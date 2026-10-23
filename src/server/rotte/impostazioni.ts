@@ -2,7 +2,8 @@
  * Pannello Impostazioni (solo ufficio): tariffe, fasi, parametri, materiali, voci di costo, utenti.
  * Le modifiche valgono per i NUOVI preventivi: quelli salvati restano calcolati come al momento del salvataggio.
  */
-import { Router, type Request } from 'express';
+import express, { Router, type Request } from 'express';
+import { importaDocumenti, leggiDocumenti, type Avanzamento } from '../import-legacy-servizio.js';
 import bcrypt from 'bcryptjs';
 import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
@@ -58,8 +59,8 @@ const CODICE_VALIDO = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
 
 export function rotteImpostazioni() {
   const r = Router();
-  const pag = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'impostazioni', contenuto: html`${menu(titolo)}${contenuto}`, avviso }));
+  const pag = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) =>
+    String(layout({ titolo, utente: req.session.utente, attiva: 'impostazioni', contenuto: html`${menu(titolo)}${contenuto}`, avviso, script }));
 
   r.get('/', (_req, res) => res.redirect('/impostazioni/tariffe'));
 
@@ -143,6 +144,29 @@ export function rotteImpostazioni() {
     });
   }
 
+  // ── Import dal vecchio portale ──
+  let importInCorso: Avanzamento | null = null;
+  r.get('/importa', (req, res) => {
+    res.send(pag(req, 'Importa', html`
+      <p class="nota">Carica l'export del vecchio portale: il file <code>casteltech-json.zip</code> (o il <code>preventivi.json</code> che contiene).
+        Clienti e prodotti vengono creati in automatico; ogni preventivo è ricalcolato con le regole nuove e conserva
+        il totale del vecchio portale per confronto. I preventivi importati risultano "archiviati". Si può ripetere: quelli già presenti vengono saltati.</p>
+      <div class="blocco stretto-form">
+        <label>File da importare <input type="file" id="file-import" accept=".zip,.json"></label>
+        <button class="primario" id="avvia-import" type="button">Importa</button>
+        <output id="stato-import" aria-live="polite"></output>
+      </div>`, undefined, 'importa.js'));
+  });
+  r.post('/importa', express.raw({ type: '*/*', limit: '60mb' }), async (req, res) => {
+    if (importInCorso && !importInCorso.finito) return res.status(409).json({ errore: 'Un import è già in corso' });
+    let docs: any[];
+    try { docs = leggiDocumenti(req.body as Buffer); } catch (e: any) { return res.status(400).json({ errore: e.message }); }
+    importInCorso = { totale: docs.length, fatti: 0, importati: 0, saltati: 0, errori: [], finito: false };
+    importaDocumenti(docs, req.session.utente!.id, importInCorso).catch(e => { importInCorso!.errori.push(e.message); importInCorso!.finito = true; });
+    res.json(importInCorso);
+  });
+  r.get('/importa/stato', (_req, res) => res.json(importInCorso ?? { finito: true, totale: 0 }));
+
   // ── Backup ──
   r.get('/backup', (req, res) => {
     const copie = elencoBackup();
@@ -220,7 +244,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

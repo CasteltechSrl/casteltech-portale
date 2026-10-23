@@ -30,6 +30,7 @@
     "connect-pg-simple": "^10.0.0",
     "express": "^5.3.0",
     "express-session": "^1.19.0",
+    "fflate": "^0.8.3",
     "helmet": "^8.3.0",
     "pg": "^8.23.1",
     "tsx": "^4.23.15"
