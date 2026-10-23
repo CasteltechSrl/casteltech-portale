@@ -9,6 +9,7 @@ import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
+import { rotteAnagrafiche } from './anagrafiche.js';
 import { creaBackup, elencoBackup, nomeFileBackup } from '../backup.js';
 import { join, basename } from 'node:path';
 
@@ -63,6 +64,7 @@ export function rotteImpostazioni() {
     String(layout({ titolo, utente: req.session.utente, attiva: 'impostazioni', contenuto: html`${menu(titolo)}${contenuto}`, avviso, script }));
 
   r.get('/', (_req, res) => res.redirect('/impostazioni/tariffe'));
+  r.use('/anagrafiche', rotteAnagrafiche(menu));
 
   // ── Tariffe ──
   r.get('/tariffe', async (req, res) => {
@@ -244,7 +246,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

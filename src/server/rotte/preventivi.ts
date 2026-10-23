@@ -2,7 +2,8 @@
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
 import { Router } from 'express';
-import { q } from '../db.js';
+import { q, q1 } from '../db.js';
+import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
 import { layout } from '../views/layout.js';
@@ -18,11 +19,15 @@ export function rottePreventivi() {
   r.get('/', async (req, res) => {
     const cerca = String(req.query.q ?? '').trim();
     const righe = await q(`
-      SELECT id, numero, creato_il, intestazione, n_schede, totale_primo_lotto, totale_secondo_lotto, stato, origine
+      SELECT id, numero, creato_il, intestazione, n_schede, totale_secondo_lotto, stato, origine,
+        (tariffe->>'ricarico')::numeric AS ricarico,
+        (risultato->'totali'->>'prezzoOrarioMedio')::numeric AS prezzo_orario,
+        (risultato->'totali'->>'prezzoSchedaSecondoLotto')::numeric AS prezzo_scheda,
+        (risultato->'totali'->>'costiUnaTantum')::numeric AS una_tantum
       FROM preventivi
       WHERE $1 = '' OR (intestazione->>'cliente') ILIKE '%'||$1||'%' OR (intestazione->>'codice') ILIKE '%'||$1||'%'
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
-      ORDER BY creato_il DESC LIMIT 300`, [cerca]);
+      ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
     res.send(String(layout({
       titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi',
       contenuto: html`
@@ -32,14 +37,16 @@ export function rottePreventivi() {
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
       <div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Descrizione</th><th class="n">Schede</th><th class="n">1° lotto</th><th class="n">€/scheda</th><th class="n">Lotti succ.</th><th>Stato</th></tr></thead>
+        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Nr. schede</th>
+          <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">% ricarico</th><th class="n" title="Lotti successivi">€/scheda</th>
+          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale lotto</th><th class="n">Costi una tantum</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
-            <td><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta">vecchio</span>` : ''}</td>
-            <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td>
+            <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}</td>
+            <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
-            <td class="n">${euro(p.totale_primo_lotto)}</td><td class="n">${euro(p.n_schede ? p.totale_primo_lotto / p.n_schede : 0)}</td>
-            <td class="n">${euro(p.totale_secondo_lotto)}</td><td><span class="stato ${p.stato}">${p.stato}</span></td>
+            <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
+            <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
           </tr>`)}
         </tbody></table></div>
       ${righe.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
@@ -51,16 +58,23 @@ export function rottePreventivi() {
   r.get('/nuovo', async (req, res) => {
     const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
     const dati = normalizza({ tariffe, nSchedeInPCB: 1 }, cat);
-    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await nomiClienti()));
+    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti()));
+  });
+
+  // prodotti (prima di '/:id', altrimenti "prodotti" verrebbe letto come numero di preventivo)
+  // selezionabili per il cliente scelto
+  r.get('/prodotti', async (req, res) => {
+    res.json(await prodottiPerCliente(Number(req.query.cliente) || 0));
   });
 
   // ── Apri esistente (calcolato col catalogo salvato nel preventivo) ──
-  r.get('/:id', async (req, res) => {
+  r.get('/:id', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
     const p = await leggiPreventivo(Number(req.params.id));
     if (!p) return res.status(404).send('Preventivo non trovato');
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
-    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await nomiClienti()));
+    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : []));
   });
 
   // ── Calcolo in tempo reale (non salva) ──
@@ -76,8 +90,13 @@ export function rottePreventivi() {
     const id = req.body.id ? Number(req.body.id) : undefined;
     const cat = await catalogoPer(id, req.body.catalogoAttuale);
     const dati = normalizza(req.body.dati, cat);
-    if (!dati.cliente) return res.status(400).json({ errore: 'Indica il cliente' });
-    if (!dati.codice && !dati.descrizione) return res.status(400).json({ errore: 'Indica almeno il codice o la descrizione' });
+    // cliente e prodotto SOLO dalle anagrafiche: i testi si prendono dal database, non dal browser
+    const cliente = dati.clienteId ? await q1<{ ragione_sociale: string }>(`SELECT ragione_sociale FROM clienti WHERE id = $1`, [dati.clienteId]) : undefined;
+    if (!cliente) return res.status(400).json({ errore: 'Scegli il cliente dall\'elenco' });
+    const prodotto = dati.prodottoId ? await q1<{ codice: string; descrizione: string }>(
+      `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [dati.prodottoId, dati.clienteId]) : undefined;
+    if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente' });
+    Object.assign(dati, { cliente: maiuscolo(cliente.ragione_sociale), codice: maiuscolo(prodotto.codice), descrizione: maiuscolo(prodotto.descrizione) });
     if (!dati.nSchede) return res.status(400).json({ errore: 'Indica la quantità di schede' });
     if (!(dati.tariffe.ricarico > 0)) return res.status(400).json({ errore: 'Il ricarico deve essere maggiore di zero' });
     const nuovoId = await salvaPreventivo({ id, dati, catalogo: cat, utenteId: req.session.utente!.id });
@@ -104,7 +123,7 @@ export function rottePreventivi() {
   return r;
 }
 
-const nomiClienti = async () => (await q<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti ORDER BY 1`)).map(x => x.r);
+const elencoClienti = () => q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
 
 async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
   if (id && !attuale) {
@@ -116,7 +135,7 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
-function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: string[] = []): string {
+function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = []): string {
   const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE');
   const valore = (cod: string) => d.parametri[cod] ?? '';
   const campoParametro = (p: Catalogo['parametri'][0]) => p.tipo === 'si_no'
@@ -146,11 +165,20 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <fieldset class="blocco">
         <legend>Prodotto</legend>
         <div class="riga-campi">
-          <label class="largo">Cliente <input data-campo="cliente" value="${d.cliente}" required list="elenco-clienti"></label>
-          <label>Codice <input data-campo="codice" value="${d.codice}"></label>
-          <label class="stretto">Rev. <input data-campo="revisione" value="${d.revisione}"></label>
+          <label class="largo">Cliente
+            <select data-id="clienteId" id="sel-cliente" required>
+              <option value="">— scegli dall'elenco —</option>
+              ${clienti.map(c => html`<option value="${c.id}" ${c.id === d.clienteId ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}
+            </select></label>
+          <label>Codice
+            <select data-id="prodottoId" id="sel-prodotto" required>
+              <option value="">${d.clienteId ? '— scegli il codice —' : '— prima scegli il cliente —'}</option>
+              ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}${x.da_assegnare ? ' (non assegnato)' : ''}</option>`)}
+            </select></label>
+          <label class="stretto">Rev. <input data-campo="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20"></label>
         </div>
-        <label>Descrizione <input data-campo="descrizione" value="${d.descrizione}"></label>
+        <label>Descrizione <input id="descrizione" value="${d.descrizione}" readonly tabindex="-1" class="sola-lettura"></label>
+        ${!d.clienteId && d.cliente ? html`<p class="nota">Nel preventivo originale: <strong>${d.cliente}</strong> ${d.codice} — non presente nelle anagrafiche. Per salvarlo scegli cliente e codice dall'elenco.</p>` : ''}
         <div class="riga-campi">
           <label>Schede <input inputmode="numeric" data-campo="nSchede" value="${d.nSchede || ''}" required></label>
           <label>Schede per pannello <input inputmode="numeric" data-campo="nSchedeInPCB" value="${d.nSchedeInPCB}"></label>
@@ -227,7 +255,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     </section>
     </div>
     </form>
-    <datalist id="elenco-clienti">${clienti.map(c => html`<option value="${c}">`)}</datalist>`,
+`,
   }));
 }
 

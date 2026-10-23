@@ -12,7 +12,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Un preventivo salvato conserva la "fotografia" del catalogo (`preventivi.catalogo`): cambiare fasi o tariffe
   non deve mai cambiare i preventivi già salvati.
 - Fasi, parametri, materiali e voci si modificano dal pannello Impostazioni (dati nel database);
-  `src/catalogo/iniziale.ts` serve solo al primo avvio.
+  `src/catalogo/iniziale.ts` serve solo al primo avvio. Per cambiare formule già in uso: nuova migrazione
+  che aggiorna solo le righe ancora uguali al valore iniziale (vedi `003_...`).
+- Anagrafiche: nei preventivi cliente, codice e descrizione si scelgono SOLO da clienti/prodotti in anagrafica
+  (Impostazioni → Anagrafiche), mai testo libero; tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi
+  preventivi sono collegati con `alias_clienti` / `alias_prodotti`. Clienti/prodotti non in elenco non vanno in anagrafica.
 
 ## Come lavorare
 - Struttura database: mai modificare un file già esistente in `db/migrazioni/`; aggiungerne uno nuovo (`002_...sql`).

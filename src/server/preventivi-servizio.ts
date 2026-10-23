@@ -5,9 +5,12 @@ import type pg from 'pg';
 import { calcolaPreventivo, type Risultato, type Tariffe } from '../engine/calcolo.js';
 import type { Catalogo } from './catalogo-db.js';
 import { q1, transazione } from './db.js';
+import { maiuscolo } from './anagrafiche-servizio.js';
 
 export interface DatiPreventivo {
-  cliente: string;
+  clienteId: number | null;      // dalle anagrafiche (obbligatorio per i preventivi nuovi)
+  prodottoId: number | null;
+  cliente: string;               // testi come compaiono nel preventivo (presi dalle anagrafiche, in maiuscolo)
   codice: string;
   revisione: string;
   descrizione: string;
@@ -34,11 +37,13 @@ export function normalizza(d: any, cat: Catalogo): DatiPreventivo {
   }
   const prezziMateriali: Record<string, number> = {};
   for (const m of cat.materiali) prezziMateriali[m.codice] = d?.prezziMateriali?.[m.codice] !== undefined ? numero(d.prezziMateriali[m.codice]) : m.costo;
+  const id = (x: unknown) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x));
   return {
-    cliente: String(d?.cliente ?? '').trim(),
-    codice: String(d?.codice ?? '').trim(),
-    revisione: String(d?.revisione ?? '').trim(),
-    descrizione: String(d?.descrizione ?? '').trim(),
+    clienteId: id(d?.clienteId), prodottoId: id(d?.prodottoId),
+    cliente: maiuscolo(d?.cliente),
+    codice: maiuscolo(d?.codice),
+    revisione: maiuscolo(d?.revisione),
+    descrizione: maiuscolo(d?.descrizione),
     nSchede: Math.max(0, Math.round(numero(d?.nSchede))),
     nSchedeInPCB: Math.max(1, Math.round(numero(d?.nSchedeInPCB) || 1)),
     tariffe: {
@@ -65,22 +70,13 @@ export function calcola(cat: Catalogo, d: DatiPreventivo): Risultato {
   return calcolaPreventivo(cat.fasi, cat.voci, d.tariffe, { nSchede: d.nSchede, parametri: vars, personeFase: d.personeFase });
 }
 
-async function trovaOCreaCliente(c: pg.PoolClient, nome: string): Promise<number | null> {
-  if (!nome) return null;
-  const e = (await c.query(`SELECT id FROM clienti WHERE lower(ragione_sociale) = lower($1) ORDER BY id LIMIT 1`, [nome])).rows[0];
-  if (e) return e.id;
-  return (await c.query(`INSERT INTO clienti (ragione_sociale) VALUES ($1) RETURNING id`, [nome])).rows[0].id;
-}
-
-async function trovaOCreaRevisione(c: pg.PoolClient, clienteId: number | null, codice: string, descrizione: string, revisione: string): Promise<number | null> {
-  if (!clienteId || !codice) return null;
-  let p = (await c.query(`SELECT id FROM prodotti WHERE cliente_id = $1 AND lower(codice) = lower($2)`, [clienteId, codice])).rows[0];
-  if (!p) p = (await c.query(`INSERT INTO prodotti (cliente_id, codice, descrizione) VALUES ($1,$2,$3) RETURNING id`, [clienteId, codice, descrizione])).rows[0];
-  else if (descrizione) await c.query(`UPDATE prodotti SET descrizione = $2 WHERE id = $1 AND coalesce(descrizione,'') = ''`, [p.id, descrizione]);
-  const r = (await c.query(
+/** Revisione del prodotto (creata se manca); un prodotto senza cliente viene assegnato a questo cliente. */
+async function revisioneProdotto(c: pg.PoolClient, prodottoId: number | null, clienteId: number | null, revisione: string): Promise<number | null> {
+  if (!prodottoId) return null;
+  if (clienteId) await c.query(`UPDATE prodotti SET cliente_id = $2 WHERE id = $1 AND cliente_id IS NULL`, [prodottoId, clienteId]);
+  return (await c.query(
     `INSERT INTO prodotti_revisioni (prodotto_id, revisione) VALUES ($1,$2)
-     ON CONFLICT (prodotto_id, revisione) DO UPDATE SET revisione = EXCLUDED.revisione RETURNING id`, [p.id, revisione])).rows[0];
-  return r.id;
+     ON CONFLICT (prodotto_id, revisione) DO UPDATE SET revisione = EXCLUDED.revisione RETURNING id`, [prodottoId, revisione])).rows[0].id;
 }
 
 export async function salvaPreventivo(opz: {
@@ -90,9 +86,8 @@ export async function salvaPreventivo(opz: {
   const { dati, catalogo } = opz;
   const ris = calcola(catalogo, dati);
   return transazione(async c => {
-    const clienteId = await trovaOCreaCliente(c, dati.cliente);
-    const revId = await trovaOCreaRevisione(c, clienteId, dati.codice, dati.descrizione, dati.revisione);
-    const campi = [clienteId, revId, dati.nSchede, dati.nSchedeInPCB, dati.tariffe,
+    const revId = await revisioneProdotto(c, dati.prodottoId, dati.clienteId, dati.revisione);
+    const campi = [dati.clienteId, revId, dati.nSchede, dati.nSchedeInPCB, dati.tariffe,
       dati.parametri, dati.personeFase, catalogo, ris, ris.totali.totalePrimoLotto, ris.totali.totaleSecondoLotto,
       dati.prezzoTargetScheda ?? null, dati.note ?? '',
       { cliente: dati.cliente, codice: dati.codice, revisione: dati.revisione, descrizione: dati.descrizione }, dati.prezziMateriali];
@@ -116,6 +111,7 @@ export async function salvaPreventivo(opz: {
 export function datiDaRiga(r: any): DatiPreventivo {
   const i = r.intestazione ?? {};
   return {
+    clienteId: r.cliente_id ?? null, prodottoId: r.prodotto_id ?? null,
     cliente: i.cliente ?? '', codice: i.codice ?? '', revisione: i.revisione ?? '', descrizione: i.descrizione ?? '',
     nSchede: r.n_schede, nSchedeInPCB: r.n_schede_pannello, tariffe: r.tariffe, parametri: r.parametri ?? {},
     personeFase: r.persone_fase ?? {}, prezziMateriali: r.prezzi_materiali ?? {},
@@ -123,4 +119,5 @@ export function datiDaRiga(r: any): DatiPreventivo {
   };
 }
 
-export const leggiPreventivo = (id: number) => q1(`SELECT * FROM preventivi WHERE id = $1`, [id]);
+export const leggiPreventivo = (id: number) => q1(
+  `SELECT p.*, r.prodotto_id FROM preventivi p LEFT JOIN prodotti_revisioni r ON r.id = p.revisione_id WHERE p.id = $1`, [id]);

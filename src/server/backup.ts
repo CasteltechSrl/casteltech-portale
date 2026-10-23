@@ -13,7 +13,7 @@ import { q } from './db.js';
 /** Tabelle in ordine di dipendenza (per il ripristino). Le sessioni di login non servono. */
 export const TABELLE_BACKUP = [
   'utenti', 'impostazioni', 'parametri', 'fasi', 'voci_costo', 'materiali',
-  'clienti', 'prodotti', 'prodotti_revisioni', 'preventivi', 'commesse', 'commesse_fasi',
+  'clienti', 'prodotti', 'alias_clienti', 'alias_prodotti', 'prodotti_revisioni', 'preventivi', 'commesse', 'commesse_fasi',
   'scansioni', 'rilevazioni', 'segnalazioni', 'analisi_commesse', 'migrazioni_applicate',
 ];
 

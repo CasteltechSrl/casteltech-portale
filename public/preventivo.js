@@ -11,6 +11,7 @@
   function raccogli() {
     const d = { parametri: {}, personeFase: {}, prezziMateriali: {}, tariffe: {} };
     form.querySelectorAll('[data-campo]').forEach(el => { d[el.dataset.campo] = el.value; });
+    form.querySelectorAll('[data-id]').forEach(el => { d[el.dataset.id] = el.value; });
     form.querySelectorAll('[data-param]').forEach(el => {
       if (el.type === 'checkbox') d.parametri[el.dataset.param] = el.checked ? 1 : 0;
       else if (el.value.trim() !== '') d.parametri[el.dataset.param] = el.value;
@@ -72,11 +73,37 @@
     }, 250);
   }
 
+  // ── Cliente e codice solo dalle anagrafiche ──
+  const selCliente = document.getElementById('sel-cliente');
+  const selProdotto = document.getElementById('sel-prodotto');
+  const descrizione = document.getElementById('descrizione');
+  selCliente.addEventListener('change', async () => {
+    selProdotto.innerHTML = '<option value="">Caricamento…</option>';
+    descrizione.value = '';
+    if (!selCliente.value) { selProdotto.innerHTML = '<option value="">— prima scegli il cliente —</option>'; return; }
+    const elenco = await (await fetch('/preventivi/prodotti?cliente=' + encodeURIComponent(selCliente.value))).json();
+    selProdotto.innerHTML = '';
+    const vuota = new Option(elenco.length ? '— scegli il codice —' : 'Nessun prodotto per questo cliente (aggiungilo in Impostazioni → Anagrafiche)', '');
+    selProdotto.add(vuota);
+    for (const p of elenco) {
+      const o = new Option(p.codice + (p.da_assegnare ? ' (non assegnato)' : ''), p.id);
+      o.dataset.descrizione = p.descrizione || '';
+      selProdotto.add(o);
+    }
+  });
+  selProdotto.addEventListener('change', () => {
+    descrizione.value = selProdotto.selectedOptions[0]?.dataset.descrizione || '';
+  });
+  // tutto in maiuscolo mentre si scrive
+  form.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
+    const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
+  }));
+
   form.addEventListener('input', e => {
     modificato = true;
     statoEl.textContent = 'Modifiche non salvate';
     if (e.target.dataset.campo === 'prezzoTargetScheda') return aggiornaTarget();
-    if (['cliente', 'codice', 'revisione', 'descrizione', 'note'].includes(e.target.dataset.campo)) return;
+    if (['revisione', 'note'].includes(e.target.dataset.campo) || e.target.dataset.id) return;
     ricalcola();
   });
   form.addEventListener('submit', e => e.preventDefault());

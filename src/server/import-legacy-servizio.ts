@@ -10,6 +10,8 @@ import { q, q1 } from './db.js';
 import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
 import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
 import { importaPreventivoLegacy } from '../catalogo/import-legacy.js';
+import { pool } from './db.js';
+import { risolvi, pulisciDescrizione } from './anagrafiche-servizio.js';
 
 /** Accetta preventivi.json oppure lo zip esportato (casteltech-json.zip) che lo contiene. */
 export function leggiDocumenti(file: Buffer): any[] {
@@ -41,8 +43,11 @@ export async function importaDocumenti(docs: any[], utenteId: number, avanz?: Av
     if (gia.has(legacyId)) { stato.saltati++; continue; }
     try {
       const imp = importaPreventivoLegacy(d);
+      // cliente e prodotto: solo se esistono nelle anagrafiche (anche tramite i nomi "vecchi" collegati)
+      const r = await risolvi(pool, pulisci(imp.cliente), pulisci(imp.codice));
       const dati = normalizza({
-        cliente: pulisci(imp.cliente) || 'Cliente sconosciuto', codice: pulisci(imp.codice), revisione: '', descrizione: pulisci(imp.descrizione),
+        clienteId: r.clienteId, prodottoId: r.prodottoId,
+        cliente: r.cliente || 'CLIENTE SCONOSCIUTO', codice: r.codice, revisione: '', descrizione: r.descrizione ?? pulisciDescrizione(imp.descrizione),
         nSchede: imp.nSchede, nSchedeInPCB: imp.nSchedeInPCB,
         tariffe: { ...imp.tariffe, costoOperatoreUfficioH: tariffeAttuali.costoOperatoreUfficioH },
         parametri: imp.parametri, prezziMateriali: imp.prezziMateriali, note: d.note ?? '',

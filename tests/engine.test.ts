@@ -103,3 +103,15 @@ test('energia e forno: preriscaldamento solo se la fase c\'è, consumo = ore × 
   assert.equal(con.fasi.find(f => f.codice === 'pepBot')!.persone, 2);
   assert.ok(FASI.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.unaTantum && f.tariffa === 'ufficio'));
 });
+
+test('preventivo vuoto: senza componenti SMD nessuna fase SMD, programmazione o AOI', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.25 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100 } });
+  const conTempo = r.fasi.filter(f => f.secondiCiclo > 0).map(f => f.codice);
+  assert.deepEqual(conTempo, ['prepDocumentazione', 'imballaggio']);
+  // solo TOP: niente fasi BOT
+  const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100, qtSmd: 50, qtFeeder: 10 } });
+  assert.ok(top.fasi.filter(f => /Bot$/.test(f.codice)).every(f => f.secondiCiclo === 0));
+  assert.ok(top.fasi.find(f => f.codice === 'avvioTop')!.secondiCiclo > 0);
+});

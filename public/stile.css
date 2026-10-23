@@ -148,3 +148,10 @@ table.editor tr.nuova-riga td { background: #fafbfa; }
   .testata { gap: .8rem; padding: .5rem 1rem; flex-wrap: wrap; }
   .totale.principale { grid-column: auto; }
 }
+
+/* anagrafiche: campi in maiuscolo e campi di sola lettura */
+input.maiuscolo { text-transform: uppercase; }
+input.sola-lettura { background: #f3f5f3; color: var(--tenue); }
+td.nowrap { white-space: nowrap; }
+.tabella-scorre.limitata { max-height: 60vh; overflow-y: auto; }
+.tabella-scorre.limitata thead th { position: sticky; top: 0; z-index: 1; }
