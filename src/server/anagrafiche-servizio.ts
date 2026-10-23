@@ -62,11 +62,32 @@ export interface FileAnagrafiche {
  * Carica l'elenco ufficiale: crea/aggiorna clienti e prodotti, registra gli alias, riallinea tutti i preventivi
  * e toglie dalle anagrafiche i clienti e prodotti che non sono nell'elenco (i preventivi vecchi restano, scollegati).
  */
-export async function caricaAnagrafiche(f: FileAnagrafiche) {
-  return transazione(async c => {
+export class Anteprima extends Error { constructor(public esito: any) { super('anteprima'); } }
+
+/**
+ * opz.togli = toglie dalle anagrafiche ciò che non è nel file (solo se richiesto esplicitamente).
+ * opz.anteprima = fa tutto dentro una transazione e poi la annulla: restituisce solo il riepilogo.
+ */
+export async function caricaAnagrafiche(f: FileAnagrafiche, opz: { togli?: boolean; anteprima?: boolean } = {}) {
+  try {
+    return await transazione(async c => {
+      const esito = await caricaDentro(c, f, !!opz.togli);
+      if (opz.anteprima) throw new Anteprima(esito);
+      return { ...esito, anteprima: false };
+    });
+  } catch (e) {
+    if (e instanceof Anteprima) return { ...e.esito, anteprima: true };
+    throw e;
+  }
+}
+
+async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean) {
+  {
+    let clientiNuovi = 0, prodottiNuovi = 0, descrizioniCambiate = 0;
     const idCliente = new Map<string, number>();
     for (const nome of f.clienti.map(maiuscolo)) {
       const e = (await c.query(`SELECT id FROM clienti WHERE upper(ragione_sociale) = $1 ORDER BY id LIMIT 1`, [nome])).rows[0];
+      if (!e) clientiNuovi++;
       const id = e ? e.id : (await c.query(`INSERT INTO clienti (ragione_sociale) VALUES ($1) RETURNING id`, [nome])).rows[0].id;
       await c.query(`UPDATE clienti SET ragione_sociale = $2, aggiornato_il = now() WHERE id = $1`, [id, nome]);
       idCliente.set(nome, id);
@@ -76,10 +97,15 @@ export async function caricaAnagrafiche(f: FileAnagrafiche) {
       const cl = p.cliente ? idCliente.get(maiuscolo(p.cliente)) ?? null : null;
       const k = chiaveCodice(p.codice);
       const e = (await c.query(
-        `SELECT id FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND cliente_id IS NOT DISTINCT FROM $2 ORDER BY id LIMIT 1`, [k, cl])).rows[0];
+        // stesso codice: stesso cliente, oppure prodotto ancora senza cliente, oppure (se nel file manca il cliente) già assegnato
+        `SELECT id, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1
+           AND (cliente_id IS NOT DISTINCT FROM $2 OR cliente_id IS NULL OR $2::int IS NULL)
+         ORDER BY (cliente_id IS NOT DISTINCT FROM $2) DESC, id LIMIT 1`, [k, cl])).rows[0];
+      if (!e) prodottiNuovi++;
+      else if (maiuscolo(e.descrizione) !== maiuscolo(p.descrizione)) descrizioniCambiate++;
       const id = e ? e.id
         : (await c.query(`INSERT INTO prodotti (cliente_id, codice, descrizione) VALUES ($1,$2,$3) RETURNING id`, [cl, maiuscolo(p.codice), maiuscolo(p.descrizione)])).rows[0].id;
-      await c.query(`UPDATE prodotti SET codice = $2, descrizione = $3 WHERE id = $1`, [id, maiuscolo(p.codice), maiuscolo(p.descrizione)]);
+      await c.query(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = coalesce($4, cliente_id) WHERE id = $1`, [id, maiuscolo(p.codice), maiuscolo(p.descrizione), cl]);
       idProdotti.add(id);
     }
     for (const [vecchio, nuovo] of Object.entries(f.alias_clienti)) {
@@ -100,6 +126,7 @@ export async function caricaAnagrafiche(f: FileAnagrafiche) {
       aliasProdotti++;
     }
     const preventivi = await riallineaPreventivi(c);
+    if (!togli) return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti: 0, prodottiTolti: 0 };
     // via dalle anagrafiche ciò che non è nell'elenco ufficiale (e non è usato)
     const tieniClienti = [...idCliente.values()], tieniProdotti = [...idProdotti];
     await c.query(`DELETE FROM prodotti_revisioni r WHERE NOT (r.prodotto_id = ANY($1))
@@ -109,8 +136,8 @@ export async function caricaAnagrafiche(f: FileAnagrafiche) {
     const clientiTolti = (await c.query(`DELETE FROM clienti k WHERE NOT (k.id = ANY($1))
       AND NOT EXISTS (SELECT 1 FROM prodotti p WHERE p.cliente_id = k.id) AND NOT EXISTS (SELECT 1 FROM preventivi p WHERE p.cliente_id = k.id)
       AND NOT EXISTS (SELECT 1 FROM commesse m WHERE m.cliente_id = k.id)`, [tieniClienti])).rowCount;
-    return { clienti: idCliente.size, prodotti: idProdotti.size, aliasProdotti, preventivi, clientiTolti, prodottiTolti };
-  });
+    return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti, prodottiTolti };
+  }
 }
 
 /** Collega ogni preventivo a cliente/prodotto ufficiali e mette l'intestazione in maiuscolo. */

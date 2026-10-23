@@ -35,12 +35,13 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
       <details class="blocco">
         <summary>Carica l'elenco ufficiale (file preparato da Claude)</summary>
         <div class="stretto-form" style="padding: 0 1rem 1rem">
-          <p class="nota">Crea/aggiorna clienti e prodotti dell'elenco, collega i nomi scritti in modo diverso nei preventivi,
-            mette tutto in maiuscolo e toglie dalle anagrafiche i clienti e i prodotti che non sono nell'elenco
-            (i vecchi preventivi restano, con il nome com'era scritto).</p>
+          <p class="nota">Aggiunge i clienti e i prodotti nuovi del file, aggiorna nomi e descrizioni di quelli esistenti
+            (anche se li avevi corretti a mano) e collega i nomi scritti in modo diverso nei preventivi. Prima mostra un riepilogo e chiede conferma.</p>
           <label>File <input type="file" id="file-anagrafiche" accept=".gz,.json"></label>
-          <button class="primario" type="button" id="carica-anagrafiche">Carica</button>
+          <label class="spunta"><input type="checkbox" id="togli-anagrafiche"> Togli anche i clienti e i prodotti che non sono nel file (solo quelli mai usati nei preventivi)</label>
+          <button class="primario" type="button" id="carica-anagrafiche">Controlla il file</button>
           <output id="esito-anagrafiche"></output>
+          <button class="primario" type="button" id="conferma-anagrafiche" hidden>Conferma e carica</button>
         </div>
       </details>
 
@@ -90,7 +91,7 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
       f = JSON.parse(b.toString('utf8'));
       if (!Array.isArray(f.clienti) || !Array.isArray(f.prodotti)) throw new Error();
     } catch { return res.status(400).json({ errore: 'File non valido: serve anagrafiche_casteltech.json.gz' }); }
-    res.json(await caricaAnagrafiche(f));
+    res.json(await caricaAnagrafiche(f, { togli: req.query.togli === '1', anteprima: req.query.conferma !== '1' }));
   });
 
   const duplicatoCliente = async (nome: string, escludi = 0) =>
