@@ -1,6 +1,6 @@
 /**
- * Quanto cambiano i prezzi passando dal vecchio catalogo al nuovo (fasi della scheda di produzione,
- * 2 persone su serigrafia+P&P TOP/BOT e onda, pre-produzione a tariffa ufficio).
+ * Quanto cambiano i prezzi passando dal vecchio catalogo al nuovo: fasi della scheda di produzione,
+ * 2 persone su P&P TOP/BOT, forno e onda; pre-produzione a tariffa ufficio; forno fuori linea.
  * Uso: npx tsx tools/impatto-nuove-regole.ts preventivi.json [dal=2025-10-01]
  */
 import { readFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ for (const d of docs) {
 console.log(`Materiale di consumo: formula identica al vecchio su ${consumoOk} preventivi, diversa su ${consumoKo}, non verificabili (prezzi mancanti, preventivi prima del 21/09/2022): ${consumoNonVerificabile}`);
 
 // 2) impatto sui prezzi
-const righe: { cliente: string; codice: string; vecchio: number; nuovo15: number; nuovo35: number }[] = [];
+const righe: { cliente: string; codice: string; vecchio: number; nuovo15: number; nuovo35: number; forno: number }[] = [];
 for (const d of docs) {
   if ((d.data?.$date ?? '') < dal) continue;
   const old = daDocumentoLegacy(d);
@@ -38,16 +38,20 @@ for (const d of docs) {
   vars.consumoSalvato = d.materialiDiConsumo?.costi ?? 0;
   const t = (uff: number): Tariffe => ({ ...imp.tariffe, costoOperatoreUfficioH: uff });
   const nuovo15 = calcolaPreventivo(FASI, voci, t(imp.tariffe.costoOperatoreProduzioneH), { nSchede: imp.nSchede, parametri: vars }).totali.totalePrimoLotto;
-  const nuovo35 = calcolaPreventivo(FASI, voci, t(35), { nSchede: imp.nSchede, parametri: vars }).totali.totalePrimoLotto;
-  righe.push({ cliente: imp.cliente, codice: imp.codice, vecchio, nuovo15, nuovo35 });
+  const nuovo35 = calcolaPreventivo(FASI, voci, t(20), { nSchede: imp.nSchede, parametri: vars }).totali.totalePrimoLotto;
+  const conForno = { ...vars, tempoTransitoForno: 240, cadenzaForno: 15, preriscaldamentoForno: 6, potenzaFornoKw: 15, prezzoKwh: 0.4,
+    preriscaldamentoOnda: 25, potenzaOndaKw: 15 };
+  const forno = calcolaPreventivo(FASI, voci, t(20), { nSchede: imp.nSchede, parametri: conForno }).totali.totalePrimoLotto;
+  righe.push({ cliente: imp.cliente, codice: imp.codice, vecchio, nuovo15, nuovo35, forno });
 }
 const pct = (a: number, b: number) => (b ? (a / b - 1) * 100 : 0);
 const media = (f: (r: typeof righe[0]) => number) => righe.reduce((a, r) => a + f(r), 0) / righe.length;
 const s = (xs: number[]) => xs.sort((a, b) => a - b);
-const d15 = s(righe.map(r => pct(r.nuovo15, r.vecchio))), d35 = s(righe.map(r => pct(r.nuovo35, r.vecchio)));
+const d15 = s(righe.map(r => pct(r.nuovo15, r.vecchio))), d35 = s(righe.map(r => pct(r.nuovo35, r.vecchio))), dF = s(righe.map(r => pct(r.forno, r.vecchio)));
 const q = (xs: number[], p: number) => xs[Math.floor((xs.length - 1) * p)];
 console.log(`\nPreventivi dal ${dal}: ${righe.length}`);
-console.log(`Solo nuove persone (2 su serig.+P&P e BOT), pre-produzione a 15 €: media ${media(r => pct(r.nuovo15, r.vecchio)).toFixed(2)}%  mediana ${q(d15, .5).toFixed(2)}%  min ${d15[0].toFixed(2)}%  max ${d15.at(-1)!.toFixed(2)}%`);
-console.log(`+ pre-produzione a tariffa ufficio 35 €:           media ${media(r => pct(r.nuovo35, r.vecchio)).toFixed(2)}%  mediana ${q(d35, .5).toFixed(2)}%  min ${d35[0].toFixed(2)}%  max ${d35.at(-1)!.toFixed(2)}%`);
+console.log(`Solo P&P BOT a 2 persone, pre-produzione a 15 €:   media ${media(r => pct(r.nuovo15, r.vecchio)).toFixed(2)}%  mediana ${q(d15, .5).toFixed(2)}%  min ${d15[0].toFixed(2)}%  max ${d15.at(-1)!.toFixed(2)}%`);
+console.log(`+ pre-produzione a tariffa ufficio 20 €:          media ${media(r => pct(r.nuovo35, r.vecchio)).toFixed(2)}%  mediana ${q(d35, .5).toFixed(2)}%  min ${d35[0].toFixed(2)}%  max ${d35.at(-1)!.toFixed(2)}%`);
+console.log(`+ forno fuori linea (4 min + 15 s/pannello, 2 pers.) e energia: media ${media(r => pct(r.forno, r.vecchio)).toFixed(2)}%  mediana ${q(dF, .5).toFixed(2)}%  min ${dF[0].toFixed(2)}%  max ${dF.at(-1)!.toFixed(2)}%`);
 console.log('\nEsempi:');
-for (const r of righe.slice(-8)) console.log(`  ${r.cliente} ${r.codice}: vecchio ${r.vecchio} € → ${r.nuovo15} € (persone) → ${r.nuovo35} € (+ ufficio 35)`);
+for (const r of righe.slice(-6)) console.log(`  ${r.cliente} ${r.codice}: vecchio ${r.vecchio} € → ${r.nuovo15} (persone) → ${r.nuovo35} (+ ufficio) → ${r.forno} (+ forno)`);

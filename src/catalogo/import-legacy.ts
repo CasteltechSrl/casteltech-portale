@@ -36,8 +36,12 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
     for (const [k, v] of Object.entries(sez ?? {})) if (k !== 'costi' && k !== '_id') p[k] = num(v);
   }
   p.nPCB = num(d.pcb?.nPCB);
-  p.usaOnda = p.tempoSaldaturaOnda > 0 ? 1 : 0;   // nel vecchio portale l'onda c'era se aveva un tempo
-  p.tempoFornoTop = 0; p.tempoFornoBot = 0;         // il vecchio portale non aveva il forno fuori linea
+  // onda: il vecchio portale usava "secondi × pannelli" = percorrenza + (pannelli − 1) × cadenza con entrambi uguali
+  p.usaOnda = p.tempoSaldaturaOnda > 0 ? 1 : 0;
+  p.tempoTransitoOnda = p.tempoSaldaturaOnda ?? 0; p.cadenzaOnda = p.tempoSaldaturaOnda ?? 0;
+  delete p.tempoSaldaturaOnda;
+  // il vecchio portale non aveva il forno fuori linea
+  p.tempoTransitoForno = 0; p.cadenzaForno = 0;
   p.oreProgPeP = ore(u('programmaPick').nOre); p.botProgPeP = u('programmaPick').bottom ? 1 : 0;
   p.oreProgAOI = ore(u('programmaAOI').nOre); p.botProgAOI = u('programmaAOI').bottom ? 1 : 0;
   p.oreProgArmadi = ore(u('programmaArmadi').nOre); p.botProgArmadi = u('programmaArmadi').bottom ? 1 : 0;

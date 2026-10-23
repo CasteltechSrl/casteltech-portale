@@ -22,9 +22,11 @@ Sostituirà il vecchio portale `portalepreventivicasteltech.ovh`, che resta atti
 - Costo fase = ore ciclo × costo orario azienda + ore uomo × costo orario operatore
   (azienda 25 €/h + produzione 15 €/h per persona, oppure + ufficio 20 €/h per la pre-produzione — modificabili).
 - Prezzo = costo × ricarico. Le fasi/voci "una tantum" entrano solo nel primo lotto.
-- Di default 2 persone su Serigrafia + P&P (TOP e BOT), Forno (fuori linea), Saldatura ad onda (modificabile per fase e per preventivo).
+- Di default 2 persone su P&P (TOP e BOT), Forno (fuori linea) e Saldatura ad onda; serigrafia (preparazione e produzione) 1 persona.
+  Tutto modificabile per fase e per singolo preventivo.
+- Forno e onda: tempo fase = percorrenza (4 min) + (pannelli − 1) × cadenza (forno 15 s, onda 90 s).
 - Pre-produzione = costi una tantum di avvio produzione.
-- Energia: forno 6 € di preriscaldamento a lotto + 0,40 €/h di fase; onda 20 € + 0,40 €/h (solo se la fase c'è).
+- Energia (solo se la fase c'è): preriscaldamento a lotto (forno 6 €, onda 25 €) + ore di fase × 15 kW × 0,40 €/kWh.
 - In produzione ogni riga della scheda indica il numero di persone: il sistema ricava ciclo e uomo reali.
   Le righe segnate **P** (problema contingente, confermato dall'ufficio) non entrano nel prezzo corretto.
 

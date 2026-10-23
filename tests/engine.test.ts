@@ -88,14 +88,18 @@ test('energia e forno: preriscaldamento solo se la fase c\'è, consumo = ore × 
   const senza = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50 } });
   assert.deepEqual(senza.voci.map(v => v.costo), [0, 0]);
   assert.equal(senza.fasi.find(f => f.codice === 'fornoTop')!.secondiCiclo, 0);
-  // SMD su due lati + onda: 50 pannelli × 4 min = 200 min per fase
+  // SMD su due lati + onda, 50 pannelli: forno 4 min + 49 × 15 s; onda 4 min + 49 × 90 s
   const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtSmdLatoB: 10, usaOnda: 1 } });
   const forno = con.fasi.find(f => f.codice === 'fornoTop')!;
-  assert.equal(forno.secondiCiclo, 50 * 240);
+  assert.equal(forno.secondiCiclo, 240 + 49 * 15);
   assert.equal(forno.persone, 2);
-  const kWh = (sec: number) => sec / 3600 * 15;
-  assert.ok(Math.abs(con.voci[0].costo - (6 + kWh(2 * 50 * 240) * 0.4)) < 1e-9);   // forno: 6 € + 0,40 €/pannello per lato
-  assert.ok(Math.abs(con.voci[1].costo - (25 + kWh(50 * 240) * 0.4)) < 1e-9);      // onda: 25 € + 0,40 €/pannello
-  assert.ok(Math.abs(kWh(240) * 0.4 - 0.4) < 1e-9);                                 // 4 min a pannello ≈ 0,40 €
+  assert.equal(con.fasi.find(f => f.codice === 'saldaturaOnda')!.secondiCiclo, 240 + 49 * 90);
+  const euroEnergia = (sec: number) => sec / 3600 * 15 * 0.4;
+  assert.ok(Math.abs(con.voci[0].costo - (6 + euroEnergia(2 * (240 + 49 * 15)))) < 1e-9);
+  assert.ok(Math.abs(con.voci[1].costo - (25 + euroEnergia(240 + 49 * 90))) < 1e-9);
+  // serigrafia separata dal P&P: 1 persona contro 2
+  assert.equal(con.fasi.find(f => f.codice === 'serigrafiaTop')!.persone, 1);
+  assert.equal(con.fasi.find(f => f.codice === 'pepTop')!.persone, 2);
+  assert.equal(con.fasi.find(f => f.codice === 'pepBot')!.persone, 2);
   assert.ok(FASI.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.unaTantum && f.tariffa === 'ufficio'));
 });
