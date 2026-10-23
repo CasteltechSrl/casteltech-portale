@@ -23,3 +23,5 @@
     segui();
   });
 })();
+
+document.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => { el.value = el.value.toUpperCase(); }));

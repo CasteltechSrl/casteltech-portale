@@ -10,7 +10,7 @@ import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
 import { rotteAnagrafiche } from './anagrafiche.js';
-import { creaBackup, elencoBackup, nomeFileBackup } from '../backup.js';
+import { creaBackup, elencoBackup, nomeFileBackup, salvaBackupSuDisco } from '../backup.js';
 import { join, basename } from 'node:path';
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
@@ -148,7 +148,8 @@ export function rotteImpostazioni() {
 
   // ── Import dal vecchio portale ──
   let importInCorso: Avanzamento | null = null;
-  r.get('/importa', (req, res) => {
+  r.get('/importa', async (req, res) => {
+    const importati = (await q(`SELECT count(*)::int AS n FROM preventivi WHERE origine = 'vecchio_portale'`))[0].n;
     res.send(pag(req, 'Importa', html`
       <p class="nota">Carica l'export del vecchio portale: il file <code>casteltech-json.zip</code> (o il <code>preventivi.json</code> che contiene).
         Clienti e prodotti vengono creati in automatico; ogni preventivo è ricalcolato con le regole nuove e conserva
@@ -157,7 +158,24 @@ export function rotteImpostazioni() {
         <label>File da importare <input type="file" id="file-import" accept=".zip,.json"></label>
         <button class="primario" id="avvia-import" type="button">Importa</button>
         <output id="stato-import" aria-live="polite"></output>
-      </div>`, undefined, 'importa.js'));
+      </div>
+      <h2>Elimina i preventivi importati</h2>
+      <form method="post" action="/impostazioni/importa/elimina" class="blocco stretto-form">
+        <p class="nota">Cancella dal portale nuovo <strong>tutti i preventivi importati dal vecchio portale</strong> (${importati} ora presenti).
+          I preventivi creati qui, i clienti e i prodotti in anagrafica restano. Prima di cancellare viene salvato in automatico un backup
+          completo (Impostazioni → Backup), da cui si possono recuperare. Il vecchio portale non viene toccato.</p>
+        <label>Per confermare scrivi <strong>ELIMINA</strong> <input name="conferma" autocomplete="off" class="maiuscolo" required></label>
+        <button class="pericolo">Elimina i preventivi importati</button>
+      </form>`, req.query.msg ? String(req.query.msg) : undefined, 'importa.js'));
+  });
+  r.post('/importa/elimina', async (req, res) => {
+    if (String(req.body.conferma ?? '').trim().toUpperCase() !== 'ELIMINA')
+      return res.redirect('/impostazioni/importa?msg=' + encodeURIComponent('Non eliminato: scrivi ELIMINA per confermare.'));
+    if (importInCorso && !importInCorso.finito)
+      return res.redirect('/impostazioni/importa?msg=' + encodeURIComponent('Non eliminato: c\'è un import in corso.'));
+    const copia = await salvaBackupSuDisco('prima-di-eliminare-importati');
+    const n = (await q(`WITH x AS (DELETE FROM preventivi WHERE origine = 'vecchio_portale' RETURNING 1) SELECT count(*)::int AS n FROM x`))[0].n;
+    res.redirect('/impostazioni/importa?msg=' + encodeURIComponent(`Eliminati ${n} preventivi importati.${copia ? ' Backup salvato prima: ' + copia : ''}`));
   });
   r.post('/importa', express.raw({ type: '*/*', limit: '60mb' }), async (req, res) => {
     if (importInCorso && !importInCorso.finito) return res.status(409).json({ errore: 'Un import è già in corso' });

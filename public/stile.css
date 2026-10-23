@@ -155,3 +155,11 @@ input.sola-lettura { background: #f3f5f3; color: var(--tenue); }
 td.nowrap { white-space: nowrap; }
 .tabella-scorre.limitata { max-height: 60vh; overflow-y: auto; }
 .tabella-scorre.limitata thead th { position: sticky; top: 0; z-index: 1; }
+
+/* elenco preventivi: pagina a tutta larghezza, colonne compatte */
+main.largo { max-width: none; }
+table.preventivi th, table.preventivi td { padding: .45rem .45rem; }
+table.preventivi td:nth-child(3) { min-width: 11rem; }          /* cliente */
+table.preventivi td:nth-child(6) { max-width: 26rem; }          /* descrizione */
+table.preventivi td:nth-child(2), table.preventivi td:nth-child(5) { white-space: nowrap; }
+button.pericolo { background: var(--negativo); border-color: var(--negativo); color: #fff; }

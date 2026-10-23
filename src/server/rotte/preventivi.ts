@@ -29,17 +29,17 @@ export function rottePreventivi() {
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
       ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
     res.send(String(layout({
-      titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi',
+      titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi', largo: true,
       contenuto: html`
       <div class="intestazione-pagina">
         <h1>Preventivi</h1>
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
-      <div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Nr. schede</th>
-          <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">% ricarico</th><th class="n" title="Lotti successivi">€/scheda</th>
-          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale lotto</th><th class="n">Costi una tantum</th></tr></thead>
+      <div class="tabella-scorre"><table class="elenco preventivi">
+        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
+          <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
+          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
             <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}</td>

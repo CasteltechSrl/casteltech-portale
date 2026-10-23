@@ -47,6 +47,16 @@ async function backupNotturno() {
   }
 }
 
+/** Salva subito una copia nella cartella dei backup (es. prima di un'operazione che cancella dati). */
+export async function salvaBackupSuDisco(motivo: string): Promise<string | null> {
+  const cartella = process.env.BACKUP_DIR;
+  if (!cartella) return null;
+  mkdirSync(cartella, { recursive: true });
+  const nome = nomeFileBackup().replace('.json.gz', `-${motivo}.json.gz`);
+  writeFileSync(join(cartella, nome), await creaBackup());
+  return nome;
+}
+
 export function elencoBackup(): { nome: string; kb: number }[] {
   const cartella = process.env.BACKUP_DIR;
   if (!cartella) return [];

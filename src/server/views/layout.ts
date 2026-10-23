@@ -2,7 +2,7 @@ import { html, raw, type Raw } from './html.js';
 
 export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
 
-export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string; avviso?: string }) {
+export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string; avviso?: string; largo?: boolean }) {
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
   return html`<!doctype html>
@@ -25,7 +25,7 @@ ${opz.utente ? html`
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}
-<main class="${opz.utente ? '' : 'centrato'}">
+<main class="${opz.utente ? (opz.largo ? 'largo' : '') : 'centrato'}">
 ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>
