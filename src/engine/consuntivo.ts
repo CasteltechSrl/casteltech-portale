@@ -1,8 +1,8 @@
 /**
  * Consuntivo di una commessa: dai tempi scritti sulla scheda di produzione al confronto col preventivo.
  *
- * Ogni riga della scheda (una "rilevazione") ha: fase, operatore, data, ora inizio, ora fine,
- * n. persone, pezzi, tipo (S = tempo standard, P = problema contingente, con causa).
+ * Ogni riga della scheda (una "rilevazione") ha: fase, operatore, data, ora inizio, ora fine
+ * (oppure solo il tempo totale), n. persone, pezzi, tipo (S = tempo standard, P = problema contingente, con causa).
  *
  *   tempo uomo  = Σ (durata riga × persone della riga)
  *   tempo ciclo = tempo in cui la fase è stata "aperta": unione degli intervalli (se due persone
@@ -18,9 +18,10 @@ import { calcolaPreventivo, r2, type FaseDef, type VoceDef, type Tariffe, type I
 
 export interface Rilevazione {
   fase: string;                 // codice fase
-  data: string;                 // AAAA-MM-GG
-  inizio: string;               // HH:MM
-  fine: string;                 // HH:MM (se < inizio si intende il giorno dopo)
+  data?: string;                // AAAA-MM-GG
+  inizio?: string;              // HH:MM
+  fine?: string;                // HH:MM (se < inizio si intende il giorno dopo)
+  durataMin?: number;           // tempo totale scritto dall'operatore, quando non ci sono apertura e chiusura
   persone?: number;             // default 1
   pezzi?: number;
   tipo: 'S' | 'P';
@@ -36,11 +37,35 @@ const minuti = (data: string, hhmm: string) => {
   return Date.parse(data + 'T00:00:00Z') / 60000 + h * 60 + (m || 0);
 };
 
-function intervallo(r: Rilevazione): Intervallo {
-  const da = minuti(r.data, r.inizio);
-  let a = minuti(r.data, r.fine);
+function intervallo(r: Rilevazione): Intervallo | null {
+  if (!r.inizio || !r.fine) return null;
+  const giorno = r.data || '2000-01-01';
+  const da = minuti(giorno, r.inizio);
+  let a = minuti(giorno, r.fine);
   if (a < da) a += 24 * 60;
   return { da, a };
+}
+
+/** Durata della riga in minuti: da apertura/chiusura, altrimenti il totale scritto. */
+export function minutiRiga(r: Rilevazione): number {
+  const i = intervallo(r);
+  return i ? i.a - i.da : Math.max(0, r.durataMin ?? 0);
+}
+
+/** Minuti di ciclo: unione degli intervalli + righe con il solo totale (che non si possono sovrapporre). */
+function cicloMinuti(rs: Rilevazione[]): number {
+  const iv = rs.map(intervallo).filter((x): x is Intervallo => !!x);
+  return unione(iv) + rs.filter(r => !intervallo(r)).reduce((a, r) => a + Math.max(0, r.durataMin ?? 0), 0);
+}
+
+/** Tempo ciclo e uomo reali per fase (tutte le righe). */
+export function tempiRealiPerFase(rs: Rilevazione[]): Record<string, { cicloSec: number; uomoSec: number; righe: number }> {
+  const out: Record<string, { cicloSec: number; uomoSec: number; righe: number }> = {};
+  for (const fase of new Set(rs.map(r => r.fase))) {
+    const righe = rs.filter(r => r.fase === fase);
+    out[fase] = { cicloSec: cicloMinuti(righe) * 60, uomoSec: righe.reduce((a, r) => a + minutiRiga(r) * 60 * (r.persone ?? 1), 0), righe: righe.length };
+  }
+  return out;
 }
 
 /** minuti coperti dall'unione degli intervalli */
@@ -111,8 +136,8 @@ export function calcolaConsuntivo(opz: {
     const opH = f.tariffa === 'ufficio' ? t.costoOperatoreUfficioH : t.costoOperatoreProduzioneH;
     const costo = (cicloSec: number, uomoSec: number) => cicloSec / 3600 * t.costoAziendaH + uomoSec / 3600 * opH;
 
-    const uomo = (rs: Rilevazione[]) => rs.reduce((a, r) => { const i = intervallo(r); return a + (i.a - i.da) * 60 * (r.persone ?? 1); }, 0);
-    const ciclo = (rs: Rilevazione[]) => unione(rs.map(intervallo)) * 60;
+    const uomo = (rs: Rilevazione[]) => rs.reduce((a, r) => a + minutiRiga(r) * 60 * (r.persone ?? 1), 0);
+    const ciclo = (rs: Rilevazione[]) => cicloMinuti(rs) * 60;
     const S = righe.filter(r => r.tipo !== 'P'), P = righe.filter(r => r.tipo === 'P');
     const realeCiclo = ciclo(righe), realeUomo = uomo(righe);
     const stdCiclo = ciclo(S), stdUomo = uomo(S);
@@ -196,8 +221,8 @@ export function cicloStandardPerFase(rilevazioni: Rilevazione[], personePreviste
   const out: Record<string, number> = {};
   for (const [fase, righe] of perFase) {
     const pers = personePreviste[fase];
-    if (pers > 0) out[fase] = righe.reduce((a, r) => { const i = intervallo(r); return a + (i.a - i.da) * 60 * (r.persone ?? 1); }, 0) / pers;
-    else out[fase] = unione(righe.map(intervallo)) * 60;
+    if (pers > 0) out[fase] = righe.reduce((a, r) => a + minutiRiga(r) * 60 * (r.persone ?? 1), 0) / pers;
+    else out[fase] = cicloMinuti(righe) * 60;
   }
   return out;
 }

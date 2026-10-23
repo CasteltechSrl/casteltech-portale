@@ -185,3 +185,23 @@ table.fasi tr.riga-gruppo.gruppo-vuoto td { color: #9aa39f; font-weight: 600; }
 .tabella-programmi td { padding: .2rem .2rem; }
 .tabella-programmi input { width: 100%; }
 ul.storico { margin: .3rem 0 0; padding-left: 1.2rem; }
+
+/* rientro scheda */
+.griglia-rientro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.colonna-controlli { order: -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem; }
+.colonna-controlli > div { max-height: 22rem; overflow: auto; }
+@media (max-width: 900px) { .colonna-controlli { grid-template-columns: 1fr; } }
+table.rientro { border-collapse: collapse; width: 100%; font-size: .85rem; }
+table.rientro th { text-align: left; font-size: .72rem; text-transform: uppercase; color: var(--testo-chiaro, #666); padding: .3rem .2rem; white-space: nowrap; }
+table.rientro td { padding: .15rem .15rem; border-top: 1px solid var(--bordo, #e3e3e3); }
+table.rientro input, table.rientro select { width: 100%; min-width: 0; padding: .3rem .35rem; font-size: .85rem; }
+table.rientro select { min-width: 12rem; }
+table.rientro input[type=date] { min-width: 8.5rem; } table.rientro input[type=time] { min-width: 5.5rem; }
+table.rientro input.corto { width: 4.5rem; } table.rientro input.cortissimo { width: 3.2rem; }
+table.rientro tr.riga-errore td { background: #fdecea; }
+input.corto { width: 5rem; }
+.due-colonne { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
+@media (max-width: 900px) { .due-colonne { grid-template-columns: 1fr; } }
+ul.controlli { padding-left: 1.1rem; margin: .3rem 0 .8rem; font-size: .88rem; }
+ul.controlli.errori li { color: #b3261e; } ul.controlli.avvisi li { color: #8a5a00; }
+table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }

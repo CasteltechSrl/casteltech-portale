@@ -7,9 +7,14 @@ import QRCode from 'qrcode';
 import { q, q1 } from '../db.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
-  PROGRAMMI, consumiPrevisti, STATI_COMMESSA, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa,
-  proponiNumero, salvaCommessa, schedaTecnica, segnalazioniProdotto, type DatiCommessa, type FaseScheda, type SchedaTecnica,
+  PROGRAMMI, STATI_COMMESSA, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
+  salvaCommessa, salvaRientro, schedaTecnica, segnalazioniCommessa, segnalazioniProdotto,
+  type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
+import { oreDa } from '../preventivi-servizio.js';
+import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
+import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
+import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { layout } from '../views/layout.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
 
@@ -98,7 +103,50 @@ export function rotteCommesse() {
     const fasi = await fasiCommessa(c);
     const storico = await segnalazioniProdotto(c.prodotto_id);
     const qr = await QRCode.toString(indirizzoQr(req, c.codice_qr), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
-    res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr))));
+    const reali = tempiRealiPerFase(await rilevazioniCommessa(c.id));
+    const catFasi: { codice: string; numero: string; nome: string }[] = prev?.catalogo?.fasi ?? [];
+    const nomeFase = (cod: string) => catFasi.find(f => f.codice === cod) ?? { numero: '', nome: cod };
+    res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr), reali, nomeFase)));
+  });
+
+  // ── Rientro della scheda (foglio tempi, materiale, spedizioni, segnalazioni) ──
+  r.get('/:id/rientro', async (req, res) => {
+    const c = await leggiCommessa(Number(req.params.id));
+    if (!c) return res.status(404).send('Commessa non trovata');
+    const msg = req.query.ok === 'conferma' ? 'Rientro confermato' : req.query.ok ? 'Salvato' : undefined;
+    res.send(await paginaRientro(req, c, await rilevazioniCommessa(c.id), { messaggio: msg }));
+  });
+
+  r.post('/:id/rientro', async (req, res) => {
+    const c = await leggiCommessa(Number(req.params.id));
+    if (!c) return res.status(404).send('Commessa non trovata');
+    const b = req.body ?? {};
+    const fasi = await fasiCommessa(c);
+    const righe = righeDaForm(b, Object.fromEntries(fasi.map(f => [f.codice, f.persone])));
+    const consumi: Record<string, number> = {};
+    for (const [k, v] of Object.entries(b.consumi ?? {})) {
+      const n = Number(String(v).replace(',', '.'));
+      if (String(v).trim() !== '' && Number.isFinite(n)) consumi[k] = n;
+    }
+    const spedizioni: Spedizione[] = [0, 1, 2].map(k => {
+      const x = b.spedizioni?.[k] ?? {};
+      const t = (y: unknown) => String(y ?? '').trim().slice(0, 60);
+      return { qta: t(x.qta), colli: t(x.colli), bancali: t(x.bancali), peso: t(x.peso), dimensione: t(x.dimensione) };
+    });
+    const vuoleConferma = b.azione === 'conferma';
+    const errori = controllaRientro(righe, fasi).filter(x => x.livello === 'errore');
+    const conferma = vuoleConferma && !errori.length;
+    const testoSegn = String(b.segnalazione?.testo ?? '').trim().slice(0, 2000);
+    await salvaRientro({
+      commessaId: c.id, righe, consumi, spedizioni, conferma, utenteId: req.session.utente!.id, prodottoId: c.prodotto_id, revisioneId: c.revisione_id,
+      segnalazione: testoSegn ? { testo: testoSegn, prossime: !!b.segnalazione?.prossime, faseCodice: String(b.segnalazione?.fase ?? '') || undefined } : undefined,
+    });
+    if (vuoleConferma && !conferma) {
+      const agg = await leggiCommessa(c.id);
+      return res.status(400).send(await paginaRientro(req, agg, await rilevazioniCommessa(c.id),
+        { errore: `Salvato, ma non confermato: ci sono ${errori.length} errori da correggere (vedi Controlli).` }));
+    }
+    res.redirect(`/commesse/${c.id}/rientro?ok=${conferma ? 'conferma' : '1'}`);
   });
 
   return r;
@@ -137,7 +185,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       <h1>${salvata ? html`Commessa ${salvata.numero} <span class="stato ${salvata.stato}">${STATI_TESTO[salvata.stato]}</span>` : 'Nuova commessa'}</h1>
       <div class="azioni">
         ${messaggio ? html`<span class="nota positivo">${messaggio}</span>` : ''}
-        ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>` : ''}
+        ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
+          <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>` : ''}
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
       </div>
     </div>
@@ -218,11 +267,162 @@ function tabellaFasi(fasi: FaseScheda[]): Raw {
     </tbody></table></div>`;
 }
 
+// ───────────────────────────── rientro della scheda ─────────────────────────────
+
+type RigaForm = Rilevazione & RigaRientro;
+
+/** Righe del foglio tempi dal form: le righe completamente vuote si ignorano. */
+function righeDaForm(b: any, personeFase: Record<string, number>): RigaForm[] {
+  const ora = (x: unknown) => { const m = String(x ?? '').trim().replace('.', ':').match(/^(\d{1,2}):(\d{2})$/); return m ? `${m[1].padStart(2, '0')}:${m[2]}` : undefined; };
+  const testo = (x: unknown) => String(x ?? '').trim().slice(0, 500);
+  const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return String(x ?? '').trim() !== '' && Number.isFinite(n) ? n : undefined; };
+  return Object.values(b?.righe ?? {}).flatMap((r: any) => {
+    const fase = testo(r.fase), inizio = ora(r.apertura), fine = ora(r.chiusura);
+    const totale = String(r.totale ?? '').trim() ? Math.round(oreDa(r.totale) * 60) : undefined;
+    if (!fase && !inizio && !fine && totale == null && !testo(r.operatore) && !testo(r.note)) return [];
+    const tipo: 'S' | 'P' = r.tipo === 'P' ? 'P' : 'S';
+    return [{
+      fase, operatore: testo(r.operatore).toUpperCase(), data: /^\d{4}-\d{2}-\d{2}$/.test(r.data ?? '') ? r.data : undefined, inizio, fine,
+      durataMin: inizio && fine ? undefined : totale, totaleScrittoMin: inizio && fine ? totale : undefined,
+      persone: numero(r.persone) ?? personeFase[fase] ?? 1, pezzi: numero(r.pezzi), tipo,
+      causa: tipo === 'P' ? testo(r.note) : '', note: tipo === 'P' ? '' : testo(r.note), materiale: testo(r.materiale), resp: testo(r.resp),
+    }];
+  });
+}
+
+async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { messaggio?: string; errore?: string }): Promise<string> {
+  const i = c.intestazione ?? {};
+  const prev = await leggiPreventivo(c.preventivo_id);
+  const fasi = await fasiCommessa(c);
+  const tutte: { codice: string; numero: string; nome: string }[] = (prev?.catalogo?.fasi ?? []);
+  const altre = tutte.filter(f => !fasi.some(x => x.codice === f.codice));
+  const nomeFase = (cod: string) => { const f = tutte.find(x => x.codice === cod); return f ? `${f.numero} ${f.nome}` : cod; };
+  const controlli = controllaRientro(righe, fasi, nomeFase);
+  const reali = tempiRealiPerFase(righe.filter(r => r.fase));
+  const voci = vociConsumo(prev, c.quantita);
+  const consumi: Record<string, number> = c.consumi ?? {};
+  const sped: Spedizione[] = [0, 1, 2].map(k => c.spedizioni?.[k] ?? { qta: '', colli: '', bancali: '', peso: '', dimensione: '' });
+  const segnalazioni = await segnalazioniCommessa(c.id);
+  const opzioniFase = (sel: string) => html`<option value="">—</option>
+    <optgroup label="Fasi della commessa">${fasi.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>
+    <optgroup label="Altre fasi">${altre.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>`;
+  const totaleTesto = (r: RigaForm) => { const m = r.inizio && r.fine ? r.totaleScrittoMin : r.durataMin; return m == null ? '' : ore(m * 60); };
+  const riga = (r: Partial<RigaForm>, k: number | string, errore = false) => html`
+    <tr class="${errore ? 'riga-errore' : ''}">
+      <td class="n num-riga">${typeof k === 'number' ? k + 1 : ''}</td>
+      <td><select name="righe[${k}][fase]">${opzioniFase(r.fase ?? '')}</select></td>
+      <td><input name="righe[${k}][operatore]" value="${r.operatore ?? ''}" class="maiuscolo" list="operatori"></td>
+      <td><input type="date" name="righe[${k}][data]" value="${r.data ?? ''}"></td>
+      <td><input type="time" name="righe[${k}][apertura]" value="${r.inizio ?? ''}"></td>
+      <td><input type="time" name="righe[${k}][chiusura]" value="${r.fine ?? ''}"></td>
+      <td><input name="righe[${k}][totale]" value="${r.fase ? totaleTesto(r as RigaForm) : ''}" placeholder="h:mm" class="corto" data-totale></td>
+      <td><input name="righe[${k}][persone]" value="${r.persone ?? ''}" inputmode="decimal" class="cortissimo"></td>
+      <td><input name="righe[${k}][pezzi]" value="${r.pezzi ?? ''}" inputmode="numeric" class="cortissimo"></td>
+      <td><select name="righe[${k}][tipo]"><option ${r.tipo !== 'P' ? raw('selected') : ''}>S</option><option ${r.tipo === 'P' ? raw('selected') : ''}>P</option></select></td>
+      <td><input name="righe[${k}][resp]" value="${r.resp ?? ''}" class="corto"></td>
+      <td><input name="righe[${k}][materiale]" value="${r.materiale ?? ''}"></td>
+      <td><input name="righe[${k}][note]" value="${(r.tipo === 'P' ? r.causa : r.note) ?? ''}"></td>
+      <td><button type="button" class="link togli-riga" title="Togli la riga">✕</button></td>
+    </tr>`;
+  const righeConErrore = new Set(controlli.filter(x => x.livello === 'errore' && x.riga != null).map(x => x.riga));
+  const operatori = await q<{ nome: string }>(`SELECT DISTINCT upper(operatore_nome) AS nome FROM rilevazioni WHERE operatore_nome IS NOT NULL ORDER BY 1`);
+  const errori = controlli.filter(x => x.livello === 'errore'), avvisi = controlli.filter(x => x.livello === 'avviso');
+  return String(layout({
+    titolo: `Rientro ${c.numero}`, utente: req.session.utente, attiva: 'commesse', largo: true, script: 'rientro.js', avviso: esito?.errore,
+    contenuto: html`
+    <form method="post" action="/commesse/${c.id}/rientro" autocomplete="off" id="rientro">
+    <div class="intestazione-pagina">
+      <h1>Rientro scheda · <a href="/commesse/${c.id}">${c.numero}</a> <span class="stato ${c.stato}">${STATI_TESTO[c.stato]}</span></h1>
+      <div class="azioni">
+        ${esito?.messaggio ? html`<span class="nota positivo">${esito.messaggio}</span>` : ''}
+        <a class="bottone" href="/commesse/${c.id}/scheda" target="_blank" rel="noopener">Scheda compilata</a>
+        <button name="azione" value="salva">Salva</button>
+        <button name="azione" value="conferma" class="primario" title="L'ufficio approva tempi e S/P: diventano l'ultima produzione per le prossime schede">Salva e conferma rientro</button>
+      </div>
+    </div>
+    <p class="riepilogo"><strong>${i.cliente}</strong> · ${i.codice}${i.revisione ? ` rev. ${i.revisione}` : ''} · ${i.descrizione} · <strong>${num(c.quantita, 0)} schede</strong>
+      ${c.rientrata_il ? html` · <span class="nota">confermata il ${data(c.rientrata_il)}</span>` : ''}</p>
+
+    <div class="griglia-rientro">
+    <section>
+      <h2>Foglio tempi</h2>
+      <p class="nota">Apertura e chiusura, oppure solo il totale. Persone vuote = quelle previste per la fase. Righe P: la causa va nelle note.</p>
+      <div class="tabella-scorre"><table class="rientro" id="tabella-righe">
+        <thead><tr><th>#</th><th>Fase</th><th>Operatore</th><th>Data</th><th>Apertura</th><th>Chiusura</th><th>Totale</th><th>Pers.</th><th>Pz</th><th>S/P</th><th>Resp</th><th>Materiale impiegato</th><th>Note / causa</th><th></th></tr></thead>
+        <tbody>${righe.map((r, k) => riga(r, k, righeConErrore.has(k)))}
+          ${Array.from({ length: righe.length ? 2 : 8 }, (_, k) => riga({}, righe.length + k))}</tbody>
+      </table></div>
+      <template id="modello-riga">${riga({}, '__N__')}</template>
+      <datalist id="operatori">${operatori.map(o => html`<option value="${o.nome}">`)}</datalist>
+      <p><button type="button" id="aggiungi-riga">+ Aggiungi riga</button></p>
+
+      <div class="due-colonne">
+      <div>
+        <h2>Materiale impiegato <span class="nota">(totale del lotto, dal foglio tempi)</span></h2>
+        <table class="fasi">
+          <thead><tr><th>Voce</th><th class="n">Totale lotto</th><th class="n">Reale</th><th class="n">Previsto</th></tr></thead>
+          <tbody>${voci.map(v => {
+            const reale = consumoReale(v, consumi[v.codice], c.quantita);
+            return html`<tr><td>${v.nome}</td>
+              <td class="n"><input name="consumi[${v.codice}]" value="${consumi[v.codice] ?? ''}" inputmode="decimal" class="corto"> <span class="unita">${v.unita}</span></td>
+              <td class="n">${reale == null ? '' : `${formatoQuantita(reale)} ${v.unita}${v.perLotto ? '' : '/sch.'}`}</td>
+              <td class="n">${v.previstoTesto}${v.previstoTesto && !v.perLotto ? '/sch.' : ''}</td></tr>`;
+          })}</tbody></table>
+      </div>
+      <div>
+        <h2>Spedizioni</h2>
+        <table class="fasi">
+          <thead><tr><th></th><th>Q.tà</th><th>Colli</th><th>Bancali</th><th>Peso</th><th>Dimensione</th></tr></thead>
+          <tbody>${sped.map((x, k) => html`<tr><td>${k + 1}</td>${(['qta', 'colli', 'bancali', 'peso', 'dimensione'] as const).map(campo =>
+            html`<td><input name="spedizioni[${k}][${campo}]" value="${x[campo] ?? ''}" class="${campo === 'dimensione' ? '' : 'corto'}"></td>`)}</tr>`)}</tbody></table>
+
+        <h2>Segnalazioni dalla produzione</h2>
+        ${segnalazioni.length ? html`<ul class="storico">${segnalazioni.map(x => html`<li>${x.fase_codice ? html`<strong>${nomeFase(x.fase_codice)}:</strong> ` : ''}${x.testo}
+          <span class="nota">${x.rilevante_prossime ? '· sulle prossime schede' : ''}</span></li>`)}</ul>` : ''}
+        <label>Nuova segnalazione <textarea name="segnalazione[testo]" rows="2"></textarea></label>
+        <div class="riga-campi">
+          <label>Fase <select name="segnalazione[fase]">${opzioniFase('')}</select></label>
+          <label class="spunta"><input type="checkbox" name="segnalazione[prossime]" checked> Riporta sulle prossime schede di questo prodotto</label>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <aside class="colonna-controlli">
+      <div>
+      <h2>Controlli</h2>
+      ${!controlli.length ? html`<p class="positivo">Nessuna incongruenza.</p>` : ''}
+      ${errori.length ? html`<ul class="controlli errori">${errori.map(x => html`<li>${x.testo}</li>`)}</ul>` : ''}
+      ${avvisi.length ? html`<ul class="controlli avvisi">${avvisi.map(x => html`<li>${x.testo}</li>`)}</ul>` : ''}
+      ${errori.length ? html`<p class="nota">Con errori il rientro si può salvare ma non confermare.</p>` : ''}
+      </div>
+      <div>
+      <h2>Tempi per fase</h2>
+      <table class="fasi">
+        <thead><tr><th>Fase</th><th class="n">Previsto</th><th class="n">Effettivo</th><th class="n">Uomo</th><th class="n">Scost.</th></tr></thead>
+        <tbody>${fasi.map(f => {
+          const re = reali[f.codice];
+          const sc = re && f.cicloSec ? Math.round((re.cicloSec / f.cicloSec - 1) * 100) : null;
+          return html`<tr class="${re ? '' : 'zero'}"><td>${f.numero} ${f.nome}</td><td class="n">${ore(f.cicloSec)}</td>
+            <td class="n">${re ? ore(re.cicloSec) : '—'}</td><td class="n">${re ? ore(re.uomoSec) : ''}</td>
+            <td class="n ${sc != null && Math.abs(sc) > SOGLIA_SCOSTAMENTO * 100 ? 'negativo' : ''}">${sc == null ? '' : `${sc > 0 ? '+' : ''}${sc}%`}</td></tr>`;
+        })}
+        ${Object.keys(reali).filter(k => !fasi.some(f => f.codice === k)).map(k => html`<tr><td>${nomeFase(k)} <span class="etichetta">non prevista</span></td><td class="n">—</td>
+          <td class="n">${ore(reali[k].cicloSec)}</td><td class="n">${ore(reali[k].uomoSec)}</td><td></td></tr>`)}</tbody>
+      </table>
+      </div>
+    </aside>
+    </div>
+    </form>`,
+  }));
+}
+
 // ───────────────────────────── stampa A4 ─────────────────────────────
 
 const RIGHE_RILEVAZIONE = 14;
 
-function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: string; numero: string | null }[], qr: Raw): Raw {
+function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: string; numero: string | null }[], qr: Raw,
+  reali: Record<string, { cicloSec: number; uomoSec: number }>, nomeFase: (cod: string) => { numero: string; nome: string }): Raw {
   const i = c.intestazione ?? {};
   const st: SchedaTecnica = schedaTecnica(c.scheda_tecnica);
   const doppia = !!prev?.parametri?.doppiaFaccia;
@@ -237,13 +437,21 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
       <div class="qr">${qr}<div>${c.numero}</div></div>
     </div>`;
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
-  const consumi = consumiPrevisti(prev, c.quantita);
+  const totReale = (codici: string[]) => codici.reduce((a, k) => a + (reali[k]?.cicloSec ?? 0), 0);
+  const haReali = Object.keys(reali).length > 0;
+  const voci = vociConsumo(prev, c.quantita);
+  const colonne = [...new Set(voci.map(v => v.colonna))];
+  const consumi: Record<string, number> = c.consumi ?? {};
+  const testoConsumo = (v: VoceConsumo) => { const r = consumoReale(v, consumi[v.codice], c.quantita); return r == null ? '' : `${formatoQuantita(r)} ${v.unita}`; };
+  const nonPreviste = Object.keys(reali).filter(k => !fasi.some(f => f.codice === k));
+  const sped: Partial<Spedizione>[] = [0, 1, 2].map(k => c.spedizioni?.[k] ?? {});
   const segnalazioni = [...(c.segnalazioni ? [c.segnalazioni] : []), ...storico.map(s => s.testo + (s.numero ? ` (comm. ${s.numero})` : ''))];
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Scheda ${c.numero} · ${i.codice}</title>
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css"></head>
 <body>
-<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button> <a href="/commesse/${c.id}">← torna alla commessa</a></div>
+<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button> <a href="/commesse/${c.id}">← torna alla commessa</a>
+  ${haReali ? html`<span>Tempi effettivi e consumi compilati dal rientro${c.rientrata_il ? ` confermato il ${data(c.rientrata_il)}` : ' (non ancora confermato)'}</span>` : ''}</div>
 
 <section class="pagina">
   ${testata}
@@ -257,25 +465,28 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>
     ${segnalazioni.length ? html`<ul>${segnalazioni.map(s => html`<li>${s}</li>`)}</ul>` : ''}</div>
-  <table class="griglia spedizioni"><tr>${[1, 2, 3].map(n => html`<td>
-    <div class="etic centro"><u>SPEDIZIONE ${n}</u></div>
-    <div class="campi3"><span>QTA:</span><span>COLLI:</span><span>BANCALI:</span></div>
-    <div class="campi2"><span>PESO:</span><span>DIMENSIONE:</span></div></td>`)}</tr></table>
+  <table class="griglia spedizioni"><tr>${sped.map((x, k) => html`<td>
+    <div class="etic centro"><u>SPEDIZIONE ${k + 1}</u></div>
+    <div class="campi3"><span>QTA: <b>${x.qta}</b></span><span>COLLI: <b>${x.colli}</b></span><span>BANCALI: <b>${x.bancali}</b></span></div>
+    <div class="campi2"><span>PESO: <b>${x.peso}</b></span><span>DIMENSIONE: <b>${x.dimensione}</b></span></div></td>`)}</tr></table>
 
-  <h3 class="gruppo">MATERIALE DI CONSUMO <span>consumo reale a scheda · tra parentesi il previsto dal preventivo</span></h3>
-  <table class="consumo"><tr>${consumi.map(m => html`<th>${m.nome.toUpperCase()}</th>`)}</tr>
-    <tr>${consumi.map(m => html`<td>${m.previsto ? html`<span class="previsto">(${m.previsto})</span>` : ''}</td>`)}</tr></table>
+  <h3 class="gruppo">MATERIALE DI CONSUMO <span>reale a scheda (bombolette: sul lotto) · tra parentesi il previsto dal preventivo</span></h3>
+  <table class="consumo"><tr>${colonne.map(col => html`<th>${col.toUpperCase()}</th>`)}</tr>
+    <tr>${colonne.map(col => html`<td>${voci.filter(v => v.colonna === col).map(v => html`<div>
+      ${testoConsumo(v) ? html`<b>${testoConsumo(v)}</b> ` : ''}${v.previstoTesto ? html`<span class="previsto">(${v.previstoTesto})</span>` : ''}</div>`)}</td>`)}</tr></table>
 
   ${perGruppo(fasi).map(g => html`
-  <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))}</span></h3>
+  <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))}${haReali ? ` · effettivo ${ore(totReale(g.fasi.map(f => f.codice)))}` : ''}</span></h3>
   <table class="fasi-stampa">
-    <thead><tr><th class="nr">NR</th><th>DESCRIZIONE FASE</th><th class="pers">PERS.</th><th class="t">TEMPO PREV. (CICLO)</th><th class="t">TEMPO ULTIMA PRODUZIONE</th><th class="t eff">TEMPO EFFETTIVO</th><th class="ok">✓</th></tr></thead>
+    <thead><tr><th class="nr">NR</th><th>DESCRIZIONE FASE</th><th class="pers">PERS.</th><th class="t">TEMPO PREV. (CICLO)</th><th class="t">TEMPO ULTIMA PRODUZIONE</th><th class="t eff">TEMPO EFFETTIVO</th></tr></thead>
     <tbody>${g.fasi.map(f => html`<tr><td class="nr">${f.numero}</td><td>${f.nome}</td><td class="pers">${num(f.persone, 1)}</td>
-      <td class="t">${ore(f.cicloSec)}</td><td class="t">${f.ultimaSec == null ? '' : ore(f.ultimaSec)}</td><td class="t eff"></td><td class="ok">☐</td></tr>`)}</tbody>
+      <td class="t">${ore(f.cicloSec)}</td><td class="t">${f.ultimaSec == null ? '' : ore(f.ultimaSec)}</td>
+      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td></tr>`)}</tbody>
   </table>`)}
-  <h3 class="gruppo">ALTRE FASI (non previste)</h3>
-  <table class="fasi-stampa"><tbody>${[1, 2, 3].map(() => html`<tr><td class="nr"></td><td></td><td class="pers"></td><td class="t"></td><td class="t"></td><td class="t eff"></td><td class="ok">☐</td></tr>`)}</tbody></table>
-  <p class="totale-stampa">Totale tempo previsto (ciclo): <strong>${ore(tot(fasi))}</strong></p>
+  ${nonPreviste.length ? html`<h3 class="gruppo">ALTRE FASI (non previste)</h3>
+  <table class="fasi-stampa"><tbody>${nonPreviste.map(k => html`<tr><td class="nr">${nomeFase(k).numero}</td><td>${nomeFase(k).nome}</td><td class="pers"></td>
+    <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td></tr>`)}</tbody></table>` : ''}
+  <p class="totale-stampa">Totale tempo previsto (ciclo): <strong>${ore(tot(fasi))}</strong>${haReali ? html` · effettivo: <strong>${ore(totReale(Object.keys(reali)))}</strong>` : ''}</p>
 </section>
 
 ${[1, 2].map(n => html`
@@ -286,7 +497,7 @@ ${[1, 2].map(n => html`
     <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>PERS.</th><th>PZ</th><th>S / P</th><th>RESP</th><th>MATERIALE IMPIEGATO</th><th>NOTE</th></tr></thead>
     <tbody>${Array.from({ length: RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 12 }, () => html`<td></td>`)}</tr>`)}</tbody>
   </table>
-  <p class="legenda">S = tempo standard · P = problema contingente (indicare la causa nelle note) · PERS. = persone che lavorano sulla fase · Foglio ${n}</p>
+  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · S = tempo standard · P = problema contingente (causa nelle note) · PERS. = persone sulla fase · MATERIALE IMPIEGATO: voce e quantità (es. pasta 350 gr) · Foglio ${n}</p>
 </section>`)}
 <script src="/static/stampa.js" defer></script>
 </body></html>`;

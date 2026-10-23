@@ -60,18 +60,16 @@ export function fasiPreviste(prev: any, quantita: number, primoLotto: boolean): 
   });
 }
 
-/** Tempi dell'ultima produzione dello stesso prodotto (commessa precedente con rilevazioni), riportati a questa quantità. */
+/** Tempi dell'ultima produzione dello stesso prodotto (commessa precedente con tempi confermati dall'ufficio), riportati a questa quantità. */
 export async function ultimaProduzione(prodottoId: number, prima: { id?: number }, quantita: number, pannelli: number, cat: Catalogo)
   : Promise<{ numero: string; tempi: Record<string, number> } | null> {
   const prec = await q1<{ id: number; numero: string; quantita: number; n_pannelli: number | null }>(`
     SELECT c.id, c.numero, c.quantita, c.n_pannelli FROM commesse c JOIN prodotti_revisioni r ON r.id = c.revisione_id
-    WHERE r.prodotto_id = $1 AND ($2::int IS NULL OR c.id <> $2) AND EXISTS (SELECT 1 FROM rilevazioni x WHERE x.commessa_id = c.id)
+    WHERE r.prodotto_id = $1 AND ($2::int IS NULL OR c.id <> $2) AND EXISTS (SELECT 1 FROM rilevazioni x WHERE x.commessa_id = c.id AND x.confermata_il IS NOT NULL)
     ORDER BY c.creato_il DESC, c.id DESC LIMIT 1`, [prodottoId, prima.id ?? null]);
   if (!prec) return null;
-  const righe = await q(`SELECT fase_codice, to_char(data, 'YYYY-MM-DD') AS data, to_char(ora_inizio, 'HH24:MI') AS inizio,
-      to_char(ora_fine, 'HH24:MI') AS fine, persone, tipo FROM rilevazioni WHERE commessa_id = $1`, [prec.id]);
+  const ril = await rilevazioniCommessa(prec.id);
   const prevFasi = await q<{ fase_codice: string; persone_previste: number }>(`SELECT fase_codice, persone_previste FROM commesse_fasi WHERE commessa_id = $1`, [prec.id]);
-  const ril: Rilevazione[] = righe.map(r => ({ fase: r.fase_codice, data: r.data, inizio: r.inizio, fine: r.fine, persone: Number(r.persone), tipo: r.tipo }));
   const std = cicloStandardPerFase(ril, Object.fromEntries(prevFasi.map(f => [f.fase_codice, Number(f.persone_previste)])));
   const da = { schede: prec.quantita, pannelli: prec.n_pannelli ?? prec.quantita }, a = { schede: quantita, pannelli };
   const tempi: Record<string, number> = {};
@@ -170,4 +168,58 @@ export const segnalazioniProdotto = (prodottoId: number) => q<{ testo: string; o
   SELECT s.testo, s.origine, s.creato_il, c.numero FROM segnalazioni s LEFT JOIN commesse c ON c.id = s.commessa_id
   WHERE s.prodotto_id = $1 AND s.rilevante_prossime ORDER BY s.creato_il DESC LIMIT 10`, [prodottoId]);
 
-export { consumiPrevisti } from '../engine/consumi.js';
+export { vociConsumo, consumoReale } from '../engine/consumi.js';
+
+/** Righe del foglio tempi di una commessa, nel formato del motore di calcolo. */
+export async function rilevazioniCommessa(commessaId: number): Promise<(Rilevazione & RigaRientro)[]> {
+  const righe = await q(`SELECT id, fase_codice, operatore_nome, to_char(data, 'YYYY-MM-DD') AS data, to_char(ora_inizio, 'HH24:MI') AS inizio,
+      to_char(ora_fine, 'HH24:MI') AS fine, durata_min, totale_scritto_min, persone, pezzi, tipo, causa, materiale, resp, note, confermata_il
+    FROM rilevazioni WHERE commessa_id = $1 ORDER BY riga, id`, [commessaId]);
+  return righe.map(r => ({
+    fase: r.fase_codice, operatore: r.operatore_nome ?? '', data: r.data ?? undefined, inizio: r.inizio ?? undefined, fine: r.fine ?? undefined,
+    durataMin: r.durata_min == null ? undefined : Number(r.durata_min),
+    totaleScrittoMin: r.totale_scritto_min == null ? undefined : Number(r.totale_scritto_min),
+    persone: Number(r.persone), pezzi: r.pezzi ?? undefined, tipo: r.tipo, causa: r.causa ?? '', materiale: r.materiale ?? '', resp: r.resp ?? '',
+    note: r.note ?? '', confermata: !!r.confermata_il,
+  }));
+}
+
+export interface RigaRientro {
+  totaleScrittoMin?: number; materiale?: string; resp?: string; confermata?: boolean;
+}
+
+export interface Spedizione { qta: string; colli: string; bancali: string; peso: string; dimensione: string }
+
+/**
+ * Salva il rientro della scheda: righe del foglio tempi (sostituiscono le precedenti), consumi del lotto,
+ * spedizioni, nuova segnalazione. Con "conferma" l'ufficio approva le righe (S/P compresi) e la commessa
+ * diventa "rientrata": serve che non ci siano errori nei controlli.
+ */
+export async function salvaRientro(opz: {
+  commessaId: number; righe: (Rilevazione & RigaRientro)[]; consumi: Record<string, number>; spedizioni: Spedizione[];
+  segnalazione?: { testo: string; prossime: boolean; faseCodice?: string }; conferma: boolean; utenteId: number; prodottoId: number; revisioneId: number;
+}): Promise<void> {
+  await transazione(async c => {
+    await c.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [opz.commessaId]);
+    for (const [i, r] of opz.righe.entries()) {
+      await c.query(`INSERT INTO rilevazioni (commessa_id, fase_codice, operatore_nome, data, ora_inizio, ora_fine, durata_min, totale_scritto_min,
+          persone, pezzi, tipo, causa, materiale, resp, note, riga, origine, confermata_da, confermata_il)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manuale',$17,$18)`,
+        [opz.commessaId, r.fase, r.operatore || null, r.data || null, r.inizio || null, r.fine || null, r.durataMin ?? null, r.totaleScrittoMin ?? null,
+         r.persone ?? 1, r.pezzi ?? null, r.tipo, r.tipo === 'P' ? (r.causa || null) : null, r.materiale || null, r.resp || null,
+         r.tipo === 'P' ? null : (r.note || null), i,
+         opz.conferma ? opz.utenteId : null, opz.conferma ? new Date() : null]);
+    }
+    await c.query(`UPDATE commesse SET consumi = $2, spedizioni = $3, aggiornato_il = now(),
+        stato = CASE WHEN $4 THEN 'rientrata' WHEN stato = 'aperta' AND $5 THEN 'in_produzione' ELSE stato END,
+        rientrata_il = CASE WHEN $4 THEN now() ELSE rientrata_il END, rientrata_da = CASE WHEN $4 THEN $6::int ELSE rientrata_da END
+      WHERE id = $1`, [opz.commessaId, opz.consumi, JSON.stringify(opz.spedizioni), opz.conferma, opz.righe.length > 0, opz.utenteId]);
+    if (opz.segnalazione?.testo)
+      await c.query(`INSERT INTO segnalazioni (prodotto_id, revisione_id, commessa_id, fase_codice, origine, testo, rilevante_prossime, autore_id)
+        VALUES ($1,$2,$3,$4,'produzione',$5,$6,$7)`, [opz.prodottoId, opz.revisioneId, opz.commessaId, opz.segnalazione.faseCodice || null,
+        opz.segnalazione.testo, opz.segnalazione.prossime, opz.utenteId]);
+  });
+}
+
+export const segnalazioniCommessa = (commessaId: number) => q<{ id: number; testo: string; rilevante_prossime: boolean; creato_il: string; fase_codice: string | null }>(
+  `SELECT id, testo, rilevante_prossime, creato_il, fase_codice FROM segnalazioni WHERE commessa_id = $1 ORDER BY creato_il`, [commessaId]);
