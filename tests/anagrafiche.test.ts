@@ -15,3 +15,14 @@ test('maiuscolo e chiave codice', () => {
   assert.equal(chiaveCodice('sl_0067'), chiaveCodice('SL-0067'));
   assert.notEqual(chiaveCodice('SL_0068'), chiaveCodice('SL_0083'));
 });
+
+const { oreDa } = await import('../src/server/preventivi-servizio.js');
+test('durate: 1:30, 30\', 1h, 1h30, 0,5', () => {
+  assert.equal(oreDa('1:30'), 1.5);
+  assert.equal(oreDa("30'"), 0.5);
+  assert.equal(oreDa('1h'), 1);
+  assert.equal(oreDa('1h30'), 1.5);
+  assert.equal(oreDa('0,5'), 0.5);
+  assert.equal(oreDa('0:10'), 10 / 60);
+  assert.equal(oreDa(''), 0);
+});

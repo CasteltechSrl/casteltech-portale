@@ -32,3 +32,8 @@ export const ore = (sec: number) => {
   const m = Math.round(sec / 60);
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
 };
+/** ore decimali → "h:mm" (0,5 → "0:30") */
+export const durata = (h: number) => {
+  const m = Math.round((Number(h) || 0) * 60);
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+};

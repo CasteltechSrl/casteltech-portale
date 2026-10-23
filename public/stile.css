@@ -46,7 +46,7 @@ button.link { border: 0; background: none; padding: 0; color: var(--accento); fo
 form.inline { display: inline; }
 input, select, textarea { font: inherit; padding: .45rem .55rem; border: 1px solid var(--bordo); border-radius: 6px; background: #fff; color: var(--testo); width: 100%; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accento); outline-offset: -1px; border-color: var(--accento); }
-input[type=checkbox] { width: auto; accent-color: var(--accento); transform: scale(1.15); }
+input[type=checkbox], input[type=radio] { width: auto; margin: 0; accent-color: var(--accento); transform: scale(1.15); }
 label { display: block; font-size: .85rem; color: var(--tenue); }
 label input, label select, label textarea, label output { margin-top: .2rem; }
 label small { display: block; font-size: .78rem; color: #8a948f; margin-top: .15rem; }
@@ -163,3 +163,9 @@ table.preventivi td:nth-child(3) { min-width: 11rem; }          /* cliente */
 table.preventivi td:nth-child(6) { max-width: 26rem; }          /* descrizione */
 table.preventivi td:nth-child(2), table.preventivi td:nth-child(5) { white-space: nowrap; }
 button.pericolo { background: var(--negativo); border-color: var(--negativo); color: #fff; }
+
+/* scelta Solo TOP / TOP + BOT */
+.scelta-lati { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2rem; padding: .6rem .8rem; background: var(--accento-chiaro); border-radius: 6px; }
+.scelta-lati label.spunta { font-weight: 600; }
+.scelta-lati small { flex-basis: 100%; margin: 0; }
+form.solo-top .solo-bot { display: none !important; }

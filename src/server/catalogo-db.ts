@@ -50,7 +50,7 @@ export async function primoAvvio() {
   if (!n?.n) {
     await transazione(async c => {
       for (const [i, p] of PARAMETRI.entries())
-        await c.query(`INSERT INTO parametri (codice, etichetta, unita, gruppo, valore_default, suggerimento, tipo, ordine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        await c.query(`INSERT INTO parametri (codice, etichetta, unita, gruppo, valore_default, suggerimento, tipo, ordine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (codice) DO NOTHING`,
           [p.codice, p.etichetta, p.unita, p.gruppo, p.default ?? null, p.suggerimento ?? null, p.tipo ?? 'numero', i * 10]);
       for (const [i, f] of FASI.entries())
         await c.query(`INSERT INTO fasi (codice, numero, nome, gruppo, formula_secondi, persone_default, tariffa, una_tantum, scala, ordine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,

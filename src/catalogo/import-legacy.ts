@@ -40,6 +40,8 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
   p.usaOnda = p.tempoSaldaturaOnda > 0 ? 1 : 0;
   p.tempoTransitoOnda = p.tempoSaldaturaOnda ?? 0; p.cadenzaOnda = p.tempoSaldaturaOnda ?? 0;
   delete p.tempoSaldaturaOnda;
+  // TOP + BOT se c'erano componenti BOT o una programmazione segnata "BOT"
+  p.doppiaFaccia = p.qtSmdLatoB > 0 || [p.botProgPeP, p.botProgAOI, p.botProgArmadi, p.botProgSerigrafia, p.botPrepDoc].some(Boolean) ? 1 : 0;
   // il vecchio portale non aveva il forno fuori linea
   p.tempoTransitoForno = 0; p.cadenzaForno = 0;
   p.oreProgPeP = ore(u('programmaPick').nOre); p.botProgPeP = u('programmaPick').bottom ? 1 : 0;

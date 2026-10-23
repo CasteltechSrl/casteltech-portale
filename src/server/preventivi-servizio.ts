@@ -25,11 +25,22 @@ export interface DatiPreventivo {
 }
 
 const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+/** Durata scritta come "1:30", "30'", "1h30", "45m" o numero di ore → ore decimali. */
+export function oreDa(x: unknown): number {
+  const t = String(x ?? '').trim().toLowerCase().replace(',', '.');
+  if (!t) return 0;
+  let m = t.match(/^(\d+):(\d{1,2})$/);
+  if (m) return Number(m[1]) + Number(m[2]) / 60;
+  m = t.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*(?:'|m|min)?)?$/);
+  if (m && (m[1] || m[2]) && /h|'|m/.test(t)) return Number(m[1] ?? 0) + Number(m[2] ?? 0) / 60;
+  return numero(t);
+}
 
 /** Ripulisce i dati arrivati dal browser. */
 export function normalizza(d: any, cat: Catalogo): DatiPreventivo {
   const parametri: Record<string, number> = {};
-  for (const p of cat.parametri) if (d?.parametri?.[p.codice] !== undefined && d.parametri[p.codice] !== '') parametri[p.codice] = numero(d.parametri[p.codice]);
+  for (const p of cat.parametri) if (d?.parametri?.[p.codice] !== undefined && d.parametri[p.codice] !== '')
+    parametri[p.codice] = p.tipo === 'durata' ? oreDa(d.parametri[p.codice]) : numero(d.parametri[p.codice]);
   const personeFase: Record<string, number> = {};
   for (const f of cat.fasi) {
     const v = d?.personeFase?.[f.codice];

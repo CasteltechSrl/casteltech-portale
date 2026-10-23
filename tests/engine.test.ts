@@ -89,7 +89,7 @@ test('energia e forno: preriscaldamento solo se la fase c\'è, consumo = ore × 
   assert.deepEqual(senza.voci.map(v => v.costo), [0, 0]);
   assert.equal(senza.fasi.find(f => f.codice === 'fornoTop')!.secondiCiclo, 0);
   // SMD su due lati + onda, 50 pannelli: forno 4 min + 49 × 15 s; onda 4 min + 49 × 90 s
-  const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtSmdLatoB: 10, usaOnda: 1 } });
+  const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtSmdLatoB: 10, usaOnda: 1, doppiaFaccia: 1 } });
   const forno = con.fasi.find(f => f.codice === 'fornoTop')!;
   assert.equal(forno.secondiCiclo, 240 + 49 * 15);
   assert.equal(forno.persone, 2);
@@ -109,9 +109,29 @@ test('preventivo vuoto: senza componenti SMD nessuna fase SMD, programmazione o 
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100 } });
   const conTempo = r.fasi.filter(f => f.secondiCiclo > 0).map(f => f.codice);
-  assert.deepEqual(conTempo, ['prepDocumentazione', 'imballaggio']);
+  // restano solo la pre-produzione che non dipende dall'SMD e l'imballaggio
+  assert.deepEqual(conTempo, ['foglioTempi', 'analisiBom', 'preventivo', 'acquistoPcb', 'acquistoComponenti', 'prepDocumentazione',
+    'etichettaturaMateriale', 'checkPreProduzione', 'imballaggio']);
   // solo TOP: niente fasi BOT
   const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100, qtSmd: 50, qtFeeder: 10 } });
   assert.ok(top.fasi.filter(f => /Bot$/.test(f.codice)).every(f => f.secondiCiclo === 0));
   assert.ok(top.fasi.find(f => f.codice === 'avvioTop')!.secondiCiclo > 0);
+});
+
+test('Solo TOP / TOP + BOT: raddoppio dei tempi "per lato" e fasi BOT solo con TOP + BOT', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const base = { ...def, nPCB: 50, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5 };
+  const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 0 } });
+  const bot = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 1 } });
+  const sec = (r: typeof top, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
+  for (const c of ['prepDocumentazione', 'progArmadi', 'filePeP', 'progPeP', 'progAOI']) assert.equal(sec(bot, c), 2 * sec(top, c), c);
+  for (const c of ['analisiBom', 'preventivo', 'etichettaturaMateriale']) assert.equal(sec(bot, c), sec(top, c), c);
+  // Solo TOP: anche se restano dati BOT, le fasi BOT non contano
+  assert.ok(top.fasi.filter(f => /Bot$/.test(f.codice)).every(f => f.secondiCiclo === 0));
+  assert.ok(sec(bot, 'avvioBot') > 0);
+  // tempi standard di pre-produzione (Adriano): foglio tempi 10', BOM 1h, P&P 1h
+  assert.equal(sec(top, 'foglioTempi'), 600);
+  assert.equal(sec(top, 'analisiBom'), 3600);
+  assert.equal(sec(top, 'progPeP'), 3600);
 });

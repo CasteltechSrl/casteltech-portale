@@ -12,6 +12,8 @@
     const d = { parametri: {}, personeFase: {}, prezziMateriali: {}, tariffe: {} };
     form.querySelectorAll('[data-campo]').forEach(el => { d[el.dataset.campo] = el.value; });
     form.querySelectorAll('[data-id]').forEach(el => { d[el.dataset.id] = el.value; });
+    const lati = form.querySelector('input[name=lati]:checked');
+    if (lati) d.parametri.doppiaFaccia = lati.value;
     form.querySelectorAll('[data-param]').forEach(el => {
       if (el.type === 'checkbox') d.parametri[el.dataset.param] = el.checked ? 1 : 0;
       else if (el.value.trim() !== '') d.parametri[el.dataset.param] = el.value;
@@ -97,6 +99,32 @@
   // tutto in maiuscolo mentre si scrive
   form.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
     const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
+  }));
+
+  // ── Solo TOP / TOP + BOT ──
+  form.querySelectorAll('input[name=lati]').forEach(r => r.addEventListener('change', () => {
+    const soloTop = r.value === '0' && r.checked;
+    form.classList.toggle('solo-top', soloTop);
+    form.querySelectorAll('.solo-bot input').forEach(el => {
+      if (el.type === 'checkbox') { if (soloTop) el.checked = false; return; }
+      // Solo TOP: i dati BOT vengono tolti. TOP + BOT: tornano i valori standard
+      el.value = soloTop ? '' : (el.value || el.placeholder || '');
+    });
+    ricalcola();
+  }));
+  // ── Durate: si scrivono come 1:30, 30', 1h, 1h30 e vengono mostrate come h:mm ──
+  const leggiDurata = t => {
+    t = String(t || '').trim().toLowerCase().replace(',', '.');
+    if (!t) return null;
+    let m = t.match(/^(\d+):(\d{1,2})$/); if (m) return +m[1] + m[2] / 60;
+    m = t.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*(?:'|m|min)?)?$/);
+    if (m && (m[1] || m[2]) && /h|'|m/.test(t)) return +(m[1] || 0) + (m[2] || 0) / 60;
+    const n = Number(t); return Number.isFinite(n) ? n : null;
+  };
+  const scriviDurata = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+  form.querySelectorAll('input[data-tipo=durata]').forEach(el => el.addEventListener('blur', () => {
+    const h = leggiDurata(el.value);
+    if (h != null) el.value = scriviDurata(h);
   }));
 
   form.addEventListener('input', e => {

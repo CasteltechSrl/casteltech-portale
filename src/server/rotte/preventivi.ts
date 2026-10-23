@@ -7,7 +7,7 @@ import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
 import { layout } from '../views/layout.js';
-import { html, euro, data, num, ore, raw, type Raw } from '../views/html.js';
+import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
 
 const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
@@ -57,7 +57,9 @@ export function rottePreventivi() {
   // ── Nuovo ──
   r.get('/nuovo', async (req, res) => {
     const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
-    const dati = normalizza({ tariffe, nSchedeInPCB: 1 }, cat);
+    // i valori standard sono già scritti nelle caselle (modificabili); le caselle sì/no partono spente
+    const standard = Object.fromEntries(cat.parametri.filter(p => p.default != null && p.tipo !== 'si_no' && p.gruppo !== 'GENERALE').map(p => [p.codice, p.default]));
+    const dati = normalizza({ tariffe, nSchedeInPCB: 1, parametri: standard }, cat);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti()));
   });
 
@@ -136,11 +138,19 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
 function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = []): string {
-  const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE');
+  const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE' && g !== 'LATI');
+  const conLati = cat.parametri.some(p => p.codice === 'doppiaFaccia');
+  const doppia = !!d.parametri.doppiaFaccia;
   const valore = (cod: string) => d.parametri[cod] ?? '';
+  // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
+  const soloBot = (p: Catalogo['parametri'][0]) => conLati && (p.gruppo === 'SMD BOT' || /LatoB$/.test(p.codice));
   const campoParametro = (p: Catalogo['parametri'][0]) => p.tipo === 'si_no'
-    ? html`<label class="spunta"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`
-    : html`<label>${p.etichetta} <span class="unita">${p.unita}</span>
+    ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`
+    : p.tipo === 'durata'
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">ore:minuti</span>
+        <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}">
+        ${p.suggerimento ? html`<small>${p.suggerimento}</small>` : ''}</label>`
+    : html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">${p.unita}</span>
         <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}">
         ${p.suggerimento ? html`<small>${p.suggerimento}</small>` : ''}</label>`;
   const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && d.parametri[p.codice]).length;
@@ -148,7 +158,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   return String(layout({
     titolo: salvato ? `Preventivo ${salvato.numero}` : 'Nuovo preventivo', utente, attiva: 'preventivi', script: 'preventivo.js',
     contenuto: html`
-    <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off">
+    <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''}">
     <div class="intestazione-pagina">
       <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
@@ -164,6 +174,11 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     <section class="colonna-dati">
       <fieldset class="blocco">
         <legend>Prodotto</legend>
+        ${conLati ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
+          <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
+          <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
+          <small class="nota">Con TOP + BOT si raddoppiano i tempi di pre-produzione indicati "per lato" e si attivano le fasi BOT.</small>
+        </div>` : ''}
         <div class="riga-campi">
           <label class="largo">Cliente
             <select data-id="clienteId" id="sel-cliente" required>
@@ -197,7 +212,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </fieldset>
 
       ${gruppi.map(g => html`
-      <details class="blocco" ${compilati(g) || g.startsWith('SMD TOP') ? raw('open') : ''}>
+      <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''}" ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' ? raw('open') : ''}>
         <summary>${g} ${compilati(g) ? html`<span class="conta">${compilati(g)}</span>` : ''}</summary>
         <div class="campi-parametri">${cat.parametri.filter(p => p.gruppo === g).map(campoParametro)}</div>
       </details>`)}
