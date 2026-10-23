@@ -55,14 +55,16 @@ export const PARAMETRI: ParametroDef[] = [
   P('oreProgPeP', 'Programmazione P&P (per lato)', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreAttrezzature3D', 'Disegno e stampa 3D attrezzature', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreCheckPreProduzione', 'Check pre-produzione', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  // Gestione materiale (Adriano, 23/10/2026). Provenienza: 1 = del cliente, da restituire (tutto a ogni lotto);
-  // 2 = del cliente, gestito a nostro magazzino; 3 = acquistato da noi (2 e 3: arrivo, etichettatura e stoccaggio
-  // solo quando il materiale si riordina, quindi nel primo lotto). Tempi scritti dall'operatore.
+  // Gestione materiale (Adriano, 23/10/2026). Provenienza: 1 = del cliente, da restituire (non passa dal magazzino);
+  // 2 = del cliente, gestito a nostro magazzino; 3 = acquistato da noi; 4 = in parte del cliente e in parte acquistato
+  // da noi, sempre gestito a magazzino (2, 3 e 4: etichettatura, stoccaggio ed estrazione
+  // dal magazzino). Tutto a ogni lotto: quasi sempre qualcosa finisce e va ricaricato. Tempi scritti dall'operatore.
   P('provenienzaMateriale', 'Provenienza del materiale', '', 'GESTIONE MATERIALE', 1),
   P('oreControlloBolla', 'Controllo bolla e materiale arrivato', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
   P('oreEtichettaturaMateriale', 'Etichettatura (software magazzino)', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
   P('oreStoccaggioMateriale', 'Stoccaggio in armadio / magazzino', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
-  P('oreEstrazioneMateriale', 'Estrazione e preparazione per la produzione', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('oreEstrazioneMateriale', 'Estrazione da magazzino', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('orePreparazioneMateriale', 'Preparazione materiale per la produzione', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
   P('oreChiusuraSessione', 'Chiusura sessione, conteggio e rientro avanzi', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
   // SMD lato TOP
   P('qtSmd', 'Componenti SMD TOP per scheda', 'pz', 'SMD TOP'),
@@ -205,14 +207,14 @@ export const FASI: FaseCatalogo[] = [
   F('O', 'attrezzature3D', 'Disegno e stampa 3D attrezzature', PRE, 'oreAttrezzature3D * 3600', uff(true)),
   F('P', 'checkPreProduzione', 'Check pre-produzione', PRE, 'oreCheckPreProduzione * 3600', uff(false)),
 
-  // Gestione materiale: caso 1 (cliente, da restituire) tutto a ogni lotto; casi 2 e 3 arrivo/etichettatura/stoccaggio
-  // solo quando il materiale si riordina (primo lotto), estrazione e chiusura a ogni lotto.
-  F('M1', 'controlloBollaLotto', 'Controllo bolla e materiale (materiale da restituire)', GM, 'se(provenienzaMateriale == 1, oreControlloBolla * 3600, 0)', { scala: 'fisso', legacy: ['controlloMaterialeSmd', 'controlloMaterialeTHT'] }),
-  F('M1', 'controlloBollaArrivo', 'Controllo bolla e materiale all\'arrivo', GM, 'se(provenienzaMateriale != 1, oreControlloBolla * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
-  F('M2', 'etichettaturaMateriale', 'Etichettatura materiale (software magazzino)', GM, 'se(provenienzaMateriale != 1, oreEtichettaturaMateriale * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
-  F('M3', 'stoccaggioMateriale', 'Stoccaggio in armadio / magazzino', GM, 'se(provenienzaMateriale != 1, oreStoccaggioMateriale * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
-  F('M4', 'estrazioneMateriale', 'Estrazione e preparazione materiale per la produzione', GM, 'oreEstrazioneMateriale * 3600', { scala: 'fisso' }),
-  F('M5', 'chiusuraSessione', 'Chiusura sessione, conteggio e rientro avanzi', GM, 'oreChiusuraSessione * 3600', { scala: 'fisso' }),
+  // Gestione materiale, tutto a ogni lotto. Con materiale del cliente da restituire (caso 1) niente magazzino:
+  // né etichettatura, né stoccaggio, né estrazione.
+  F('M1', 'controlloBollaLotto', 'Controllo bolla e materiale arrivato', GM, 'oreControlloBolla * 3600', { scala: 'fisso', legacy: ['controlloMaterialeSmd', 'controlloMaterialeTHT'] }),
+  F('M2', 'etichettaturaMateriale', 'Etichettatura materiale (software magazzino)', GM, 'se(provenienzaMateriale != 1, oreEtichettaturaMateriale * 3600, 0)', { scala: 'fisso' }),
+  F('M3', 'stoccaggioMateriale', 'Stoccaggio in armadio / magazzino', GM, 'se(provenienzaMateriale != 1, oreStoccaggioMateriale * 3600, 0)', { scala: 'fisso' }),
+  F('M4', 'estrazioneMateriale', 'Estrazione da magazzino', GM, 'se(provenienzaMateriale != 1, oreEstrazioneMateriale * 3600, 0)', { scala: 'fisso' }),
+  F('M5', 'preparazioneMateriale', 'Preparazione materiale per la produzione', GM, 'orePreparazioneMateriale * 3600', { scala: 'fisso' }),
+  F('M6', 'chiusuraSessione', 'Chiusura sessione, conteggio e rientro avanzi', GM, 'oreChiusuraSessione * 3600', { scala: 'fisso' }),
 
   F('2T', 'progSerigrafiaTop', 'Programmazione serigrafia TOP', 'SMD', 'se(qtSmd > 0, oreProgSerigrafia * 3600, 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
   F('3T', 'equipSerigrafiaTop', 'Equipaggiamento serigrafia TOP', 'SMD', 'se(qtSmd > 0, tempoAttrezSerigrafia * 60, 0)', { scala: 'fisso', legacy: ['equipaggiamentoSerig'] }),

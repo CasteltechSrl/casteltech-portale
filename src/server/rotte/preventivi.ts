@@ -10,7 +10,7 @@ import { layout } from '../views/layout.js';
 import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
 
-const PROVENIENZE: [number, string][] = [[1, 'Del cliente, da restituire'], [2, 'Del cliente, a nostro magazzino'], [3, 'Acquistato da noi']];
+const PROVENIENZE: [number, string][] = [[1, 'Del cliente, da restituire'], [2, 'Del cliente, a nostro magazzino'], [3, 'Acquistato da noi'], [4, 'In parte del cliente, in parte acquistato da noi']];
 const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
@@ -146,13 +146,13 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
   const info = (p: Catalogo['parametri'][0]) => p.suggerimento ? html` <span class="info" title="${p.suggerimento}" aria-label="${p.suggerimento}">ⓘ</span>` : '';
   const soloBot = (p: Catalogo['parametri'][0]) => conLati && (p.gruppo === 'SMD BOT' || /LatoB$/.test(p.codice));
-  // gestione materiale: etichettatura e stoccaggio non servono se il materiale del cliente va restituito
+  // gestione materiale: etichettatura, stoccaggio ed estrazione non servono se il materiale del cliente va restituito
   const provenienza = Number(d.parametri.provenienzaMateriale ?? 1);
-  const soloMagazzino = (p: Catalogo['parametri'][0]) => ['oreEtichettaturaMateriale', 'oreStoccaggioMateriale'].includes(p.codice);
+  const soloMagazzino = (p: Catalogo['parametri'][0]) => ['oreEtichettaturaMateriale', 'oreStoccaggioMateriale', 'oreEstrazioneMateriale'].includes(p.codice);
   const sceltaProvenienza = () => html`
     <div class="scelta-lati scelta-provenienza" role="radiogroup" aria-label="Provenienza del materiale">
       ${PROVENIENZE.map(([v, testo]) => html`<label class="spunta"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
-      <small class="nota">Materiale da restituire: tutto a ogni lotto. A magazzino: arrivo, etichettatura e stoccaggio solo nel 1° lotto.</small>
+      <small class="nota">Tutto a ogni lotto. Materiale da restituire: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso al cliente in imballaggio.</small>
     </div>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'
