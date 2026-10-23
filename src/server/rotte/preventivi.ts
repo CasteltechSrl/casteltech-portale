@@ -284,6 +284,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
           <label>Stato <select name="stato">${STATI.map(s => html`<option ${s === salvato.stato ? raw('selected') : ''}>${s}</option>`)}</select></label>
           <button>Aggiorna stato</button>
         </form>
+        <a class="bottone primario" href="/commesse/nuova?preventivo=${salvato.id}">Crea commessa</a>
         <form method="post" action="/preventivi/${salvato.id}/duplica" class="inline">
           <button title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica con prezzi attuali</button>
         </form>

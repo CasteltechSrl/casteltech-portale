@@ -183,3 +183,29 @@ export function prezzoCorretto(opz: {
   };
   return calcolaPreventivo(opz.fasi, opz.voci, opz.tariffe, input);
 }
+
+// ───────────────────────────── tempi "ultima produzione" per la scheda ─────────────────────────────
+
+/**
+ * Tempo ciclo standard (solo righe S) per fase, dalle rilevazioni di una commessa: unione degli intervalli,
+ * riportato alle persone previste quando sono indicate (tempo uomo ÷ persone previste), come nel consuntivo.
+ */
+export function cicloStandardPerFase(rilevazioni: Rilevazione[], personePreviste: Record<string, number> = {}): Record<string, number> {
+  const perFase = new Map<string, Rilevazione[]>();
+  for (const r of rilevazioni) if (r.tipo !== 'P') perFase.set(r.fase, [...(perFase.get(r.fase) ?? []), r]);
+  const out: Record<string, number> = {};
+  for (const [fase, righe] of perFase) {
+    const pers = personePreviste[fase];
+    if (pers > 0) out[fase] = righe.reduce((a, r) => { const i = intervallo(r); return a + (i.a - i.da) * 60 * (r.persone ?? 1); }, 0) / pers;
+    else out[fase] = unione(righe.map(intervallo)) * 60;
+  }
+  return out;
+}
+
+/** Riporta un tempo a un'altra quantità secondo la scala della fase (fisso / per scheda / per pannello). */
+export function riportaAQuantita(sec: number, scala: 'fisso' | 'scheda' | 'pannello',
+  da: { schede: number; pannelli: number }, a: { schede: number; pannelli: number }): number {
+  if (scala === 'scheda') return da.schede > 0 ? sec * a.schede / da.schede : sec;
+  if (scala === 'pannello') return da.pannelli > 0 ? sec * a.pannelli / da.pannelli : sec;
+  return sec;
+}

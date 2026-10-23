@@ -24,6 +24,7 @@ ${opz.utente ? html`
   <nav>
     ${opz.utente.ruolo === 'ufficio' ? html`
       ${voce('/preventivi', 'Preventivi', 'preventivi')}
+      ${voce('/commesse', 'Commesse', 'commesse')}
       ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>

@@ -13,6 +13,7 @@ import { layout, type Utente } from './views/layout.js';
 import { html } from './views/html.js';
 import { rottePreventivi } from './rotte/preventivi.js';
 import { rotteImpostazioni } from './rotte/impostazioni.js';
+import { rotteCommesse } from './rotte/commesse.js';
 import { avviaBackupNotturno } from './backup.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -98,6 +99,13 @@ app.get('/salute', (_req, res) => { res.send('ok'); });
 
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
+app.use('/commesse', soloUfficio, rotteCommesse());
+// QR stampato sulla scheda di produzione: apre la commessa
+app.get('/c/:codice', soloUfficio, async (req, res) => {
+  const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE codice_qr = $1`, [req.params.codice]);
+  if (!c) return res.status(404).send('Commessa non trovata');
+  res.redirect(`/commesse/${c.id}`);
+});
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);

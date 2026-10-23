@@ -39,7 +39,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
 ## Stato dei lavori (aggiornare quando cambia)
 1. ✅ Motore di calcolo, catalogo dalla scheda di produzione, tempo ciclo/uomo, energia forno/onda.
 2. ✅ Sito: login, preventivi (calcolo in tempo reale), impostazioni, utenti, import dal vecchio portale.
-3. ⬜ Commesse e stampa scheda di produzione (PDF con QR, tempi preventivati e ultima produzione).
+3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
+   prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità, ultima produzione, fogli tempi, QR → `/c/<codice>`.
+   La scheda tecnica (programmi, lamine, paste, note) sta sulla revisione del prodotto e si ripropone ai lotti successivi.
 4. ⬜ Rientro schede: inserimento manuale, poi lettura automatica della scansione; S/P confermato dall'ufficio.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

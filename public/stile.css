@@ -176,3 +176,12 @@ form.materiale-da-restituire .solo-magazzino { display: none !important; }
 table.fasi tr.riga-gruppo td { background: #eef3f1; font-weight: 700; color: var(--accento); border-top: 2px solid #d5e4df; font-size: .82rem; letter-spacing: .02em; }
 table.fasi tr.riga-gruppo.gruppo-vuoto td { color: #9aa39f; font-weight: 600; }
 .info { cursor: help; color: var(--accento); font-size: .85rem; margin-left: .2rem; }
+
+/* commesse */
+.riepilogo { margin: 0; line-height: 1.5; }
+.tabella-programmi { width: 100%; border-collapse: collapse; margin-bottom: .8rem; }
+.tabella-programmi th { text-align: left; font-weight: 500; padding: .2rem .4rem .2rem 0; white-space: nowrap; }
+.tabella-programmi thead th { font-size: .8rem; color: var(--testo-chiaro, #666); }
+.tabella-programmi td { padding: .2rem .2rem; }
+.tabella-programmi input { width: 100%; }
+ul.storico { margin: .3rem 0 0; padding-left: 1.2rem; }

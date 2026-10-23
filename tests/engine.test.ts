@@ -166,3 +166,20 @@ test('gestione materiale: tutto a ogni lotto; con materiale da restituire niente
   }
   assert.ok(FASI.filter(f => f.gruppo === 'GESTIONE MATERIALE').every(f => !f.unaTantum));
 });
+
+test('scheda: tempo ultima produzione = righe S, riportato a persone previste e alla nuova quantità', async () => {
+  const { cicloStandardPerFase, riportaAQuantita } = await import('../src/engine/consuntivo.js');
+  const r = cicloStandardPerFase([
+    { fase: 'pep', data: '2026-10-01', inizio: '08:00', fine: '09:00', persone: 2, tipo: 'S' },
+    { fase: 'pep', data: '2026-10-01', inizio: '09:00', fine: '09:30', persone: 1, tipo: 'S' },
+    { fase: 'pep', data: '2026-10-01', inizio: '10:00', fine: '11:00', persone: 2, tipo: 'P', causa: 'feeder rotto' },
+    { fase: 'imb', data: '2026-10-02', inizio: '14:00', fine: '14:30', tipo: 'S' },
+    { fase: 'imb', data: '2026-10-02', inizio: '14:15', fine: '14:45', tipo: 'S' },
+  ], { pep: 2 });
+  assert.equal(r.pep, (7200 + 1800) / 2);  // uomo 2h30 ÷ 2 persone previste; la riga P non conta
+  assert.equal(r.imb, 2700);               // senza persone previste: unione degli intervalli (14:00–14:45)
+  const da = { schede: 100, pannelli: 50 }, a = { schede: 300, pannelli: 150 };
+  assert.equal(riportaAQuantita(600, 'fisso', da, a), 600);
+  assert.equal(riportaAQuantita(600, 'scheda', da, a), 1800);
+  assert.equal(riportaAQuantita(600, 'pannello', da, { schede: 300, pannelli: 75 }), 900);
+});

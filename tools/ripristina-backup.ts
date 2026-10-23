@@ -38,6 +38,8 @@ await transazione(async c => {
   }
   const maxNum = await c.query(`SELECT max(substring(numero from '-(\\d+)$')::int) AS n FROM preventivi`);
   if (maxNum.rows[0]?.n) await c.query(`SELECT setval('numerazione_preventivi', $1)`, [maxNum.rows[0].n]);
+  const maxComm = await c.query(`SELECT max(substring(numero from '^C\\d{4}-(\\d+)$')::int) AS n FROM commesse`);
+  if (maxComm.rows[0]?.n) await c.query(`SELECT setval('numerazione_commesse', $1)`, [maxComm.rows[0].n]);
 });
 console.log(`Ripristino completato dal backup del ${backup.creato_il}`);
 await pool.end();
