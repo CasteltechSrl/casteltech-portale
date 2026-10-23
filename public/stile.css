@@ -169,6 +169,8 @@ button.pericolo { background: var(--negativo); border-color: var(--negativo); co
 .scelta-lati label.spunta { font-weight: 600; }
 .scelta-lati small { flex-basis: 100%; margin: 0; }
 form.solo-top .solo-bot { display: none !important; }
+form.materiale-da-restituire .solo-magazzino { display: none !important; }
+.campi-parametri .scelta-provenienza { grid-column: 1 / -1; }
 
 /* tabella fasi: riga di totale per gruppo */
 table.fasi tr.riga-gruppo td { background: #eef3f1; font-weight: 700; color: var(--accento); border-top: 2px solid #d5e4df; font-size: .82rem; letter-spacing: .02em; }

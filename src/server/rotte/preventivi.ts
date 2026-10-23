@@ -10,6 +10,7 @@ import { layout } from '../views/layout.js';
 import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
 
+const PROVENIENZE: [number, string][] = [[1, 'Del cliente, da restituire'], [2, 'Del cliente, a nostro magazzino'], [3, 'Acquistato da noi']];
 const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
@@ -145,19 +146,28 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
   const info = (p: Catalogo['parametri'][0]) => p.suggerimento ? html` <span class="info" title="${p.suggerimento}" aria-label="${p.suggerimento}">ⓘ</span>` : '';
   const soloBot = (p: Catalogo['parametri'][0]) => conLati && (p.gruppo === 'SMD BOT' || /LatoB$/.test(p.codice));
-  const campoParametro = (p: Catalogo['parametri'][0]) => p.tipo === 'si_no'
+  // gestione materiale: etichettatura e stoccaggio non servono se il materiale del cliente va restituito
+  const provenienza = Number(d.parametri.provenienzaMateriale ?? 1);
+  const soloMagazzino = (p: Catalogo['parametri'][0]) => ['oreEtichettaturaMateriale', 'oreStoccaggioMateriale'].includes(p.codice);
+  const sceltaProvenienza = () => html`
+    <div class="scelta-lati scelta-provenienza" role="radiogroup" aria-label="Provenienza del materiale">
+      ${PROVENIENZE.map(([v, testo]) => html`<label class="spunta"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
+      <small class="nota">Materiale da restituire: tutto a ogni lotto. A magazzino: arrivo, etichettatura e stoccaggio solo nel 1° lotto.</small>
+    </div>`;
+  const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
+    : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`
     : p.tipo === 'durata'
-    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">ore:minuti</span>${info(p)}
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}">${p.etichetta} <span class="unita">ore:minuti</span>${info(p)}
         <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
     : html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">${p.unita}</span>${info(p)}
         <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}"></label>`;
-  const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && d.parametri[p.codice]).length;
+  const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && p.codice !== 'provenienzaMateriale' && d.parametri[p.codice]).length;
 
   return String(layout({
     titolo: salvato ? `Preventivo ${salvato.numero}` : 'Nuovo preventivo', utente, attiva: 'preventivi', script: 'preventivo.js',
     contenuto: html`
-    <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''}">
+    <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''} ${provenienza === 1 ? 'materiale-da-restituire' : ''}">
     <div class="intestazione-pagina">
       <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
@@ -216,7 +226,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </fieldset>` : ''}
 
       ${gruppi.map(g => html`
-      <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''}" ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' ? raw('open') : ''}>
+      <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''}" ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' || g === 'GESTIONE MATERIALE' ? raw('open') : ''}>
         <summary>${g} ${compilati(g) ? html`<span class="conta">${compilati(g)}</span>` : ''}</summary>
         <div class="campi-parametri">${cat.parametri.filter(p => p.gruppo === g).map(campoParametro)}</div>
       </details>`)}

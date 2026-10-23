@@ -42,6 +42,13 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
   delete p.tempoSaldaturaOnda;
   // TOP + BOT se c'erano componenti BOT o una programmazione segnata "BOT"
   p.doppiaFaccia = p.qtSmdLatoB > 0 || [p.botProgPeP, p.botProgAOI, p.botProgArmadi, p.botProgSerigrafia, p.botPrepDoc].some(Boolean) ? 1 : 0;
+  // il "controllo materiale" del vecchio portale (per feeder e per tipologia THT) = controllo bolla e materiale
+  // del cliente da restituire (caso 1), a ogni lotto
+  p.provenienzaMateriale = 1;
+  p.oreControlloBolla = ((p.qtFeeder ?? 0) * (p.tempoContMateriale ?? 0) + (p.qtFeederLatoB ?? 0) * (p.tempoContMaterialeLatoB ?? 0)
+    + (p.qtTipolTht ?? 0) * (p.tempoControlloMateriale ?? 0)) / 3600;
+  for (const k of ['tempoContMateriale', 'tempoContMaterialeLatoB', 'tempoControlloMateriale']) delete p[k];
+  p.minResoMateriale = 0;   // non previsto nel vecchio portale
   // il vecchio portale non aveva il forno fuori linea
   p.tempoTransitoForno = 0; p.cadenzaForno = 0;
   p.oreProgPeP = ore(u('programmaPick').nOre); p.botProgPeP = u('programmaPick').bottom ? 1 : 0;

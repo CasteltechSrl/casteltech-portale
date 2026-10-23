@@ -53,13 +53,20 @@ export const PARAMETRI: ParametroDef[] = [
   P('oreProgArmadi', 'Programmazione armadi (per lato)', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreFilePeP', 'Preparazione file P&P (per lato)', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreProgPeP', 'Programmazione P&P (per lato)', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreEtichettaturaMateriale', 'Etichettatura / controllo materiale', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreAttrezzature3D', 'Disegno e stampa 3D attrezzature', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
   P('oreCheckPreProduzione', 'Check pre-produzione', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
+  // Gestione materiale (Adriano, 23/10/2026). Provenienza: 1 = del cliente, da restituire (tutto a ogni lotto);
+  // 2 = del cliente, gestito a nostro magazzino; 3 = acquistato da noi (2 e 3: arrivo, etichettatura e stoccaggio
+  // solo quando il materiale si riordina, quindi nel primo lotto). Tempi scritti dall'operatore.
+  P('provenienzaMateriale', 'Provenienza del materiale', '', 'GESTIONE MATERIALE', 1),
+  P('oreControlloBolla', 'Controllo bolla e materiale arrivato', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('oreEtichettaturaMateriale', 'Etichettatura (software magazzino)', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('oreStoccaggioMateriale', 'Stoccaggio in armadio / magazzino', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('oreEstrazioneMateriale', 'Estrazione e preparazione per la produzione', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
+  P('oreChiusuraSessione', 'Chiusura sessione, conteggio e rientro avanzi', 'h', 'GESTIONE MATERIALE', undefined, undefined, 'durata'),
   // SMD lato TOP
   P('qtSmd', 'Componenti SMD TOP per scheda', 'pz', 'SMD TOP'),
   P('qtFeeder', 'Feeder TOP', 'pz', 'SMD TOP'),
-  P('tempoContMateriale', 'Controllo materiale per feeder', 's', 'SMD TOP', 60),
   P('oreProgSerigrafia', 'Programmazione serigrafia (per lato)', 'h', 'SMD TOP', 0.5, undefined, 'durata'),
   P('tempoAttrezSerigrafia', 'Attrezzaggio serigrafia', 'min', 'SMD TOP', 20, '40–60 min se campionatura'),
   P('tempoAttrezPeP', 'Attrezzaggio P&P per feeder', 'min', 'SMD TOP', 3),
@@ -70,7 +77,6 @@ export const PARAMETRI: ParametroDef[] = [
   // SMD lato BOT
   P('qtSmdLatoB', 'Componenti SMD BOT per scheda', 'pz', 'SMD BOT'),
   P('qtFeederLatoB', 'Feeder BOT', 'pz', 'SMD BOT'),
-  P('tempoContMaterialeLatoB', 'Controllo materiale per feeder BOT', 's', 'SMD BOT', 60),
   P('tempoAttrezSerigrafiaLatoB', 'Attrezzaggio serigrafia BOT', 'min', 'SMD BOT', 20),
   P('tempoAttrezPePLatoB', 'Attrezzaggio P&P per feeder BOT', 'min', 'SMD BOT', 3),
   P('tempoAvvioProduzioneLatoB', 'Avvio produzione BOT', 'min', 'SMD BOT', 30),
@@ -86,11 +92,9 @@ export const PARAMETRI: ParametroDef[] = [
   P('tempoRevisioneAoi', 'Ispezione AOI TOP per scheda', 's', 'AOI', 60),
   P('tempoRevisioneAoiLatoB', 'Ispezione AOI BOT per scheda', 's', 'AOI', 30),
   P('tempoRiparazioneSmd', 'Riparazione SMD per scheda', 's', 'AOI', 0),
-  P('minChiusuraSessione', 'Chiusura sessione e rientro bobine', 'min', 'AOI', 0),
   // THT
   P('qtTht', 'Componenti THT per scheda', 'pz', 'THT'),
   P('qtTipolTht', 'Tipologie componenti THT', 'pz', 'THT'),
-  P('tempoControlloMateriale', 'Controllo materiale THT per tipologia', 's', 'THT', 60),
   P('qtPthdaPreparare', 'Componenti THT da preparare per scheda', 'pz', 'THT'),
   P('tempoDiPrepTht', 'Preparazione per componente', 's', 'THT', 4),
   P('qntCompMontaggio', 'Componenti montati in giostra per scheda', 'pz', 'THT'),
@@ -121,6 +125,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('modifica', 'Modifiche varie per scheda', 's', 'COMPLETAMENTO', 0),
   P('tempoPrepScatole', 'Preparazione scatole e buste per scheda', 's', 'IMBALLAGGIO', 0),
   P('tempoDiImballaggio', 'Imballaggio per scheda', 's', 'IMBALLAGGIO', 30),
+  P('minResoMateriale', 'Reso materiale avanzato al cliente (a lotto)', 'min', 'IMBALLAGGIO', 10, 'Solo con materiale del cliente da restituire'),
   // Materiali di consumo (quantità)
   P('crema', 'Crema saldante per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,6–1,5–2,6 gr (0,0034 gr/comp.; 500 comp. ≈ 1,5 gr/scheda)'),
   P('stagno', 'Stagno lead free (reofori per scheda)', 'pz', 'MATERIALE DI CONSUMO', 0, '0,45 gr/comp — 0,016 gr/foro'),
@@ -182,6 +187,7 @@ const F = (numero: string, codice: string, nome: string, gruppo: string, formula
      unaTantum: o.unaTantum ?? false, scala: o.scala, legacy: o.legacy });
 
 const PRE = 'PRE-PRODUZIONE';
+const GM = 'GESTIONE MATERIALE';
 // pre-produzione = costi una tantum di avvio produzione (indicazione di Adriano, 23/10/2026)
 const uff = (_unaTantum?: boolean) => ({ tariffa: 'ufficio' as T, unaTantum: true, scala: 'fisso' as Scala });
 
@@ -196,11 +202,18 @@ export const FASI: FaseCatalogo[] = [
   F('I', 'progArmadi', 'Programmazione armadi TOP e BOT', PRE, 'se(qtSmd + doppiaFaccia * qtSmdLatoB > 0, oreProgArmadi * 3600 * se(doppiaFaccia, 2, 1), 0)', { ...uff(true), legacy: ['utProgArmadi'] }),
   F('L', 'filePeP', 'Preparazione file P&P', PRE, 'se(qtSmd + doppiaFaccia * qtSmdLatoB > 0, oreFilePeP * 3600 * se(doppiaFaccia, 2, 1), 0)', uff(true)),
   F('M', 'progPeP', 'Programmazione P&P TOP e BOT', PRE, 'se(qtSmd + doppiaFaccia * qtSmdLatoB > 0, oreProgPeP * 3600 * se(doppiaFaccia, 2, 1), 0)', { ...uff(true), legacy: ['utProgPeP'] }),
-  F('N', 'etichettaturaMateriale', 'Etichettatura / controllo materiale', PRE, 'oreEtichettaturaMateriale * 3600', uff(false)),
   F('O', 'attrezzature3D', 'Disegno e stampa 3D attrezzature', PRE, 'oreAttrezzature3D * 3600', uff(true)),
   F('P', 'checkPreProduzione', 'Check pre-produzione', PRE, 'oreCheckPreProduzione * 3600', uff(false)),
 
-  F('1T', 'materialeTop', 'Estrazione/preparazione materiale TOP', 'SMD', 'se(qtSmd > 0, qtFeeder * tempoContMateriale, 0)', { scala: 'fisso', legacy: ['controlloMaterialeSmd'] }),
+  // Gestione materiale: caso 1 (cliente, da restituire) tutto a ogni lotto; casi 2 e 3 arrivo/etichettatura/stoccaggio
+  // solo quando il materiale si riordina (primo lotto), estrazione e chiusura a ogni lotto.
+  F('M1', 'controlloBollaLotto', 'Controllo bolla e materiale (materiale da restituire)', GM, 'se(provenienzaMateriale == 1, oreControlloBolla * 3600, 0)', { scala: 'fisso', legacy: ['controlloMaterialeSmd', 'controlloMaterialeTHT'] }),
+  F('M1', 'controlloBollaArrivo', 'Controllo bolla e materiale all\'arrivo', GM, 'se(provenienzaMateriale != 1, oreControlloBolla * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
+  F('M2', 'etichettaturaMateriale', 'Etichettatura materiale (software magazzino)', GM, 'se(provenienzaMateriale != 1, oreEtichettaturaMateriale * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
+  F('M3', 'stoccaggioMateriale', 'Stoccaggio in armadio / magazzino', GM, 'se(provenienzaMateriale != 1, oreStoccaggioMateriale * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
+  F('M4', 'estrazioneMateriale', 'Estrazione e preparazione materiale per la produzione', GM, 'oreEstrazioneMateriale * 3600', { scala: 'fisso' }),
+  F('M5', 'chiusuraSessione', 'Chiusura sessione, conteggio e rientro avanzi', GM, 'oreChiusuraSessione * 3600', { scala: 'fisso' }),
+
   F('2T', 'progSerigrafiaTop', 'Programmazione serigrafia TOP', 'SMD', 'se(qtSmd > 0, oreProgSerigrafia * 3600, 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
   F('3T', 'equipSerigrafiaTop', 'Equipaggiamento serigrafia TOP', 'SMD', 'se(qtSmd > 0, tempoAttrezSerigrafia * 60, 0)', { scala: 'fisso', legacy: ['equipaggiamentoSerig'] }),
   F('4T', 'equipPePTop', 'Equipaggiamento Pick&Place TOP', 'SMD', 'se(qtSmd > 0, tempoAttrezPeP * 60 * qtFeeder, 0)', { scala: 'fisso', legacy: ['equipaggiamentoPeP'] }),
@@ -209,7 +222,6 @@ export const FASI: FaseCatalogo[] = [
   F('6T.2', 'pepTop', 'Pick&Place TOP', 'SMD', 'qtSmd / (pepChipH / 3600) * nSchede', { persone: 2, scala: 'scheda', legacy: ['montaggioSmd'] }),
   F('7T', 'fornoTop', 'Forno TOP', 'SMD', 'se(qtSmd > 0, tempoTransitoForno + max(nPCB - 1, 0) * cadenzaForno, 0)', { persone: 2, scala: 'pannello' }),
   F('8T', 'smontaggioTop', 'Smontaggio macchina TOP', 'SMD', 'se(qtSmd > 0, tempoSmontaggio * 60 * qtFeeder, 0)', { scala: 'fisso', legacy: ['smontaggioPeP'] }),
-  F('1B', 'materialeBot', 'Estrazione/preparazione materiale BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, qtFeederLatoB * tempoContMaterialeLatoB, 0)', { scala: 'fisso', legacy: ['controlloMaterialeSmd'] }),
   F('2B', 'progSerigrafiaBot', 'Programmazione serigrafia BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, oreProgSerigrafia * 3600, 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
   F('3B', 'equipSerigrafiaBot', 'Equipaggiamento serigrafia BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoAttrezSerigrafiaLatoB * 60, 0)', { scala: 'fisso', legacy: ['equipaggiamentoSerigB'] }),
   F('4B', 'equipPePBot', 'Equipaggiamento Pick&Place BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoAttrezPePLatoB * 60 * qtFeederLatoB, 0)', { scala: 'fisso', legacy: ['equipaggiamentoPePB'] }),
@@ -221,9 +233,7 @@ export const FASI: FaseCatalogo[] = [
   F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'se(qtSmd + doppiaFaccia * qtSmdLatoB > 0, oreProgAOI * 3600 * se(doppiaFaccia, 2, 1), 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
   F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(se(qtSmd > 0, tempoRevisioneAoi, 0) + se(doppiaFaccia * qtSmdLatoB > 0, tempoRevisioneAoiLatoB, 0)) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
   F('11', 'riparazioneSmd', 'Riparazione SMD', 'SMD', 'tempoRiparazioneSmd * nSchede', { scala: 'scheda' }),
-  F('12', 'chiusuraSessione', 'Chiusura sessione, conteggio e rientro bobine a magazzino', 'SMD', 'minChiusuraSessione * 60', { scala: 'fisso' }),
 
-  F('13', 'materialeTht', 'Estrazione/preparazione materiale THT', 'THT', 'tempoControlloMateriale * qtTipolTht', { scala: 'fisso', legacy: ['controlloMaterialeTHT'] }),
   F('14', 'preparazioneManuale', 'Preparazione manuale componenti', 'THT', 'tempoDiPrepTht * qtPthdaPreparare * nSchede', { scala: 'scheda', legacy: ['preparazioneComponenti'] }),
   F('15', 'giostra', 'Giostra', 'THT', 'tempoMontaggioTht * qntCompMontaggio * nSchede', { scala: 'scheda', legacy: ['giostra'] }),
   F('16', 'protezioni', 'Protezioni', 'THT', 'tempoProtezione * nSchede', { scala: 'scheda', legacy: ['protezioni'] }),
@@ -248,6 +258,7 @@ export const FASI: FaseCatalogo[] = [
   F('34M', 'modifiche', 'Modifiche varie', 'COMPLETAMENTO', 'modifica * nSchede', { scala: 'scheda', legacy: ['modifica'] }),
   F('35', 'prepScatole', 'Preparazione scatole e buste', 'IMBALLAGGIO', 'tempoPrepScatole * nSchede', { scala: 'scheda' }),
   F('36', 'imballaggio', 'Imballaggio', 'IMBALLAGGIO', 'tempoDiImballaggio * nSchede', { scala: 'scheda', legacy: ['imballaggio'] }),
+  F('36R', 'resoMaterialeCliente', 'Reso materiale avanzato al cliente', 'IMBALLAGGIO', 'se(provenienzaMateriale == 1, minResoMateriale * 60, 0)', { scala: 'fisso' }),
 ];
 
 // ───────────────────────────── VOCI DI COSTO ─────────────────────────────

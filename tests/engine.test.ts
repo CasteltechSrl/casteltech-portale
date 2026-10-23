@@ -109,8 +109,9 @@ test('preventivo vuoto: senza componenti SMD nessuna fase SMD, programmazione o 
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100 } });
   const conTempo = r.fasi.filter(f => f.secondiCiclo > 0).map(f => f.codice);
-  // la pre-produzione non ha tempi standard (li scrive l'operatore): resta solo l'imballaggio
-  assert.deepEqual(conTempo, ['imballaggio']);
+  // pre-produzione e gestione materiale senza tempi standard (li scrive l'operatore): restano l'imballaggio
+  // e, con materiale del cliente da restituire (provenienza standard), i 10' di reso al cliente
+  assert.deepEqual(conTempo, ['imballaggio', 'resoMaterialeCliente']);
   // solo TOP: niente fasi BOT
   const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100, qtSmd: 50, qtFeeder: 10 } });
   assert.ok(top.fasi.filter(f => /Bot$/.test(f.codice)).every(f => f.secondiCiclo === 0));
@@ -135,4 +136,36 @@ test('Solo TOP / TOP + BOT: raddoppio dei tempi "per lato" e fasi BOT solo con T
   // pre-produzione vuota = nessun costo
   const vuota = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50 } });
   assert.ok(vuota.fasi.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.costo === 0));
+});
+
+test('gestione materiale: da restituire tutto a ogni lotto; a magazzino arrivo, etichettatura e stoccaggio solo nel 1° lotto', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const tempi = { oreControlloBolla: 0.5, oreEtichettaturaMateriale: 1, oreStoccaggioMateriale: 0.25, oreEstrazioneMateriale: 0.5, oreChiusuraSessione: 0.25 };
+  const calc = (provenienzaMateriale: number) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...def, nPCB: 10, ...tempi, provenienzaMateriale } });
+  const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
+  const restituire = calc(1), magazzino = calc(2), acquistato = calc(3);
+  // caso 1: controllo a ogni lotto, niente etichettatura e stoccaggio, 10' di reso al cliente
+  assert.equal(sec(restituire, 'controlloBollaLotto'), 1800);
+  assert.equal(sec(restituire, 'controlloBollaArrivo'), 0);
+  assert.equal(sec(restituire, 'etichettaturaMateriale') + sec(restituire, 'stoccaggioMateriale'), 0);
+  assert.equal(sec(restituire, 'resoMaterialeCliente'), 600);
+  // casi 2 e 3: controllo, etichettatura e stoccaggio una tantum, niente reso
+  for (const r of [magazzino, acquistato]) {
+    assert.equal(sec(r, 'controlloBollaLotto'), 0);
+    assert.equal(sec(r, 'controlloBollaArrivo'), 1800);
+    assert.equal(sec(r, 'etichettaturaMateriale'), 3600);
+    assert.equal(sec(r, 'stoccaggioMateriale'), 900);
+    assert.equal(sec(r, 'resoMaterialeCliente'), 0);
+  }
+  // estrazione e chiusura sempre, a ogni lotto
+  for (const r of [restituire, magazzino, acquistato]) {
+    assert.equal(sec(r, 'estrazioneMateriale'), 1800);
+    assert.equal(sec(r, 'chiusuraSessione'), 900);
+  }
+  const unaTantum = (c: string) => FASI.find(f => f.codice === c)!.unaTantum;
+  assert.ok(['controlloBollaArrivo', 'etichettaturaMateriale', 'stoccaggioMateriale'].every(unaTantum));
+  assert.ok(!['controlloBollaLotto', 'estrazioneMateriale', 'chiusuraSessione', 'resoMaterialeCliente'].some(unaTantum));
+  // lotti successivi a magazzino: senza i costi di arrivo, etichettatura e stoccaggio (1h45 a 40 €/h = 70 €)
+  assert.equal(Math.round((magazzino.totali.totalePrimoLotto - magazzino.totali.totaleSecondoLotto) * 100) / 100, 70);
 });

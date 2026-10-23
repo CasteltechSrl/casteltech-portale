@@ -16,6 +16,7 @@
     if (lati) d.parametri.doppiaFaccia = lati.value;
     form.querySelectorAll('[data-param]').forEach(el => {
       if (el.type === 'checkbox') d.parametri[el.dataset.param] = el.checked ? 1 : 0;
+      else if (el.type === 'radio') { if (el.checked) d.parametri[el.dataset.param] = el.value; }
       else if (el.value.trim() !== '') d.parametri[el.dataset.param] = el.value;
     });
     form.querySelectorAll('[data-persone]').forEach(el => { d.personeFase[el.dataset.persone] = el.value; });
@@ -125,6 +126,10 @@
       el.value = soloTop ? '' : (el.value || el.placeholder || '');
     });
     ricalcola();
+  }));
+  // ── Provenienza del materiale: con materiale da restituire niente etichettatura e stoccaggio ──
+  form.querySelectorAll('input[name=provenienza]').forEach(r => r.addEventListener('change', () => {
+    form.classList.toggle('materiale-da-restituire', r.checked && r.value === '1');
   }));
   // ── Durate: si scrivono come 1:30, 30', 1h, 1h30 e vengono mostrate come h:mm ──
   const leggiDurata = t => {
