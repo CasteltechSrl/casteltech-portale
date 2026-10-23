@@ -80,15 +80,22 @@ test('catalogo iniziale: tutte le formule sono valide e usano solo nomi esistent
   assert.equal(new Set(codici).size, codici.length, 'codici fase duplicati');
 });
 
-test('energia: preriscaldamento solo se la fase c\'è, più 0,40 €/h sul tempo di fase', () => {
+test('energia e forno: preriscaldamento solo se la fase c\'è, consumo = ore × kW × €/kWh', () => {
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
   const voci = VOCI.filter(v => v.gruppo === 'ENERGIA');
-  const base = { preriscaldamentoForno: 6, energiaFornoH: 0.4, preriscaldamentoOnda: 20, energiaOndaH: 0.4, nPCB: 100 };
-  const senza = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: base });
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  // nessun SMD e onda non prevista: niente forno, niente onda, niente energia
+  const senza = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50 } });
   assert.deepEqual(senza.voci.map(v => v.costo), [0, 0]);
-  const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...base, tempoFornoTop: 36, tempoFornoBot: 36, tempoSaldaturaOnda: 72 } });
-  assert.equal(con.voci[0].costo, 6 + 2 * 0.4);   // forno: 1 h TOP + 1 h BOT
-  assert.equal(con.voci[1].costo, 20 + 2 * 0.4);  // onda: 2 h
-  assert.equal(con.fasi.find(f => f.codice === 'fornoTop')!.persone, 2);
+  assert.equal(senza.fasi.find(f => f.codice === 'fornoTop')!.secondiCiclo, 0);
+  // SMD su due lati + onda: 50 pannelli × 4 min = 200 min per fase
+  const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtSmdLatoB: 10, usaOnda: 1 } });
+  const forno = con.fasi.find(f => f.codice === 'fornoTop')!;
+  assert.equal(forno.secondiCiclo, 50 * 240);
+  assert.equal(forno.persone, 2);
+  const kWh = (sec: number) => sec / 3600 * 15;
+  assert.ok(Math.abs(con.voci[0].costo - (6 + kWh(2 * 50 * 240) * 0.4)) < 1e-9);   // forno: 6 € + 0,40 €/pannello per lato
+  assert.ok(Math.abs(con.voci[1].costo - (25 + kWh(50 * 240) * 0.4)) < 1e-9);      // onda: 25 € + 0,40 €/pannello
+  assert.ok(Math.abs(kWh(240) * 0.4 - 0.4) < 1e-9);                                 // 4 min a pannello ≈ 0,40 €
   assert.ok(FASI.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.unaTantum && f.tariffa === 'ufficio'));
 });

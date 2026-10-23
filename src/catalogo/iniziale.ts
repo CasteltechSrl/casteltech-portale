@@ -67,7 +67,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('tempoAvvioProduzione', 'Avvio produzione + controllo 1ª scheda', 'min', 'SMD TOP', 30, 'Std 30–120 min'),
   P('tempoSerigrafia', 'Serigrafia per pannello', 's', 'SMD TOP', 30, 'Std 30 s'),
   P('pepChipH', 'Velocità P&P', 'chip/h', 'SMD TOP', 6000, '3000 campionatura — 6000 iPulse — 10000 MyData'),
-  P('tempoFornoTop', 'Forno TOP per pannello', 's', 'SMD TOP', 0, 'Forno fuori linea: tempo di ciclo per pannello'),
+  P('tempoFornoTop', 'Forno TOP per pannello', 's', 'SMD TOP', 240, 'Forno fuori linea: 4 min a pannello. Si applica solo se ci sono SMD TOP'),
   P('tempoSmontaggio', 'Smontaggio P&P per feeder', 'min', 'SMD TOP', 2, 'Std 2 min'),
   // SMD lato BOT
   P('qtSmdLatoB', 'Componenti SMD BOT per scheda', 'pz', 'SMD BOT'),
@@ -79,7 +79,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('tempoAvvioProduzioneLatoB', 'Avvio produzione BOT', 'min', 'SMD BOT', 30),
   P('tempoSerigrafiaLatoB', 'Serigrafia BOT per pannello', 's', 'SMD BOT', 30),
   P('pepChipHLatoB', 'Velocità P&P BOT', 'chip/h', 'SMD BOT', 6000),
-  P('tempoFornoBot', 'Forno BOT per pannello', 's', 'SMD BOT', 0, 'Forno fuori linea: tempo di ciclo per pannello'),
+  P('tempoFornoBot', 'Forno BOT per pannello', 's', 'SMD BOT', 240, 'Forno fuori linea: 4 min a pannello. Si applica solo se ci sono SMD BOT'),
   P('tempoSmontaggioLatoB', 'Smontaggio P&P per feeder BOT', 'min', 'SMD BOT', 2),
   // AOI / riparazione
   P('oreProgAOI', 'Programmazione AOI', 'h', 'AOI', 1.5),
@@ -97,7 +97,8 @@ export const PARAMETRI: ParametroDef[] = [
   P('qntCompMontaggio', 'Componenti montati in giostra per scheda', 'pz', 'THT'),
   P('tempoMontaggioTht', 'Giostra per componente', 's', 'THT', 5, 'Std 5 s'),
   P('tempoProtezione', 'Protezioni per scheda', 's', 'THT', 0, 'Std 3 s'),
-  P('tempoSaldaturaOnda', 'Saldatura a onda per pannello', 's', 'THT', 0, 'Std 60 s (saldatura + prep. + rimozione protezioni)'),
+  P('usaOnda', 'Saldatura a onda prevista', 'sì/no', 'THT', 0, undefined, 'si_no'),
+  P('tempoSaldaturaOnda', 'Saldatura a onda per pannello', 's', 'THT', 240, '4 min a pannello (saldatura + prep. + rimozione protezioni)'),
   P('qntPuntiSaldaturaMano', 'Punti di saldatura a mano per scheda', 'pz', 'THT'),
   P('tempoSaldaturaaMano', 'Saldatura a mano per punto', 's', 'THT', 10, 'Std 10 s'),
   P('tempoDiRevisione', 'Revisione per scheda', 's', 'THT', 0, 'Std 30 s'),
@@ -146,9 +147,10 @@ export const PARAMETRI: ParametroDef[] = [
   P('nSpedizioni', 'Spedizioni', 'pz', 'ACQUISTI', 0),
   // Energia (forno e saldatrice a onda)
   P('preriscaldamentoForno', 'Preriscaldamento forno (fisso a lotto)', '€', 'ENERGIA', 6),
-  P('energiaFornoH', 'Consumo forno per ora di fase', '€/h', 'ENERGIA', 0.4),
-  P('preriscaldamentoOnda', 'Preriscaldamento saldatrice a onda (fisso a lotto)', '€', 'ENERGIA', 20),
-  P('energiaOndaH', 'Consumo saldatrice a onda per ora di fase', '€/h', 'ENERGIA', 0.4),
+  P('potenzaFornoKw', 'Consumo forno a regime', 'kW', 'ENERGIA', 15, '15–20 kW: con 4 min a pannello e 0,40 €/kWh ≈ 0,40 € a pannello'),
+  P('preriscaldamentoOnda', 'Preriscaldamento saldatrice a onda (fisso a lotto)', '€', 'ENERGIA', 25),
+  P('potenzaOndaKw', 'Consumo saldatrice a onda a regime', 'kW', 'ENERGIA', 15, '15–20 kW: con 4 min a pannello e 0,40 €/kWh ≈ 0,40 € a pannello'),
+  P('prezzoKwh', 'Prezzo energia', '€/kWh', 'ENERGIA', 0.4),
   P('costoSpedizione', 'Costo per spedizione', '€', 'ACQUISTI', 0),
 ];
 
@@ -204,7 +206,7 @@ export const FASI: FaseCatalogo[] = [
   F('4T', 'equipPePTop', 'Equipaggiamento Pick&Place TOP', 'SMD', 'tempoAttrezPeP * 60 * qtFeeder', { scala: 'fisso', legacy: ['equipaggiamentoPeP'] }),
   F('5T', 'avvioTop', 'Avvio produzione + controllo 1ª scheda TOP', 'SMD', 'tempoAvvioProduzione * 60', { scala: 'fisso', legacy: ['avvioProduzione'] }),
   F('6T', 'serigrafiaPePTop', 'Serigrafia + P&P TOP', 'SMD', 'tempoSerigrafia * nPCB + qtSmd / (pepChipH / 3600) * nSchede', { persone: 2, scala: 'scheda', legacy: ['serigrafia', 'montaggioSmd'] }),
-  F('7T', 'fornoTop', 'Forno TOP', 'SMD', 'tempoFornoTop * nPCB', { persone: 2, scala: 'pannello' }),
+  F('7T', 'fornoTop', 'Forno TOP', 'SMD', 'se(qtSmd > 0, tempoFornoTop * nPCB, 0)', { persone: 2, scala: 'pannello' }),
   F('8T', 'smontaggioTop', 'Smontaggio macchina TOP', 'SMD', 'tempoSmontaggio * 60 * qtFeeder', { scala: 'fisso', legacy: ['smontaggioPeP'] }),
   F('1B', 'materialeBot', 'Estrazione/preparazione materiale BOT', 'SMD', 'qtFeederLatoB * tempoContMaterialeLatoB', { scala: 'fisso', legacy: ['controlloMaterialeSmd'] }),
   F('2B', 'progSerigrafiaBot', 'Programmazione serigrafia BOT', 'SMD', 'oreProgSerigrafia * 3600 * botProgSerigrafia', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
@@ -212,7 +214,7 @@ export const FASI: FaseCatalogo[] = [
   F('4B', 'equipPePBot', 'Equipaggiamento Pick&Place BOT', 'SMD', 'tempoAttrezPePLatoB * 60 * qtFeederLatoB', { scala: 'fisso', legacy: ['equipaggiamentoPePB'] }),
   F('5B', 'avvioBot', 'Avvio produzione + controllo 1ª scheda BOT', 'SMD', 'tempoAvvioProduzioneLatoB * 60', { scala: 'fisso', legacy: ['avvioProduzioneLatoB'] }),
   F('6B', 'serigrafiaPePBot', 'Serigrafia + P&P BOT', 'SMD', 'tempoSerigrafiaLatoB * nPCB + qtSmdLatoB / (pepChipHLatoB / 3600) * nSchede', { persone: 2, scala: 'scheda', legacy: ['serigrafiaLatoB', 'montaggioSmdLatoB'] }),
-  F('7B', 'fornoBot', 'Forno BOT', 'SMD', 'tempoFornoBot * nPCB', { persone: 2, scala: 'pannello' }),
+  F('7B', 'fornoBot', 'Forno BOT', 'SMD', 'se(qtSmdLatoB > 0, tempoFornoBot * nPCB, 0)', { persone: 2, scala: 'pannello' }),
   F('8B', 'smontaggioBot', 'Smontaggio macchina BOT', 'SMD', 'tempoSmontaggioLatoB * 60 * qtFeederLatoB', { scala: 'fisso', legacy: ['smontaggioPePLatoB'] }),
   F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'oreProgAOI * 3600 * se(botProgAOI, 2, 1)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
   F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(tempoRevisioneAoi + tempoRevisioneAoiLatoB) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
@@ -223,7 +225,7 @@ export const FASI: FaseCatalogo[] = [
   F('14', 'preparazioneManuale', 'Preparazione manuale componenti', 'THT', 'tempoDiPrepTht * qtPthdaPreparare * nSchede', { scala: 'scheda', legacy: ['preparazioneComponenti'] }),
   F('15', 'giostra', 'Giostra', 'THT', 'tempoMontaggioTht * qntCompMontaggio * nSchede', { scala: 'scheda', legacy: ['giostra'] }),
   F('16', 'protezioni', 'Protezioni', 'THT', 'tempoProtezione * nSchede', { scala: 'scheda', legacy: ['protezioni'] }),
-  F('17', 'saldaturaOnda', 'Saldatura ad onda', 'THT', 'tempoSaldaturaOnda * nPCB', { persone: 2, scala: 'pannello', legacy: ['saldaturaAdOnda'] }),
+  F('17', 'saldaturaOnda', 'Saldatura ad onda', 'THT', 'se(usaOnda, tempoSaldaturaOnda * nPCB, 0)', { persone: 2, scala: 'pannello', legacy: ['saldaturaAdOnda'] }),
   F('18', 'saldaturaMano', 'Saldatura a mano', 'THT', 'qntPuntiSaldaturaMano * tempoSaldaturaaMano * nSchede', { scala: 'scheda', legacy: ['saldaturaAMano'] }),
   F('19', 'revisione', 'Revisione', 'THT', 'tempoDiRevisione * nSchede', { scala: 'scheda', legacy: ['revisione'] }),
   F('20', 'separazione', 'Separazione schede', 'THT', 'tempoSeparazioneSchede * nSchede', { scala: 'scheda', legacy: ['separazioneSchede'] }),
@@ -274,7 +276,7 @@ export const VOCI: VoceDef[] = [
   { codice: 'valoreAcquistoPCB', nome: 'PCB', gruppo: 'MATERIALE PER PRODUZIONE', formulaEuro: 'costoPcbScheda * nSchede', unaTantum: false },
   // energia: si attiva solo se la fase ha un tempo (preriscaldamento una volta per lotto)
   { codice: 'energiaForno', nome: 'Energia forno', gruppo: 'ENERGIA', unaTantum: false,
-    formulaEuro: 'se(ore_fornoTop + ore_fornoBot > 0, preriscaldamentoForno, 0) + (ore_fornoTop + ore_fornoBot) * energiaFornoH' },
+    formulaEuro: 'se(ore_fornoTop + ore_fornoBot > 0, preriscaldamentoForno, 0) + (ore_fornoTop + ore_fornoBot) * potenzaFornoKw * prezzoKwh' },
   { codice: 'energiaOnda', nome: 'Energia saldatrice a onda', gruppo: 'ENERGIA', unaTantum: false,
-    formulaEuro: 'se(ore_saldaturaOnda > 0, preriscaldamentoOnda, 0) + ore_saldaturaOnda * energiaOndaH' },
+    formulaEuro: 'se(ore_saldaturaOnda > 0, preriscaldamentoOnda, 0) + ore_saldaturaOnda * potenzaOndaKw * prezzoKwh' },
 ];
