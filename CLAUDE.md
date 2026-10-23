@@ -40,12 +40,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
 1. ✅ Motore di calcolo, catalogo dalla scheda di produzione, tempo ciclo/uomo, energia forno/onda.
 2. ✅ Sito: login, preventivi (calcolo in tempo reale), impostazioni, utenti, import dal vecchio portale.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
-   prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità, ultima produzione, fogli tempi, QR → `/c/<codice>`.
+   prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
+   fogli tempi, QR → `/c/<codice>`. Niente "tempo ultima produzione" (Adriano: andrebbe riparametrizzato sulla quantità).
    La scheda tecnica (programmi, lamine, paste, note) sta sulla revisione del prodotto e si ripropone ai lotti successivi.
 4. 🟡 Rientro schede. ✅ Inserimento manuale (ufficio): `/commesse/:id/rientro`, controlli in `src/engine/rientro.ts`
    (errori bloccano la conferma, avvisi no), consumi del lotto e spedizioni sulla commessa, la scheda stampata si
-   compila da sola (tempo effettivo, consumo reale a scheda). Solo le commesse confermate fanno da "ultima produzione".
+   compila da sola (tempo effettivo ciclo e uomo, consumo reale a scheda).
    Gli operatori per ora scrivono solo sulla carta (app da telefono in futuro).
    ⬜ Lettura automatica: scanner con ADF (PDF multipagina, il QR riconosce la commessa), API Anthropic, conferma ufficio.
-5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni.
+5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
+   importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

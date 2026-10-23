@@ -257,13 +257,14 @@ function perGruppo(fasi: FaseScheda[]) {
 function tabellaFasi(fasi: FaseScheda[]): Raw {
   if (!fasi.length) return html`<p class="vuoto">Nessuna fase con un tempo nel preventivo.</p>`;
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
+  const totUomo = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.uomoSec, 0);
   return html`<div class="tabella-scorre"><table class="fasi">
-    <thead><tr><th>N.</th><th>Fase</th><th class="n">Pers.</th><th class="n" title="Tempo ciclo da preventivo">Previsto</th><th class="n">Ultima prod.</th></tr></thead>
+    <thead><tr><th>N.</th><th>Fase</th><th class="n">Pers.</th><th class="n" title="Tempo ciclo previsto">Ciclo prev.</th><th class="n" title="Tempo uomo previsto = ciclo × persone">Uomo prev.</th></tr></thead>
     <tbody>${perGruppo(fasi).map(g => html`
-      <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="n">${ore(tot(g.fasi))}</td><td></td></tr>
+      <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="n">${ore(tot(g.fasi))}</td><td class="n">${ore(totUomo(g.fasi))}</td></tr>
       ${g.fasi.map(f => html`<tr><td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta">1° lotto</span>` : ''}</td>
-        <td class="n">${num(f.persone, 1)}</td><td class="n">${ore(f.cicloSec)}</td><td class="n">${f.ultimaSec == null ? '—' : ore(f.ultimaSec)}</td></tr>`)}`)}
-      <tr class="riga-gruppo"><td colspan="3">TOTALE</td><td class="n">${ore(tot(fasi))}</td><td></td></tr>
+        <td class="n">${num(f.persone, 1)}</td><td class="n">${ore(f.cicloSec)}</td><td class="n">${ore(f.uomoSec)}</td></tr>`)}`)}
+      <tr class="riga-gruppo"><td colspan="3">TOTALE</td><td class="n">${ore(tot(fasi))}</td><td class="n">${ore(totUomo(fasi))}</td></tr>
     </tbody></table></div>`;
 }
 
@@ -337,7 +338,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
         ${esito?.messaggio ? html`<span class="nota positivo">${esito.messaggio}</span>` : ''}
         <a class="bottone" href="/commesse/${c.id}/scheda" target="_blank" rel="noopener">Scheda compilata</a>
         <button name="azione" value="salva">Salva</button>
-        <button name="azione" value="conferma" class="primario" title="L'ufficio approva tempi e S/P: diventano l'ultima produzione per le prossime schede">Salva e conferma rientro</button>
+        <button name="azione" value="conferma" class="primario" title="L'ufficio approva tempi e S/P: la commessa diventa rientrata e pronta per l'analisi">Salva e conferma rientro</button>
       </div>
     </div>
     <p class="riepilogo"><strong>${i.cliente}</strong> · ${i.codice}${i.revisione ? ` rev. ${i.revisione}` : ''} · ${i.descrizione} · <strong>${num(c.quantita, 0)} schede</strong>
@@ -399,15 +400,16 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
       <div>
       <h2>Tempi per fase</h2>
       <table class="fasi">
-        <thead><tr><th>Fase</th><th class="n">Previsto</th><th class="n">Effettivo</th><th class="n">Uomo</th><th class="n">Scost.</th></tr></thead>
+        <thead><tr><th rowspan="2">Fase</th><th class="n" colspan="2">Previsto</th><th class="n" colspan="2">Effettivo</th><th class="n" rowspan="2" title="Scostamento del tempo ciclo">Scost.</th></tr>
+          <tr><th class="n">Ciclo</th><th class="n">Uomo</th><th class="n">Ciclo</th><th class="n">Uomo</th></tr></thead>
         <tbody>${fasi.map(f => {
           const re = reali[f.codice];
           const sc = re && f.cicloSec ? Math.round((re.cicloSec / f.cicloSec - 1) * 100) : null;
-          return html`<tr class="${re ? '' : 'zero'}"><td>${f.numero} ${f.nome}</td><td class="n">${ore(f.cicloSec)}</td>
+          return html`<tr class="${re ? '' : 'zero'}"><td>${f.numero} ${f.nome}</td><td class="n">${ore(f.cicloSec)}</td><td class="n">${ore(f.uomoSec)}</td>
             <td class="n">${re ? ore(re.cicloSec) : '—'}</td><td class="n">${re ? ore(re.uomoSec) : ''}</td>
             <td class="n ${sc != null && Math.abs(sc) > SOGLIA_SCOSTAMENTO * 100 ? 'negativo' : ''}">${sc == null ? '' : `${sc > 0 ? '+' : ''}${sc}%`}</td></tr>`;
         })}
-        ${Object.keys(reali).filter(k => !fasi.some(f => f.codice === k)).map(k => html`<tr><td>${nomeFase(k)} <span class="etichetta">non prevista</span></td><td class="n">—</td>
+        ${Object.keys(reali).filter(k => !fasi.some(f => f.codice === k)).map(k => html`<tr><td>${nomeFase(k)} <span class="etichetta">non prevista</span></td><td class="n">—</td><td class="n">—</td>
           <td class="n">${ore(reali[k].cicloSec)}</td><td class="n">${ore(reali[k].uomoSec)}</td><td></td></tr>`)}</tbody>
       </table>
       </div>
@@ -438,6 +440,8 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     </div>`;
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
   const totReale = (codici: string[]) => codici.reduce((a, k) => a + (reali[k]?.cicloSec ?? 0), 0);
+  const totUomo = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.uomoSec, 0);
+  const totRealeUomo = (codici: string[]) => codici.reduce((a, k) => a + (reali[k]?.uomoSec ?? 0), 0);
   const haReali = Object.keys(reali).length > 0;
   const voci = vociConsumo(prev, c.quantita);
   const colonne = [...new Set(voci.map(v => v.colonna))];
@@ -476,17 +480,19 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
       ${testoConsumo(v) ? html`<b>${testoConsumo(v)}</b> ` : ''}${v.previstoTesto ? html`<span class="previsto">(${v.previstoTesto})</span>` : ''}</div>`)}</td>`)}</tr></table>
 
   ${perGruppo(fasi).map(g => html`
-  <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))}${haReali ? ` · effettivo ${ore(totReale(g.fasi.map(f => f.codice)))}` : ''}</span></h3>
+  <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))} ciclo / ${ore(totUomo(g.fasi))} uomo${haReali ? ` · effettivo ${ore(totReale(g.fasi.map(f => f.codice)))} ciclo / ${ore(totRealeUomo(g.fasi.map(f => f.codice)))} uomo` : ''}</span></h3>
   <table class="fasi-stampa">
-    <thead><tr><th class="nr">NR</th><th>DESCRIZIONE FASE</th><th class="pers">PERS.</th><th class="t">TEMPO PREV. (CICLO)</th><th class="t">TEMPO ULTIMA PRODUZIONE</th><th class="t eff">TEMPO EFFETTIVO</th></tr></thead>
+    <thead><tr><th class="nr" rowspan="2">NR</th><th rowspan="2">DESCRIZIONE FASE</th><th class="pers" rowspan="2">PERS.</th><th colspan="2">TEMPO PREVISTO</th><th colspan="2" class="eff">TEMPO EFFETTIVO</th></tr>
+      <tr><th class="t">CICLO</th><th class="t">UOMO</th><th class="t eff">CICLO</th><th class="t eff">UOMO</th></tr></thead>
     <tbody>${g.fasi.map(f => html`<tr><td class="nr">${f.numero}</td><td>${f.nome}</td><td class="pers">${num(f.persone, 1)}</td>
-      <td class="t">${ore(f.cicloSec)}</td><td class="t">${f.ultimaSec == null ? '' : ore(f.ultimaSec)}</td>
-      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td></tr>`)}</tbody>
+      <td class="t">${ore(f.cicloSec)}</td><td class="t">${ore(f.uomoSec)}</td>
+      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td>
+      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].uomoSec)}</b>` : ''}</td></tr>`)}</tbody>
   </table>`)}
   ${nonPreviste.length ? html`<h3 class="gruppo">ALTRE FASI (non previste)</h3>
   <table class="fasi-stampa"><tbody>${nonPreviste.map(k => html`<tr><td class="nr">${nomeFase(k).numero}</td><td>${nomeFase(k).nome}</td><td class="pers"></td>
-    <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td></tr>`)}</tbody></table>` : ''}
-  <p class="totale-stampa">Totale tempo previsto (ciclo): <strong>${ore(tot(fasi))}</strong>${haReali ? html` · effettivo: <strong>${ore(totReale(Object.keys(reali)))}</strong>` : ''}</p>
+    <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td><td class="t eff"><b>${ore(reali[k].uomoSec)}</b></td></tr>`)}</tbody></table>` : ''}
+  <p class="totale-stampa">Totale previsto: <strong>${ore(tot(fasi))}</strong> ciclo / <strong>${ore(totUomo(fasi))}</strong> uomo${haReali ? html` · effettivo: <strong>${ore(totReale(Object.keys(reali)))}</strong> ciclo / <strong>${ore(totRealeUomo(Object.keys(reali)))}</strong> uomo` : ''}</p>
 </section>
 
 ${[1, 2].map(n => html`

@@ -47,7 +47,8 @@ h3.gruppo span { font-weight: 400; text-decoration: none; font-size: 8.5pt; }
 .fasi-stampa tr { break-inside: avoid; }
 .fasi-stampa .nr { width: 10mm; text-align: center; }
 .fasi-stampa .pers { width: 11mm; text-align: center; }
-.fasi-stampa .t { width: 22mm; text-align: center; }
+.fasi-stampa .t { width: 17mm; text-align: center; }
+.fasi-stampa th.eff { background: #d9e8e4; }
 .fasi-stampa td.eff { background: #fff; }
 .fasi-stampa .ok { width: 8mm; text-align: center; }
 .totale-stampa { text-align: right; margin-top: 3mm; }
