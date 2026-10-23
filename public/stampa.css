@@ -26,6 +26,10 @@ table { border-collapse: collapse; width: 100%; }
 .val { min-height: 5mm; font-size: 10pt; font-weight: 600; }
 .forte .val { font-size: 11.5pt; }
 .tb { font-weight: 600; } .tb span { font-weight: 400; font-style: italic; font-size: 8pt; display: inline-block; width: 9mm; }
+table.consumo { table-layout: fixed; }
+table.consumo th { border: 1px solid #000; font-weight: 400; font-size: 7.5pt; padding: 1mm; background: #e6e6e6; }
+table.consumo td { border: 1px solid #000; height: 12mm; vertical-align: top; padding: 1mm; }
+table.consumo .previsto { font-size: 7.5pt; font-style: italic; }
 .lotto { font-weight: 400; font-style: italic; font-size: 8pt; margin-top: 2mm; border-bottom: 1px dotted #000; padding-bottom: 3mm; }
 .riquadro { border: 1px solid #000; border-top: 0; padding: 1mm 1.5mm; min-height: 22mm; }
 .riquadro .testo { white-space: pre-wrap; font-size: 10pt; }

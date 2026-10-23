@@ -19,7 +19,7 @@ export const PROGRAMMI: [string, string][] = [
   ['progArmadio', 'Prog. armadio'], ['progSerigrafia', 'Prog. serigrafia'], ['lamina', 'Lamina'],
   ['progPePFox', 'Prog. P&P FOX'], ['progPePIpulse', 'Prog. P&P iPulse'], ['progForno', 'Prog. forno'], ['progAOI', 'Prog. AOI'],
 ];
-/** Materiali di saldatura (tipo; il lotto si scrive a mano in produzione). */
+/** Vecchio campo "materiali di saldatura" (tipo): non più usato, sostituito dalla riga Materiale di consumo. */
 export const MATERIALI_SALDATURA: [string, string][] = [
   ['pastaSaldante', 'Pasta saldante'], ['stagnoSaldatrice', 'Stagno saldatrice'], ['flussante', 'Flussante / gel'], ['filo', 'Filo di saldatura'],
 ];
@@ -169,3 +169,5 @@ export async function fasiCommessa(commessa: any): Promise<FaseScheda[]> {
 export const segnalazioniProdotto = (prodottoId: number) => q<{ testo: string; origine: string; creato_il: string; numero: string | null }>(`
   SELECT s.testo, s.origine, s.creato_il, c.numero FROM segnalazioni s LEFT JOIN commesse c ON c.id = s.commessa_id
   WHERE s.prodotto_id = $1 AND s.rilevante_prossime ORDER BY s.creato_il DESC LIMIT 10`, [prodottoId]);
+
+export { consumiPrevisti } from '../engine/consumi.js';

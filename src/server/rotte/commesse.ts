@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import { q, q1 } from '../db.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
-  MATERIALI_SALDATURA, PROGRAMMI, STATI_COMMESSA, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa,
+  PROGRAMMI, consumiPrevisti, STATI_COMMESSA, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa,
   proponiNumero, salvaCommessa, schedaTecnica, segnalazioniProdotto, type DatiCommessa, type FaseScheda, type SchedaTecnica,
 } from '../commesse-servizio.js';
 import { layout } from '../views/layout.js';
@@ -179,13 +179,6 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       </fieldset>
 
       <fieldset class="blocco">
-        <legend>Materiali di saldatura</legend>
-        <div class="campi-parametri">${MATERIALI_SALDATURA.map(([k, nome]) => html`
-          <label>${nome} <input name="scheda[materiali][${k}]" value="${st.materiali[k]}" maxlength="80"></label>`)}</div>
-        <p class="nota">Il lotto del materiale usato lo scrive l'operatore sulla scheda.</p>
-      </fieldset>
-
-      <fieldset class="blocco">
         <legend>Note di montaggio</legend>
         <textarea name="scheda[noteMontaggio]" rows="4">${st.noteMontaggio}</textarea>
         <p class="nota">Programmi, lamine, materiali e note di montaggio si ripropongono alla prossima commessa dello stesso prodotto.</p>
@@ -244,6 +237,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
       <div class="qr">${qr}<div>${c.numero}</div></div>
     </div>`;
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
+  const consumi = consumiPrevisti(prev, c.quantita);
   const segnalazioni = [...(c.segnalazioni ? [c.segnalazioni] : []), ...storico.map(s => s.testo + (s.numero ? ` (comm. ${s.numero})` : ''))];
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Scheda ${c.numero} · ${i.codice}</title>
@@ -259,7 +253,6 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo)}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
     <tr>${cella('PROG. ARMADIO', prog('progArmadio'))}${cella('PROG. SERIGRAFIA', prog('progSerigrafia'))}${cella('LAMINA', prog('lamina'))}${cella('PASTA', st.pasta)}</tr>
     <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. FORNO', prog('progForno'))}${cella('PROG. AOI', prog('progAOI'))}</tr>
-    <tr>${MATERIALI_SALDATURA.map(([k, nome]) => cella(nome.toUpperCase(), html`${st.materiali[k]}<div class="lotto">Lotto:</div>`))}</tr>
   </table>
   <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>
@@ -268,6 +261,10 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <div class="etic centro"><u>SPEDIZIONE ${n}</u></div>
     <div class="campi3"><span>QTA:</span><span>COLLI:</span><span>BANCALI:</span></div>
     <div class="campi2"><span>PESO:</span><span>DIMENSIONE:</span></div></td>`)}</tr></table>
+
+  <h3 class="gruppo">MATERIALE DI CONSUMO <span>consumo reale a scheda · tra parentesi il previsto dal preventivo</span></h3>
+  <table class="consumo"><tr>${consumi.map(m => html`<th>${m.nome.toUpperCase()}</th>`)}</tr>
+    <tr>${consumi.map(m => html`<td>${m.previsto ? html`<span class="previsto">(${m.previsto})</span>` : ''}</td>`)}</tr></table>
 
   ${perGruppo(fasi).map(g => html`
   <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))}</span></h3>
