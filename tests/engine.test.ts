@@ -68,3 +68,27 @@ test('prezzo corretto: i fattori si applicano e la quantità scala solo le fasi 
   assert.equal(doppio.fasi[0].secondiCiclo, 7200); // onda raddoppia
   assert.equal(doppio.fasi[1].secondiCiclo, 3600); // attrezzaggio no
 });
+
+import { FASI, VOCI, PARAMETRI, MATERIALI } from '../src/catalogo/iniziale.js';
+import { controllaFormula } from '../src/catalogo/controlli.js';
+
+test('catalogo iniziale: tutte le formule sono valide e usano solo nomi esistenti', () => {
+  const cat = { fasi: FASI, parametri: PARAMETRI, materiali: MATERIALI };
+  for (const f of FASI) assert.equal(controllaFormula(f.formulaSecondi, cat), null, `fase ${f.codice}`);
+  for (const v of VOCI) assert.equal(controllaFormula(v.formulaEuro, cat, true), null, `voce ${v.codice}`);
+  const codici = FASI.map(f => f.codice);
+  assert.equal(new Set(codici).size, codici.length, 'codici fase duplicati');
+});
+
+test('energia: preriscaldamento solo se la fase c\'è, più 0,40 €/h sul tempo di fase', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const voci = VOCI.filter(v => v.gruppo === 'ENERGIA');
+  const base = { preriscaldamentoForno: 6, energiaFornoH: 0.4, preriscaldamentoOnda: 20, energiaOndaH: 0.4, nPCB: 100 };
+  const senza = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: base });
+  assert.deepEqual(senza.voci.map(v => v.costo), [0, 0]);
+  const con = calcolaPreventivo(FASI, voci, t, { nSchede: 100, parametri: { ...base, tempoFornoTop: 36, tempoFornoBot: 36, tempoSaldaturaOnda: 72 } });
+  assert.equal(con.voci[0].costo, 6 + 2 * 0.4);   // forno: 1 h TOP + 1 h BOT
+  assert.equal(con.voci[1].costo, 20 + 2 * 0.4);  // onda: 2 h
+  assert.equal(con.fasi.find(f => f.codice === 'fornoTop')!.persone, 2);
+  assert.ok(FASI.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.unaTantum && f.tariffa === 'ufficio'));
+});

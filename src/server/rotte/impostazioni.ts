@@ -1,0 +1,209 @@
+/**
+ * Pannello Impostazioni (solo ufficio): tariffe, fasi, parametri, materiali, voci di costo, utenti.
+ * Le modifiche valgono per i NUOVI preventivi: quelli salvati restano calcolati come al momento del salvataggio.
+ */
+import { Router, type Request } from 'express';
+import bcrypt from 'bcryptjs';
+import { q, q1 } from '../db.js';
+import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
+import { layout } from '../views/layout.js';
+import { html, raw, type Raw } from '../views/html.js';
+
+type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
+interface Tabella { tabella: string; chiave: string; titolo: string; spiegazione: string; ordine: string; campi: Campo[]; formula?: string }
+
+const TABELLE: Record<string, Tabella> = {
+  fasi: {
+    tabella: 'fasi', chiave: 'codice', titolo: 'Fasi', ordine: 'ordine, numero', formula: 'formula_secondi',
+    spiegazione: 'La formula dà il TEMPO CICLO dell\'intero lotto in secondi. Tempo uomo = ciclo × persone. "Scala" dice come riportare i tempi reali a un\'altra quantità.',
+    campi: [
+      { nome: 'ordine', titolo: 'Ordine', tipo: 'numero' }, { nome: 'numero', titolo: 'N.' }, { nome: 'nome', titolo: 'Nome', largo: true },
+      { nome: 'gruppo', titolo: 'Gruppo' }, { nome: 'formula_secondi', titolo: 'Formula (secondi)', tipo: 'formula', largo: true },
+      { nome: 'persone_default', titolo: 'Persone', tipo: 'numero' },
+      { nome: 'tariffa', titolo: 'Tariffa', tipo: 'scelta', scelte: ['produzione', 'ufficio'] },
+      { nome: 'una_tantum', titolo: '1° lotto', tipo: 'si_no' },
+      { nome: 'scala', titolo: 'Scala', tipo: 'scelta', scelte: ['fisso', 'scheda', 'pannello'] },
+      { nome: 'stampa_su_scheda', titolo: 'Su scheda', tipo: 'si_no' }, { nome: 'attiva', titolo: 'Attiva', tipo: 'si_no' },
+    ],
+  },
+  parametri: {
+    tabella: 'parametri', chiave: 'codice', titolo: 'Parametri', ordine: 'ordine',
+    spiegazione: 'I dati che si inseriscono nel preventivo. Il "codice" è il nome da usare nelle formule (non cambiarlo se è già usato).',
+    campi: [
+      { nome: 'ordine', titolo: 'Ordine', tipo: 'numero' }, { nome: 'etichetta', titolo: 'Etichetta', largo: true }, { nome: 'unita', titolo: 'Unità' },
+      { nome: 'gruppo', titolo: 'Gruppo' }, { nome: 'valore_default', titolo: 'Default', tipo: 'numero' },
+      { nome: 'suggerimento', titolo: 'Suggerimento', largo: true }, { nome: 'tipo', titolo: 'Tipo', tipo: 'scelta', scelte: ['numero', 'si_no'] },
+      { nome: 'attivo', titolo: 'Attivo', tipo: 'si_no' },
+    ],
+  },
+  materiali: {
+    tabella: 'materiali', chiave: 'codice', titolo: 'Materiali di consumo', ordine: 'descrizione',
+    spiegazione: 'Prezzi usati nei nuovi preventivi. Nelle formule: prezzo_<codice> e qta_<codice>.',
+    campi: [{ nome: 'descrizione', titolo: 'Descrizione', largo: true }, { nome: 'costo', titolo: 'Costo €', tipo: 'numero' }, { nome: 'um', titolo: 'U.m.' }, { nome: 'quantita', titolo: 'Quantità', tipo: 'numero' }],
+  },
+  voci: {
+    tabella: 'voci_costo', chiave: 'codice', titolo: 'Voci di costo', ordine: 'ordine', formula: 'formula_euro',
+    spiegazione: 'Costi non a tempo (materiali, lamine, spedizione…). La formula dà il costo in euro dell\'intero lotto; il prezzo è costo × ricarico.',
+    campi: [
+      { nome: 'ordine', titolo: 'Ordine', tipo: 'numero' }, { nome: 'nome', titolo: 'Nome', largo: true }, { nome: 'gruppo', titolo: 'Gruppo' },
+      { nome: 'formula_euro', titolo: 'Formula (€)', tipo: 'formula', largo: true }, { nome: 'una_tantum', titolo: '1° lotto', tipo: 'si_no' },
+      { nome: 'attiva', titolo: 'Attiva', tipo: 'si_no' },
+    ],
+  },
+};
+
+const CODICE_VALIDO = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+
+export function rotteImpostazioni() {
+  const r = Router();
+  const pag = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
+    String(layout({ titolo, utente: req.session.utente, attiva: 'impostazioni', contenuto: html`${menu(titolo)}${contenuto}`, avviso }));
+
+  r.get('/', (_req, res) => res.redirect('/impostazioni/tariffe'));
+
+  // ── Tariffe ──
+  r.get('/tariffe', async (req, res) => {
+    const t = await caricaTariffe();
+    res.send(pag(req, 'Tariffe', html`
+      <form method="post" class="blocco stretto-form">
+        <p class="nota">Valori proposti nei nuovi preventivi (modificabili anche nel singolo preventivo).</p>
+        <label>Costo orario azienda <span class="unita">€/h di ciclo</span><input name="costoAziendaH" inputmode="decimal" value="${t.costoAziendaH}"></label>
+        <label>Costo operatore produzione <span class="unita">€/h per persona</span><input name="costoOperatoreProduzioneH" inputmode="decimal" value="${t.costoOperatoreProduzioneH}"></label>
+        <label>Costo ufficio (pre-produzione) <span class="unita">€/h per persona</span><input name="costoOperatoreUfficioH" inputmode="decimal" value="${t.costoOperatoreUfficioH}"></label>
+        <label>Ricarico <span class="unita">es. 1,25</span><input name="ricarico" inputmode="decimal" value="${t.ricarico}"></label>
+        <button class="primario">Salva tariffe</button>
+      </form>`, req.query.ok ? 'Tariffe salvate.' : undefined));
+  });
+  r.post('/tariffe', async (req, res) => {
+    const n = (k: string) => Number(String(req.body[k] ?? '').replace(',', '.')) || 0;
+    const t = { costoAziendaH: n('costoAziendaH'), costoOperatoreProduzioneH: n('costoOperatoreProduzioneH'), costoOperatoreUfficioH: n('costoOperatoreUfficioH'), ricarico: n('ricarico') };
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('tariffe', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(t)]);
+    res.redirect('/impostazioni/tariffe?ok=1');
+  });
+
+  // ── Tabelle del catalogo ──
+  for (const [slug, T] of Object.entries(TABELLE)) {
+    r.get(`/${slug}`, async (req, res) => {
+      const righe = await q(`SELECT * FROM ${T.tabella} ORDER BY ${T.ordine}`);
+      res.send(pag(req, T.titolo, html`
+        <p class="nota">${T.spiegazione}</p>
+        ${T.formula ? html`<p class="nota">Nelle formule: + − × ÷ con <code>* /</code>, parentesi, <code>min()</code>, <code>max()</code>, <code>round()</code>, <code>se(condizione, sì, no)</code>.
+          Variabili sempre disponibili: <code>nSchede</code>, <code>nPCB</code> (pannelli), <code>nSchedeInPCB</code>. Elenco nomi: <a href="/impostazioni/parametri">parametri</a>, <a href="/impostazioni/materiali">materiali</a>.
+          ${T.tabella === 'voci_costo' ? html`Nelle voci si usano anche le ore di ciclo delle fasi: <code>ore_</code> + codice fase (es. <code>ore_saldaturaOnda</code>).` : ''}</p>` : ''}
+        <div class="tabella-scorre"><table class="editor">
+          <thead><tr><th>Codice</th>${T.campi.map(c => html`<th>${c.titolo}</th>`)}<th></th></tr></thead>
+          <tbody>
+          ${righe.map(riga => html`<tr>
+            <td><code>${riga[T.chiave]}</code></td>
+            ${T.campi.map(c => html`<td class="${c.largo ? 'largo' : ''}">${input(c, riga[c.nome], `f-${slug}-${riga[T.chiave]}`)}</td>`)}
+            <td><form method="post" action="/impostazioni/${slug}/${encodeURIComponent(riga[T.chiave])}" id="f-${slug}-${riga[T.chiave]}"><button>Salva</button></form></td>
+          </tr>`)}
+          <tr class="nuova-riga">
+            <td><input name="codice" form="f-${slug}-nuovo" placeholder="nuovoCodice" required pattern="[A-Za-z][A-Za-z0-9_]*"></td>
+            ${T.campi.map(c => html`<td class="${c.largo ? 'largo' : ''}">${input(c, c.tipo === 'si_no' ? (c.nome.startsWith('attiv') || c.nome === 'stampa_su_scheda') : '', `f-${slug}-nuovo`)}</td>`)}
+            <td><form method="post" action="/impostazioni/${slug}" id="f-${slug}-nuovo"><button class="primario">Aggiungi</button></form></td>
+          </tr>
+          </tbody></table></div>`, req.query.msg ? String(req.query.msg) : undefined));
+    });
+
+    const valori = (body: any) => T.campi.map(c => {
+      const v = body[c.nome];
+      if (c.tipo === 'si_no') return v === 'on' || v === 'true';
+      if (c.tipo === 'numero') return v === '' || v == null ? null : Number(String(v).replace(',', '.'));
+      return String(v ?? '').trim();
+    });
+    const verificaFormula = async (body: any) => {
+      if (!T.formula) return null;
+      return controllaFormula(String(body[T.formula] ?? ''), await caricaCatalogo(), T.tabella === 'voci_costo');
+    };
+
+    r.post(`/${slug}/:codice`, async (req, res) => {
+      const errore = await verificaFormula(req.body);
+      if (errore) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${req.params.codice}: ${errore}. Non salvato.`)}`);
+      const set = T.campi.map((c, i) => `${c.nome} = $${i + 2}`).join(', ');
+      await q(`UPDATE ${T.tabella} SET ${set} WHERE ${T.chiave} = $1`, [req.params.codice, ...valori(req.body)]);
+      res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${req.params.codice} salvato.`)}`);
+    });
+    r.post(`/${slug}`, async (req, res) => {
+      const codice = String(req.body.codice ?? '').trim();
+      if (!CODICE_VALIDO.test(codice)) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent('Codice non valido: solo lettere, numeri e _, iniziando con una lettera.')}`);
+      if (await q1(`SELECT 1 FROM ${T.tabella} WHERE ${T.chiave} = $1`, [codice])) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`Il codice ${codice} esiste già.`)}`);
+      const errore = await verificaFormula(req.body);
+      if (errore) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${errore}. Non aggiunto.`)}`);
+      const v = valori(req.body);
+      // campi obbligatori senza valore: valori di riserva sensati
+      const nomi = T.campi.map(c => c.nome);
+      const vv = v.map((x, i) => (x === '' || x == null) && ['nome', 'etichetta', 'descrizione', 'numero', 'gruppo', 'um'].includes(nomi[i]) ? codice : x)
+        .map((x, i) => (x == null && ['ordine', 'persone_default', 'costo'].includes(nomi[i]) ? (nomi[i] === 'persone_default' ? 1 : 0) : x))
+        .map((x, i) => (x === '' && ['formula_secondi', 'formula_euro'].includes(nomi[i]) ? '0' : x));
+      await q(`INSERT INTO ${T.tabella} (${T.chiave}, ${nomi.join(', ')}) VALUES ($1, ${nomi.map((_, i) => `$${i + 2}`).join(', ')})`, [codice, ...vv]);
+      res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${codice} aggiunto.`)}`);
+    });
+  }
+
+  // ── Utenti ──
+  r.get('/utenti', async (req, res) => {
+    const utenti = await q(`SELECT id, nome, email, ruolo, attivo, pin_hash IS NOT NULL AS ha_pin FROM utenti ORDER BY ruolo, nome`);
+    res.send(pag(req, 'Utenti', html`
+      <p class="nota">Ufficio: accesso completo. Produzione: solo inserimento tempi e note sulle schede (accesso con email e password; il PIN servirà per tablet e telefono).</p>
+      <table class="editor">
+        <thead><tr><th>Nome</th><th>Email</th><th>Ruolo</th><th>Attivo</th><th>Nuova password</th><th></th></tr></thead>
+        <tbody>${utenti.map(u => html`<tr>
+          <td><input name="nome" value="${u.nome}" form="u-${u.id}"></td>
+          <td><input name="email" value="${u.email ?? ''}" form="u-${u.id}" type="email"></td>
+          <td><select name="ruolo" form="u-${u.id}">${['ufficio', 'produzione'].map(x => html`<option ${x === u.ruolo ? raw('selected') : ''}>${x}</option>`)}</select></td>
+          <td><input type="checkbox" name="attivo" form="u-${u.id}" ${u.attivo ? raw('checked') : ''}></td>
+          <td><input name="password" type="password" form="u-${u.id}" placeholder="lascia vuoto per non cambiarla" autocomplete="new-password"></td>
+          <td><form method="post" action="/impostazioni/utenti/${u.id}" id="u-${u.id}"><button>Salva</button></form></td></tr>`)}
+          <tr class="nuova-riga">
+            <td><input name="nome" form="u-nuovo" required placeholder="Nome e cognome"></td>
+            <td><input name="email" form="u-nuovo" type="email" required></td>
+            <td><select name="ruolo" form="u-nuovo"><option>produzione</option><option>ufficio</option></select></td>
+            <td></td>
+            <td><input name="password" type="password" form="u-nuovo" required minlength="10" autocomplete="new-password" placeholder="almeno 10 caratteri"></td>
+            <td><form method="post" action="/impostazioni/utenti" id="u-nuovo"><button class="primario">Aggiungi</button></form></td>
+          </tr>
+        </tbody></table>`, req.query.msg ? String(req.query.msg) : undefined));
+  });
+  r.post('/utenti', async (req, res) => {
+    const pwd = String(req.body.password ?? '');
+    if (pwd.length < 10) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'));
+    try {
+      await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, $4)`,
+        [String(req.body.nome).trim(), String(req.body.email).trim(), await bcrypt.hash(pwd, 12), req.body.ruolo === 'ufficio' ? 'ufficio' : 'produzione']);
+    } catch { return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Email già presente.')); }
+    res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente aggiunto.'));
+  });
+  r.post('/utenti/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    const ruolo = req.body.ruolo === 'ufficio' ? 'ufficio' : 'produzione';
+    const attivo = req.body.attivo === 'on';
+    if (id === req.session.utente!.id && (!attivo || ruolo !== 'ufficio'))
+      return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Non puoi disattivare o declassare te stesso.'));
+    await q(`UPDATE utenti SET nome = $2, email = lower(nullif($3, '')), ruolo = $4, attivo = $5 WHERE id = $1`,
+      [id, String(req.body.nome).trim(), String(req.body.email ?? '').trim(), ruolo, attivo]);
+    const pwd = String(req.body.password ?? '');
+    if (pwd) {
+      if (pwd.length < 10) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Password non cambiata: almeno 10 caratteri.'));
+      await q(`UPDATE utenti SET password_hash = $2 WHERE id = $1`, [id, await bcrypt.hash(pwd, 12)]);
+    }
+    res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente salvato.'));
+  });
+
+  return r;
+}
+
+function menu(attiva: string) {
+  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti']];
+  return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
+}
+
+function input(c: Campo, v: any, form: string) {
+  switch (c.tipo) {
+    case 'si_no': return html`<input type="checkbox" name="${c.nome}" form="${form}" ${v ? raw('checked') : ''}>`;
+    case 'scelta': return html`<select name="${c.nome}" form="${form}">${c.scelte!.map(s => html`<option ${s === v ? raw('selected') : ''}>${s}</option>`)}</select>`;
+    case 'numero': return html`<input name="${c.nome}" form="${form}" value="${v ?? ''}" inputmode="decimal" class="corto">`;
+    case 'formula': return html`<input name="${c.nome}" form="${form}" value="${v ?? ''}" class="formula" spellcheck="false">`;
+    default: return html`<input name="${c.nome}" form="${form}" value="${v ?? ''}">`;
+  }
+}

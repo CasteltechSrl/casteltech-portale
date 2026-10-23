@@ -249,3 +249,9 @@ JOIN clienti cl ON cl.id = c.cliente_id
 JOIN prodotti_revisioni r ON r.id = c.revisione_id
 JOIN prodotti p ON p.id = r.prodotto_id
 LEFT JOIN analisi_commesse a ON a.commessa_id = c.id;
+
+-- ── Dati del vecchio portale e numerazione ──────────────────────────────────
+ALTER TABLE preventivi ADD COLUMN dati_vecchio_portale jsonb;   -- totali come li aveva calcolati il vecchio portale
+CREATE SEQUENCE numerazione_preventivi;
+ALTER TABLE preventivi ADD COLUMN intestazione jsonb NOT NULL DEFAULT '{}'::jsonb;   -- cliente, codice, revisione, descrizione come scritti
+ALTER TABLE preventivi ADD COLUMN prezzi_materiali jsonb NOT NULL DEFAULT '{}'::jsonb;

@@ -10,7 +10,8 @@
  *                                + ore ciclo × n. persone × costo orario operatore (produzione o ufficio)
  *   prezzo fase                  = costo fase × ricarico
  *
- * Voci di costo (materiali, lamine, spedizione, …): prezzo = costo × ricarico.
+ * Voci di costo (materiali, lamine, spedizione, energia…): prezzo = costo × ricarico.
+ * Nelle formule delle voci si possono usare le ore di ciclo delle fasi: ore_<codiceFase>.
  * Fasi e voci "una tantum" entrano solo nel primo lotto.
  *
  * Gli arrotondamenti al centesimo sono gli stessi del vecchio portale, così i totali
@@ -138,10 +139,13 @@ export function calcolaPreventivo(
     }
   }
 
+  // le voci di costo possono usare i tempi delle fasi: ore_<codiceFase> = ore di ciclo (es. energia del forno)
+  const varsVoci: Record<string, number | null | undefined> = { ...vars };
+  for (const f of fasi) varsVoci['ore_' + f.codice] = f.secondiCiclo / 3600;
   const voci: RigaVoce[] = [];
   let prezzoVociTot = 0, prezzoVociRic = 0, costoVociTot = 0, guadagnoVociRic = 0;
   for (const v of vociDef) {
-    const costo = calcolaFormula(v.formulaEuro, vars);
+    const costo = calcolaFormula(v.formulaEuro, varsVoci);
     const prezzo = r2(costo * ric);
     const guadagno = r2(prezzo - costo);
     voci.push({

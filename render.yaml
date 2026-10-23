@@ -1,0 +1,36 @@
+# Configurazione Render ("Blueprint"): crea il sito e il database con un clic.
+# Costo previsto: sito 7 $/mese + database 6 $/mese (circa 13 € in tutto).
+services:
+  - type: web
+    name: casteltech-portale
+    runtime: node
+    plan: 0.5c-512mb         # 7 $/mese, sempre acceso
+    region: frankfurt
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /salute
+    autoDeploy: true            # ogni modifica salvata su GitHub (ramo main) viene pubblicata da sola
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: casteltech-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false             # chiesto alla creazione: email del primo utente ufficio
+      - key: ADMIN_PASSWORD
+        sync: false             # chiesto alla creazione: password del primo utente ufficio
+      - key: ADMIN_NOME
+        value: Adriano Gambi
+
+databases:
+  - name: casteltech-db
+    plan: 0.1c-256mb         # 6 $/mese, backup inclusi
+    region: frankfurt
+    databaseName: casteltech
+    postgresMajorVersion: "16"

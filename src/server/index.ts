@@ -1,0 +1,107 @@
+/**
+ * Avvio del portale: server web, sessioni, login, pagine.
+ */
+import express, { type NextFunction, type Request, type Response } from 'express';
+import session from 'express-session';
+import pgSession from 'connect-pg-simple';
+import helmet from 'helmet';
+import bcrypt from 'bcryptjs';
+import { join } from 'node:path';
+import { pool, q1, applicaMigrazioni } from './db.js';
+import { primoAvvio } from './catalogo-db.js';
+import { layout, type Utente } from './views/layout.js';
+import { html } from './views/html.js';
+import { rottePreventivi } from './rotte/preventivi.js';
+import { rotteImpostazioni } from './rotte/impostazioni.js';
+
+declare module 'express-session' { interface SessionData { utente?: Utente } }
+
+const app = express();
+app.set('trust proxy', 1); // dietro il proxy https di Render
+app.use(helmet({ referrerPolicy: { policy: 'same-origin' }, contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'img-src': ["'self'", 'data:'] } } }));
+app.use('/static', express.static(join(process.cwd(), 'public'), { maxAge: '1h' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '2mb' }));
+
+const segreto = process.env.SESSION_SECRET;
+if (!segreto && process.env.NODE_ENV === 'production') throw new Error('Manca SESSION_SECRET');
+app.use(session({
+  store: new (pgSession(session))({ pool, createTableIfMissing: true, tableName: 'sessioni' }),
+  secret: segreto ?? 'solo-per-sviluppo-locale',
+  resave: false, saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 12 },
+}));
+
+// blocca richieste che modificano dati arrivando da altri siti
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    // (i cookie di sessione "lax" non partono comunque da altri siti; questo è un controllo in più)
+    const origine = req.get('origin');
+    let host: string | null = null;
+    try { host = origine && origine !== 'null' ? new URL(origine).host : null; } catch { host = 'non-valido'; }
+    if (host && host !== req.get('host')) return res.status(403).send('Richiesta non consentita');
+  }
+  next();
+});
+
+export function soloUfficio(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.utente) return res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl));
+  if (req.session.utente.ruolo !== 'ufficio') return res.status(403).send(String(layout({ titolo: 'Accesso negato', utente: req.session.utente, contenuto: html`<h1>Pagina riservata all'ufficio</h1>` })));
+  next();
+}
+
+// ── Login ──
+const tentativi = new Map<string, { n: number; fino: number }>();
+const paginaLogin = (errore?: string, torna = '/') => String(layout({
+  titolo: 'Accesso', avviso: errore,
+  contenuto: html`
+  <form method="post" action="/login" class="scheda-login">
+    <div class="marchio grande"><span class="logo">C</span> Casteltech</div>
+    <input type="hidden" name="torna" value="${torna}">
+    <label>Email <input name="email" type="email" autocomplete="username" required autofocus></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primario">Entra</button>
+  </form>`,
+}));
+app.get('/login', (req, res) => res.send(paginaLogin(undefined, String(req.query.torna ?? '/'))));
+app.post('/login', async (req, res) => {
+  const ip = req.ip ?? '';
+  const t = tentativi.get(ip);
+  if (t && t.n >= 8 && t.fino > Date.now()) return res.status(429).send(paginaLogin('Troppi tentativi: riprova tra qualche minuto.'));
+  const u = await q1(`SELECT * FROM utenti WHERE email = lower($1) AND attivo`, [String(req.body.email ?? '').trim()]);
+  const ok = u?.password_hash && await bcrypt.compare(String(req.body.password ?? ''), u.password_hash);
+  if (!ok) {
+    tentativi.set(ip, { n: (t && t.fino > Date.now() ? t.n : 0) + 1, fino: Date.now() + 10 * 60_000 });
+    return res.status(401).send(paginaLogin('Email o password non corretti.'));
+  }
+  tentativi.delete(ip);
+  req.session.regenerate(() => {
+    req.session.utente = { id: u.id, nome: u.nome, ruolo: u.ruolo };
+    const torna = String(req.body.torna ?? '/');
+    res.redirect(torna.startsWith('/') && !torna.startsWith('//') ? torna : '/');
+  });
+});
+app.post('/esci', (req, res) => req.session.destroy(() => res.redirect('/login')));
+
+app.get('/', (req, res) => {
+  if (!req.session.utente) return res.redirect('/login');
+  res.redirect(req.session.utente.ruolo === 'ufficio' ? '/preventivi' : '/produzione');
+});
+app.get('/produzione', (req, res) => {
+  if (!req.session.utente) return res.redirect('/login');
+  res.send(String(layout({ titolo: 'Produzione', utente: req.session.utente, contenuto: html`<h1>Produzione</h1><p>Qui arriveranno le schede di produzione da compilare.</p>` })));
+});
+app.get('/salute', async (_req, res) => { await q1('SELECT 1'); res.send('ok'); });
+
+app.use('/preventivi', soloUfficio, rottePreventivi());
+app.use('/impostazioni', soloUfficio, rotteImpostazioni());
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  res.status(500).send('Si è verificato un errore. Riprova; se continua, segnala l\'ora e la pagina.');
+});
+
+await applicaMigrazioni();
+await primoAvvio();
+const porta = Number(process.env.PORT ?? 3000);
+app.listen(porta, () => console.log(`Portale attivo su http://localhost:${porta}`));
