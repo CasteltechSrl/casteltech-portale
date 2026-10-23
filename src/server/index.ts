@@ -13,6 +13,7 @@ import { layout, type Utente } from './views/layout.js';
 import { html } from './views/html.js';
 import { rottePreventivi } from './rotte/preventivi.js';
 import { rotteImpostazioni } from './rotte/impostazioni.js';
+import { avviaBackupNotturno } from './backup.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -26,7 +27,8 @@ app.use(express.json({ limit: '2mb' }));
 const segreto = process.env.SESSION_SECRET;
 if (!segreto && process.env.NODE_ENV === 'production') throw new Error('Manca SESSION_SECRET');
 app.use(session({
-  store: new (pgSession(session))({ pool, createTableIfMissing: true, tableName: 'sessioni' }),
+  // pulizia sessioni scadute ogni 12 ore (non ogni 15 minuti), per non tenere sveglio il database
+  store: new (pgSession(session))({ pool, createTableIfMissing: true, tableName: 'sessioni', pruneSessionInterval: 12 * 60 * 60 }),
   secret: segreto ?? 'solo-per-sviluppo-locale',
   resave: false, saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 12 },
@@ -91,7 +93,8 @@ app.get('/produzione', (req, res) => {
   if (!req.session.utente) return res.redirect('/login');
   res.send(String(layout({ titolo: 'Produzione', utente: req.session.utente, contenuto: html`<h1>Produzione</h1><p>Qui arriveranno le schede di produzione da compilare.</p>` })));
 });
-app.get('/salute', async (_req, res) => { await q1('SELECT 1'); res.send('ok'); });
+// controllo di Render: NON interroga il database, così Neon (piano gratuito) può spegnersi quando nessuno lavora
+app.get('/salute', (_req, res) => { res.send('ok'); });
 
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
@@ -103,5 +106,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 await applicaMigrazioni();
 await primoAvvio();
+avviaBackupNotturno();
 const porta = Number(process.env.PORT ?? 3000);
 app.listen(porta, () => console.log(`Portale attivo su http://localhost:${porta}`));

@@ -8,6 +8,8 @@ import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
+import { creaBackup, elencoBackup, nomeFileBackup } from '../backup.js';
+import { join, basename } from 'node:path';
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
 interface Tabella { tabella: string; chiave: string; titolo: string; spiegazione: string; ordine: string; campi: Campo[]; formula?: string }
@@ -141,6 +143,30 @@ export function rotteImpostazioni() {
     });
   }
 
+  // ── Backup ──
+  r.get('/backup', (req, res) => {
+    const copie = elencoBackup();
+    res.send(pag(req, 'Backup', html`
+      <p class="nota">Ogni notte alle 2:30 il portale salva una copia completa dei dati (ultimi 30 giorni).
+        Puoi anche scaricarne una adesso e conservarla dove vuoi (es. Google Drive).</p>
+      <form method="post" action="/impostazioni/backup/scarica"><button class="primario">Scarica un backup adesso</button></form>
+      <h2>Copie automatiche</h2>
+      ${copie.length ? html`<table class="editor"><thead><tr><th>File</th><th class="n">Dimensione</th><th></th></tr></thead><tbody>
+        ${copie.map(c => html`<tr><td><code>${c.nome}</code></td><td class="n">${c.kb} KB</td><td><a href="/impostazioni/backup/file/${encodeURIComponent(c.nome)}">Scarica</a></td></tr>`)}
+      </tbody></table>` : html`<p class="vuoto">Nessuna copia automatica ancora${process.env.BACKUP_DIR ? '' : ' (cartella backup non configurata)'}.</p>`}`));
+  });
+  r.post('/backup/scarica', async (_req, res) => {
+    const file = await creaBackup();
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeFileBackup()}"`);
+    res.send(file);
+  });
+  r.get('/backup/file/:nome', (req, res) => {
+    const nome = basename(String(req.params.nome));
+    if (!process.env.BACKUP_DIR || !elencoBackup().some(c => c.nome === nome)) return res.status(404).send('Backup non trovato');
+    res.download(join(process.env.BACKUP_DIR, nome));
+  });
+
   // ── Utenti ──
   r.get('/utenti', async (req, res) => {
     const utenti = await q(`SELECT id, nome, email, ruolo, attivo, pin_hash IS NOT NULL AS ha_pin FROM utenti ORDER BY ruolo, nome`);
@@ -194,7 +220,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti']];
+  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

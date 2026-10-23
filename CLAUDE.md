@@ -22,6 +22,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
+## Database su Neon (piano gratuito)
+Il database si spegne dopo 5 minuti senza richieste e il piano ha 100 ore di calcolo al mese:
+niente controlli periodici che interrogano il database (il controllo di Render `/salute` non lo tocca),
+niente timer frequenti. Backup notturno in `BACKUP_DIR` (disco Render) + pulsante in Impostazioni → Backup.
+
 ## Avvio in locale
 Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (crea il primo utente ufficio), `PORT`.
 `npm install && npm run dev`.
