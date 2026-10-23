@@ -147,7 +147,7 @@ export function rotteImpostazioni() {
   r.get('/backup', (req, res) => {
     const copie = elencoBackup();
     res.send(pag(req, 'Backup', html`
-      <p class="nota">Ogni notte alle 2:30 il portale salva una copia completa dei dati (ultimi 30 giorni).
+      <p class="nota">Dal lunedì al venerdì alle 20:30 il portale salva una copia completa dei dati (ultimi 30 giorni).
         Puoi anche scaricarne una adesso e conservarla dove vuoi (es. Google Drive).</p>
       <form method="post" action="/impostazioni/backup/scarica"><button class="primario">Scarica un backup adesso</button></form>
       <h2>Copie automatiche</h2>

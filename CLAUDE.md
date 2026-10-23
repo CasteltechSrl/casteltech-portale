@@ -25,7 +25,8 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 ## Database su Neon (piano gratuito)
 Il database si spegne dopo 5 minuti senza richieste e il piano ha 100 ore di calcolo al mese:
 niente controlli periodici che interrogano il database (il controllo di Render `/salute` non lo tocca),
-niente timer frequenti. Backup notturno in `BACKUP_DIR` (disco Render) + pulsante in Impostazioni → Backup.
+niente timer frequenti. Uso reale: lun–ven 8–20. Backup lun–ven alle 20:30 in `BACKUP_DIR` (disco Render)
++ pulsante in Impostazioni → Backup.
 
 ## Avvio in locale
 Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (crea il primo utente ufficio), `PORT`.

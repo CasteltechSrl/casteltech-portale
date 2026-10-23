@@ -1,6 +1,7 @@
 /**
  * Backup del database: tutte le tabelle in un unico file JSON compresso (.json.gz).
- * - ogni notte alle 02:30 (ora italiana) una copia in BACKUP_DIR (disco di Render), tenendo gli ultimi 30 giorni;
+ * - dal lunedì al venerdì alle 20:30 (ora italiana, a fine giornata: il database Neon è ancora acceso e non
+ *   va svegliato di notte) una copia in BACKUP_DIR (disco di Render), tenendo gli ultimi 30 giorni;
  * - in qualsiasi momento dal pannello Impostazioni → Backup (scarica il file).
  * Ripristino: tools/ripristina-backup.ts
  */
@@ -40,9 +41,9 @@ async function backupNotturno() {
     for (const f of readdirSync(cartella)) {
       if (f.startsWith('casteltech-backup-') && statSync(join(cartella, f)).mtimeMs < limite) unlinkSync(join(cartella, f));
     }
-    console.log('Backup notturno salvato');
+    console.log('Backup serale salvato');
   } catch (e) {
-    console.error('Backup notturno NON riuscito', e);
+    console.error('Backup serale NON riuscito', e);
   }
 }
 
@@ -55,14 +56,15 @@ export function elencoBackup(): { nome: string; kb: number }[] {
   } catch { return []; }
 }
 
-/** Controlla ogni 10 minuti se è l'ora del backup (02:30–02:40 ora italiana). */
+/** Controlla ogni 10 minuti se è l'ora del backup (20:30 ora italiana, lunedì–venerdì). Non tocca il database finché non è l'ora. */
 export function avviaBackupNotturno() {
   let ultimoGiorno = '';
   setInterval(() => {
-    const ora = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const ora = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hourCycle: 'h23' }).formatToParts(new Date());
     const p = Object.fromEntries(ora.map(x => [x.type, x.value]));
     const giorno = `${p.year}-${p.month}-${p.day}`;
-    if (p.hour === '02' && Number(p.minute) >= 30 && giorno !== ultimoGiorno) {
+    const feriale = !['Sat', 'Sun'].includes(p.weekday);
+    if (feriale && p.hour === '20' && Number(p.minute) >= 30 && giorno !== ultimoGiorno) {
       ultimoGiorno = giorno;
       void backupNotturno();
     }
