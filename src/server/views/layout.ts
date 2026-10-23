@@ -1,5 +1,8 @@
 import { html, raw, type Raw } from './html.js';
 
+/** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
+const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
+
 export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
 
 export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string; avviso?: string; largo?: boolean }) {
@@ -12,7 +15,7 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${opz.titolo} · Casteltech</title>
 <link rel="icon" href="/static/favicon.svg">
-<link rel="stylesheet" href="/static/stile.css">
+<link rel="stylesheet" href="/static/stile.css?v=${VERSIONE}">
 </head>
 <body>
 ${opz.utente ? html`
@@ -29,7 +32,7 @@ ${opz.utente ? html`
 ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>
-${opz.script ? raw(`<script src="/static/${opz.script}" defer></script>`) : ''}
+${opz.script ? raw(`<script src="/static/${opz.script}?v=${VERSIONE}" defer></script>`) : ''}
 </body>
 </html>`;
 }
