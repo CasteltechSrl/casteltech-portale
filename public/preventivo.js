@@ -35,6 +35,20 @@
       tr.querySelector('[data-v=costo]').textContent = euro(f.costo);
       tr.querySelector('[data-v=prezzo]').textContent = euro(f.prezzo);
     }
+    // totali per gruppo (PRE-PRODUZIONE, SMD, THT…)
+    const gruppi = {};
+    for (const f of r.fasi) {
+      const g = gruppi[f.gruppo] ??= { ciclo: 0, uomo: 0, costo: 0, prezzo: 0 };
+      g.ciclo += f.secondiCiclo; g.uomo += f.secondiUomo; g.costo += f.costo; g.prezzo += f.prezzo;
+    }
+    form.querySelectorAll('tr.riga-gruppo').forEach(tr => {
+      const g = gruppi[tr.dataset.gruppo] || { ciclo: 0, uomo: 0, costo: 0, prezzo: 0 };
+      tr.querySelector('[data-v=ciclo]').textContent = ore(g.ciclo);
+      tr.querySelector('[data-v=uomo]').textContent = ore(g.uomo);
+      tr.querySelector('[data-v=costo]').textContent = euro(g.costo);
+      tr.querySelector('[data-v=prezzo]').textContent = euro(g.prezzo);
+      tr.classList.toggle('gruppo-vuoto', !g.ciclo);
+    });
     for (const v of r.voci) {
       const tr = form.querySelector(`tr[data-voce="${CSS.escape(v.codice)}"]`);
       if (!tr) continue;

@@ -58,7 +58,7 @@ export function rottePreventivi() {
   r.get('/nuovo', async (req, res) => {
     const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
     // i valori standard sono già scritti nelle caselle (modificabili); le caselle sì/no partono spente
-    const standard = Object.fromEntries(cat.parametri.filter(p => p.default != null && p.tipo !== 'si_no' && p.gruppo !== 'GENERALE').map(p => [p.codice, p.default]));
+    const standard = Object.fromEntries(cat.parametri.filter(p => p.default != null && p.tipo !== 'si_no' && p.gruppo !== 'GENERALE' && p.gruppo !== 'PRE-PRODUZIONE').map(p => [p.codice, p.default]));
     const dati = normalizza({ tariffe, nSchedeInPCB: 1, parametri: standard }, cat);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti()));
   });
@@ -143,16 +143,15 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const doppia = !!d.parametri.doppiaFaccia;
   const valore = (cod: string) => d.parametri[cod] ?? '';
   // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
+  const info = (p: Catalogo['parametri'][0]) => p.suggerimento ? html` <span class="info" title="${p.suggerimento}" aria-label="${p.suggerimento}">ⓘ</span>` : '';
   const soloBot = (p: Catalogo['parametri'][0]) => conLati && (p.gruppo === 'SMD BOT' || /LatoB$/.test(p.codice));
   const campoParametro = (p: Catalogo['parametri'][0]) => p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`
     : p.tipo === 'durata'
-    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">ore:minuti</span>
-        <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}">
-        ${p.suggerimento ? html`<small>${p.suggerimento}</small>` : ''}</label>`
-    : html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">${p.unita}</span>
-        <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}">
-        ${p.suggerimento ? html`<small>${p.suggerimento}</small>` : ''}</label>`;
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">ore:minuti</span>${info(p)}
+        <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
+    : html`<label class="${soloBot(p) ? 'solo-bot' : ''}">${p.etichetta} <span class="unita">${p.unita}</span>${info(p)}
+        <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}"></label>`;
   const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && d.parametri[p.codice]).length;
 
   return String(layout({
@@ -174,11 +173,6 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     <section class="colonna-dati">
       <fieldset class="blocco">
         <legend>Prodotto</legend>
-        ${conLati ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
-          <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
-          <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
-          <small class="nota">Con TOP + BOT si raddoppiano i tempi di pre-produzione indicati "per lato" e si attivano le fasi BOT.</small>
-        </div>` : ''}
         <div class="riga-campi">
           <label class="largo">Cliente
             <select data-id="clienteId" id="sel-cliente" required>
@@ -211,6 +205,16 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         </div>
       </fieldset>
 
+      ${conLati ? html`
+      <fieldset class="blocco">
+        <legend>Lati da montare</legend>
+        <div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
+          <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
+          <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
+          <small class="nota">Con TOP + BOT raddoppiano i tempi di pre-produzione indicati "per lato" e si attivano le fasi BOT.</small>
+        </div>
+      </fieldset>` : ''}
+
       ${gruppi.map(g => html`
       <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''}" ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' ? raw('open') : ''}>
         <summary>${g} ${compilati(g) ? html`<span class="conta">${compilati(g)}</span>` : ''}</summary>
@@ -240,13 +244,20 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <div class="tabella-scorre"><table class="fasi" id="tabella-fasi">
         <thead><tr><th>N.</th><th>Fase</th><th class="n" title="Persone">Pers.</th><th class="n" title="Tempo ciclo: impegno della fase">Ciclo</th><th class="n" title="Tempo uomo = ciclo × persone">Uomo</th><th class="n">Costo</th><th class="n">Prezzo</th></tr></thead>
         <tbody>
-        ${cat.fasi.map(f => {
+        ${[...new Set(cat.fasi.map(f => f.gruppo))].map(g => {
+          const delGruppo = ris.fasi.filter(x => x.gruppo === g);
+          const somma = (k: 'secondiCiclo' | 'secondiUomo' | 'costo' | 'prezzo') => delGruppo.reduce((a, x) => a + x[k], 0);
+          return html`<tr class="riga-gruppo ${somma('secondiCiclo') ? '' : 'gruppo-vuoto'}" data-gruppo="${g}">
+            <td colspan="3">${g}</td><td class="n" data-v="ciclo">${ore(somma('secondiCiclo'))}</td><td class="n" data-v="uomo">${ore(somma('secondiUomo'))}</td>
+            <td class="n" data-v="costo">${euro(somma('costo'))}</td><td class="n" data-v="prezzo">${euro(somma('prezzo'))}</td></tr>
+          ${cat.fasi.filter(f => f.gruppo === g).map(f => {
           const x = ris.fasi.find(y => y.codice === f.codice)!;
           return html`<tr data-fase="${f.codice}" class="${x.secondiCiclo ? '' : 'zero'} ${f.unaTantum ? 'una-tantum' : ''}">
             <td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta" title="Solo primo lotto">1° lotto</span>` : ''}${f.tariffa === 'ufficio' ? html` <span class="etichetta">ufficio</span>` : ''}</td>
             <td class="n"><input class="persone" inputmode="decimal" data-persone="${f.codice}" value="${d.personeFase[f.codice] ?? f.persone}"></td>
             <td class="n" data-v="ciclo">${ore(x.secondiCiclo)}</td><td class="n" data-v="uomo">${ore(x.secondiUomo)}</td>
             <td class="n" data-v="costo">${euro(x.costo)}</td><td class="n" data-v="prezzo">${euro(x.prezzo)}</td></tr>`;
+          })}`;
         })}
         </tbody></table></div>
 
