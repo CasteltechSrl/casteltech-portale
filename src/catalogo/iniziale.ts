@@ -1,0 +1,269 @@
+/**
+ * CATALOGO INIZIALE — fasi della scheda di produzione Casteltech (@@_MASTERspec_costruzione.docx).
+ *
+ * Questo file serve solo a riempire il database la prima volta. Dopo, fasi, parametri,
+ * materiali e formule si modificano dal pannello "Impostazioni" del portale.
+ *
+ * Regole:
+ *  - formulaSecondi = TEMPO CICLO (impegno linea/fase) dell'intero lotto, in secondi.
+ *  - persone       = persone previste di default; tempo uomo = ciclo × persone.
+ *  - scala         = come si riporta un tempo reale a un'altra quantità:
+ *                    'fisso' (non dipende dai pezzi: attrezzaggi, programmi),
+ *                    'scheda' (proporzionale alle schede), 'pannello' (proporzionale ai PCB/pannelli).
+ *  - legacy        = fase del vecchio portale da cui arriva la formula (per l'import e i confronti).
+ */
+import type { FaseDef, VoceDef } from '../engine/calcolo.js';
+
+export type Scala = 'fisso' | 'scheda' | 'pannello';
+
+export interface FaseCatalogo extends FaseDef {
+  numero: string;            // numero sulla scheda di produzione (A, 1T, 13, …)
+  scala: Scala;
+  legacy?: string[];
+}
+
+export interface ParametroDef {
+  codice: string;
+  etichetta: string;
+  unita: string;
+  gruppo: string;
+  default?: number;
+  suggerimento?: string;
+  tipo?: 'numero' | 'si_no';
+}
+
+export interface MaterialeDef { codice: string; descrizione: string; costo: number; um: string; quantita?: number }
+
+// ───────────────────────────── PARAMETRI (dati da inserire nel preventivo) ─────────────────────────────
+const P = (codice: string, etichetta: string, unita: string, gruppo: string, def?: number, suggerimento?: string, tipo?: 'si_no'): ParametroDef =>
+  ({ codice, etichetta, unita, gruppo, default: def, suggerimento, tipo });
+
+export const PARAMETRI: ParametroDef[] = [
+  P('nPCB', 'Quantità pannelli (PCB)', 'pz', 'GENERALE', undefined, 'Calcolato: schede ÷ schede per pannello'),
+  // Pre-produzione (ore)
+  P('oreFoglioTempi', 'Preparazione foglio tempi', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreAnalisiBom', 'Analisi BOM e ricerca prezzi', 'h', 'PRE-PRODUZIONE', 0),
+  P('orePreventivo', 'Preparazione preventivo', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreAcquistoPcb', 'Acquisto PCB', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreAcquistoComponenti', 'Acquisto componenti', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreAcquistoLamine', 'Acquisto lamine', 'h', 'PRE-PRODUZIONE', 0),
+  P('orePrepDoc', 'Preparazione documentazione', 'h', 'PRE-PRODUZIONE', 0.5),
+  P('botPrepDoc', 'Documentazione TOP+BOT (×2)', 'sì/no', 'PRE-PRODUZIONE', 0, undefined, 'si_no'),
+  P('oreProgArmadi', 'Programmazione armadi', 'h', 'PRE-PRODUZIONE', 0.5),
+  P('botProgArmadi', 'Armadi TOP+BOT (×2)', 'sì/no', 'PRE-PRODUZIONE', 0, undefined, 'si_no'),
+  P('oreFilePeP', 'Preparazione file P&P', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreProgPeP', 'Programmazione P&P', 'h', 'PRE-PRODUZIONE', 1.5),
+  P('botProgPeP', 'P&P TOP+BOT (×2)', 'sì/no', 'PRE-PRODUZIONE', 0, undefined, 'si_no'),
+  P('oreEtichettaturaMateriale', 'Etichettatura / controllo materiale', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreAttrezzature3D', 'Disegno e stampa 3D attrezzature', 'h', 'PRE-PRODUZIONE', 0),
+  P('oreCheckPreProduzione', 'Check pre-produzione', 'h', 'PRE-PRODUZIONE', 0),
+  // SMD lato TOP
+  P('qtSmd', 'Componenti SMD TOP per scheda', 'pz', 'SMD TOP'),
+  P('qtFeeder', 'Feeder TOP', 'pz', 'SMD TOP'),
+  P('tempoContMateriale', 'Controllo materiale per feeder', 's', 'SMD TOP', 60, 'Std 60 s'),
+  P('oreProgSerigrafia', 'Programmazione serigrafia (per lato)', 'h', 'SMD TOP', 0.5),
+  P('tempoAttrezSerigrafia', 'Attrezzaggio serigrafia', 'min', 'SMD TOP', 20, 'Std 20 min — 40/60 min campionatura'),
+  P('tempoAttrezPeP', 'Attrezzaggio P&P per feeder', 'min', 'SMD TOP', 3, 'Std 3 min'),
+  P('tempoAvvioProduzione', 'Avvio produzione + controllo 1ª scheda', 'min', 'SMD TOP', 30, 'Std 30–120 min'),
+  P('tempoSerigrafia', 'Serigrafia per pannello', 's', 'SMD TOP', 30, 'Std 30 s'),
+  P('pepChipH', 'Velocità P&P', 'chip/h', 'SMD TOP', 6000, '3000 campionatura — 6000 iPulse — 10000 MyData'),
+  P('tempoFornoTop', 'Forno per pannello (solo se non in linea)', 's', 'SMD TOP', 0, 'Lasciare 0 se il forno è in linea con il P&P'),
+  P('tempoSmontaggio', 'Smontaggio P&P per feeder', 'min', 'SMD TOP', 2, 'Std 2 min'),
+  // SMD lato BOT
+  P('qtSmdLatoB', 'Componenti SMD BOT per scheda', 'pz', 'SMD BOT'),
+  P('qtFeederLatoB', 'Feeder BOT', 'pz', 'SMD BOT'),
+  P('tempoContMaterialeLatoB', 'Controllo materiale per feeder BOT', 's', 'SMD BOT', 60, 'Std 60 s'),
+  P('botProgSerigrafia', 'Programmazione serigrafia anche BOT', 'sì/no', 'SMD BOT', 0, undefined, 'si_no'),
+  P('tempoAttrezSerigrafiaLatoB', 'Attrezzaggio serigrafia BOT', 'min', 'SMD BOT', 20),
+  P('tempoAttrezPePLatoB', 'Attrezzaggio P&P per feeder BOT', 'min', 'SMD BOT', 3),
+  P('tempoAvvioProduzioneLatoB', 'Avvio produzione BOT', 'min', 'SMD BOT', 30),
+  P('tempoSerigrafiaLatoB', 'Serigrafia BOT per pannello', 's', 'SMD BOT', 30),
+  P('pepChipHLatoB', 'Velocità P&P BOT', 'chip/h', 'SMD BOT', 6000),
+  P('tempoFornoBot', 'Forno BOT per pannello (solo se non in linea)', 's', 'SMD BOT', 0),
+  P('tempoSmontaggioLatoB', 'Smontaggio P&P per feeder BOT', 'min', 'SMD BOT', 2),
+  // AOI / riparazione
+  P('oreProgAOI', 'Programmazione AOI', 'h', 'AOI', 1.5),
+  P('botProgAOI', 'AOI TOP+BOT (×2)', 'sì/no', 'AOI', 0, undefined, 'si_no'),
+  P('tempoRevisioneAoi', 'Ispezione AOI TOP per scheda', 's', 'AOI', 60, 'Std 60 s'),
+  P('tempoRevisioneAoiLatoB', 'Ispezione AOI BOT per scheda', 's', 'AOI', 30, 'Std 30 s'),
+  P('tempoRiparazioneSmd', 'Riparazione SMD per scheda', 's', 'AOI', 0),
+  P('minChiusuraSessione', 'Chiusura sessione e rientro bobine', 'min', 'AOI', 0),
+  // THT
+  P('qtTht', 'Componenti THT per scheda', 'pz', 'THT'),
+  P('qtTipolTht', 'Tipologie componenti THT', 'pz', 'THT'),
+  P('tempoControlloMateriale', 'Controllo materiale THT per tipologia', 's', 'THT', 60, 'Std 60 s'),
+  P('qtPthdaPreparare', 'Componenti THT da preparare per scheda', 'pz', 'THT'),
+  P('tempoDiPrepTht', 'Preparazione per componente', 's', 'THT', 4, 'Std 4 s'),
+  P('qntCompMontaggio', 'Componenti montati in giostra per scheda', 'pz', 'THT'),
+  P('tempoMontaggioTht', 'Giostra per componente', 's', 'THT', 5, 'Std 5 s'),
+  P('tempoProtezione', 'Protezioni per scheda', 's', 'THT', 0, 'Std 3 s'),
+  P('tempoSaldaturaOnda', 'Saldatura a onda per pannello', 's', 'THT', 0, 'Std 60 s (saldatura + prep. + rimozione protezioni)'),
+  P('qntPuntiSaldaturaMano', 'Punti di saldatura a mano per scheda', 'pz', 'THT'),
+  P('tempoSaldaturaaMano', 'Saldatura a mano per punto', 's', 'THT', 10, 'Std 10 s'),
+  P('tempoDiRevisione', 'Revisione per scheda', 's', 'THT', 0, 'Std 30 s'),
+  P('tempoSeparazioneSchede', 'Separazione per scheda', 's', 'THT', 0, 'Std 10 s'),
+  // Completamento
+  P('componentiMeccanici', 'Montaggio meccanico per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tropicalizzazione', 'Conformal coating per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoPotting', 'Potting per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoLavaggio', 'Lavaggio per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoPulizia', 'Pulizia per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoCablaggio', 'Cablaggio per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoTagliaSpela', 'Taglia e spela fili per scheda', 's', 'COMPLETAMENTO', 0),
+  P('programmazioneFlash', 'Caricamento firmware per scheda', 's', 'COMPLETAMENTO', 0),
+  P('collaudo', 'Test elettrico/funzionale per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoRiparazione', 'Riparazione per scheda', 's', 'COMPLETAMENTO', 0),
+  P('targhette', 'Etichettatura per scheda', 's', 'COMPLETAMENTO', 0, 'Std 5 s a etichetta × n° etichette'),
+  P('tempoPressfit', 'Pressfit per scheda', 's', 'COMPLETAMENTO', 0),
+  P('rivettatura', 'Rivettatura per scheda', 's', 'COMPLETAMENTO', 0, 'Std 12 s a rivetto'),
+  P('tempoPartiElettroniche', 'Montaggio parti elettroniche per scheda', 's', 'COMPLETAMENTO', 0),
+  P('modifica', 'Modifiche varie per scheda', 's', 'COMPLETAMENTO', 0),
+  P('tempoPrepScatole', 'Preparazione scatole e buste per scheda', 's', 'IMBALLAGGIO', 0),
+  P('tempoDiImballaggio', 'Imballaggio per scheda', 's', 'IMBALLAGGIO', 30, 'Std 30 s'),
+  // Materiali di consumo (quantità)
+  P('crema', 'Crema saldante per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,6–1,5–2,6 gr (0,0034 gr/comp.; 500 comp. ≈ 1,5 gr/scheda)'),
+  P('stagno', 'Stagno lead free (reofori per scheda)', 'pz', 'MATERIALE DI CONSUMO', 0, '0,45 gr/comp — 0,016 gr/foro'),
+  P('stagnoPerSaldature', 'Stagno saldatrice per scheda', 'gr', 'MATERIALE DI CONSUMO', 0),
+  P('stagnoInFilo', 'Stagno in filo per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,125 gr a pin'),
+  P('rivetto', 'Rivetti per scheda', 'pz', 'MATERIALE DI CONSUMO', 0),
+  P('kaptonInNastro', 'Kapton nastro per scheda', 'cm', 'MATERIALE DI CONSUMO', 0),
+  P('bolliniKapton', 'Bollini kapton per scheda', 'pz', 'MATERIALE DI CONSUMO', 0),
+  P('spellicolabile', 'Spellicolabile per scheda', 'gr', 'MATERIALE DI CONSUMO', 0),
+  P('splicing', 'Giunzioni splicing (totali)', 'pz', 'MATERIALE DI CONSUMO', 0),
+  P('tropicalizzante', 'Bombolette tropicalizzante (totali)', 'pz', 'MATERIALE DI CONSUMO', 0),
+  P('pastaTermoconduttiva', 'Pasta termoconduttiva per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '1 gr, 2 gr per componenti grandi'),
+  P('viteria', 'Viteria per scheda', '€', 'MATERIALE DI CONSUMO', 0, 'M4x16 + rondella + spaccata = 0,07 €'),
+  P('altriCosti', 'Altri costi per scheda', '€', 'MATERIALE DI CONSUMO', 0),
+  P('buste', 'Buste ESD (totali)', 'pz', 'IMBALLAGGIO', 0),
+  P('cartoni', 'Cartoni (totali)', 'pz', 'IMBALLAGGIO', 0),
+  // Acquisti e una tantum
+  P('nLamine', 'Lamine serigrafiche', 'pz', 'ACQUISTI', 0),
+  P('prezzoLamina', 'Costo lamina', '€', 'ACQUISTI', 91.6),
+  P('nAttrezzaggiPcb', 'Attrezzature PCB', 'pz', 'ACQUISTI', 0),
+  P('costoAttrezzaggioPcb', 'Costo attrezzatura PCB', '€', 'ACQUISTI', 0),
+  P('costoComponentiScheda', 'Costo componenti per scheda', '€', 'ACQUISTI', 0),
+  P('costoPcbScheda', 'Costo PCB per scheda', '€', 'ACQUISTI', 0),
+  P('nSpedizioni', 'Spedizioni', 'pz', 'ACQUISTI', 0),
+  P('costoSpedizione', 'Costo per spedizione', '€', 'ACQUISTI', 0),
+];
+
+// ───────────────────────────── MATERIALI (prezzi, modificabili) ─────────────────────────────
+// Prezzi dall'ultimo preventivo salvato sul vecchio portale. Nelle formule: prezzo_<codice>, qta_<codice>.
+export const MATERIALI: MaterialeDef[] = [
+  { codice: 'busteEsd', descrizione: 'Buste ESD', costo: 0.1, um: 'pz' },
+  { codice: 'cremaLF', descrizione: 'Crema lead free', costo: 0.15, um: 'gr' },
+  { codice: 'stagnoSaldatriceLF', descrizione: 'Stagno per saldatrice LF', costo: 0.06, um: 'gr' },
+  { codice: 'kaptonBollini10', descrizione: 'Kapton bollini Ø10 mm', costo: 0.01776, um: 'pz' },
+  { codice: 'kaptonBollini6', descrizione: 'Kapton bollini Ø6 mm', costo: 0.01405, um: 'pz' },
+  { codice: 'kaptonNastro', descrizione: 'Kapton nastro', costo: 0.0014, um: 'cm' },
+  { codice: 'rivetto', descrizione: 'Rivetto', costo: 0.038, um: 'pz' },
+  { codice: 'scatolone', descrizione: 'Scatolone', costo: 4, um: 'pz' },
+  { codice: 'spellicolabile', descrizione: 'Spellicolabile', costo: 0.042, um: 'gr' },
+  { codice: 'stagnoLF', descrizione: 'Stagno lead free', costo: 0.06, um: 'gr', quantita: 0.02 },
+  { codice: 'stagnoFilo', descrizione: 'Stagno in filo per saldatura a mano', costo: 0.13, um: 'gr' },
+  { codice: 'tropicalizzante', descrizione: 'Tropicalizzante', costo: 35, um: 'ml', quantita: 400 },
+  { codice: 'etichettaSplicing', descrizione: 'Etichetta splicing', costo: 0.05, um: 'pz' },
+  { codice: 'clipsSplicing', descrizione: 'Clips splicing', costo: 0.0175, um: 'pz' },
+  { codice: 'pastaTermo', descrizione: 'Pasta termoconduttiva', costo: 0.2, um: 'gr' },
+];
+
+// ───────────────────────────── FASI ─────────────────────────────
+type T = 'produzione' | 'ufficio';
+const F = (numero: string, codice: string, nome: string, gruppo: string, formulaSecondi: string,
+  o: { persone?: number; tariffa?: T; unaTantum?: boolean; scala: Scala; legacy?: string[] }): FaseCatalogo =>
+  ({ numero, codice, nome, gruppo, formulaSecondi, persone: o.persone ?? 1, tariffa: o.tariffa ?? 'produzione',
+     unaTantum: o.unaTantum ?? false, scala: o.scala, legacy: o.legacy });
+
+const PRE = 'PRE-PRODUZIONE';
+const uff = (unaTantum: boolean) => ({ tariffa: 'ufficio' as T, unaTantum, scala: 'fisso' as Scala });
+
+export const FASI: FaseCatalogo[] = [
+  F('A', 'foglioTempi', 'Preparazione foglio tempi', PRE, 'oreFoglioTempi * 3600', uff(false)),
+  F('B', 'analisiBom', 'Analisi BOM e ricerca prezzi', PRE, 'oreAnalisiBom * 3600', uff(false)),
+  F('C', 'preventivo', 'Preventivo', PRE, 'orePreventivo * 3600', uff(false)),
+  F('D', 'acquistoPcb', 'Acquisto PCB', PRE, 'oreAcquistoPcb * 3600', uff(false)),
+  F('E', 'acquistoComponenti', 'Acquisto componenti', PRE, 'oreAcquistoComponenti * 3600', uff(false)),
+  F('F', 'acquistoLamine', 'Acquisto lamine', PRE, 'oreAcquistoLamine * 3600', uff(true)),
+  F('G', 'prepDocumentazione', 'Preparazione documentazione', PRE, 'orePrepDoc * 3600 * se(botPrepDoc, 2, 1)', { ...uff(true), legacy: ['utPrepDoc'] }),
+  F('I', 'progArmadi', 'Programmazione armadi TOP e BOT', PRE, 'oreProgArmadi * 3600 * se(botProgArmadi, 2, 1)', { ...uff(true), legacy: ['utProgArmadi'] }),
+  F('L', 'filePeP', 'Preparazione file P&P', PRE, 'oreFilePeP * 3600', uff(true)),
+  F('M', 'progPeP', 'Programmazione P&P TOP e BOT', PRE, 'oreProgPeP * 3600 * se(botProgPeP, 2, 1)', { ...uff(true), legacy: ['utProgPeP'] }),
+  F('N', 'etichettaturaMateriale', 'Etichettatura / controllo materiale', PRE, 'oreEtichettaturaMateriale * 3600', uff(false)),
+  F('O', 'attrezzature3D', 'Disegno e stampa 3D attrezzature', PRE, 'oreAttrezzature3D * 3600', uff(true)),
+  F('P', 'checkPreProduzione', 'Check pre-produzione', PRE, 'oreCheckPreProduzione * 3600', uff(false)),
+
+  F('1T', 'materialeTop', 'Estrazione/preparazione materiale TOP', 'SMD', 'qtFeeder * tempoContMateriale', { scala: 'fisso', legacy: ['controlloMaterialeSmd'] }),
+  F('2T', 'progSerigrafiaTop', 'Programmazione serigrafia TOP', 'SMD', 'oreProgSerigrafia * 3600', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
+  F('3T', 'equipSerigrafiaTop', 'Equipaggiamento serigrafia TOP', 'SMD', 'tempoAttrezSerigrafia * 60', { scala: 'fisso', legacy: ['equipaggiamentoSerig'] }),
+  F('4T', 'equipPePTop', 'Equipaggiamento Pick&Place TOP', 'SMD', 'tempoAttrezPeP * 60 * qtFeeder', { scala: 'fisso', legacy: ['equipaggiamentoPeP'] }),
+  F('5T', 'avvioTop', 'Avvio produzione + controllo 1ª scheda TOP', 'SMD', 'tempoAvvioProduzione * 60', { scala: 'fisso', legacy: ['avvioProduzione'] }),
+  F('6T', 'serigrafiaPePTop', 'Serigrafia + P&P TOP', 'SMD', 'tempoSerigrafia * nPCB + qtSmd / (pepChipH / 3600) * nSchede', { persone: 2, scala: 'scheda', legacy: ['serigrafia', 'montaggioSmd'] }),
+  F('7T', 'fornoTop', 'Forno TOP', 'SMD', 'tempoFornoTop * nPCB', { persone: 2, scala: 'pannello' }),
+  F('8T', 'smontaggioTop', 'Smontaggio macchina TOP', 'SMD', 'tempoSmontaggio * 60 * qtFeeder', { scala: 'fisso', legacy: ['smontaggioPeP'] }),
+  F('1B', 'materialeBot', 'Estrazione/preparazione materiale BOT', 'SMD', 'qtFeederLatoB * tempoContMaterialeLatoB', { scala: 'fisso', legacy: ['controlloMaterialeSmd'] }),
+  F('2B', 'progSerigrafiaBot', 'Programmazione serigrafia BOT', 'SMD', 'oreProgSerigrafia * 3600 * botProgSerigrafia', { unaTantum: true, scala: 'fisso', legacy: ['utProgSerigrafia'] }),
+  F('3B', 'equipSerigrafiaBot', 'Equipaggiamento serigrafia BOT', 'SMD', 'tempoAttrezSerigrafiaLatoB * 60', { scala: 'fisso', legacy: ['equipaggiamentoSerigB'] }),
+  F('4B', 'equipPePBot', 'Equipaggiamento Pick&Place BOT', 'SMD', 'tempoAttrezPePLatoB * 60 * qtFeederLatoB', { scala: 'fisso', legacy: ['equipaggiamentoPePB'] }),
+  F('5B', 'avvioBot', 'Avvio produzione + controllo 1ª scheda BOT', 'SMD', 'tempoAvvioProduzioneLatoB * 60', { scala: 'fisso', legacy: ['avvioProduzioneLatoB'] }),
+  F('6B', 'serigrafiaPePBot', 'Serigrafia + P&P BOT', 'SMD', 'tempoSerigrafiaLatoB * nPCB + qtSmdLatoB / (pepChipHLatoB / 3600) * nSchede', { persone: 2, scala: 'scheda', legacy: ['serigrafiaLatoB', 'montaggioSmdLatoB'] }),
+  F('7B', 'fornoBot', 'Forno BOT', 'SMD', 'tempoFornoBot * nPCB', { persone: 2, scala: 'pannello' }),
+  F('8B', 'smontaggioBot', 'Smontaggio macchina BOT', 'SMD', 'tempoSmontaggioLatoB * 60 * qtFeederLatoB', { scala: 'fisso', legacy: ['smontaggioPePLatoB'] }),
+  F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'oreProgAOI * 3600 * se(botProgAOI, 2, 1)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
+  F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(tempoRevisioneAoi + tempoRevisioneAoiLatoB) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
+  F('11', 'riparazioneSmd', 'Riparazione SMD', 'SMD', 'tempoRiparazioneSmd * nSchede', { scala: 'scheda' }),
+  F('12', 'chiusuraSessione', 'Chiusura sessione, conteggio e rientro bobine a magazzino', 'SMD', 'minChiusuraSessione * 60', { scala: 'fisso' }),
+
+  F('13', 'materialeTht', 'Estrazione/preparazione materiale THT', 'THT', 'tempoControlloMateriale * qtTipolTht', { scala: 'fisso', legacy: ['controlloMaterialeTHT'] }),
+  F('14', 'preparazioneManuale', 'Preparazione manuale componenti', 'THT', 'tempoDiPrepTht * qtPthdaPreparare * nSchede', { scala: 'scheda', legacy: ['preparazioneComponenti'] }),
+  F('15', 'giostra', 'Giostra', 'THT', 'tempoMontaggioTht * qntCompMontaggio * nSchede', { scala: 'scheda', legacy: ['giostra'] }),
+  F('16', 'protezioni', 'Protezioni', 'THT', 'tempoProtezione * nSchede', { scala: 'scheda', legacy: ['protezioni'] }),
+  F('17', 'saldaturaOnda', 'Saldatura ad onda', 'THT', 'tempoSaldaturaOnda * nPCB', { persone: 2, scala: 'pannello', legacy: ['saldaturaAdOnda'] }),
+  F('18', 'saldaturaMano', 'Saldatura a mano', 'THT', 'qntPuntiSaldaturaMano * tempoSaldaturaaMano * nSchede', { scala: 'scheda', legacy: ['saldaturaAMano'] }),
+  F('19', 'revisione', 'Revisione', 'THT', 'tempoDiRevisione * nSchede', { scala: 'scheda', legacy: ['revisione'] }),
+  F('20', 'separazione', 'Separazione schede', 'THT', 'tempoSeparazioneSchede * nSchede', { scala: 'scheda', legacy: ['separazioneSchede'] }),
+  F('21', 'montaggioMeccanico', 'Montaggio meccanico', 'COMPLETAMENTO', 'componentiMeccanici * nSchede', { scala: 'scheda', legacy: ['montaggioComponentiMec'] }),
+  F('22', 'conformalCoating', 'Conformal coating', 'COMPLETAMENTO', 'tropicalizzazione * nSchede', { scala: 'scheda', legacy: ['tropicalizzazione'] }),
+  F('23', 'potting', 'Potting', 'COMPLETAMENTO', 'tempoPotting * nSchede', { scala: 'scheda' }),
+  F('24', 'lavaggio', 'Lavaggio schede', 'COMPLETAMENTO', 'tempoLavaggio * nSchede', { scala: 'scheda' }),
+  F('25', 'pulizia', 'Pulizia schede', 'COMPLETAMENTO', 'tempoPulizia * nSchede', { scala: 'scheda' }),
+  F('26', 'cablaggio', 'Cablaggio', 'COMPLETAMENTO', 'tempoCablaggio * nSchede', { scala: 'scheda' }),
+  F('27', 'tagliaSpela', 'Taglia e spela fili', 'COMPLETAMENTO', 'tempoTagliaSpela * nSchede', { scala: 'scheda' }),
+  F('28', 'firmware', 'Caricamento firmware', 'COMPLETAMENTO', 'programmazioneFlash * nSchede', { scala: 'scheda', legacy: ['programmazioneFlash'] }),
+  F('29', 'test', 'Test elettrico e/o funzionale', 'COMPLETAMENTO', 'collaudo * nSchede', { scala: 'scheda', legacy: ['collaudo'] }),
+  F('30', 'riparazione', 'Riparazione', 'COMPLETAMENTO', 'tempoRiparazione * nSchede', { scala: 'scheda' }),
+  F('31', 'etichettatura', 'Etichettatura', 'COMPLETAMENTO', 'targhette * nSchede', { scala: 'scheda', legacy: ['targhetta'] }),
+  F('32', 'pressfit', 'Pressfit', 'COMPLETAMENTO', 'tempoPressfit * nSchede', { scala: 'scheda' }),
+  F('33', 'rivettatura', 'Rivettatura', 'COMPLETAMENTO', 'rivettatura * nSchede', { scala: 'scheda', legacy: ['rivettatura'] }),
+  F('34', 'partiElettroniche', 'Montaggio parti elettroniche (es. display)', 'COMPLETAMENTO', 'tempoPartiElettroniche * nSchede', { scala: 'scheda' }),
+  F('34M', 'modifiche', 'Modifiche varie', 'COMPLETAMENTO', 'modifica * nSchede', { scala: 'scheda', legacy: ['modifica'] }),
+  F('35', 'prepScatole', 'Preparazione scatole e buste', 'IMBALLAGGIO', 'tempoPrepScatole * nSchede', { scala: 'scheda' }),
+  F('36', 'imballaggio', 'Imballaggio', 'IMBALLAGGIO', 'tempoDiImballaggio * nSchede', { scala: 'scheda', legacy: ['imballaggio'] }),
+];
+
+// ───────────────────────────── VOCI DI COSTO ─────────────────────────────
+const CONSUMO = [
+  'crema * prezzo_cremaLF * nSchede',
+  '+ prezzo_stagnoLF * qta_stagnoLF * stagno * nSchede',
+  '+ prezzo_stagnoSaldatriceLF * stagnoPerSaldature * nSchede',
+  '+ prezzo_stagnoFilo * stagnoInFilo * nSchede',
+  '+ rivetto * prezzo_rivetto * nSchede',
+  '+ prezzo_kaptonNastro * kaptonInNastro * nSchede',
+  '+ bolliniKapton * prezzo_kaptonBollini10 * nSchede',
+  '+ spellicolabile * prezzo_spellicolabile * nSchede',
+  '+ (prezzo_etichettaSplicing + prezzo_clipsSplicing) * splicing',
+  '+ tropicalizzante * prezzo_tropicalizzante',
+  '+ viteria * nSchede',
+  '+ altriCosti * nSchede',
+  '+ pastaTermoconduttiva * prezzo_pastaTermo * nSchede',
+  '+ prezzo_scatolone * cartoni',
+  '+ prezzo_busteEsd * buste',
+].join(' ');
+
+export const VOCI: VoceDef[] = [
+  { codice: 'spedizione', nome: 'Spedizione', gruppo: 'SPEDIZIONE', formulaEuro: 'costoSpedizione * nSpedizioni', unaTantum: false },
+  { codice: 'materialeDiConsumo', nome: 'Materiale di consumo', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: CONSUMO, unaTantum: false },
+  { codice: 'laminaSerigrafica', nome: 'Lamina serigrafica', gruppo: 'COSTI UNA TANTUM', formulaEuro: 'prezzoLamina * nLamine', unaTantum: true },
+  { codice: 'attrezzaggioPCB', nome: 'Attrezzaggio PCB', gruppo: 'COSTI UNA TANTUM', formulaEuro: 'costoAttrezzaggioPcb * nAttrezzaggiPcb', unaTantum: true },
+  { codice: 'valoreAcquistoComponenti', nome: 'Componenti', gruppo: 'MATERIALE PER PRODUZIONE', formulaEuro: 'costoComponentiScheda * nSchede', unaTantum: false },
+  { codice: 'valoreAcquistoPCB', nome: 'PCB', gruppo: 'MATERIALE PER PRODUZIONE', formulaEuro: 'costoPcbScheda * nSchede', unaTantum: false },
+];

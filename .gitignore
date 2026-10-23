@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+# dati reali: mai nel repository
+*.json.bak
+dati/

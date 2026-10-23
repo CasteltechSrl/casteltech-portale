@@ -1,0 +1,21 @@
+{
+  "name": "casteltech-portale",
+  "version": "0.1.0",
+  "description": "Preventivi, schede di produzione e consuntivi Casteltech",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "verifica": "tsc --noEmit",
+    "verifica-legacy": "tsx tools/verifica-legacy.ts"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "private": "true"
+}
