@@ -442,11 +442,28 @@ export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
 function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, vista: 'fasi' | 'macro'): Raw {
   const r = riepilogo(ris);
   const i = p.intestazione ?? {};
+  const somma = (xs: { prezzo: number }[]) => xs.reduce((a, x) => a + x.prezzo, 0);
   const v = (cod: string) => d.parametri[cod] ?? cat.parametri.find(x => x.codice === cod)?.default;
   const scelte = cat.parametri.filter(x => x.gruppo === 'INFORMAZIONI GENERALI' && v(x.codice)).map(x => x.etichetta);
-  const fasiRic = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0), fasiUT = ris.fasi.filter(f => f.unaTantum && f.prezzo > 0);
-  const vociRic = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0), vociUT = ris.voci.filter(x => x.unaTantum && x.prezzo > 0);
-  const somma = (xs: { prezzo: number }[]) => xs.reduce((a, x) => a + x.prezzo, 0);
+  const doppia = !!v('doppiaFaccia');
+  const fasiRic = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0);
+  // energia insieme al materiale di consumo
+  const vociRic = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => (x.gruppo === 'ENERGIA' ? { ...x, gruppo: 'MATERIALE DI CONSUMO' } : x));
+  // una tantum per il cliente: documentazione, programmazione attrezzature (tutto il resto delle fasi una tantum),
+  // lamine, attrezzaggio PCB; con il BOT si dice che sono raddoppiati
+  const fasiUTtutte = ris.fasi.filter(f => f.unaTantum && f.prezzo > 0);
+  const doc = fasiUTtutte.filter(f => f.codice === 'prepDocumentazione');
+  const altre = fasiUTtutte.filter(f => f.codice !== 'prepDocumentazione');
+  const perLato = doppia ? ' — TOP e BOT (×2)' : '';
+  const nLamine = Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1);
+  const righeUT: { nome: string; prezzo: number }[] = [
+    ...(doc.length ? [{ nome: `Preparazione documentazione${perLato}`, prezzo: somma(doc) }] : []),
+    ...(altre.length ? [{ nome: `Programmazione attrezzature di produzione${perLato}`, prezzo: somma(altre) }] : []),
+    ...ris.voci.filter(x => x.unaTantum && x.prezzo > 0).map(x => ({
+      nome: x.codice === 'laminaSerigrafica' ? (nLamine > 1 ? `Lamine serigrafiche (${nLamine}${doppia && nLamine === 2 ? ': TOP e BOT' : ''})` : 'Lamina serigrafica')
+        : x.codice === 'attrezzaggioPCB' ? 'Attrezzaggio PCB' : x.nome,
+      prezzo: x.prezzo })),
+  ];
   const gruppiDi = <T extends { gruppo: string }>(xs: T[]) => [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) }));
   const SIGLE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
   const nomeGruppo = (g: string) => SIGLE[g] ?? (g.charAt(0) + g.slice(1).toLowerCase()).replace(/\b(smd|tht|aoi|pcb|bot|top)\b/gi, x => x.toUpperCase());
@@ -485,14 +502,19 @@ function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risulta
   ${scelte.length ? html`<p class="scelte">${scelte.join(' · ')}</p>` : ''}
 
   <div class="riepilogo-stampa">
-    <div><span>Prezzo a scheda</span><strong>${euro(r.prezzoScheda)}</strong><small>lotto ${euro(r.prezzoLotto)}</small></div>
-    ${r.unaTantum > 0 ? html`
-    <div><span>Costi una tantum</span><strong>${euro(r.unaTantum)}</strong><small>solo 1° lotto</small></div>
-    <div><span>Prezzo a scheda con una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong><small>1° lotto ${euro(r.prezzoLottoConUnaTantum)}</small></div>` : ''}
+    <div><span>Prezzo a scheda</span><strong>${euro(r.prezzoScheda)}</strong></div>
+    ${r.unaTantum > 0 ? html`<div><span>Prezzo a scheda con una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong></div>` : ''}
   </div>
 
-  ${tabella(`Lotto di ${num(d.nSchede, 0)} schede`, fasiRic, vociRic, r.prezzoLotto)}
-  ${r.unaTantum > 0 ? tabella('Costi una tantum (solo primo lotto)', fasiUT, vociUT, r.unaTantum) : ''}
+  ${tabella(`Produzione: lotto di ${num(d.nSchede, 0)} schede`, fasiRic, vociRic, r.prezzoLotto)}
+  ${r.unaTantum > 0 ? html`
+    <h3>Costi una tantum (solo primo lotto)</h3>
+    <table class="prezzi">
+      <thead><tr><th>Voce</th><th class="n">Prezzo</th></tr></thead>
+      <tbody>${righeUT.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</tbody>
+      <tfoot><tr><td>Totale una tantum</td><td class="n">${euro(r.unaTantum)}</td></tr></tfoot>
+    </table>
+    <table class="prezzi totale-generale"><tr><td>Totale (produzione + una tantum)</td><td class="n">${euro(r.prezzoLottoConUnaTantum)}</td></tr></table>` : ''}
   ${d.note ? html`<h3>Note</h3><p class="note-stampa">${d.note}</p>` : ''}
   <p class="piede">Prezzi IVA esclusa.</p>
 </section>
