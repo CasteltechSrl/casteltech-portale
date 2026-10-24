@@ -122,7 +122,7 @@ test('Solo TOP / TOP + BOT: raddoppio dei tempi "per lato" e fasi BOT solo con T
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const pre = { oreFoglioTempi: 1 / 6, oreAnalisiBom: 1, orePreventivo: 0.5, orePrepDoc: 0.5, oreProgArmadi: 0.5, oreFilePeP: 0.5, oreProgPeP: 1, oreEtichettaturaMateriale: 1 };
-  const base = { ...def, ...pre, nPCB: 50, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5 };
+  const base = { ...def, ...pre, nPCB: 50, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5, primaProduzione: 1, provenienzaMateriale: 2 };
   const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 0 } });
   const bot = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 1 } });
   const sec = (r: typeof top, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
@@ -290,4 +290,13 @@ test('spunte: lamina std 110 € e con trattamenti 165 € fissi (×2 con TOP+BO
   assert.equal(sec(onda, 'progOnda'), 900);
   const mano = calc({ presenteTht: 1, usaOnda: 0, primaProduzione: 1 });
   assert.equal(sec(mano, 'prepCarrelli') + sec(mano, 'progOnda') + sec(mano, 'saldaturaOnda'), 0);
+});
+
+test('default: 1ª produzione non spuntata (nessuna programmazione), lamina con trattamenti costa 110 €', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.3 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtFeeder: 20, laminaTrattamenti: 1 } });
+  assert.ok(['progPeP', 'progSerigrafiaTop', 'progAOI', 'progForno'].every(c => r.fasi.find(f => f.codice === c)!.secondiCiclo === 0));
+  const lamina = r.voci.find(v => v.codice === 'laminaSerigrafica')!;
+  assert.equal(lamina.costo, 110); assert.equal(lamina.prezzo, 165); assert.equal(lamina.guadagno, 55);
 });

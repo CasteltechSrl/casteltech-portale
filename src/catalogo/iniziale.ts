@@ -41,7 +41,7 @@ const P = (codice: string, etichetta: string, unita: string, gruppo: string, def
 export const PARAMETRI: ParametroDef[] = [
   P('nPCB', 'Quantità pannelli (PCB)', 'pz', 'GENERALE', undefined, 'Calcolato: schede ÷ schede per pannello'),
   // Informazioni generali (Adriano, 24/10/2026): spunte che decidono quali sezioni, fasi e costi contano
-  P('primaProduzione', '1ª produzione', '', 'INFORMAZIONI GENERALI', 1, 'Prima produzione: si contano le programmazioni (SMD e/o saldatrice ad onda)', 'si_no'),
+  P('primaProduzione', '1ª produzione', '', 'INFORMAZIONI GENERALI', 0, 'Prima produzione: si contano le programmazioni (SMD e/o saldatrice ad onda)', 'si_no'),
   P('presenteSmd', 'TOP', '', 'INFORMAZIONI GENERALI', 1, 'Componenti SMD sul lato TOP', 'si_no'),
   // Solo TOP (0) oppure TOP + BOT (1): raddoppia i tempi "per lato" e le lamine, abilita le fasi BOT
   P('doppiaFaccia', 'TOP+BOT', '', 'INFORMAZIONI GENERALI', 0, 'SMD su due lati: raddoppiano programmazioni a lato e lamine, si attivano le fasi BOT', 'si_no'),
@@ -167,7 +167,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('nLamine', 'Lamine serigrafiche', 'pz', 'ACQUISTI', undefined, 'Vuoto = una per lato'),
   P('prezzoLamina', 'Costo lamina std', '€', 'ACQUISTI', 91.6),
   P('prezzoVenditaLamina', 'Prezzo vendita lamina std', '€', 'ACQUISTI', 110, 'Fisso, già ricaricato'),
-  P('costoLaminaTrattata', 'Costo lamina con trattamenti', '€', 'ACQUISTI', undefined, 'Vuoto = come il prezzo di vendita'),
+  P('costoLaminaTrattata', 'Costo lamina con trattamenti', '€', 'ACQUISTI', 110, 'Vuoto = come il prezzo di vendita'),
   P('prezzoVenditaLaminaTrattata', 'Prezzo vendita lamina con trattamenti', '€', 'ACQUISTI', 165, 'Fisso, già ricaricato'),
   P('nAttrezzaggiPcb', 'Attrezzature PCB', 'pz', 'ACQUISTI', 0),
   P('costoAttrezzaggioPcb', 'Costo attrezzatura PCB', '€', 'ACQUISTI', 0),
