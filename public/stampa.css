@@ -19,17 +19,23 @@ body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 10pt; col
 table { border-collapse: collapse; width: 100%; }
 .griglia { table-layout: fixed; }
 .griglia td { border: 1px solid #000; vertical-align: top; padding: .7mm 1.5mm; overflow-wrap: anywhere; }
-.griglia col.c1 { width: 24%; } .griglia col.c2 { width: 30%; } .griglia col.c3 { width: 22%; } .griglia col.c4 { width: 24%; }
+.griglia col.c1 { width: 27%; } .griglia col.c2 { width: 28%; } .griglia col.c3 { width: 22%; } .griglia col.c4 { width: 23%; }
 .griglia td.larga { width: 52%; }
 .etic { font-style: italic; font-size: 7.5pt; text-transform: uppercase; }
 .etic.centro { text-align: center; font-weight: 700; font-style: normal; }
 .val { min-height: 4mm; font-size: 9.5pt; font-weight: 600; }
 .forte .val { font-size: 11.5pt; }
-.tb { font-weight: 600; } .tb span { font-weight: 400; font-style: italic; font-size: 8pt; display: inline-block; width: 9mm; }
+.tb { display: flex; align-items: baseline; gap: 1mm; white-space: nowrap; }
+.tb span { font-weight: 400; font-style: italic; font-size: 7.5pt; flex: 0 0 7.5mm; }
+.tb b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.tb b.m { font-size: 8.5pt; } .tb b.s { font-size: 7.5pt; } .tb b.xs { font-size: 6.5pt; }
 table.consumo { table-layout: fixed; }
 table.consumo th { border: 1px solid #000; font-weight: 400; font-size: 7.5pt; padding: 1mm; background: #e6e6e6; }
-table.consumo td { border: 1px solid #000; height: 9mm; vertical-align: top; padding: .7mm 1mm; font-size: 8.5pt; }
-table.consumo .previsto { font-size: 7.5pt; font-style: italic; }
+table.consumo td { border: 1px solid #000; height: 9mm; vertical-align: top; padding: .7mm 1mm; font-size: 8pt; text-align: center; }
+table.consumo .cons { line-height: 1.25; }
+table.consumo .cons + .cons { margin-top: 1mm; padding-top: .8mm; border-top: 1px dotted #999; min-height: 4mm; }
+table.consumo .cons span { display: block; font-style: italic; font-size: 7pt; }
+table.consumo .cons b { display: block; white-space: nowrap; min-height: 3.5mm; }
 .lotto { font-weight: 400; font-style: italic; font-size: 8pt; margin-top: 2mm; border-bottom: 1px dotted #000; padding-bottom: 3mm; }
 .riquadro { border: 1px solid #000; border-top: 0; padding: .8mm 1.5mm; min-height: 13mm; }
 .riquadro .testo { white-space: pre-wrap; font-size: 9pt; }

@@ -432,7 +432,10 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const doppia = !!prev?.parametri?.doppiaFaccia;
   const bot = (v: string) => (doppia ? v : '—');
   const quantita = html`${num(c.quantita, 0)} / ${num(c.n_pannelli ?? c.quantita, 0)}`;
-  const prog = (k: string) => html`<div class="tb"><span>TOP:</span> ${st.programmi[k]?.top}</div><div class="tb"><span>BOT:</span> ${bot(st.programmi[k]?.bot ?? '')}</div>`;
+  // nomi lunghi dei programmi: carattere più piccolo, così restano su una riga accanto a TOP/BOT
+  const misura = (t: string) => (t.length > 26 ? 'xs' : t.length > 21 ? 's' : t.length > 17 ? 'm' : '');
+  const lato = (nome: string, t: string) => html`<div class="tb"><span>${nome}:</span><b class="${misura(t)}">${t}</b></div>`;
+  const prog = (k: string) => html`${lato('TOP', st.programmi[k]?.top ?? '')}${lato('BOT', bot(st.programmi[k]?.bot ?? ''))}`;
   const cella = (etichetta: string, contenuto: unknown, cls = '', colonne = 1) => html`<td class="${cls}" colspan="${colonne}"><div class="etic">${etichetta}</div><div class="val">${contenuto}</div></td>`;
   const testata = html`
     <div class="testata-stampa">
@@ -476,10 +479,15 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <div class="campi3"><span>QTA: <b>${x.qta}</b></span><span>COLLI: <b>${x.colli}</b></span><span>BANCALI: <b>${x.bancali}</b></span></div>
     <div class="campi2"><span>PESO: <b>${x.peso}</b></span><span>DIMENSIONE: <b>${x.dimensione}</b></span></div></td>`)}</tr></table>
 
-  <h3 class="gruppo">MATERIALE DI CONSUMO <span>reale a scheda (bombolette: sul lotto) · tra parentesi il previsto dal preventivo</span></h3>
+  <h3 class="gruppo">MATERIALE DI CONSUMO <span>quantità a scheda (conformal coating: bombolette sul lotto)</span></h3>
   <table class="consumo"><tr>${colonne.map(col => html`<th>${col.toUpperCase()}</th>`)}</tr>
-    <tr>${colonne.map(col => html`<td>${voci.filter(v => v.colonna === col).map(v => html`<div>
-      ${testoConsumo(v) ? html`<b>${testoConsumo(v)}</b> ` : ''}${v.previstoTesto ? html`<span class="previsto">(${v.previstoTesto})</span>` : ''}</div>`)}</td>`)}</tr></table>
+    <tr>${colonne.map(col => {
+      const dellaColonna = voci.filter(v => v.colonna === col);
+      const previsto = dellaColonna.map(v => v.previstoTesto).filter(Boolean).join(' + ');
+      const consuntivo = dellaColonna.map(testoConsumo).filter(Boolean).join(' + ');
+      return html`<td><div class="cons"><span>Da preventivo:</span> <b>${previsto || '—'}</b></div>
+        <div class="cons"><span>A consuntivo:</span> <b>${consuntivo}</b></div></td>`;
+    })}</tr></table>
 
   <h3 class="gruppo">FASI DI LAVORAZIONE <span>tempi in ore:minuti</span></h3>
   <table class="fasi-stampa">
