@@ -134,6 +134,15 @@
     // il lato BOT si monta insieme al TOP: BOT spunta anche TOP, togliere TOP toglie anche BOT
     if (el.dataset.param === 'doppiaFaccia' && el.checked && casella('presenteSmd')) casella('presenteSmd').checked = true;
     if (el.dataset.param === 'presenteSmd' && !el.checked && casella('doppiaFaccia')) casella('doppiaFaccia').checked = false;
+    // 1ª produzione e variazione quantità si escludono
+    if (el.dataset.param === 'primaProduzione' && el.checked && casella('variazioneQuantita')) casella('variazioneQuantita').checked = false;
+    if (el.dataset.param === 'variazioneQuantita' && el.checked && casella('primaProduzione')) casella('primaProduzione').checked = false;
+    // campionatura: ricarico al 35% (togliendo la spunta torna quello di prima)
+    if (el.dataset.param === 'campionatura') {
+      const ric = form.querySelector('[data-tariffa=ricarico]');
+      if (el.checked) { ric.dataset.prima = ric.value; ric.value = '1.35'; }
+      else if (ric.dataset.prima) ric.value = ric.dataset.prima;
+    }
     // lamina: std oppure con trattamenti
     if (el.dataset.param === 'acquistoLamina' && el.checked && casella('laminaTrattamenti')) casella('laminaTrattamenti').checked = false;
     if (el.dataset.param === 'laminaTrattamenti' && el.checked && casella('acquistoLamina')) casella('acquistoLamina').checked = false;

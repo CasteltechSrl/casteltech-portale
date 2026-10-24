@@ -300,3 +300,20 @@ test('default: 1ª produzione non spuntata (nessuna programmazione), lamina con 
   const lamina = r.voci.find(v => v.codice === 'laminaSerigrafica')!;
   assert.equal(lamina.costo, 110); assert.equal(lamina.prezzo, 165); assert.equal(lamina.guadagno, 55);
 });
+
+test('splicing: tape extender 0,30 € per feeder TOP e BOT; imballaggio: 1 min a scatola + 10 s a busta; lamina std 75 €', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const prezzi = Object.fromEntries(MATERIALI.map(m => ['prezzo_' + m.codice, m.costo]));
+  const calc = (p: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, ...prezzi, nPCB: 50, ...p } });
+  const voce = (r: ReturnType<typeof calc>, c: string) => r.voci.find(v => v.codice === c)!;
+  const base = { qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5 };
+  assert.ok(Math.abs(voce(calc({ ...base, usaSplicing: 1 }), 'tapeExtender').costo - 6) < 1e-9);                   // 20 × 0,30
+  assert.ok(Math.abs(voce(calc({ ...base, usaSplicing: 1, doppiaFaccia: 1 }), 'tapeExtender').costo - 7.5) < 1e-9); // 25 × 0,30
+  assert.equal(voce(calc({ ...base, usaSplicing: 0 }), 'tapeExtender').costo, 0);
+  const imb = calc({ cartoni: 2, buste: 50 });
+  assert.equal(imb.fasi.find(f => f.codice === 'prepScatole')!.secondiCiclo, 2 * 60 + 50 * 10);
+  assert.equal(imb.fasi.find(f => f.codice === 'imballaggio')!.secondiCiclo, 100 * 15);
+  const lamina = voce(calc({ acquistoLamina: 1 }), 'laminaSerigrafica');
+  assert.equal(lamina.costo, 75); assert.equal(lamina.prezzo, 110);
+});

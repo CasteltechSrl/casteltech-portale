@@ -41,6 +41,8 @@ const P = (codice: string, etichetta: string, unita: string, gruppo: string, def
 export const PARAMETRI: ParametroDef[] = [
   P('nPCB', 'Quantità pannelli (PCB)', 'pz', 'GENERALE', undefined, 'Calcolato: schede ÷ schede per pannello'),
   // Informazioni generali (Adriano, 24/10/2026): spunte che decidono quali sezioni, fasi e costi contano
+  P('campionatura', 'Campionatura', '', 'INFORMAZIONI GENERALI', 0, 'Campionatura: il ricarico passa al 35%', 'si_no'),
+  P('variazioneQuantita', 'Variazione quantità', '', 'INFORMAZIONI GENERALI', 0, 'Stesso prodotto già prodotto, cambia solo la quantità (niente 1ª produzione)', 'si_no'),
   P('primaProduzione', '1ª produzione', '', 'INFORMAZIONI GENERALI', 0, 'Prima produzione: si contano le programmazioni (SMD e/o saldatrice ad onda)', 'si_no'),
   P('presenteSmd', 'TOP', '', 'INFORMAZIONI GENERALI', 1, 'Componenti SMD sul lato TOP', 'si_no'),
   // Solo TOP (0) oppure TOP + BOT (1): raddoppia i tempi "per lato" e le lamine, abilita le fasi BOT
@@ -53,6 +55,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('laminaTrattamenti', 'Lamina con trattamenti', '', 'INFORMAZIONI GENERALI', 0, 'Lamina con trattamenti: 165 € di vendita fissi (senza ricarico), due con TOP+BOT', 'si_no'),
   P('etichette', 'Etichette', '', 'INFORMAZIONI GENERALI', 0, 'Etichettatura delle schede (15 s a scheda) e costo etichetta se non la fornisce il cliente', 'si_no'),
   P('puliziaSaldature', 'Pulizia saldature', '', 'INFORMAZIONI GENERALI', 0, 'Pulizia punti saldatura: 2 min a scheda + liquido 0,20 € a scheda', 'si_no'),
+  P('usaSplicing', 'Splicing', '', 'INFORMAZIONI GENERALI', 0, 'Splicing: un tape extender per ogni feeder SMD (TOP e BOT)', 'si_no'),
   P('lavaggioSchede', 'Lavaggio schede', '', 'INFORMAZIONI GENERALI', 0, 'Lavaggio: 45 s a scheda + liquido 0,10 € a scheda + 5 € a lotto di energia e avvio', 'si_no'),
   // Pre-produzione (ore)
   P('oreFoglioTempi', 'Preparazione foglio tempi', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
@@ -87,20 +90,20 @@ export const PARAMETRI: ParametroDef[] = [
   P('qtSmd', 'Componenti SMD TOP per scheda', 'pz', 'SMD TOP'),
   P('qtFeeder', 'Feeder TOP', 'pz', 'SMD TOP'),
   P('tempoAttrezSerigrafia', 'Attrezzaggio serigrafia', 'min', 'SMD TOP', 20, '40–60 min se campionatura'),
-  P('tempoAttrezPeP', 'Attrezzaggio P&P per feeder', 'min', 'SMD TOP', 3),
+  P('tempoAttrezPeP', 'Attrezzaggio P&P per feeder', 'min', 'SMD TOP', 2),
   P('tempoAvvioProduzione', 'Avvio produzione + controllo 1ª scheda', 'min', 'SMD TOP', 30, 'da 30 a 120 min'),
   P('tempoSerigrafia', 'Serigrafia per pannello', 's', 'SMD TOP', 30),
   P('pepChipH', 'Velocità P&P', 'chip/h', 'SMD TOP', 6000, '3000 campionatura — 6000 iPulse — 10000 MyData'),
-  P('tempoSmontaggio', 'Smontaggio P&P per feeder', 'min', 'SMD TOP', 2),
+  P('tempoSmontaggio', 'Smontaggio P&P per feeder', 'min', 'SMD TOP', 1),
   // SMD lato BOT
   P('qtSmdLatoB', 'Componenti SMD BOT per scheda', 'pz', 'SMD BOT'),
   P('qtFeederLatoB', 'Feeder BOT', 'pz', 'SMD BOT'),
   P('tempoAttrezSerigrafiaLatoB', 'Attrezzaggio serigrafia BOT', 'min', 'SMD BOT', 20),
-  P('tempoAttrezPePLatoB', 'Attrezzaggio P&P per feeder BOT', 'min', 'SMD BOT', 3),
+  P('tempoAttrezPePLatoB', 'Attrezzaggio P&P per feeder BOT', 'min', 'SMD BOT', 2),
   P('tempoAvvioProduzioneLatoB', 'Avvio produzione BOT', 'min', 'SMD BOT', 30),
   P('tempoSerigrafiaLatoB', 'Serigrafia BOT per pannello', 's', 'SMD BOT', 30),
   P('pepChipHLatoB', 'Velocità P&P BOT', 'chip/h', 'SMD BOT', 6000),
-  P('tempoSmontaggioLatoB', 'Smontaggio P&P per feeder BOT', 'min', 'SMD BOT', 2),
+  P('tempoSmontaggioLatoB', 'Smontaggio P&P per feeder BOT', 'min', 'SMD BOT', 1),
   // Forno fuori linea (stesso forno per TOP e BOT): la prima scheda impiega il tempo di percorrenza,
   // poi ne esce una ogni "cadenza". Tempo fase = percorrenza + (pannelli − 1) × cadenza.
   P('tempoTransitoForno', 'Percorrenza forno', 's', 'FORNO', 240),
@@ -143,8 +146,10 @@ export const PARAMETRI: ParametroDef[] = [
   P('rivettatura', 'Rivettatura per scheda', 's', 'COMPLETAMENTO', 0, '12 s a rivetto'),
   P('tempoPartiElettroniche', 'Montaggio parti elettroniche per scheda', 's', 'COMPLETAMENTO', 0),
   P('modifica', 'Modifiche varie per scheda', 's', 'COMPLETAMENTO', 0),
-  P('tempoPrepScatole', 'Preparazione scatole e buste per scheda', 's', 'IMBALLAGGIO', 0),
-  P('tempoDiImballaggio', 'Imballaggio per scheda', 's', 'IMBALLAGGIO', 30),
+  // preparazione: montare le scatole e preparare le buste, in base a quante se ne usano (cartoni e buste qui sotto)
+  P('minPrepScatola', 'Preparazione per scatola', 'min', 'IMBALLAGGIO', 1),
+  P('secPrepBusta', 'Preparazione per busta', 's', 'IMBALLAGGIO', 10),
+  P('tempoDiImballaggio', 'Imballaggio per scheda', 's', 'IMBALLAGGIO', 15),
   P('minResoMateriale', 'Reso materiale avanzato al cliente (a lotto)', 'min', 'IMBALLAGGIO', 10, 'Solo con materiale del cliente da restituire'),
   // Materiali di consumo (quantità)
   P('crema', 'Pasta saldante per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,6–1,5–2,6 gr (0,0034 gr/comp.; 500 comp. ≈ 1,5 gr/scheda)'),
@@ -165,7 +170,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('cartoni', 'Cartoni (totali)', 'pz', 'IMBALLAGGIO', 0),
   // Acquisti e una tantum
   P('nLamine', 'Lamine serigrafiche', 'pz', 'ACQUISTI', undefined, 'Vuoto = una per lato'),
-  P('prezzoLamina', 'Costo lamina std', '€', 'ACQUISTI', 91.6),
+  P('prezzoLamina', 'Costo lamina std', '€', 'ACQUISTI', 75),
   P('prezzoVenditaLamina', 'Prezzo vendita lamina std', '€', 'ACQUISTI', 110, 'Fisso, già ricaricato'),
   P('costoLaminaTrattata', 'Costo lamina con trattamenti', '€', 'ACQUISTI', 110, 'Vuoto = come il prezzo di vendita'),
   P('prezzoVenditaLaminaTrattata', 'Prezzo vendita lamina con trattamenti', '€', 'ACQUISTI', 165, 'Fisso, già ricaricato'),
@@ -187,20 +192,21 @@ export const PARAMETRI: ParametroDef[] = [
 // Prezzi dall'ultimo preventivo salvato sul vecchio portale. Nelle formule: prezzo_<codice>, qta_<codice>.
 export const MATERIALI: MaterialeDef[] = [
   { codice: 'busteEsd', descrizione: 'Buste ESD', costo: 0.1, um: 'pz' },
-  { codice: 'cremaLF', descrizione: 'Crema lead free', costo: 0.15, um: 'gr' },
-  { codice: 'stagnoSaldatriceLF', descrizione: 'Stagno per saldatrice LF', costo: 0.06, um: 'gr' },
+  { codice: 'cremaLF', descrizione: 'Pasta saldante', costo: 0.15, um: 'gr' },
+  { codice: 'stagnoSaldatriceLF', descrizione: 'Stagno saldatrice', costo: 0.06, um: 'gr' },
   { codice: 'kaptonBollini10', descrizione: 'Kapton bollini Ø10 mm', costo: 0.01776, um: 'pz' },
   { codice: 'kaptonBollini6', descrizione: 'Kapton bollini Ø6 mm', costo: 0.01405, um: 'pz' },
   { codice: 'kaptonNastro', descrizione: 'Kapton nastro', costo: 0.0014, um: 'cm' },
   { codice: 'rivetto', descrizione: 'Rivetto', costo: 0.038, um: 'pz' },
   { codice: 'scatolone', descrizione: 'Scatolone', costo: 4, um: 'pz' },
   { codice: 'spellicolabile', descrizione: 'Spellicolabile', costo: 0.042, um: 'gr' },
-  { codice: 'stagnoLF', descrizione: 'Stagno lead free', costo: 0.06, um: 'gr', quantita: 0.02 },
+  { codice: 'stagnoLF', descrizione: 'Stagno saldatrice (a reoforo)', costo: 0.06, um: 'gr', quantita: 0.02 },
   { codice: 'stagnoFilo', descrizione: 'Stagno in filo per saldatura a mano', costo: 0.13, um: 'gr' },
   { codice: 'tropicalizzante', descrizione: 'Tropicalizzante', costo: 35, um: 'ml', quantita: 400 },
   { codice: 'etichettaSplicing', descrizione: 'Etichetta splicing', costo: 0.05, um: 'pz' },
   { codice: 'clipsSplicing', descrizione: 'Clips splicing', costo: 0.0175, um: 'pz' },
   { codice: 'pastaTermo', descrizione: 'Pasta termoconduttiva', costo: 0.2, um: 'gr' },
+  { codice: 'tapeExtender', descrizione: 'Tape extender', costo: 0.3, um: 'pz' },
 ];
 
 // ───────────────────────────── FASI ─────────────────────────────
@@ -282,7 +288,7 @@ export const FASI: FaseCatalogo[] = [
   F('33', 'rivettatura', 'Rivettatura', 'COMPLETAMENTO', 'rivettatura * nSchede', { scala: 'scheda', legacy: ['rivettatura'] }),
   F('34', 'partiElettroniche', 'Montaggio parti elettroniche (es. display)', 'COMPLETAMENTO', 'tempoPartiElettroniche * nSchede', { scala: 'scheda' }),
   F('34M', 'modifiche', 'Modifiche varie', 'COMPLETAMENTO', 'modifica * nSchede', { scala: 'scheda', legacy: ['modifica'] }),
-  F('35', 'prepScatole', 'Preparazione scatole e buste', 'IMBALLAGGIO', 'tempoPrepScatole * nSchede', { scala: 'scheda' }),
+  F('35', 'prepScatole', 'Preparazione scatole e buste', 'IMBALLAGGIO', 'cartoni * minPrepScatola * 60 + buste * secPrepBusta', { scala: 'scheda' }),
   F('36', 'imballaggio', 'Imballaggio', 'IMBALLAGGIO', 'tempoDiImballaggio * nSchede', { scala: 'scheda', legacy: ['imballaggio'] }),
   F('36R', 'resoMaterialeCliente', 'Reso materiale avanzato al cliente', 'IMBALLAGGIO', 'se(provenienzaMateriale == 1, minResoMateriale * 60, 0)', { scala: 'fisso' }),
 ];
@@ -311,6 +317,7 @@ export const VOCI: VoceDef[] = [
   { codice: 'materialeDiConsumo', nome: 'Materiale di consumo', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: CONSUMO, unaTantum: false },
   { codice: 'etichette', nome: 'Etichette', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: 'se(etichette, costoEtichetta * nSchede, 0)', unaTantum: false },
   { codice: 'liquidoPulizia', nome: 'Liquido pulizia saldature', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: 'se(puliziaSaldature, costoLiquidoPulizia * nSchede, 0)', unaTantum: false },
+  { codice: 'tapeExtender', nome: 'Tape extender (splicing)', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: 'se(usaSplicing, (qtFeeder + doppiaFaccia * qtFeederLatoB) * prezzo_tapeExtender, 0)', unaTantum: false },
   { codice: 'lavaggio', nome: 'Lavaggio (liquido, energia e avvio)', gruppo: 'MATERIALE DI CONSUMO', formulaEuro: 'se(lavaggioSchede, costoLiquidoLavaggio * nSchede + costoAvvioLavaggio, 0)', unaTantum: false },
   // lamina: prezzo di vendita fisso (110 € std, 165 € con trattamenti), il ricarico non si applica
   { codice: 'laminaSerigrafica', nome: 'Lamina serigrafica', gruppo: 'COSTI UNA TANTUM', unaTantum: true,

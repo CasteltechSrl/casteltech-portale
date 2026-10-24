@@ -219,7 +219,7 @@ table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }
 .titolo-spunte small { font-weight: 400; color: var(--tenue); margin-left: .3rem; }
 .riga-spunte { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .nome-riga { font-size: .75rem; font-weight: 600; color: var(--tenue); min-width: 3.4rem; letter-spacing: .02em; }
-.riga-spunte { flex-wrap: nowrap; } .gruppo-spunte.lavorazioni .riga-spunte { flex-wrap: wrap; }
+.riga-spunte { flex-wrap: nowrap; } .gruppo-spunte.lavorazioni .riga-spunte, .gruppo-spunte.produzione .riga-spunte { flex-wrap: wrap; }
 label.chip { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem .25rem .45rem; border-radius: 999px;
   background: #fff; border: 1px solid var(--bordo-tinta); font-size: .85rem; cursor: pointer; user-select: none; width: auto; margin: 0; }
 label.chip input { width: auto; margin: 0; accent-color: var(--accento); }

@@ -95,6 +95,16 @@ export function rottePreventivi() {
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : []));
   });
 
+  // ── Anteprima di stampa (per il cliente: solo prezzi) ──
+  r.get('/:id/stampa', async (req, res) => {
+    const p = await leggiPreventivo(Number(req.params.id));
+    if (!p) return res.status(404).send('Preventivo non trovato');
+    const cat: Catalogo = p.catalogo;
+    const dati = datiDaRiga(p);
+    const vista = req.query.vista === 'macro' ? 'macro' : 'fasi';
+    res.send(String(stampaPreventivo(p, cat, dati, calcola(cat, dati), vista)));
+  });
+
   // ── Calcolo in tempo reale (non salva) ──
   r.post('/calcola', async (req, res) => {
     const cat = await catalogoPer(req.body.id, req.body.catalogoAttuale);
@@ -172,12 +182,12 @@ export function rottePreventivi() {
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
 /** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
-  { titolo: 'Produzione', classe: 'produzione', sotto: 'programmazioni', righe: [{ nome: '', codici: ['primaProduzione'] }] },
+  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
     { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
-  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede'] }] },
+  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
   doppiaFaccia: 'BOT', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
@@ -283,6 +293,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
+        ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>
     </div>
@@ -424,4 +435,67 @@ export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
       <small>${euro(r.prezzoOraCiclo)}/h ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
     <div class="totale"><span title="Ore uomo del lotto, senza una tantum">Ore uomo</span><strong>${ore(r.oreUomoSec)}</strong>
       <small>${euro(r.prezzoOraUomo)}/h uomo</small><small>1° lotto: ${ore(r.oreUomoPrimoLottoSec)}</small></div>`;
+}
+
+// ───────────────────────────── stampa del preventivo (per il cliente) ─────────────────────────────
+
+function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, vista: 'fasi' | 'macro'): Raw {
+  const r = riepilogo(ris);
+  const i = p.intestazione ?? {};
+  const v = (cod: string) => d.parametri[cod] ?? cat.parametri.find(x => x.codice === cod)?.default;
+  const scelte = cat.parametri.filter(x => x.gruppo === 'INFORMAZIONI GENERALI' && v(x.codice)).map(x => x.etichetta);
+  const fasiRic = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0), fasiUT = ris.fasi.filter(f => f.unaTantum && f.prezzo > 0);
+  const vociRic = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0), vociUT = ris.voci.filter(x => x.unaTantum && x.prezzo > 0);
+  const somma = (xs: { prezzo: number }[]) => xs.reduce((a, x) => a + x.prezzo, 0);
+  const gruppiDi = <T extends { gruppo: string }>(xs: T[]) => [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) }));
+  const SIGLE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
+  const nomeGruppo = (g: string) => SIGLE[g] ?? (g.charAt(0) + g.slice(1).toLowerCase()).replace(/\b(smd|tht|aoi|pcb|bot|top)\b/gi, x => x.toUpperCase());
+  const tabella = (titolo: string, fasi: typeof fasiRic, voci: typeof vociRic, totale: number) => html`
+    <h3>${titolo}</h3>
+    <table class="prezzi">
+      <thead><tr><th>${vista === 'fasi' ? 'Lavorazione' : 'Area'}</th><th class="n">Prezzo</th></tr></thead>
+      <tbody>
+      ${vista === 'fasi'
+        ? [...gruppiDi(fasi), ...gruppiDi(voci)].map(({ g, righe }) => html`
+          <tr class="gruppo"><td>${nomeGruppo(g)}</td><td class="n">${euro(somma(righe))}</td></tr>
+          ${righe.map(x => html`<tr><td class="rientro">${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}`)
+        : [...gruppiDi(fasi), ...gruppiDi(voci)].map(({ g, righe }) => html`<tr><td>${nomeGruppo(g)}</td><td class="n">${euro(somma(righe))}</td></tr>`)}
+      </tbody>
+      <tfoot><tr><td>Totale</td><td class="n">${euro(totale)}</td></tr></tfoot>
+    </table>`;
+  return html`<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><title>Preventivo ${p.numero} · ${i.codice}</title>
+<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css"></head>
+<body>
+<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
+  <a href="?vista=fasi" class="${vista === 'fasi' ? 'attiva' : ''}">Dettaglio per fasi</a>
+  <a href="?vista=macro" class="${vista === 'macro' ? 'attiva' : ''}">Solo macro aree</a>
+  <a href="/preventivi/${p.id}">← torna al preventivo</a></div>
+<section class="pagina preventivo-stampa">
+  <div class="testata-stampa">
+    <img src="/static/logo-casteltech.png" alt="Casteltech" class="logo">
+    <div class="titolo-stampa">PREVENTIVO<br><span>${p.numero} del ${data(p.creato_il)}</span></div>
+    <div class="qr"></div>
+  </div>
+  <table class="griglia"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+    <tr><td><div class="etic">CLIENTE</div><div class="val">${i.cliente}</div></td><td><div class="etic">DESCRIZIONE</div><div class="val">${i.descrizione}</div></td>
+      <td><div class="etic">CODICE / REV.</div><div class="val">${i.codice}${i.revisione ? ` rev. ${i.revisione}` : ''}</div></td>
+      <td><div class="etic">QUANTITÀ</div><div class="val">${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? ` (${num(nPannelli(d.nSchede, d.nSchedeInPCB), 0)} pannelli)` : ''}</div></td></tr>
+  </table>
+  ${scelte.length ? html`<p class="scelte">${scelte.join(' · ')}</p>` : ''}
+
+  <div class="riepilogo-stampa">
+    <div><span>Prezzo a scheda</span><strong>${euro(r.prezzoScheda)}</strong><small>lotto ${euro(r.prezzoLotto)}</small></div>
+    ${r.unaTantum > 0 ? html`
+    <div><span>Costi una tantum</span><strong>${euro(r.unaTantum)}</strong><small>solo 1° lotto</small></div>
+    <div><span>Prezzo a scheda con una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong><small>1° lotto ${euro(r.prezzoLottoConUnaTantum)}</small></div>` : ''}
+  </div>
+
+  ${tabella(`Lotto di ${num(d.nSchede, 0)} schede`, fasiRic, vociRic, r.prezzoLotto)}
+  ${r.unaTantum > 0 ? tabella('Costi una tantum (solo primo lotto)', fasiUT, vociUT, r.unaTantum) : ''}
+  ${d.note ? html`<h3>Note</h3><p class="note-stampa">${d.note}</p>` : ''}
+  <p class="piede">Prezzi IVA esclusa.</p>
+</section>
+<script src="/static/stampa.js" defer></script>
+</body></html>`;
 }

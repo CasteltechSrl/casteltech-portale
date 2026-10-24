@@ -62,6 +62,26 @@ h3.gruppo span { font-weight: 400; text-decoration: none; font-size: 8.5pt; }
 .tabella-rilevazioni th:nth-child(10) { width: 14mm; } .tabella-rilevazioni th:nth-child(11) { width: 34mm; }
 .legenda { font-size: 7.5pt; margin-top: 2mm; }
 
+/* stampa del preventivo */
+.barra-stampa a.attiva { font-weight: 700; text-decoration: none; background: rgba(255,255,255,.18); padding: 2px 8px; border-radius: 4px; }
+.preventivo-stampa h3 { font-size: 11pt; margin: 6mm 0 2mm; }
+.preventivo-stampa .scelte { font-size: 8.5pt; color: #333; margin: 2mm 0 0; }
+.riepilogo-stampa { display: flex; gap: 3mm; margin-top: 5mm; }
+.riepilogo-stampa > div { flex: 1; border: 1px solid #000; padding: 2mm 3mm; display: grid; }
+.riepilogo-stampa > div:first-child { background: #e8f3f0; }
+.riepilogo-stampa span { font-size: 8pt; text-transform: uppercase; font-style: italic; }
+.riepilogo-stampa strong { font-size: 15pt; }
+.riepilogo-stampa small { font-size: 8.5pt; }
+table.prezzi td, table.prezzi th { border-bottom: 1px solid #ccc; padding: 1.2mm 2mm; font-size: 9.5pt; }
+table.prezzi th { text-align: left; background: #e6e6e6; font-weight: 400; font-size: 8pt; border-bottom: 1px solid #000; }
+table.prezzi .n { text-align: right; white-space: nowrap; width: 30mm; }
+table.prezzi tr.gruppo td { font-weight: 700; background: #f4f4f4; }
+table.prezzi td.rientro { padding-left: 7mm; }
+table.prezzi tfoot td { font-weight: 700; border-top: 2px solid #000; border-bottom: 0; font-size: 10.5pt; }
+table.prezzi tr { break-inside: avoid; }
+.note-stampa { white-space: pre-wrap; font-size: 9.5pt; }
+.piede { font-size: 8pt; color: #555; margin-top: 6mm; }
+
 @media print {
   body { background: #fff; }
   .barra-stampa { display: none; }
