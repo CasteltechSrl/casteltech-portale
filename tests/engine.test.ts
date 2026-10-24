@@ -182,3 +182,56 @@ test('scheda: tempo ultima produzione = righe S, riportato a persone previste e 
   assert.equal(riportaAQuantita(600, 'scheda', da, a), 1800);
   assert.equal(riportaAQuantita(600, 'pannello', da, { schede: 300, pannelli: 75 }), 900);
 });
+
+test('riepilogo preventivo: una tantum interni/acquisti, margini, ore e prezzo orario ciclo e uomo', async () => {
+  const { riepilogo } = await import('../src/engine/riepilogo.js');
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.25 };
+  const fasi: FaseDef[] = [
+    { codice: 'pep', nome: 'P&P', gruppo: 'SMD', formulaSecondi: '3600', persone: 2, tariffa: 'produzione', unaTantum: false },
+    { codice: 'prog', nome: 'Programmazione', gruppo: 'PRE', formulaSecondi: '3600', persone: 1, tariffa: 'ufficio', unaTantum: true },
+  ];
+  const voci = [{ codice: 'lamina', nome: 'Lamina', gruppo: 'UT', formulaEuro: '100', unaTantum: true }];
+  const r = riepilogo(calcolaPreventivo(fasi, voci, t, { nSchede: 10, parametri: {} }));
+  assert.equal(r.prezzoLotto, 68.75);                     // (25 + 2 × 15) × 1,25
+  assert.equal(r.prezzoScheda, 6.88);
+  assert.equal(r.unaTantumInterni, 56.25);                // (25 + 20) × 1,25
+  assert.equal(r.unaTantumAcquisti, 125);                 // 100 × 1,25
+  assert.equal(r.unaTantum, 181.25);
+  assert.equal(r.prezzoLottoConUnaTantum, 250);
+  assert.equal(r.margineUnaTantum, 36.25);                // 181,25 − (45 + 100)
+  assert.equal(r.margineLotto, 13.75);
+  assert.equal(r.margineScheda, 1.38);
+  assert.equal(r.oreCicloSec, 3600); assert.equal(r.oreUomoSec, 7200);
+  assert.equal(r.prezzoOraCiclo, 68.75); assert.equal(r.prezzoOraUomo, 34.38);
+});
+
+test('informazioni generali: programmazioni solo con prima produzione, armadi solo a magazzino, acquisti solo con la spunta', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const base = { ...def, nPCB: 10, qtSmd: 50, qtFeeder: 10, oreProgArmadi: 0.5, oreFilePeP: 0.5, oreProgPeP: 1, oreProgForno: 0.25,
+    oreProgOnda: 0.5, usaOnda: 1, qtTht: 5, oreAcquistoLamine: 0.25, oreAcquistoPcb: 0.25, costoPcbScheda: 2, prezzoLamina: 90 };
+  const calc = (p: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...base, ...p } });
+  const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
+  const voce = (r: ReturnType<typeof calc>, c: string) => r.voci.find(v => v.codice === c)!.costo;
+  const prog = ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progForno', 'progAOI', 'progOnda'];
+  // prima produzione, materiale a magazzino, THT con onda: tutte le programmazioni
+  const prima = calc({ primaProduzione: 1, provenienzaMateriale: 2, presenteTht: 1 });
+  for (const c of prog) assert.ok(sec(prima, c) > 0, c);
+  // materiale del cliente da restituire: niente programmazione armadi
+  assert.equal(sec(calc({ primaProduzione: 1, provenienzaMateriale: 1, presenteTht: 1 }), 'progArmadi'), 0);
+  // ripetizione: nessuna programmazione
+  const ripetizione = calc({ primaProduzione: 0, provenienzaMateriale: 2, presenteTht: 1 });
+  for (const c of prog) assert.equal(sec(ripetizione, c), 0, c);
+  // solo THT: niente programmazioni SMD, sì onda
+  const soloTht = calc({ primaProduzione: 1, provenienzaMateriale: 2, presenteTht: 1, qtSmd: 0, qtFeeder: 0 });
+  for (const c of ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progForno', 'progAOI']) assert.equal(sec(soloTht, c), 0, c);
+  assert.ok(sec(soloTht, 'progOnda') > 0);
+  // acquisti: tempo e costo solo con la spunta; lamine: vuoto = una per lato
+  const senza = calc({ acquistoLamina: 0, acquistoPcb: 0 });
+  assert.equal(sec(senza, 'acquistoLamine') + sec(senza, 'acquistoPcb'), 0);
+  assert.equal(voce(senza, 'laminaSerigrafica') + voce(senza, 'valoreAcquistoPCB'), 0);
+  const con = calc({ acquistoLamina: 1, acquistoPcb: 1, doppiaFaccia: 1 });
+  assert.equal(sec(con, 'acquistoLamine'), 900);
+  assert.equal(voce(con, 'laminaSerigrafica'), 180);      // 2 lati × 90 €
+  assert.equal(voce(con, 'valoreAcquistoPCB'), 20);
+});

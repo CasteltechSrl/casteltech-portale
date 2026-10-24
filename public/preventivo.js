@@ -25,7 +25,7 @@
     return d;
   }
 
-  function aggiorna({ risultato: r, nPCB }) {
+  function aggiorna({ risultato: r, nPCB, totaliHtml }) {
     document.getElementById('nPCB').textContent = nPCB;
     for (const f of r.fasi) {
       const tr = form.querySelector(`tr[data-fase="${CSS.escape(f.codice)}"]`);
@@ -57,15 +57,7 @@
       tr.querySelector('[data-v=prezzo]').textContent = euro(v.prezzo);
     }
     const t = r.totali;
-    const set = (k, testo) => { const el = form.querySelector(`[data-t="${k}"]`); if (el) el.textContent = testo; };
-    set('totalePrimoLotto', euro(t.totalePrimoLotto));
-    set('prezzoSchedaPrimoLotto', euro(t.prezzoSchedaPrimoLotto) + ' a scheda');
-    set('totaleSecondoLotto', euro(t.totaleSecondoLotto));
-    set('prezzoSchedaSecondoLotto', euro(t.prezzoSchedaSecondoLotto) + ' a scheda');
-    set('costiUnaTantum', euro(t.costiUnaTantum));
-    set('guadagnoLotto', euro(t.guadagnoLotto));
-    set('ore', `${ore(t.secondiCicloPrimoLotto)} / ${ore(t.secondiUomoPrimoLotto)}`);
-    set('prezzoOrarioMedio', euro(t.prezzoOrarioMedio) + ' per ora di ciclo');
+    document.getElementById('totali').innerHTML = totaliHtml;
     aggiornaTarget(t.prezzoSchedaSecondoLotto);
   }
 
@@ -130,6 +122,10 @@
   // ── Provenienza del materiale: con materiale da restituire niente etichettatura e stoccaggio ──
   form.querySelectorAll('input[name=provenienza]').forEach(r => r.addEventListener('change', () => {
     form.classList.toggle('materiale-da-restituire', r.checked && r.value === '1');
+  }));
+  // ── Informazioni generali: le sezioni e i campi che dipendono da una spunta compaiono solo se è messa ──
+  form.querySelectorAll('.spunte-generali input[type=checkbox]').forEach(el => el.addEventListener('change', () => {
+    form.querySelectorAll(`[data-dipende="${el.dataset.param}"]`).forEach(x => { x.hidden = !el.checked; });
   }));
   // ── Durate: si scrivono come 1:30, 30', 1h, 1h30 e vengono mostrate come h:mm ──
   const leggiDurata = t => {

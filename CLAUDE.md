@@ -39,6 +39,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
 ## Stato dei lavori (aggiornare quando cambia)
 1. ✅ Motore di calcolo, catalogo dalla scheda di produzione, tempo ciclo/uomo, energia forno/onda.
 2. ✅ Sito: login, preventivi (calcolo in tempo reale), impostazioni, utenti, import dal vecchio portale.
+   Informazioni generali del preventivo (prima produzione, THT, acquisto lamina/PCB/componenti): le programmazioni
+   (gruppo PROGRAMMAZIONI) contano solo con prima produzione, armadi solo con materiale a magazzino (migrazione 011).
+   Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
    fogli tempi, QR → `/c/<codice>`. Niente "tempo ultima produzione" (Adriano: andrebbe riparametrizzato sulla quantità).

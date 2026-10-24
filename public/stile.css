@@ -103,7 +103,8 @@ details.blocco > summary .conta { font-size: .72rem; background: var(--accento-c
 .riga-campi > label.largo { flex: 3 1 14rem; }
 .riga-campi > label.stretto { flex: 0 1 5rem; }
 
-.totali { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; }
+.totali { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; }
+@media (max-width: 700px) { .totali { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .totale { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .7rem .9rem; display: grid; gap: .1rem; }
 .totale span { font-size: .78rem; color: var(--tenue); }
 .totale strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
@@ -205,3 +206,6 @@ input.corto { width: 5rem; }
 ul.controlli { padding-left: 1.1rem; margin: .3rem 0 .8rem; font-size: .88rem; }
 ul.controlli.errori li { color: #b3261e; } ul.controlli.avvisi li { color: #8a5a00; }
 table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }
+
+.spunte-generali { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: .8rem 0 .3rem; }
+[hidden] { display: none !important; }

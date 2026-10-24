@@ -60,7 +60,9 @@ export function rotteCommesse() {
     const ultimaScheda = prev.revisione_id ? await q1<{ scheda_tecnica: any }>(`SELECT scheda_tecnica FROM prodotti_revisioni WHERE id = $1`, [prev.revisione_id]) : null;
     const dati: DatiCommessa = {
       numero: await proponiNumero(), ordineCliente: '', referenteCliente: '', dataOrdine: null, dataConsegna: null,
-      quantita: prev.n_schede, primoLotto: prev.prodotto_id ? !(await haCommessePrecedenti(prev.prodotto_id)) : true,
+      quantita: prev.n_schede,
+      // primo lotto: il preventivo è una prima produzione e il prodotto non ha ancora avuto commesse
+      primoLotto: prev.parametri?.primaProduzione !== 0 && (prev.prodotto_id ? !(await haCommessePrecedenti(prev.prodotto_id)) : true),
       segnalazioni: '', scheda: schedaTecnica(ultimaScheda?.scheda_tecnica),
     };
     res.send(await paginaCommessa(req, prev, dati));

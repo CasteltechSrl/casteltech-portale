@@ -49,6 +49,9 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
   p.nItemMateriale = (p.qtFeeder ?? 0) + (p.qtFeederLatoB ?? 0) + (p.qtTipolTht ?? 0);
   for (const k of ['tempoContMateriale', 'tempoContMaterialeLatoB', 'tempoControlloMateriale']) delete p[k];
   p.minResoMateriale = 0;   // non previsto nel vecchio portale
+  // informazioni generali: il vecchio portale contava sempre le programmazioni; acquisti se c'era un costo
+  p.primaProduzione = 1;
+  p.presenteTht = (p.qtTht ?? 0) > 0 || p.usaOnda ? 1 : 0;
   // il vecchio portale non aveva il forno fuori linea
   p.tempoTransitoForno = 0; p.cadenzaForno = 0;
   p.oreProgPeP = ore(u('programmaPick').nOre); p.botProgPeP = u('programmaPick').bottom ? 1 : 0;
@@ -61,6 +64,9 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
   const mp = d.materialePerProduzione ?? {};
   p.costoComponentiScheda = num(mp.valoreAcquistoComponenti?.CustomData?.costoDiAcquisto);
   p.costoPcbScheda = num(mp.valoreAcquistoPCB?.CustomData?.costoDiAcquisto);
+  p.acquistoLamina = p.nLamine > 0 ? 1 : 0;
+  p.acquistoPcb = p.costoPcbScheda > 0 ? 1 : 0;
+  p.acquistoComponenti = p.costoComponentiScheda > 0 ? 1 : 0;
   const sp = d.spedizione?.spedizione?.CustomData ?? {};
   p.costoSpedizione = num(sp.costoDiAcquisto); p.nSpedizioni = num(sp.n);
 
