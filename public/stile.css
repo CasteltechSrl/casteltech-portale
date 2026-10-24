@@ -119,7 +119,19 @@ details.blocco > summary .conta { font-size: .72rem; background: var(--accento-c
 table.fasi { background: var(--carta); }
 table.fasi tr.zero { display: none; }
 table.fasi.mostra-zero tr.zero { display: table-row; color: #9aa39f; }
-table.fasi tr.una-tantum td:first-child { box-shadow: inset 3px 0 0 #d9b44a; }
+/* costi una tantum (solo 1° lotto): ambra */
+:root { --ut-sfondo: #fdf5e1; --ut-bordo: #e2b54f; --ut-testo: #8a5a00; }
+table.fasi tr.una-tantum td { background: var(--ut-sfondo); }
+table.fasi tr.una-tantum td:first-child { box-shadow: inset 4px 0 0 var(--ut-bordo); }
+table.fasi tr.riga-gruppo.una-tantum td { background: #f8e8bf; color: var(--ut-testo); }
+.etichetta.ut { background: #f6e3b0; color: var(--ut-testo); }
+.totale.ut { background: var(--ut-sfondo); border-color: var(--ut-bordo); }
+.totale.ut span, .totale.ut small { color: var(--ut-testo); }
+label.campo-ut input { background: var(--ut-sfondo); border-color: var(--ut-bordo); }
+details.gruppo-ut { border-left: 4px solid var(--ut-bordo); }
+details.gruppo-ut > summary { background: linear-gradient(90deg, var(--ut-sfondo), transparent 70%); }
+.legenda-ut { font-size: .8rem; color: var(--ut-testo); margin: .8rem 0 0; display: flex; align-items: center; gap: .4rem; }
+.legenda-ut .campione { width: .9rem; height: .9rem; border-radius: 3px; background: var(--ut-sfondo); border: 1px solid var(--ut-bordo); display: inline-block; }
 input.persone { width: 3.6rem; text-align: right; padding: .2rem .35rem; }
 #tabella-voci { border: 1px solid var(--bordo); border-radius: var(--raggio); overflow: hidden; }
 .azioni-secondarie { display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; margin: 1.5rem 0; }

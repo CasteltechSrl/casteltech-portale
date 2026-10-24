@@ -12,6 +12,7 @@ import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html
 import type { Risultato } from '../../engine/calcolo.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
+import { variabiliUsate } from '../../engine/espressioni.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -279,10 +280,16 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`
     : p.tipo === 'durata'
-    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}">${etichettaBreve(p)}${info(p)}
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
         <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
-    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}">${etichettaBreve(p)}${info(p)}
+    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
         <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}"></label>`;
+  // campi che alimentano SOLO costi una tantum (letti dalle formule): evidenziati in ambra
+  const usate = (formule: string[]) => new Set(formule.flatMap(f => { try { return variabiliUsate(f); } catch { return []; } }));
+  const inUT = usate([...cat.fasi.filter(f => f.unaTantum).map(f => f.formulaSecondi), ...cat.voci.filter(v => v.unaTantum).flatMap(v => [v.formulaEuro, v.formulaPrezzo ?? ''])]);
+  const inRic = usate([...cat.fasi.filter(f => !f.unaTantum).map(f => f.formulaSecondi), ...cat.voci.filter(v => !v.unaTantum).map(v => v.formulaEuro)]);
+  const soloUT = (cod: string) => inUT.has(cod) && !inRic.has(cod) && !generali.some(p => p.codice === cod);
+  const gruppoUT = (g: string) => { const ps = cat.parametri.filter(p => p.gruppo === g); return ps.length > 0 && ps.every(p => soloUT(p.codice)); };
   const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && p.codice !== 'provenienzaMateriale' && d.parametri[p.codice]).length;
 
   return String(layout({
@@ -349,8 +356,8 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </fieldset>` : ''}
 
       ${gruppi.map(g => html`
-      <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''}"${dipende(GRUPPO_DIPENDE[g])} ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' || g === 'GESTIONE MATERIALE' || g === 'PROGRAMMAZIONI' || g === 'THT' ? raw('open') : ''}>
-        <summary>${g} ${compilati(g) ? html`<span class="conta">${compilati(g)}</span>` : ''}</summary>
+      <details class="blocco ${conLati && g === 'SMD BOT' ? 'solo-bot' : ''} ${gruppoUT(g) ? 'gruppo-ut' : ''}"${dipende(GRUPPO_DIPENDE[g])} ${compilati(g) || g.startsWith('SMD TOP') || g === 'PRE-PRODUZIONE' || g === 'GESTIONE MATERIALE' || g === 'PROGRAMMAZIONI' || g === 'THT' ? raw('open') : ''}>
+        <summary>${g} ${compilati(g) ? html`<span class="conta">${compilati(g)}</span>` : ''}${gruppoUT(g) ? html` <span class="etichetta ut">una tantum</span>` : ''}</summary>
         <div class="campi-parametri">${cat.parametri.filter(p => p.gruppo === g).map(campoParametro)}</div>
       </details>`)}
 
@@ -373,6 +380,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         <input inputmode="decimal" data-campo="prezzoTargetScheda" value="${d.prezzoTargetScheda ?? ''}">
         <output id="diff-target"></output></label>
 
+      <p class="legenda-ut"><span class="campione"></span> In ambra i costi una tantum (solo 1° lotto)</p>
       <h2>Fasi <label class="spunta piccola"><input type="checkbox" id="mostra-tutte"> mostra anche le fasi a zero</label></h2>
       <div class="tabella-scorre"><table class="fasi" id="tabella-fasi">
         <thead><tr><th>N.</th><th>Fase</th><th class="n" title="Persone">Pers.</th><th class="n" title="Tempo ciclo: impegno della fase">Ciclo</th><th class="n" title="Tempo uomo = ciclo × persone">Uomo</th><th class="n">Costo</th><th class="n">Prezzo</th></tr></thead>
@@ -380,13 +388,14 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         ${[...new Set(cat.fasi.map(f => f.gruppo))].map(g => {
           const delGruppo = ris.fasi.filter(x => x.gruppo === g);
           const somma = (k: 'secondiCiclo' | 'secondiUomo' | 'costo' | 'prezzo') => delGruppo.reduce((a, x) => a + x[k], 0);
-          return html`<tr class="riga-gruppo ${somma('secondiCiclo') ? '' : 'gruppo-vuoto'}" data-gruppo="${g}">
+          const tuttoUT = cat.fasi.filter(f => f.gruppo === g).every(f => f.unaTantum);
+          return html`<tr class="riga-gruppo ${somma('secondiCiclo') ? '' : 'gruppo-vuoto'} ${tuttoUT ? 'una-tantum' : ''}" data-gruppo="${g}">
             <td colspan="3">${g}</td><td class="n" data-v="ciclo">${ore(somma('secondiCiclo'))}</td><td class="n" data-v="uomo">${ore(somma('secondiUomo'))}</td>
             <td class="n" data-v="costo">${euro(somma('costo'))}</td><td class="n" data-v="prezzo">${euro(somma('prezzo'))}</td></tr>
           ${cat.fasi.filter(f => f.gruppo === g).map(f => {
           const x = ris.fasi.find(y => y.codice === f.codice)!;
           return html`<tr data-fase="${f.codice}" class="${x.secondiCiclo ? '' : 'zero'} ${f.unaTantum ? 'una-tantum' : ''}">
-            <td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta" title="Solo primo lotto">1° lotto</span>` : ''}${f.tariffa === 'ufficio' ? html` <span class="etichetta">ufficio</span>` : ''}</td>
+            <td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta ut" title="Solo primo lotto">1° lotto</span>` : ''}${f.tariffa === 'ufficio' ? html` <span class="etichetta">ufficio</span>` : ''}</td>
             <td class="n"><input class="persone" inputmode="decimal" data-persone="${f.codice}" value="${d.personeFase[f.codice] ?? f.persone}"></td>
             <td class="n" data-v="ciclo">${ore(x.secondiCiclo)}</td><td class="n" data-v="uomo">${ore(x.secondiUomo)}</td>
             <td class="n" data-v="costo">${euro(x.costo)}</td><td class="n" data-v="prezzo">${euro(x.prezzo)}</td></tr>`;
@@ -397,7 +406,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <h2>Altri costi</h2>
       <table class="fasi" id="tabella-voci">
         <thead><tr><th>Voce</th><th class="n">Costo</th><th class="n">Prezzo</th></tr></thead>
-        <tbody>${ris.voci.map(v => html`<tr data-voce="${v.codice}" class="${v.unaTantum ? 'una-tantum' : ''}"><td>${v.nome}${v.unaTantum ? html` <span class="etichetta">1° lotto</span>` : ''}</td>
+        <tbody>${ris.voci.map(v => html`<tr data-voce="${v.codice}" class="${v.unaTantum ? 'una-tantum' : ''}"><td>${v.nome}${v.unaTantum ? html` <span class="etichetta ut">1° lotto</span>` : ''}</td>
           <td class="n" data-v="costo">${euro(v.costo)}</td><td class="n" data-v="prezzo">${euro(v.prezzo)}</td></tr>`)}</tbody>
       </table>
 
@@ -424,13 +433,13 @@ export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
   return html`
     <div class="totale principale"><span title="Prezzo a scheda dei lotti, senza costi una tantum">Prezzo scheda</span><strong>${euro(r.prezzoScheda)}</strong>
       <small>Lotto: ${euro(r.prezzoLotto)}</small></div>
-    <div class="totale"><span title="Costi una tantum (solo 1° lotto)">Una tantum</span><strong>${euro(r.unaTantum)}</strong>
+    <div class="totale ut"><span title="Costi una tantum (solo 1° lotto)">Una tantum</span><strong>${euro(r.unaTantum)}</strong>
       <small title="Pre-produzione e programmazioni">Interni: ${euro(r.unaTantumInterni)}</small>
       <small title="Lamine, attrezzaggio PCB">Acquisti: ${euro(r.unaTantumAcquisti)}</small></div>
-    <div class="totale"><span title="Prezzo a scheda del 1° lotto, con i costi una tantum">Prezzo scheda+una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong>
+    <div class="totale ut"><span title="Prezzo a scheda del 1° lotto, con i costi una tantum">Prezzo scheda+una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong>
       <small>Lotto: ${euro(r.prezzoLottoConUnaTantum)}</small></div>
     <div class="totale"><span title="Margine a scheda dei lotti, senza una tantum">Margine scheda</span><strong>${euro(r.margineScheda)}</strong><small>Lotto: ${euro(r.margineLotto)}</small></div>
-    <div class="totale"><span>Margine una tantum</span><strong>${euro(r.margineUnaTantum)}</strong></div>
+    <div class="totale ut"><span>Margine una tantum</span><strong>${euro(r.margineUnaTantum)}</strong></div>
     <div class="totale"><span title="Ore ciclo del lotto, senza una tantum">Ore ciclo</span><strong>${ore(r.oreCicloSec)}</strong>
       <small>${euro(r.prezzoOraCiclo)}/h ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
     <div class="totale"><span title="Ore uomo del lotto, senza una tantum">Ore uomo</span><strong>${ore(r.oreUomoSec)}</strong>
