@@ -176,7 +176,10 @@ export interface Spedizione { qta: string; colli: string; bancali: string; peso:
 export async function salvaRientro(opz: {
   commessaId: number; righe: (Rilevazione & RigaRientro)[]; consumi: Record<string, number>; spedizioni: Spedizione[];
   segnalazione?: { testo: string; prossime: boolean; faseCodice?: string }; conferma: boolean; utenteId: number; prodottoId: number; revisioneId: number;
+  /** commessa già rientrata: le correzioni dell'ufficio restano confermate anche con un semplice "Salva" */
+  giaConfermata?: boolean;
 }): Promise<void> {
+  const righeConfermate = opz.conferma || !!opz.giaConfermata;
   await transazione(async c => {
     await c.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [opz.commessaId]);
     for (const [i, r] of opz.righe.entries()) {
@@ -186,7 +189,7 @@ export async function salvaRientro(opz: {
         [opz.commessaId, r.fase, r.operatore || null, r.data || null, r.inizio || null, r.fine || null, r.durataMin ?? null, r.totaleScrittoMin ?? null,
          r.persone ?? 1, r.pezzi ?? null, r.tipo, r.tipo === 'P' ? (r.causa || null) : null, r.materiale || null, r.resp || null,
          r.tipo === 'P' ? null : (r.note || null), i,
-         opz.conferma ? opz.utenteId : null, opz.conferma ? new Date() : null]);
+         righeConfermate ? opz.utenteId : null, righeConfermate ? new Date() : null]);
     }
     await c.query(`UPDATE commesse SET consumi = $2, spedizioni = $3, aggiornato_il = now(),
         stato = CASE WHEN $4 THEN 'rientrata' WHEN stato = 'aperta' AND $5 THEN 'in_produzione' ELSE stato END,
@@ -201,3 +204,27 @@ export async function salvaRientro(opz: {
 
 export const segnalazioniCommessa = (commessaId: number) => q<{ id: number; testo: string; rilevante_prossime: boolean; creato_il: string; fase_codice: string | null }>(
   `SELECT id, testo, rilevante_prossime, creato_il, fase_codice FROM segnalazioni WHERE commessa_id = $1 ORDER BY creato_il`, [commessaId]);
+
+/**
+ * Inserimento rapido dalla pagina della commessa (ufficio): tempi totali per fase, aggiunti in fondo al foglio tempi
+ * come righe "solo totale" di tipo S (es. pre-produzione, tempi dimenticati). Se la commessa è già rientrata,
+ * le righe nuove sono già confermate.
+ */
+export async function aggiungiTempi(commessaId: number, righe: { fase: string; durataMin: number; persone: number; note?: string }[],
+  utente: { id: number; nome: string }): Promise<number> {
+  if (!righe.length) return 0;
+  return transazione(async c => {
+    const comm = (await c.query(`SELECT stato FROM commesse WHERE id = $1`, [commessaId])).rows[0];
+    if (!comm) return 0;
+    const confermate = ['rientrata', 'analizzata', 'chiusa'].includes(comm.stato);
+    let riga = Number((await c.query(`SELECT coalesce(max(riga), -1) AS n FROM rilevazioni WHERE commessa_id = $1`, [commessaId])).rows[0].n);
+    for (const r of righe) {
+      await c.query(`INSERT INTO rilevazioni (commessa_id, fase_codice, operatore_nome, data, durata_min, persone, tipo, note, riga, origine, confermata_da, confermata_il)
+        VALUES ($1,$2,$3,current_date,$4,$5,'S',$6,$7,'manuale',$8,$9)`,
+        [commessaId, r.fase, utente.nome.toUpperCase(), r.durataMin, r.persone, r.note || 'Inserito dalla commessa', ++riga,
+         confermate ? utente.id : null, confermate ? new Date() : null]);
+    }
+    await c.query(`UPDATE commesse SET stato = CASE WHEN stato = 'aperta' THEN 'in_produzione' ELSE stato END, aggiornato_il = now() WHERE id = $1`, [commessaId]);
+    return righe.length;
+  });
+}

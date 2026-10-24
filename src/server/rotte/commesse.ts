@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import { q, q1 } from '../db.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
-  PROGRAMMI, STATI_COMMESSA, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
+  PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
   salvaCommessa, salvaRientro, schedaTecnica, segnalazioniCommessa, segnalazioniProdotto,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
@@ -111,6 +111,25 @@ export function rotteCommesse() {
     res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr), reali, nomeFase)));
   });
 
+  // ── Inserimento rapido dei tempi dalla pagina della commessa ──
+  r.post('/:id/tempi', async (req, res) => {
+    const c = await leggiCommessa(Number(req.params.id));
+    if (!c) return res.status(404).send('Commessa non trovata');
+    const prev = await leggiPreventivo(c.preventivo_id);
+    const codici = new Set<string>((prev?.catalogo?.fasi ?? []).map((f: any) => f.codice));
+    const persone = Object.fromEntries((await fasiCommessa(c)).map(f => [f.codice, f.persone]));
+    const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return String(x ?? '').trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined; };
+    const righe: { fase: string; durataMin: number; persone: number }[] = [];
+    const leggi = (fase: string, x: any) => {
+      const durataMin = String(x?.durata ?? '').trim() ? Math.round(oreDa(x.durata) * 60) : 0;
+      if (codici.has(fase) && durataMin > 0) righe.push({ fase, durataMin, persone: numero(x?.persone) ?? persone[fase] ?? 1 });
+    };
+    for (const [fase, x] of Object.entries(req.body?.tempi ?? {})) leggi(fase, x);
+    if (req.body?.nuova?.fase) leggi(String(req.body.nuova.fase), req.body.nuova);
+    const n = await aggiungiTempi(c.id, righe, req.session.utente!);
+    res.redirect(`/commesse/${c.id}?tempi=${n}`);
+  });
+
   // ── Rientro della scheda (foglio tempi, materiale, spedizioni, segnalazioni) ──
   r.get('/:id/rientro', async (req, res) => {
     const c = await leggiCommessa(Number(req.params.id));
@@ -141,6 +160,7 @@ export function rotteCommesse() {
     const testoSegn = String(b.segnalazione?.testo ?? '').trim().slice(0, 2000);
     await salvaRientro({
       commessaId: c.id, righe, consumi, spedizioni, conferma, utenteId: req.session.utente!.id, prodottoId: c.prodotto_id, revisioneId: c.revisione_id,
+      giaConfermata: ['rientrata', 'analizzata', 'chiusa'].includes(c.stato),
       segnalazione: testoSegn ? { testo: testoSegn, prossime: !!b.segnalazione?.prossime, faseCodice: String(b.segnalazione?.fase ?? '') || undefined } : undefined,
     });
     if (vuoleConferma && !conferma) {
@@ -187,6 +207,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       <h1>${salvata ? html`Commessa ${salvata.numero} <span class="stato ${salvata.stato}">${STATI_TESTO[salvata.stato]}</span>` : 'Nuova commessa'}</h1>
       <div class="azioni">
         ${messaggio ? html`<span class="nota positivo">${messaggio}</span>` : ''}
+        ${req.query.tempi ? html`<span class="nota positivo">Tempi aggiunti: ${String(req.query.tempi)}</span>` : ''}
         ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
           <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>` : ''}
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
@@ -245,11 +266,45 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
 
     <section class="colonna-risultati">
       <h2>Fasi sulla scheda ${salvata ? '' : html`<span class="nota">(anteprima: si aggiornano al salvataggio)</span>`}</h2>
-      ${tabellaFasi(fasi)}
+      ${salvata ? await tabellaFasiConTempi(salvata, fasi, prev) : tabellaFasi(fasi)}
     </section>
     </div>
-    </form>`,
+    </form>
+    ${salvata ? html`<form id="tempi" method="post" action="/commesse/${salvata.id}/tempi"></form>` : ''}`,
   }));
+}
+
+/** Tabella fasi della commessa salvata: previsto, effettivo già registrato e caselle per aggiungere tempi. */
+async function tabellaFasiConTempi(c: any, fasi: FaseScheda[], prev: any): Promise<Raw> {
+  const reali = tempiRealiPerFase(await rilevazioniCommessa(c.id));
+  const tutte: { codice: string; numero: string; nome: string }[] = (prev?.catalogo?.fasi ?? []);
+  const altre = [...Object.keys(reali).filter(k => !fasi.some(f => f.codice === k))];
+  const nomeFase = (cod: string) => tutte.find(x => x.codice === cod) ?? { numero: '', nome: cod };
+  const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
+  const totUomo = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.uomoSec, 0);
+  const eff = (cod: string, k: 'cicloSec' | 'uomoSec') => (reali[cod] ? ore(reali[cod][k]) : '');
+  const caselle = (cod: string, pers: number) => html`<td class="n"><input form="tempi" name="tempi[${cod}][durata]" class="corto" placeholder="h:mm" inputmode="text"></td>
+    <td class="n"><input form="tempi" name="tempi[${cod}][persone]" class="cortissimo" placeholder="${num(pers, 1)}" inputmode="decimal"></td>`;
+  return html`<p class="nota">Tempi totali dell'intero lotto in ore:minuti. Per aggiungere un tempo (pre-produzione, tempi dimenticati)
+    scrivilo in "Aggiungi" e premi <strong>Aggiungi tempi</strong>: si somma all'effettivo. Per correggere righe già inserite usa
+    <a href="/commesse/${c.id}/rientro">Rientro scheda</a>.</p>
+  <div class="tabella-scorre"><table class="fasi tempi-commessa">
+    <thead><tr><th rowspan="2">N.</th><th rowspan="2">Fase</th><th class="n" colspan="2">Previsto lotto (hh:mm)</th><th class="n" colspan="2">Effettivo lotto (hh:mm)</th><th class="n" colspan="2">Aggiungi</th></tr>
+      <tr><th class="n">Ciclo</th><th class="n">Uomo</th><th class="n">Ciclo</th><th class="n">Uomo</th><th class="n">h:mm</th><th class="n">Pers.</th></tr></thead>
+    <tbody>${perGruppo(fasi).map(g => html`
+      <tr class="riga-gruppo"><td colspan="2">${g.gruppo}</td><td class="n">${ore(tot(g.fasi))}</td><td class="n">${ore(totUomo(g.fasi))}</td><td colspan="4"></td></tr>
+      ${g.fasi.map(f => html`<tr><td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta ut">1° lotto</span>` : ''}</td>
+        <td class="n">${ore(f.cicloSec)}</td><td class="n">${ore(f.uomoSec)}</td><td class="n"><strong>${eff(f.codice, 'cicloSec')}</strong></td><td class="n">${eff(f.codice, 'uomoSec')}</td>
+        ${caselle(f.codice, f.persone)}</tr>`)}`)}
+      ${altre.map(k => html`<tr><td>${nomeFase(k).numero}</td><td>${nomeFase(k).nome} <span class="etichetta">non prevista</span></td><td></td><td></td>
+        <td class="n"><strong>${eff(k, 'cicloSec')}</strong></td><td class="n">${eff(k, 'uomoSec')}</td>${caselle(k, 1)}</tr>`)}
+      <tr><td colspan="6"><select form="tempi" name="nuova[fase]" aria-label="Altra fase"><option value="">+ altra fase (non prevista)…</option>
+        ${tutte.filter(f => !fasi.some(x => x.codice === f.codice) && !altre.includes(f.codice)).map(f => html`<option value="${f.codice}">${f.numero} ${f.nome}</option>`)}</select></td>
+        <td class="n"><input form="tempi" name="nuova[durata]" class="corto" placeholder="h:mm"></td><td class="n"><input form="tempi" name="nuova[persone]" class="cortissimo" placeholder="1"></td></tr>
+      <tr class="riga-gruppo"><td colspan="2">TOTALE</td><td class="n">${ore(tot(fasi))}</td><td class="n">${ore(totUomo(fasi))}</td>
+        <td class="n">${ore(Object.values(reali).reduce((a, x) => a + x.cicloSec, 0))}</td><td class="n">${ore(Object.values(reali).reduce((a, x) => a + x.uomoSec, 0))}</td>
+        <td colspan="2" class="n"><button form="tempi" class="primario">Aggiungi tempi</button></td></tr>
+    </tbody></table></div>`;
 }
 
 function perGruppo(fasi: FaseScheda[]) {

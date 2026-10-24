@@ -246,3 +246,8 @@ button.pericolo, button.pericolo:disabled { background: #fff; color: #b3261e; bo
 button.pericolo:not(:disabled):hover { background: #fdecea; }
 button:disabled { opacity: .45; cursor: default; }
 td.selezione, th.selezione { width: 2rem; text-align: center; }
+
+/* commessa: inserimento rapido dei tempi */
+table.tempi-commessa input { padding: .2rem .35rem; font-size: .85rem; margin: 0; }
+table.tempi-commessa input.corto { width: 4.4rem; } table.tempi-commessa input.cortissimo { width: 3rem; }
+table.tempi-commessa select { width: 100%; font-size: .85rem; }
