@@ -433,7 +433,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const bot = (v: string) => (doppia ? v : '—');
   const quantita = html`${num(c.quantita, 0)} / ${num(c.n_pannelli ?? c.quantita, 0)}`;
   const prog = (k: string) => html`<div class="tb"><span>TOP:</span> ${st.programmi[k]?.top}</div><div class="tb"><span>BOT:</span> ${bot(st.programmi[k]?.bot ?? '')}</div>`;
-  const cella = (etichetta: string, contenuto: unknown, cls = '') => html`<td class="${cls}"><div class="etic">${etichetta}</div><div class="val">${contenuto}</div></td>`;
+  const cella = (etichetta: string, contenuto: unknown, cls = '', colonne = 1) => html`<td class="${cls}" colspan="${colonne}"><div class="etic">${etichetta}</div><div class="val">${contenuto}</div></td>`;
   const testata = html`
     <div class="testata-stampa">
       <img src="/static/logo-casteltech.png" alt="Casteltech" class="logo">
@@ -466,7 +466,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <tr>${cella('CLIENTE', i.cliente)}${cella('REFERENTE CLIENTE', c.referente_cliente)}${cella('NR. ORDINE CLIENTE', c.ordine_cliente)}${cella("QTA' / PANN.", quantita, 'forte')}</tr>
     <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo)}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
     <tr>${cella('PROG. ARMADIO', prog('progArmadio'))}${cella('PROG. SERIGRAFIA', prog('progSerigrafia'))}${cella('LAMINA', prog('lamina'))}${cella('PASTA', st.pasta)}</tr>
-    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. FORNO', prog('progForno'))}${cella('PROG. AOI', prog('progAOI'))}</tr>
+    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'), '', 2)}</tr>
   </table>
   <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>

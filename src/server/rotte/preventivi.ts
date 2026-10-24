@@ -243,7 +243,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     costoLaminaTrattata: LAMINA, prezzoVenditaLaminaTrattata: LAMINA,
     oreAcquistoPcb: 'acquistoPcb', costoPcbScheda: 'acquistoPcb',
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
-    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgForno: SMD, oreProgAOI: SMD,
+    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: SMD,
     preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
     oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
     potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,

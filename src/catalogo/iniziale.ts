@@ -72,7 +72,6 @@ export const PARAMETRI: ParametroDef[] = [
   P('oreFilePeP', 'Preparazione file P&P (per lato)', 'h', 'PROGRAMMAZIONI', 0.5, undefined, 'durata'),
   P('oreProgPeP', 'Programmazione P&P (per lato)', 'h', 'PROGRAMMAZIONI', 1, undefined, 'durata'),
   P('oreProgSerigrafia', 'Programmazione serigrafia (per lato)', 'h', 'PROGRAMMAZIONI', 0.5, undefined, 'durata'),
-  P('oreProgForno', 'Programmazione profilo forno', 'h', 'PROGRAMMAZIONI', 1 / 6, undefined, 'durata'),
   P('oreProgAOI', 'Programmazione AOI (per lato)', 'h', 'PROGRAMMAZIONI', 2, undefined, 'durata'),
   P('oreProgOnda', 'Programmazione saldatrice ad onda', 'h', 'PROGRAMMAZIONI', 0.25, undefined, 'durata'),
   // Gestione materiale (Adriano, 23/10/2026). Provenienza: 1 = del cliente, da restituire a fine lavoro (non passa dal
@@ -261,7 +260,6 @@ export const FASI: FaseCatalogo[] = [
   F('7B', 'fornoBot', 'Forno BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoTransitoForno + max(nPCB - 1, 0) * cadenzaForno, 0)', { persone: 2, scala: 'pannello' }),
   F('8B', 'smontaggioBot', 'Smontaggio macchina BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoSmontaggioLatoB * 60 * qtFeederLatoB, 0)', { scala: 'fisso', legacy: ['smontaggioPePLatoB'] }),
   F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'se(primaProduzione * (qtSmd + doppiaFaccia * qtSmdLatoB) > 0, oreProgAOI * 3600 * se(doppiaFaccia, 2, 1), 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
-  F('9F', 'progForno', 'Programmazione profilo forno', 'SMD', 'se(primaProduzione * (qtSmd + doppiaFaccia * qtSmdLatoB) > 0, oreProgForno * 3600, 0)', { unaTantum: true, scala: 'fisso' }),
   F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(se(qtSmd > 0, tempoRevisioneAoi, 0) + se(doppiaFaccia * qtSmdLatoB > 0, tempoRevisioneAoiLatoB, 0)) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
   F('11', 'riparazioneSmd', 'Riparazione SMD', 'SMD', 'tempoRiparazioneSmd * nSchede', { scala: 'scheda' }),
 

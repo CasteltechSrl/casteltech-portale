@@ -208,12 +208,12 @@ test('riepilogo preventivo: una tantum interni/acquisti, margini, ore e prezzo o
 test('informazioni generali: programmazioni solo con prima produzione, armadi solo a magazzino, acquisti solo con la spunta', () => {
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
-  const base = { ...def, nPCB: 10, qtSmd: 50, qtFeeder: 10, oreProgArmadi: 0.5, oreFilePeP: 0.5, oreProgPeP: 1, oreProgForno: 0.25,
+  const base = { ...def, nPCB: 10, qtSmd: 50, qtFeeder: 10, oreProgArmadi: 0.5, oreFilePeP: 0.5, oreProgPeP: 1,
     oreProgOnda: 0.5, usaOnda: 1, qtTht: 5, oreAcquistoLamine: 0.25, oreAcquistoPcb: 0.25, costoPcbScheda: 2, prezzoLamina: 90 };
   const calc = (p: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...base, ...p } });
   const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
   const voce = (r: ReturnType<typeof calc>, c: string) => r.voci.find(v => v.codice === c)!.costo;
-  const prog = ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progForno', 'progAOI', 'progOnda'];
+  const prog = ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progAOI', 'progOnda'];
   // prima produzione, materiale a magazzino, THT con onda: tutte le programmazioni
   const prima = calc({ primaProduzione: 1, provenienzaMateriale: 2, presenteTht: 1 });
   for (const c of prog) assert.ok(sec(prima, c) > 0, c);
@@ -224,7 +224,7 @@ test('informazioni generali: programmazioni solo con prima produzione, armadi so
   for (const c of prog) assert.equal(sec(ripetizione, c), 0, c);
   // solo THT: niente programmazioni SMD, sì onda
   const soloTht = calc({ primaProduzione: 1, provenienzaMateriale: 2, presenteTht: 1, qtSmd: 0, qtFeeder: 0 });
-  for (const c of ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progForno', 'progAOI']) assert.equal(sec(soloTht, c), 0, c);
+  for (const c of ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'progAOI']) assert.equal(sec(soloTht, c), 0, c);
   assert.ok(sec(soloTht, 'progOnda') > 0);
   // acquisti: tempo e costo solo con la spunta; lamine: vuoto = una per lato
   const senza = calc({ acquistoLamina: 0, acquistoPcb: 0 });
@@ -296,7 +296,7 @@ test('default: 1ª produzione non spuntata (nessuna programmazione), lamina con 
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.3 };
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50, qtSmd: 100, qtFeeder: 20, laminaTrattamenti: 1 } });
-  assert.ok(['progPeP', 'progSerigrafiaTop', 'progAOI', 'progForno'].every(c => r.fasi.find(f => f.codice === c)!.secondiCiclo === 0));
+  assert.ok(['progPeP', 'progSerigrafiaTop', 'progAOI'].every(c => r.fasi.find(f => f.codice === c)!.secondiCiclo === 0));
   const lamina = r.voci.find(v => v.codice === 'laminaSerigrafica')!;
   assert.equal(lamina.costo, 110); assert.equal(lamina.prezzo, 165); assert.equal(lamina.guadagno, 55);
 });
@@ -316,4 +316,9 @@ test('splicing: tape extender 0,30 € per feeder TOP e BOT; imballaggio: 1 min 
   assert.equal(imb.fasi.find(f => f.codice === 'imballaggio')!.secondiCiclo, 100 * 15);
   const lamina = voce(calc({ acquistoLamina: 1 }), 'laminaSerigrafica');
   assert.equal(lamina.costo, 75); assert.equal(lamina.prezzo, 110);
+});
+
+test('niente programmazione profilo forno', () => {
+  assert.ok(!FASI.some(f => f.codice === 'progForno'));
+  assert.ok(!PARAMETRI.some(p => p.codice === 'oreProgForno'));
 });

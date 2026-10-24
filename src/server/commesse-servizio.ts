@@ -15,7 +15,7 @@ import type { Rilevazione } from '../engine/consuntivo.js';
 /** Campi con TOP e BOT, nell'ordine della scheda. */
 export const PROGRAMMI: [string, string][] = [
   ['progArmadio', 'Prog. armadio'], ['progSerigrafia', 'Prog. serigrafia'], ['lamina', 'Lamina'],
-  ['progPePFox', 'Prog. P&P FOX'], ['progPePIpulse', 'Prog. P&P iPulse'], ['progForno', 'Prog. forno'], ['progAOI', 'Prog. AOI'],
+  ['progPePFox', 'Prog. P&P FOX'], ['progPePIpulse', 'Prog. P&P iPulse'], ['progAOI', 'Prog. AOI'],
 ];
 /** Vecchio campo "materiali di saldatura" (tipo): non più usato, sostituito dalla riga Materiale di consumo. */
 export const MATERIALI_SALDATURA: [string, string][] = [
@@ -45,6 +45,9 @@ export interface FaseScheda {
   persone: number; cicloSec: number; uomoSec: number;
 }
 
+/** Fasi tolte (Adriano, 24/10/2026) che i preventivi salvati prima possono ancora avere. */
+const FASI_TOLTE_DALLA_SCHEDA = ['progForno'];
+
 /** Fasi del preventivo ricalcolate sulla quantità della commessa (solo quelle con un tempo). */
 export function fasiPreviste(prev: any, quantita: number, primoLotto: boolean): FaseScheda[] {
   const cat: Catalogo = prev.catalogo;
@@ -52,7 +55,7 @@ export function fasiPreviste(prev: any, quantita: number, primoLotto: boolean): 
   const ris = calcola(cat, dati);
   return cat.fasi.flatMap(f => {
     const r = ris.fasi.find(x => x.codice === f.codice);
-    if (!r || r.secondiCiclo <= 0 || (f.unaTantum && !primoLotto)) return [];
+    if (!r || r.secondiCiclo <= 0 || (f.unaTantum && !primoLotto) || FASI_TOLTE_DALLA_SCHEDA.includes(f.codice)) return [];
     return [{ codice: f.codice, numero: f.numero, nome: f.nome, gruppo: f.gruppo, unaTantum: f.unaTantum, tariffa: f.tariffa,
       persone: r.persone, cicloSec: r.secondiCiclo, uomoSec: r.secondiUomo }];
   });
