@@ -18,17 +18,20 @@ export interface VoceConsumo {
 const nf = (x: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 3 }).format(x);
 
 export function vociConsumo(prev: any, quantita: number): VoceConsumo[] {
-  const cat: { parametri?: { codice: string; default?: number | null }[] } | undefined = prev?.catalogo;
+  const cat: { parametri?: { codice: string; default?: number | null }[]; materiali?: { codice: string; quantita?: number }[] } | undefined = prev?.catalogo;
   const v: Record<string, number> = {};
   for (const p of cat?.parametri ?? []) if (p.default != null) v[p.codice] = Number(p.default);
   for (const [k, x] of Object.entries(prev?.parametri ?? {})) v[k] = Number(x);
   const pos = (cod: string) => (v[cod] > 0 ? v[cod] : null);
   const voce = (codice: string, colonna: string, nome: string, unita: string, previsto: number | null, perLotto = false, previstoTesto?: string): VoceConsumo =>
     ({ codice, colonna, nome, unita, perLotto, previsto, previstoTesto: previstoTesto ?? (previsto != null ? `${nf(previsto)} ${unita}` : '') });
+  // stagno saldatrice: reofori × gr a reoforo + peso, più le scorie (20% di default)
+  const grReoforo = Number(cat?.materiali?.find(m => m.codice === 'stagnoLF')?.quantita ?? 0);
+  const stagnoSald = ((v.stagno ?? 0) * grReoforo + (v.stagnoPerSaldature ?? 0)) * (1 + (v.scorieSaldatrice ?? 0) / 100);
   const bombolette = v.tropicalizzante > 0 && prev?.n_schede > 0 ? v.tropicalizzante * quantita / prev.n_schede : null;
   return [
     voce('pastaSaldante', 'Pasta saldante', 'Pasta saldante', 'gr', pos('crema')),
-    voce('stagnoSaldatrice', 'Stagno saldatrice', 'Stagno saldatrice', 'gr', pos('stagnoPerSaldature')),
+    voce('stagnoSaldatrice', 'Stagno saldatrice', 'Stagno saldatrice', 'gr', stagnoSald > 0 ? stagnoSald : null),
     voce('flussante', 'Flussante liquido / gel', 'Flussante liquido / gel', 'ml', null),
     voce('filo', 'Filo di saldatura', 'Filo di saldatura', 'gr', pos('stagnoInFilo')),
     voce('viteria', 'Viteria', 'Viteria', 'pz', null, false, pos('viteria') != null ? `${nf(v.viteria)} €` : ''),

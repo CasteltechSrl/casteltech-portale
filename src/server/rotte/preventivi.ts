@@ -10,8 +10,11 @@ import { layout } from '../views/layout.js';
 import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
 import { riepilogo } from '../../engine/riepilogo.js';
+import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 
-const PROVENIENZE: [number, string][] = [[1, 'Del cliente, da restituire a fine lavoro'], [2, 'Gestito a nostro magazzino (acquistato da noi, del cliente o misto)']];
+const PROVENIENZE: [number, string, string][] = [
+  [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
+  [2, 'A nostro magazzino', 'Gestito a nostro magazzino: acquistato da noi, del cliente o misto']];
 const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
@@ -156,7 +159,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const doppia = !!d.parametri.doppiaFaccia;
   const valore = (cod: string) => d.parametri[cod] ?? '';
   // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
-  const info = (p: Catalogo['parametri'][0]) => p.suggerimento ? html` <span class="info" title="${p.suggerimento}" aria-label="${p.suggerimento}">ⓘ</span>` : '';
+  const info = (p: Catalogo['parametri'][0]) => p.suggerimento ? html` <span class="info" aria-label="${p.suggerimento}">ⓘ</span>` : '';
   const soloBot = (p: Catalogo['parametri'][0]) => conLati && (p.gruppo === 'SMD BOT' || /LatoB$/.test(p.codice));
   // gestione materiale: etichettatura, stoccaggio ed estrazione non servono se il materiale del cliente va restituito
   // 1 = del cliente, da restituire; qualsiasi altro valore (anche 3 e 4 dei preventivi salvati prima) = gestito a magazzino
@@ -164,16 +167,16 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const soloMagazzino = (p: Catalogo['parametri'][0]) => ['oreEtichettaturaMateriale', 'oreStoccaggioMateriale', 'oreEstrazioneMateriale', 'tempoEtichettaturaItem', 'tempoStoccaggioItem', 'tempoEstrazioneItem'].includes(p.codice);
   const sceltaProvenienza = () => html`
     <div class="scelta-lati scelta-provenienza" role="radiogroup" aria-label="Provenienza del materiale">
-      ${PROVENIENZE.map(([v, testo]) => html`<label class="spunta"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
-      <small class="nota">Tempo = numero item × tempo per item, a ogni lotto. Da restituire: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio.</small>
+      ${PROVENIENZE.map(([v, testo, spiega]) => html`<label class="spunta" title="${spiega}"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
+      <span class="info" title="Tempo = numero item × tempo per item, a ogni lotto">ⓘ</span>
     </div>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'
-    ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`
+    ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`
     : p.tipo === 'durata'
-    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])}>${p.etichetta} <span class="unita">ore:minuti</span>${info(p)}
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}">${etichettaBreve(p)}${info(p)}
         <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
-    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])}>${p.etichetta} <span class="unita">${p.unita}</span>${info(p)}
+    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}">${etichettaBreve(p)}${info(p)}
         <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}"></label>`;
   const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && p.codice !== 'provenienzaMateriale' && d.parametri[p.codice]).length;
 
@@ -234,12 +237,11 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         ${conLati ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
           <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
           <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
-          <small class="nota">Con TOP + BOT raddoppiano i tempi indicati "per lato" e si attivano le fasi BOT.</small>
+          <span class="info" title="Con TOP + BOT raddoppiano i tempi indicati &quot;a lato&quot; e si attivano le fasi BOT">ⓘ</span>
         </div>` : ''}
         ${generali.length ? html`<div class="spunte-generali">${generali.map(p => html`
-          <label class="spunta"><input type="checkbox" data-param="${p.codice}" ${spunta(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`)}</div>
-          <small class="nota">Le programmazioni contano solo con "Prima produzione" (armadi solo se il materiale va a nostro magazzino);
-            tempi e costi di acquisto solo con la spunta.</small>` : ''}
+          <label class="spunta" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${spunta(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`)}
+          <span class="info" title="Le programmazioni contano solo con la 1ª produzione (armadi solo se il materiale va a nostro magazzino); tempi e costi di acquisto solo con la spunta">ⓘ</span></div>` : ''}
       </fieldset>` : ''}
 
       ${gruppi.map(g => html`
@@ -316,17 +318,17 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
 export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
   const r = riepilogo(ris);
   return html`
-    <div class="totale principale"><span>Prezzo a scheda (senza una tantum)</span><strong>${euro(r.prezzoScheda)}</strong>
+    <div class="totale principale"><span title="Prezzo a scheda dei lotti, senza costi una tantum">Prezzo scheda</span><strong>${euro(r.prezzoScheda)}</strong>
       <small>Lotto: ${euro(r.prezzoLotto)}</small></div>
-    <div class="totale"><span>Una tantum</span><strong>${euro(r.unaTantum)}</strong>
+    <div class="totale"><span title="Costi una tantum (solo 1° lotto)">Una tantum</span><strong>${euro(r.unaTantum)}</strong>
       <small title="Pre-produzione e programmazioni">Interni: ${euro(r.unaTantumInterni)}</small>
       <small title="Lamine, attrezzaggio PCB">Acquisti: ${euro(r.unaTantumAcquisti)}</small></div>
-    <div class="totale"><span>A scheda con una tantum (1° lotto)</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong>
+    <div class="totale"><span title="Prezzo a scheda del 1° lotto, con i costi una tantum">Prezzo scheda+una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong>
       <small>Lotto: ${euro(r.prezzoLottoConUnaTantum)}</small></div>
-    <div class="totale"><span>Margine a scheda</span><strong>${euro(r.margineScheda)}</strong><small>Lotto: ${euro(r.margineLotto)}</small></div>
+    <div class="totale"><span title="Margine a scheda dei lotti, senza una tantum">Margine scheda</span><strong>${euro(r.margineScheda)}</strong><small>Lotto: ${euro(r.margineLotto)}</small></div>
     <div class="totale"><span>Margine una tantum</span><strong>${euro(r.margineUnaTantum)}</strong></div>
-    <div class="totale"><span>Ore ciclo (lotto)</span><strong>${ore(r.oreCicloSec)}</strong>
-      <small>${euro(r.prezzoOraCiclo)} per ora ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
-    <div class="totale"><span>Ore uomo (lotto)</span><strong>${ore(r.oreUomoSec)}</strong>
-      <small>${euro(r.prezzoOraUomo)} per ora uomo</small><small>1° lotto: ${ore(r.oreUomoPrimoLottoSec)}</small></div>`;
+    <div class="totale"><span title="Ore ciclo del lotto, senza una tantum">Ore ciclo</span><strong>${ore(r.oreCicloSec)}</strong>
+      <small>${euro(r.prezzoOraCiclo)}/h ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
+    <div class="totale"><span title="Ore uomo del lotto, senza una tantum">Ore uomo</span><strong>${ore(r.oreUomoSec)}</strong>
+      <small>${euro(r.prezzoOraUomo)}/h uomo</small><small>1° lotto: ${ore(r.oreUomoPrimoLottoSec)}</small></div>`;
 }

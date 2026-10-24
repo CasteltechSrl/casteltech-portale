@@ -20,6 +20,10 @@ test('scheda: materiale di consumo previsto dal preventivo e reale a scheda dal 
   assert.equal(consumoReale(v.pastaSaldante, 400, 250), 1.6);   // 400 gr sul lotto = 1,6 gr a scheda
   assert.equal(consumoReale(v.conformal, 4, 250), 4);           // bombolette: totale del lotto
   assert.equal(consumoReale(v.pastaSaldante, null, 250), null);
+  // stagno saldatrice: (100 reofori × 0,02 gr + 3 gr) × 1,2 di scorie = 6 gr a scheda
+  const s2 = vociConsumo({ n_schede: 100, catalogo: { parametri: [], materiali: [{ codice: 'stagnoLF', quantita: 0.02 }] },
+    parametri: { stagno: 100, stagnoPerSaldature: 3, scorieSaldatrice: 20 } }, 100).find(m => m.codice === 'stagnoSaldatrice')!;
+  assert.ok(Math.abs(s2.previsto! - 6) < 1e-9);
 });
 
 test('rientro: righe con solo il tempo totale contano nel ciclo e nell\'uomo', () => {
@@ -55,4 +59,18 @@ test('rientro: controlli su righe non chiuse, P senza causa, tempi dimenticati o
   assert.ok(avvisi.some(t => t.includes('totale scritto 0:40')));
   assert.ok(avvisi.some(t => t.includes('non prevista')));
   assert.ok(!avvisi.some(t => t.includes('Imballaggio')));   // 25 min contro 30 previsti: nella norma
+});
+
+test('etichette corte del preventivo: unità e "a scheda" tra parentesi', async () => {
+  const { etichettaBreve } = await import('../src/server/views/etichette.js');
+  assert.equal(etichettaBreve({ etichetta: 'Montaggio meccanico per scheda', unita: 's' }), 'Montaggio meccanico (sec. a scheda)');
+  assert.equal(etichettaBreve({ etichetta: 'Pasta saldante per scheda', unita: 'gr' }), 'Pasta saldante (gr a scheda)');
+  assert.equal(etichettaBreve({ etichetta: 'Stagno saldatrice per scheda', unita: 'reofori' }), 'Stagno saldatrice (nr. reofori a scheda)');
+  assert.equal(etichettaBreve({ etichetta: 'Programmazione P&P (per lato)', unita: 'h', tipo: 'durata' }), 'Programmazione P&P (h:mm a lato)');
+  assert.equal(etichettaBreve({ etichetta: 'Buste ESD (totali)', unita: 'pz' }), 'Buste ESD (nr. totali)');
+  assert.equal(etichettaBreve({ etichetta: 'Preriscaldamento forno (fisso a lotto)', unita: '€' }), 'Preriscaldamento forno (€ a lotto)');
+  assert.equal(etichettaBreve({ etichetta: 'Numero item (codici SMD + THT + PCB + altro)', unita: 'pz' }), 'Numero item (nr.)');
+  assert.equal(etichettaBreve({ etichetta: 'Feeder TOP', unita: 'pz' }), 'Feeder TOP (nr.)');
+  assert.equal(etichettaBreve({ etichetta: 'Smontaggio P&P per feeder', unita: 'min' }), 'Smontaggio P&P (min a feeder)');
+  assert.equal(etichettaBreve({ etichetta: 'Saldatura a onda prevista', unita: 'sì/no' }), 'Saldatura a onda prevista');
 });

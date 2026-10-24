@@ -96,7 +96,7 @@ test('energia e forno: preriscaldamento solo se la fase c\'è, consumo = ore × 
   assert.equal(con.fasi.find(f => f.codice === 'saldaturaOnda')!.secondiCiclo, 240 + 49 * 90);
   const euroEnergia = (sec: number) => sec / 3600 * 15 * 0.4;
   assert.ok(Math.abs(con.voci[0].costo - (6 + euroEnergia(2 * (240 + 49 * 15)))) < 1e-9);
-  assert.ok(Math.abs(con.voci[1].costo - (25 + euroEnergia(240 + 49 * 90))) < 1e-9);
+  assert.ok(Math.abs(con.voci[1].costo - (10 + euroEnergia(240 + 49 * 90))) < 1e-9);   // preriscaldamento onda 10 €
   // serigrafia separata dal P&P: 1 persona contro 2
   assert.equal(con.fasi.find(f => f.codice === 'serigrafiaTop')!.persone, 1);
   assert.equal(con.fasi.find(f => f.codice === 'pepTop')!.persone, 2);
@@ -234,4 +234,19 @@ test('informazioni generali: programmazioni solo con prima produzione, armadi so
   assert.equal(sec(con, 'acquistoLamine'), 900);
   assert.equal(voce(con, 'laminaSerigrafica'), 180);      // 2 lati × 90 €
   assert.equal(voce(con, 'valoreAcquistoPCB'), 20);
+});
+
+test('saldatrice: 15 min di carrelli a ogni produzione, +20% di scorie sullo stagno', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const prezzi = Object.fromEntries(MATERIALI.flatMap(m => [['prezzo_' + m.codice, 0], ['qta_' + m.codice, m.quantita ?? 0]]));
+  const calc = (p: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, ...prezzi, nPCB: 50, ...p } });
+  const carrelli = (r: ReturnType<typeof calc>) => r.fasi.find(f => f.codice === 'prepCarrelli')!;
+  const conOnda = calc({ presenteTht: 1, usaOnda: 1, primaProduzione: 0 });
+  assert.equal(carrelli(conOnda).secondiCiclo, 900);
+  assert.equal(carrelli(conOnda).unaTantum, false);
+  assert.equal(carrelli(calc({ presenteTht: 1, usaOnda: 0 })).secondiCiclo, 0);
+  // stagno: 10 gr/scheda a 0,06 €/gr su 100 schede = 60 € + 20% di scorie = 72 €
+  const consumo = calc({ stagnoPerSaldature: 10, prezzo_stagnoSaldatriceLF: 0.06 }).voci.find(v => v.codice === 'materialeDiConsumo')!;
+  assert.ok(Math.abs(consumo.costo - 72) < 1e-9);
 });
