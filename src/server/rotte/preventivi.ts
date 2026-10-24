@@ -7,7 +7,7 @@ import { salvaBackupSuDisco } from '../backup.js';
 import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
-import { layout } from '../views/layout.js';
+import { layout, VERSIONE } from '../views/layout.js';
 import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
 import { riepilogo } from '../../engine/riepilogo.js';
@@ -491,7 +491,7 @@ function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risulta
     </table>`;
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Preventivo ${p.numero} · ${i.codice}</title>
-<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css"></head>
+<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
 <body>
 <div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
   <a href="?vista=fasi" class="${vista === 'fasi' ? 'attiva' : ''}">Dettaglio per fasi</a>
@@ -527,6 +527,6 @@ function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risulta
   ${d.note ? html`<h3>Note</h3><p class="note-stampa">${d.note}</p>` : ''}
   <p class="piede">Prezzi IVA esclusa.</p>
 </section>
-<script src="/static/stampa.js" defer></script>
+<script src="/static/stampa.js?v=${VERSIONE}" defer></script>
 </body></html>`;
 }

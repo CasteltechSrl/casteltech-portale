@@ -1,7 +1,7 @@
 import { html, raw, type Raw } from './html.js';
 
 /** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
-const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
+export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
 
 export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
 

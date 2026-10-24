@@ -15,7 +15,7 @@ import { oreDa } from '../preventivi-servizio.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
-import { layout } from '../views/layout.js';
+import { layout, VERSIONE } from '../views/layout.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
 
 const STATI_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
@@ -457,7 +457,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const segnalazioni = [...(c.segnalazioni ? [c.segnalazioni] : []), ...storico.map(s => s.testo + (s.numero ? ` (comm. ${s.numero})` : ''))];
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Scheda ${c.numero} · ${i.codice}</title>
-<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css"></head>
+<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
 <body>
 <div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button> <a href="/commesse/${c.id}">← torna alla commessa</a>
   ${haReali ? html`<span>Tempi effettivi e consumi compilati dal rientro${c.rientrata_il ? ` confermato il ${data(c.rientrata_il)}` : ' (non ancora confermato)'}</span>` : ''}</div>
@@ -519,6 +519,6 @@ ${[1, 2].map(n => html`
   </table>
   <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · S = tempo standard · P = problema contingente (causa nelle note) · PERS. = persone sulla fase · MATERIALE IMPIEGATO: voce e quantità (es. pasta 350 gr) · Foglio ${n}</p>
 </section>`)}
-<script src="/static/stampa.js" defer></script>
+<script src="/static/stampa.js?v=${VERSIONE}" defer></script>
 </body></html>`;
 }
