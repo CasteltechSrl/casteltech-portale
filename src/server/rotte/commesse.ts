@@ -481,20 +481,24 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <tr>${colonne.map(col => html`<td>${voci.filter(v => v.colonna === col).map(v => html`<div>
       ${testoConsumo(v) ? html`<b>${testoConsumo(v)}</b> ` : ''}${v.previstoTesto ? html`<span class="previsto">(${v.previstoTesto})</span>` : ''}</div>`)}</td>`)}</tr></table>
 
-  ${perGruppo(fasi).map(g => html`
-  <h3 class="gruppo">${g.gruppo} <span>previsto ${ore(tot(g.fasi))} ciclo / ${ore(totUomo(g.fasi))} uomo${haReali ? ` · effettivo ${ore(totReale(g.fasi.map(f => f.codice)))} ciclo / ${ore(totRealeUomo(g.fasi.map(f => f.codice)))} uomo` : ''}</span></h3>
+  <h3 class="gruppo">FASI DI LAVORAZIONE <span>tempi in ore:minuti</span></h3>
   <table class="fasi-stampa">
     <thead><tr><th class="nr" rowspan="2">NR</th><th rowspan="2">DESCRIZIONE FASE</th><th class="pers" rowspan="2">PERS.</th><th colspan="2">TEMPO PREVISTO</th><th colspan="2" class="eff">TEMPO EFFETTIVO</th></tr>
       <tr><th class="t">CICLO</th><th class="t">UOMO</th><th class="t eff">CICLO</th><th class="t eff">UOMO</th></tr></thead>
-    <tbody>${g.fasi.map(f => html`<tr><td class="nr">${f.numero}</td><td>${f.nome}</td><td class="pers">${num(f.persone, 1)}</td>
-      <td class="t">${ore(f.cicloSec)}</td><td class="t">${ore(f.uomoSec)}</td>
-      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td>
-      <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].uomoSec)}</b>` : ''}</td></tr>`)}</tbody>
-  </table>`)}
-  ${nonPreviste.length ? html`<h3 class="gruppo">ALTRE FASI (non previste)</h3>
-  <table class="fasi-stampa"><tbody>${nonPreviste.map(k => html`<tr><td class="nr">${nomeFase(k).numero}</td><td>${nomeFase(k).nome}</td><td class="pers"></td>
-    <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td><td class="t eff"><b>${ore(reali[k].uomoSec)}</b></td></tr>`)}</tbody></table>` : ''}
-  <p class="totale-stampa">Totale previsto: <strong>${ore(tot(fasi))}</strong> ciclo / <strong>${ore(totUomo(fasi))}</strong> uomo${haReali ? html` · effettivo: <strong>${ore(totReale(Object.keys(reali)))}</strong> ciclo / <strong>${ore(totRealeUomo(Object.keys(reali)))}</strong> uomo` : ''}</p>
+    <tbody>${perGruppo(fasi).map(g => html`
+      <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="t">${ore(tot(g.fasi))}</td><td class="t">${ore(totUomo(g.fasi))}</td>
+        <td class="t eff">${haReali ? ore(totReale(g.fasi.map(f => f.codice))) : ''}</td><td class="t eff">${haReali ? ore(totRealeUomo(g.fasi.map(f => f.codice))) : ''}</td></tr>
+      ${g.fasi.map(f => html`<tr><td class="nr">${f.numero}</td><td>${f.nome}</td><td class="pers">${num(f.persone, 1)}</td>
+        <td class="t">${ore(f.cicloSec)}</td><td class="t">${ore(f.uomoSec)}</td>
+        <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td>
+        <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].uomoSec)}</b>` : ''}</td></tr>`)}`)}
+    ${nonPreviste.length ? html`<tr class="riga-gruppo"><td colspan="7">ALTRE FASI (non previste)</td></tr>
+      ${nonPreviste.map(k => html`<tr><td class="nr">${nomeFase(k).numero}</td><td>${nomeFase(k).nome}</td><td class="pers"></td>
+        <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td><td class="t eff"><b>${ore(reali[k].uomoSec)}</b></td></tr>`)}` : ''}
+      <tr class="riga-totale"><td colspan="3">TOTALE</td><td class="t">${ore(tot(fasi))}</td><td class="t">${ore(totUomo(fasi))}</td>
+        <td class="t eff">${haReali ? ore(totReale(Object.keys(reali))) : ''}</td><td class="t eff">${haReali ? ore(totRealeUomo(Object.keys(reali))) : ''}</td></tr>
+    </tbody>
+  </table>
 </section>
 
 ${[1, 2].map(n => html`
