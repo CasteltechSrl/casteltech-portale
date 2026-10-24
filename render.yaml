@@ -31,3 +31,5 @@ services:
         sync: false             # chiesto alla creazione: password del primo utente ufficio
       - key: ADMIN_NOME
         value: Adriano Gambi
+      - key: ANTHROPIC_API_KEY
+        sync: false             # inserita a mano su Render: lettura automatica delle schede scansionate

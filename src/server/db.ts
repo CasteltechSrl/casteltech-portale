@@ -17,9 +17,14 @@ pg.types.setTypeParser(1082, v => v);
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('Manca la variabile DATABASE_URL');
 
+const locale = /localhost|127\.0\.0\.1|@\/|host=\//.test(url) || process.env.DATABASE_SSL === 'no';
+// Connessione cifrata con verifica del certificato (come già faceva "sslmode=require" della stringa Neon).
+// Il parametro sslmode si toglie dalla stringa e la cifratura si imposta qui: così niente avviso
+// "SECURITY WARNING" all'avvio e nessun cambio di comportamento con le prossime versioni della libreria.
+const senzaSslmode = url.replace(/([?&])sslmode=[^&]*&?/, '$1').replace(/[?&]$/, '');
 export const pool = new pg.Pool({
-  connectionString: url,
-  ssl: /localhost|127\.0\.0\.1|@\/|host=\//.test(url) || process.env.DATABASE_SSL === 'no' ? false : { rejectUnauthorized: false },
+  connectionString: locale ? url : senzaSslmode,
+  ssl: locale ? false : { rejectUnauthorized: true },
   max: 5,
 });
 
