@@ -37,6 +37,8 @@ export interface VoceDef {
   gruppo: string;
   formulaEuro: string;       // costo in euro per l'intero lotto
   unaTantum: boolean;
+  /** prezzo di vendita fisso, già ricaricato (es. lamina a 110 €): se c'è, il ricarico non si applica (Adriano, 24/10/2026) */
+  formulaPrezzo?: string | null;
 }
 
 export interface Tariffe {
@@ -146,7 +148,7 @@ export function calcolaPreventivo(
   let prezzoVociTot = 0, prezzoVociRic = 0, costoVociTot = 0, guadagnoVociRic = 0;
   for (const v of vociDef) {
     const costo = calcolaFormula(v.formulaEuro, varsVoci);
-    const prezzo = r2(costo * ric);
+    const prezzo = v.formulaPrezzo ? r2(calcolaFormula(v.formulaPrezzo, varsVoci)) : r2(costo * ric);
     const guadagno = r2(prezzo - costo);
     voci.push({
       codice: v.codice, nome: v.nome, gruppo: v.gruppo, unaTantum: v.unaTantum,

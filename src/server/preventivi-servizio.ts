@@ -41,6 +41,12 @@ export function normalizza(d: any, cat: Catalogo): DatiPreventivo {
   const parametri: Record<string, number> = {};
   for (const p of cat.parametri) if (d?.parametri?.[p.codice] !== undefined && d.parametri[p.codice] !== '')
     parametri[p.codice] = p.tipo === 'durata' ? oreDa(d.parametri[p.codice]) : numero(d.parametri[p.codice]);
+  // spunte delle informazioni generali tolte: le quantità nascoste non devono contare
+  const haSpunta = (cod: string) => cat.parametri.some(p => p.codice === cod && p.gruppo === 'INFORMAZIONI GENERALI');
+  if (haSpunta('presenteSmd') && parametri.presenteSmd === 0)
+    for (const k of ['qtSmd', 'qtFeeder', 'qtSmdLatoB', 'qtFeederLatoB']) parametri[k] = 0;
+  if (haSpunta('presenteTht') && haSpunta('usaOnda') && parametri.presenteTht === 0 && parametri.usaOnda === 0)
+    for (const k of ['qtTht', 'qtTipolTht', 'qtPthdaPreparare', 'qntCompMontaggio', 'qntPuntiSaldaturaMano', 'tempoProtezione', 'tempoDiRevisione', 'tempoSeparazioneSchede']) parametri[k] = 0;
   const personeFase: Record<string, number> = {};
   for (const f of cat.fasi) {
     const v = d?.personeFase?.[f.codice];

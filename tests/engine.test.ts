@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calcolaFormula, variabiliUsate } from '../src/engine/espressioni.js';
-import { calcolaPreventivo, type FaseDef, type Tariffe } from '../src/engine/calcolo.js';
+import { calcolaPreventivo, r2, type FaseDef, type Tariffe } from '../src/engine/calcolo.js';
 import { calcolaConsuntivo, prezzoCorretto } from '../src/engine/consuntivo.js';
 
 test('formule: operazioni, parametri mancanti = 0, divisione per zero = 0, funzioni', () => {
@@ -249,4 +249,45 @@ test('saldatrice: 15 min di carrelli a ogni produzione, +20% di scorie sullo sta
   // stagno: 10 gr/scheda a 0,06 €/gr su 100 schede = 60 € + 20% di scorie = 72 €
   const consumo = calc({ stagnoPerSaldature: 10, prezzo_stagnoSaldatriceLF: 0.06 }).voci.find(v => v.codice === 'materialeDiConsumo')!;
   assert.ok(Math.abs(consumo.costo - 72) < 1e-9);
+});
+
+test('voce a prezzo fisso: il ricarico non si applica (lamina 110 €)', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.35 };
+  const voci = [{ codice: 'lamina', nome: 'Lamina', gruppo: 'UT', formulaEuro: '91.6 * n', formulaPrezzo: '110 * n', unaTantum: true },
+    { codice: 'altro', nome: 'Altro', gruppo: 'X', formulaEuro: '10', unaTantum: false }];
+  const r = calcolaPreventivo([], voci, t, { nSchede: 10, parametri: { n: 2 } });
+  assert.equal(r.voci[0].prezzo, 220);
+  assert.equal(r.voci[0].guadagno, r2(220 - 183.2));
+  assert.equal(r.voci[1].prezzo, 13.5);   // le altre voci restano costo × ricarico
+});
+
+test('spunte: lamina std 110 € e con trattamenti 165 € fissi (×2 con TOP+BOT), etichette, pulizia, lavaggio, onda', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1.3 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const calc = (p: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50, ...p } });
+  const voce = (r: ReturnType<typeof calc>, c: string) => r.voci.find(v => v.codice === c)!;
+  const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
+  assert.equal(voce(calc({ acquistoLamina: 1 }), 'laminaSerigrafica').prezzo, 110);
+  assert.equal(voce(calc({ acquistoLamina: 1, doppiaFaccia: 1 }), 'laminaSerigrafica').prezzo, 220);
+  assert.equal(voce(calc({ laminaTrattamenti: 1, doppiaFaccia: 1 }), 'laminaSerigrafica').prezzo, 330);
+  assert.equal(voce(calc({}), 'laminaSerigrafica').prezzo, 0);
+  // etichette: 15 s a scheda + costo etichetta
+  const et = calc({ etichette: 1, costoEtichetta: 0.05 });
+  assert.equal(sec(et, 'etichettatura'), 1500);
+  assert.equal(voce(et, 'etichette').costo, 5);
+  assert.equal(sec(calc({ etichette: 0 }), 'etichettatura'), 0);
+  // pulizia saldature: 2 min a scheda + 0,20 € a scheda
+  const pu = calc({ puliziaSaldature: 1 });
+  assert.equal(sec(pu, 'pulizia'), 12000);
+  assert.ok(Math.abs(voce(pu, 'liquidoPulizia').costo - 20) < 1e-9);
+  // lavaggio: 45 s a scheda + 0,10 € a scheda + 5 € a lotto
+  const la = calc({ lavaggioSchede: 1 });
+  assert.equal(sec(la, 'lavaggio'), 4500);
+  assert.ok(Math.abs(voce(la, 'lavaggio').costo - 15) < 1e-9);
+  // onda: carrelli e programmazione con la sola spunta "THT saldatura ad onda"; a mano niente saldatrice
+  const onda = calc({ usaOnda: 1, primaProduzione: 1 });
+  assert.equal(sec(onda, 'prepCarrelli'), 900);
+  assert.equal(sec(onda, 'progOnda'), 900);
+  const mano = calc({ presenteTht: 1, usaOnda: 0, primaProduzione: 1 });
+  assert.equal(sec(mano, 'prepCarrelli') + sec(mano, 'progOnda') + sec(mano, 'saldaturaOnda'), 0);
 });

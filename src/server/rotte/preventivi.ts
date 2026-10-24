@@ -14,7 +14,7 @@ import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
-  [2, 'A nostro magazzino', 'Gestito a nostro magazzino: acquistato da noi, del cliente o misto']];
+  [2, 'Nostro magazzino', 'Gestito a nostro magazzino: acquistato da noi, del cliente o misto']];
 const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
@@ -147,15 +147,32 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const generali = cat.parametri.filter(p => p.gruppo === 'INFORMAZIONI GENERALI');
   // campi e sezioni che contano solo con una spunta delle informazioni generali: nascosti se la spunta è tolta
   const spunta = (cod: string) => !!(d.parametri[cod] ?? cat.parametri.find(p => p.codice === cod)?.default);
+  // regola: "a b" = servono a E b; "a|b" = basta a O b
+  const LAMINA = 'acquistoLamina|laminaTrattamenti', ONDA = 'usaOnda', SMD = 'presenteSmd';
   const DIPENDE: Record<string, string> = {
-    oreAcquistoLamine: 'acquistoLamina', nLamine: 'acquistoLamina', prezzoLamina: 'acquistoLamina',
+    oreAcquistoLamine: LAMINA, nLamine: LAMINA, prezzoLamina: LAMINA, prezzoVenditaLamina: LAMINA,
+    costoLaminaTrattata: LAMINA, prezzoVenditaLaminaTrattata: LAMINA,
     oreAcquistoPcb: 'acquistoPcb', costoPcbScheda: 'acquistoPcb',
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
+    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgForno: SMD, oreProgAOI: SMD,
+    preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
+    oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
+    potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,
+    targhette: 'etichette', costoEtichetta: 'etichette',
+    tempoPulizia: 'puliziaSaldature', costoLiquidoPulizia: 'puliziaSaldature',
+    tempoLavaggio: 'lavaggioSchede', costoLiquidoLavaggio: 'lavaggioSchede', costoAvvioLavaggio: 'lavaggioSchede',
   };
-  const GRUPPO_DIPENDE: Record<string, string> = { PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht' };
-  const conSpunta = (flag?: string) => !!flag && generali.some(p => p.codice === flag);
-  const dipende = (flag?: string) => (conSpunta(flag) ? html` data-dipende="${flag}"${spunta(flag!) ? '' : raw(' hidden')}` : '');
+  const GRUPPO_DIPENDE: Record<string, string> = {
+    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: SMD,
+  };
+  const esiste = (flag: string) => generali.some(p => p.codice === flag);
+  // tiene solo le spunte presenti nel catalogo del preventivo (i preventivi vecchi non le hanno)
+  const regola = (r?: string) => (r ?? '').split(' ').map(g => g.split('|').filter(esiste).join('|')).filter(Boolean).join(' ');
+  const vale = (r: string) => r.split(' ').every(g => g.split('|').some(spunta));
+  const dipende = (r?: string) => { const x = regola(r); return x ? html` data-dipende="${x}"${vale(x) ? '' : raw(' hidden')}` : ''; };
   const conLati = cat.parametri.some(p => p.codice === 'doppiaFaccia');
+  // preventivi salvati prima del 24/10/2026: Solo TOP / TOP + BOT come scelta a pallini
+  const latiRadio = cat.parametri.some(p => p.codice === 'doppiaFaccia' && p.gruppo === 'LATI');
   const doppia = !!d.parametri.doppiaFaccia;
   const valore = (cod: string) => d.parametri[cod] ?? '';
   // campi che valgono solo per il lato BOT: nascosti (e svuotati) se il preventivo è "Solo TOP"
@@ -231,17 +248,17 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         </div>
       </fieldset>
 
-      ${conLati || generali.length ? html`
+      ${latiRadio || generali.length ? html`
       <fieldset class="blocco">
-        <legend>${generali.length ? 'Informazioni generali' : 'Lati da montare'}</legend>
-        ${conLati ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
+        <legend>${generali.length ? 'INFORMAZIONI GENERALI' : 'Lati da montare'}</legend>
+        ${latiRadio ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
           <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
           <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
           <span class="info" title="Con TOP + BOT raddoppiano i tempi indicati &quot;a lato&quot; e si attivano le fasi BOT">ⓘ</span>
         </div>` : ''}
         ${generali.length ? html`<div class="spunte-generali">${generali.map(p => html`
           <label class="spunta" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${spunta(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`)}
-          <span class="info" title="Le programmazioni contano solo con la 1ª produzione (armadi solo se il materiale va a nostro magazzino); tempi e costi di acquisto solo con la spunta">ⓘ</span></div>` : ''}
+          <span class="info" title="Le sezioni e i campi collegati compaiono solo con la spunta. Passa sopra alle voci per i dettagli.">ⓘ</span></div>` : ''}
       </fieldset>` : ''}
 
       ${gruppi.map(g => html`

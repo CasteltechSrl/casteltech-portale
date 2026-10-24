@@ -124,8 +124,22 @@
     form.classList.toggle('materiale-da-restituire', r.checked && r.value === '1');
   }));
   // ── Informazioni generali: le sezioni e i campi che dipendono da una spunta compaiono solo se è messa ──
+  // regola data-dipende: "a b" = servono a E b; "a|b" = basta a O b
+  const spunta = cod => { const el = form.querySelector(`.spunte-generali [data-param="${cod}"]`); return !el || el.checked; };
+  const aggiornaDipendenze = () => form.querySelectorAll('[data-dipende]').forEach(x => {
+    x.hidden = !x.dataset.dipende.split(' ').every(g => g.split('|').some(spunta));
+  });
+  const casella = cod => form.querySelector(`.spunte-generali [data-param="${cod}"]`);
   form.querySelectorAll('.spunte-generali input[type=checkbox]').forEach(el => el.addEventListener('change', () => {
-    form.querySelectorAll(`[data-dipende="${el.dataset.param}"]`).forEach(x => { x.hidden = !el.checked; });
+    // TOP+BOT comprende il TOP; senza TOP niente TOP+BOT
+    if (el.dataset.param === 'doppiaFaccia' && el.checked && casella('presenteSmd')) casella('presenteSmd').checked = true;
+    if (el.dataset.param === 'presenteSmd' && !el.checked && casella('doppiaFaccia')) casella('doppiaFaccia').checked = false;
+    // lamina: std oppure con trattamenti
+    if (el.dataset.param === 'acquistoLamina' && el.checked && casella('laminaTrattamenti')) casella('laminaTrattamenti').checked = false;
+    if (el.dataset.param === 'laminaTrattamenti' && el.checked && casella('acquistoLamina')) casella('acquistoLamina').checked = false;
+    const doppia = casella('doppiaFaccia');
+    if (doppia) form.classList.toggle('solo-top', !doppia.checked);
+    aggiornaDipendenze();
   }));
   // ── Durate: si scrivono come 1:30, 30', 1h, 1h30 e vengono mostrate come h:mm ──
   const leggiDurata = t => {

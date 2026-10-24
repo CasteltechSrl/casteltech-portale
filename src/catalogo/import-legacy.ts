@@ -51,7 +51,11 @@ export function importaPreventivoLegacy(d: any): PreventivoImportato {
   p.minResoMateriale = 0;   // non previsto nel vecchio portale
   // informazioni generali: il vecchio portale contava sempre le programmazioni; acquisti se c'era un costo
   p.primaProduzione = 1;
-  p.presenteTht = (p.qtTht ?? 0) > 0 || p.usaOnda ? 1 : 0;
+  p.presenteSmd = (p.qtSmd ?? 0) + (p.qtSmdLatoB ?? 0) > 0 ? 1 : 0;
+  p.presenteTht = (p.qtTht ?? 0) > 0 && !p.usaOnda ? 1 : 0;
+  p.etichette = (p.targhette ?? 0) > 0 ? 1 : 0;
+  p.puliziaSaldature = (p.tempoPulizia ?? 0) > 0 ? 1 : 0;
+  p.lavaggioSchede = (p.tempoLavaggio ?? 0) > 0 ? 1 : 0;
   // il vecchio portale non aveva il forno fuori linea
   p.tempoTransitoForno = 0; p.cadenzaForno = 0;
   p.oreProgPeP = ore(u('programmaPick').nOre); p.botProgPeP = u('programmaPick').bottom ? 1 : 0;

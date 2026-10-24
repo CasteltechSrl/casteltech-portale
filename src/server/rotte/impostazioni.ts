@@ -47,10 +47,11 @@ const TABELLE: Record<string, Tabella> = {
   },
   voci: {
     tabella: 'voci_costo', chiave: 'codice', titolo: 'Voci di costo', ordine: 'ordine', formula: 'formula_euro',
-    spiegazione: 'Costi non a tempo (materiali, lamine, spedizione…). La formula dà il costo in euro dell\'intero lotto; il prezzo è costo × ricarico.',
+    spiegazione: 'Costi non a tempo (materiali, lamine, spedizione…). La formula dà il costo in euro dell\'intero lotto; il prezzo è costo × ricarico, oppure il "prezzo fisso" se indicato (già ricaricato, es. lamina 110 €).',
     campi: [
       { nome: 'ordine', titolo: 'Ordine', tipo: 'numero' }, { nome: 'nome', titolo: 'Nome', largo: true }, { nome: 'gruppo', titolo: 'Gruppo' },
-      { nome: 'formula_euro', titolo: 'Formula (€)', tipo: 'formula', largo: true }, { nome: 'una_tantum', titolo: '1° lotto', tipo: 'si_no' },
+      { nome: 'formula_euro', titolo: 'Formula (€)', tipo: 'formula', largo: true },
+      { nome: 'formula_prezzo', titolo: 'Prezzo fisso (€, senza ricarico)', tipo: 'formula', largo: true }, { nome: 'una_tantum', titolo: '1° lotto', tipo: 'si_no' },
       { nome: 'attiva', titolo: 'Attiva', tipo: 'si_no' },
     ],
   },
@@ -119,7 +120,10 @@ export function rotteImpostazioni() {
     });
     const verificaFormula = async (body: any) => {
       if (!T.formula) return null;
-      return controllaFormula(String(body[T.formula] ?? ''), await caricaCatalogo(), T.tabella === 'voci_costo');
+      const cat = await caricaCatalogo();
+      const prezzo = String(body.formula_prezzo ?? '').trim();
+      if (T.tabella === 'voci_costo' && prezzo) { const e = controllaFormula(prezzo, cat, true); if (e) return `Prezzo fisso: ${e}`; }
+      return controllaFormula(String(body[T.formula] ?? ''), cat, T.tabella === 'voci_costo');
     };
 
     r.post(`/${slug}/:codice`, async (req, res) => {

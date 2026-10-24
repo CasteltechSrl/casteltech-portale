@@ -28,7 +28,7 @@ export async function caricaCatalogo(): Promise<Catalogo> {
       codice: f.codice, numero: f.numero, nome: f.nome, gruppo: f.gruppo, formulaSecondi: f.formula_secondi,
       persone: Number(f.persone_default), tariffa: f.tariffa, unaTantum: f.una_tantum, scala: f.scala,
     })),
-    voci: voci.map(v => ({ codice: v.codice, nome: v.nome, gruppo: v.gruppo, formulaEuro: v.formula_euro, unaTantum: v.una_tantum })),
+    voci: voci.map(v => ({ codice: v.codice, nome: v.nome, gruppo: v.gruppo, formulaEuro: v.formula_euro, unaTantum: v.una_tantum, formulaPrezzo: v.formula_prezzo || null })),
     parametri: parametri.map(p => ({
       codice: p.codice, etichetta: p.etichetta, unita: p.unita, gruppo: p.gruppo,
       default: p.valore_default ?? undefined, suggerimento: p.suggerimento ?? undefined, tipo: p.tipo,
@@ -56,8 +56,8 @@ export async function primoAvvio() {
         await c.query(`INSERT INTO fasi (codice, numero, nome, gruppo, formula_secondi, persone_default, tariffa, una_tantum, scala, ordine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [f.codice, f.numero, f.nome, f.gruppo, f.formulaSecondi, f.persone, f.tariffa, f.unaTantum, f.scala, i * 10]);
       for (const [i, v] of VOCI.entries())
-        await c.query(`INSERT INTO voci_costo (codice, nome, gruppo, formula_euro, una_tantum, ordine) VALUES ($1,$2,$3,$4,$5,$6)`,
-          [v.codice, v.nome, v.gruppo, v.formulaEuro, v.unaTantum, i * 10]);
+        await c.query(`INSERT INTO voci_costo (codice, nome, gruppo, formula_euro, una_tantum, ordine, formula_prezzo) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [v.codice, v.nome, v.gruppo, v.formulaEuro, v.unaTantum, i * 10, v.formulaPrezzo ?? null]);
       for (const m of MATERIALI)
         await c.query(`INSERT INTO materiali (codice, descrizione, costo, um, quantita) VALUES ($1,$2,$3,$4,$5)`,
           [m.codice, m.descrizione, m.costo, m.um, m.quantita ?? null]);
