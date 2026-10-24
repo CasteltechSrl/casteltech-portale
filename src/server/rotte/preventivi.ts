@@ -2,7 +2,8 @@
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
 import { Router } from 'express';
-import { q, q1 } from '../db.js';
+import { q, q1, transazione } from '../db.js';
+import { salvaBackupSuDisco } from '../backup.js';
 import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
@@ -33,20 +34,29 @@ export function rottePreventivi() {
       WHERE $1 = '' OR (intestazione->>'cliente') ILIKE '%'||$1||'%' OR (intestazione->>'codice') ILIKE '%'||$1||'%'
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
       ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
+    const msg = String(req.query.msg ?? '');
     res.send(String(layout({
-      titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi', largo: true,
+      titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi', largo: true, avviso: msg || undefined,
       contenuto: html`
       <div class="intestazione-pagina">
         <h1>Preventivi</h1>
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
+      <form method="post" action="/preventivi/azioni" id="azioni-elenco">
+      <div class="barra-azioni">
+        <span id="n-selezionati" class="nota">Nessun preventivo selezionato</span>
+        <button name="azione" value="commessa" data-serve="1" disabled title="Crea la commessa dal preventivo selezionato (uno alla volta)">Crea commessa</button>
+        <button name="azione" value="duplica" data-serve="1+" disabled title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica</button>
+        <button name="azione" value="elimina" data-serve="1+" disabled class="pericolo" title="Elimina i preventivi selezionati (non quelli già diventati commessa)">Elimina</button>
+      </div>
       <div class="tabella-scorre"><table class="elenco preventivi">
-        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
+        <thead><tr><th class="selezione"><input type="checkbox" id="seleziona-tutti" title="Seleziona tutti" aria-label="Seleziona tutti"></th><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
           <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
           <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
+            <td class="selezione"><input type="checkbox" name="ids" value="${p.id}" aria-label="Seleziona ${p.numero}"></td>
             <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}</td>
             <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
@@ -54,6 +64,7 @@ export function rottePreventivi() {
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
           </tr>`)}
         </tbody></table></div>
+      </form>
       ${righe.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
       script: 'elenco.js',
     })));
@@ -118,16 +129,83 @@ export function rottePreventivi() {
 
   // duplica con catalogo, tariffe e prezzi materiali ATTUALI
   r.post('/:id/duplica', async (req, res) => {
-    const p = await leggiPreventivo(Number(req.params.id));
-    if (!p) return res.status(404).send('Preventivo non trovato');
-    const cat = await caricaCatalogo();
-    const vecchi = datiDaRiga(p);
-    const dati = normalizza({ ...vecchi, prezziMateriali: undefined, tariffe: await caricaTariffe() }, cat);
-    const id = await salvaPreventivo({ dati, catalogo: cat, utenteId: req.session.utente!.id });
+    const id = await duplica(Number(req.params.id), req.session.utente!.id);
+    if (!id) return res.status(404).send('Preventivo non trovato');
     res.redirect(`/preventivi/${id}`);
   });
 
+  // azioni dall'elenco su uno o più preventivi spuntati
+  r.post('/azioni', async (req, res) => {
+    const ids = [...new Set(([] as unknown[]).concat(req.body?.ids ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0))];
+    const torna = (msg: string) => res.redirect(`/preventivi?msg=${encodeURIComponent(msg)}`);
+    if (!ids.length) return torna('Seleziona almeno un preventivo.');
+    const azione = String(req.body?.azione ?? '');
+    if (azione === 'commessa') {
+      if (ids.length !== 1) return torna('La commessa si crea da un preventivo alla volta: selezionane uno solo.');
+      return res.redirect(`/commesse/nuova?preventivo=${ids[0]}`);
+    }
+    if (azione === 'duplica') {
+      const nuovi: number[] = [];
+      for (const id of ids) { const n = await duplica(id, req.session.utente!.id); if (n) nuovi.push(n); }
+      if (nuovi.length === 1) return res.redirect(`/preventivi/${nuovi[0]}`);
+      return torna(`Creati ${nuovi.length} preventivi con fasi, tariffe e prezzi attuali.`);
+    }
+    if (azione === 'elimina') {
+      // i preventivi già diventati commessa restano (la commessa li usa per la scheda e il consuntivo)
+      const conCommessa = await q<{ numero: string }>(`SELECT DISTINCT p.numero FROM preventivi p JOIN commesse c ON c.preventivo_id = p.id WHERE p.id = ANY($1)`, [ids]);
+      const eliminabili = (await q<{ id: number }>(`SELECT id FROM preventivi p WHERE id = ANY($1) AND NOT EXISTS (SELECT 1 FROM commesse c WHERE c.preventivo_id = p.id)`, [ids])).map(x => x.id);
+      if (eliminabili.length) {
+        await salvaBackupSuDisco('prima-di-eliminare-preventivi').catch(() => null);
+        await transazione(async c => {
+          await c.query(`UPDATE analisi_commesse SET nuovo_preventivo_id = NULL WHERE nuovo_preventivo_id = ANY($1)`, [eliminabili]);
+          await c.query(`DELETE FROM preventivi WHERE id = ANY($1)`, [eliminabili]);
+        });
+      }
+      return torna(`Eliminati ${eliminabili.length} preventivi.` + (conCommessa.length ? ` Non eliminati perché già diventati commessa: ${conCommessa.map(x => x.numero).join(', ')}.` : ''));
+    }
+    torna('Azione non riconosciuta.');
+  });
+
   return r;
+}
+
+// ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
+/** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
+const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
+  { titolo: 'Produzione', classe: 'produzione', sotto: 'programmazioni', righe: [{ nome: '', codici: ['primaProduzione'] }] },
+  { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
+    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] }] },
+  { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
+    { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
+  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede'] }] },
+];
+const NOME_SPUNTA: Record<string, string> = {
+  doppiaFaccia: 'BOT', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+};
+
+function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
+  const trova = (cod: string) => generali.find(p => p.codice === cod);
+  const usati = new Set(GRUPPI_SPUNTE.flatMap(g => g.righe.flatMap(r => r.codici)));
+  const altri = generali.filter(p => !usati.has(p.codice));
+  const casella = (p: Catalogo['parametri'][0]) => html`<label class="chip" title="${etichettaCompleta(p)}">
+    <input type="checkbox" data-param="${p.codice}" ${spunta(p.codice) ? raw('checked') : ''}><span>${NOME_SPUNTA[p.codice] ?? p.etichetta}</span></label>`;
+  const gruppi = [...GRUPPI_SPUNTE, ...(altri.length ? [{ titolo: 'Altro', classe: 'altro', sotto: '', righe: [{ nome: '', codici: altri.map(p => p.codice) }] }] : [])];
+  return html`<div class="spunte-generali">${gruppi.map(g => {
+    const righe = g.righe.map(r => ({ ...r, voci: r.codici.map(trova).filter((p): p is Catalogo['parametri'][0] => !!p) })).filter(r => r.voci.length);
+    return righe.length ? html`<div class="gruppo-spunte ${g.classe}">
+      <div class="titolo-spunte">${g.titolo} ${g.sotto ? html`<small>${g.sotto}</small>` : ''}</div>
+      ${righe.map(r => html`<div class="riga-spunte">${r.nome ? html`<span class="nome-riga">${r.nome}</span>` : ''}${r.voci.map(casella)}</div>`)}
+    </div>` : '';
+  })}</div>`;
+}
+
+/** Duplica con catalogo, tariffe e prezzi materiali ATTUALI. */
+async function duplica(id: number, utenteId: number): Promise<number | null> {
+  const p = await leggiPreventivo(id);
+  if (!p) return null;
+  const cat = await caricaCatalogo();
+  const dati = normalizza({ ...datiDaRiga(p), prezziMateriali: undefined, tariffe: await caricaTariffe() }, cat);
+  return salvaPreventivo({ dati, catalogo: cat, utenteId });
 }
 
 const elencoClienti = () => q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -250,15 +328,13 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
 
       ${latiRadio || generali.length ? html`
       <fieldset class="blocco">
-        <legend>${generali.length ? 'INFORMAZIONI GENERALI' : 'Lati da montare'}</legend>
+        <legend>${generali.length ? 'Informazioni generali' : 'Lati da montare'}</legend>
         ${latiRadio ? html`<div class="scelta-lati" role="radiogroup" aria-label="Lati da montare">
           <label class="spunta"><input type="radio" name="lati" value="0" ${!doppia ? raw('checked') : ''}> Solo TOP</label>
           <label class="spunta"><input type="radio" name="lati" value="1" ${doppia ? raw('checked') : ''}> TOP + BOT</label>
           <span class="info" title="Con TOP + BOT raddoppiano i tempi indicati &quot;a lato&quot; e si attivano le fasi BOT">ⓘ</span>
         </div>` : ''}
-        ${generali.length ? html`<div class="spunte-generali">${generali.map(p => html`
-          <label class="spunta" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${spunta(p.codice) ? raw('checked') : ''}> ${p.etichetta}</label>`)}
-          <span class="info" title="Le sezioni e i campi collegati compaiono solo con la spunta. Passa sopra alle voci per i dettagli.">ⓘ</span></div>` : ''}
+        ${generali.length ? riquadroSpunte(generali, spunta) : ''}
       </fieldset>` : ''}
 
       ${gruppi.map(g => html`

@@ -44,7 +44,7 @@ export const PARAMETRI: ParametroDef[] = [
   P('primaProduzione', '1ª produzione', '', 'INFORMAZIONI GENERALI', 0, 'Prima produzione: si contano le programmazioni (SMD e/o saldatrice ad onda)', 'si_no'),
   P('presenteSmd', 'TOP', '', 'INFORMAZIONI GENERALI', 1, 'Componenti SMD sul lato TOP', 'si_no'),
   // Solo TOP (0) oppure TOP + BOT (1): raddoppia i tempi "per lato" e le lamine, abilita le fasi BOT
-  P('doppiaFaccia', 'TOP+BOT', '', 'INFORMAZIONI GENERALI', 0, 'SMD su due lati: raddoppiano programmazioni a lato e lamine, si attivano le fasi BOT', 'si_no'),
+  P('doppiaFaccia', 'BOT', '', 'INFORMAZIONI GENERALI', 0, 'SMD anche sul lato BOT: raddoppiano programmazioni a lato e lamine, si attivano le fasi BOT', 'si_no'),
   P('usaOnda', 'THT saldatura ad onda', '', 'INFORMAZIONI GENERALI', 0, 'THT con saldatrice ad onda: tempi, energia, carrelli e programmazione', 'si_no'),
   P('presenteTht', 'THT saldatura a mano', '', 'INFORMAZIONI GENERALI', 0, 'THT senza saldatrice: nessun costo legato alla saldatrice ad onda', 'si_no'),
   P('acquistoComponenti', 'Componenti', '', 'INFORMAZIONI GENERALI', 0, 'Acquisto componenti: tempo di acquisto e costo componenti', 'si_no'),

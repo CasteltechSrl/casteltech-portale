@@ -131,7 +131,7 @@
   });
   const casella = cod => form.querySelector(`.spunte-generali [data-param="${cod}"]`);
   form.querySelectorAll('.spunte-generali input[type=checkbox]').forEach(el => el.addEventListener('change', () => {
-    // TOP+BOT comprende il TOP; senza TOP niente TOP+BOT
+    // il lato BOT si monta insieme al TOP: BOT spunta anche TOP, togliere TOP toglie anche BOT
     if (el.dataset.param === 'doppiaFaccia' && el.checked && casella('presenteSmd')) casella('presenteSmd').checked = true;
     if (el.dataset.param === 'presenteSmd' && !el.checked && casella('doppiaFaccia')) casella('doppiaFaccia').checked = false;
     // lamina: std oppure con trattamenti

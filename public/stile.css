@@ -207,5 +207,30 @@ ul.controlli { padding-left: 1.1rem; margin: .3rem 0 .8rem; font-size: .88rem; }
 ul.controlli.errori li { color: #b3261e; } ul.controlli.avvisi li { color: #8a5a00; }
 table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }
 
-.spunte-generali { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin: .8rem 0 .3rem; }
+.spunte-generali { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: .4rem 0 .2rem; }
+@media (max-width: 700px) { .spunte-generali { grid-template-columns: 1fr; } }
+.gruppo-spunte { --tinta: #e8f3f0; --bordo-tinta: #8cc5b7; background: var(--tinta); border-left: 4px solid var(--bordo-tinta);
+  border-radius: 8px; padding: .55rem .7rem .6rem; display: grid; gap: .4rem; align-content: start; }
+.gruppo-spunte.montaggio { --tinta: #eaf0fa; --bordo-tinta: #8ea9d8; }
+.gruppo-spunte.acquisti { --tinta: #fbf3e4; --bordo-tinta: #ddb76b; }
+.gruppo-spunte.lavorazioni { --tinta: #f3edf8; --bordo-tinta: #b39bd0; }
+.gruppo-spunte.altro { --tinta: #f1f1f1; --bordo-tinta: #bbb; }
+.titolo-spunte { font-weight: 600; font-size: .9rem; }
+.titolo-spunte small { font-weight: 400; color: var(--tenue); margin-left: .3rem; }
+.riga-spunte { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.nome-riga { font-size: .75rem; font-weight: 600; color: var(--tenue); min-width: 3.4rem; letter-spacing: .02em; }
+.riga-spunte { flex-wrap: nowrap; } .gruppo-spunte.lavorazioni .riga-spunte { flex-wrap: wrap; }
+label.chip { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem .25rem .45rem; border-radius: 999px;
+  background: #fff; border: 1px solid var(--bordo-tinta); font-size: .85rem; cursor: pointer; user-select: none; width: auto; margin: 0; }
+label.chip input { width: auto; margin: 0; accent-color: var(--accento); }
+label.chip:has(input:checked) { background: var(--accento); border-color: var(--accento); color: #fff; }
+label.chip:has(input:checked) input { accent-color: #fff; }
 [hidden] { display: none !important; }
+
+/* elenco preventivi: spunte e azioni */
+.barra-azioni { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .6rem 0; }
+.barra-azioni .nota { margin-right: auto; }
+button.pericolo, button.pericolo:disabled { background: #fff; color: #b3261e; border: 1px solid #e6b3ae; }
+button.pericolo:not(:disabled):hover { background: #fdecea; }
+button:disabled { opacity: .45; cursor: default; }
+td.selezione, th.selezione { width: 2rem; text-align: center; }
