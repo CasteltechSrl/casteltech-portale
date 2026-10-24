@@ -261,7 +261,7 @@ function tabellaFasi(fasi: FaseScheda[]): Raw {
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
   const totUomo = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.uomoSec, 0);
   return html`<div class="tabella-scorre"><table class="fasi">
-    <thead><tr><th>N.</th><th>Fase</th><th class="n">Pers.</th><th class="n" title="Tempo ciclo previsto">Ciclo prev.</th><th class="n" title="Tempo uomo previsto = ciclo × persone">Uomo prev.</th></tr></thead>
+    <thead><tr><th>N.</th><th>Fase</th><th class="n">Pers.</th><th class="n" title="Tempo ciclo previsto per l'intero lotto, ore:minuti">Ciclo lotto (hh:mm)</th><th class="n" title="Tempo uomo previsto per l'intero lotto = ciclo × persone, ore:minuti">Uomo lotto (hh:mm)</th></tr></thead>
     <tbody>${perGruppo(fasi).map(g => html`
       <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="n">${ore(tot(g.fasi))}</td><td class="n">${ore(totUomo(g.fasi))}</td></tr>
       ${g.fasi.map(f => html`<tr><td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta">1° lotto</span>` : ''}</td>
@@ -402,7 +402,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
       <div>
       <h2>Tempi per fase</h2>
       <table class="fasi">
-        <thead><tr><th rowspan="2">Fase</th><th class="n" colspan="2">Previsto</th><th class="n" colspan="2">Effettivo</th><th class="n" rowspan="2" title="Scostamento del tempo ciclo">Scost.</th></tr>
+        <thead><tr><th rowspan="2">Fase</th><th class="n" colspan="2">Previsto lotto (hh:mm)</th><th class="n" colspan="2">Effettivo lotto (hh:mm)</th><th class="n" rowspan="2" title="Scostamento del tempo ciclo">Scost.</th></tr>
           <tr><th class="n">Ciclo</th><th class="n">Uomo</th><th class="n">Ciclo</th><th class="n">Uomo</th></tr></thead>
         <tbody>${fasi.map(f => {
           const re = reali[f.codice];
@@ -489,9 +489,9 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
         <div class="cons"><span>A consuntivo:</span> <b>${consuntivo}</b></div></td>`;
     })}</tr></table>
 
-  <h3 class="gruppo">FASI DI LAVORAZIONE <span>tempi in ore:minuti</span></h3>
+  <h3 class="gruppo">FASI DI LAVORAZIONE <span>tempi totali per l'intero lotto di ${num(c.quantita, 0)} schede, in ore:minuti (hh:mm)</span></h3>
   <table class="fasi-stampa">
-    <thead><tr><th class="nr" rowspan="2">NR</th><th rowspan="2">DESCRIZIONE FASE</th><th class="pers" rowspan="2">PERS.</th><th colspan="2">TEMPO PREVISTO</th><th colspan="2" class="eff">TEMPO EFFETTIVO</th></tr>
+    <thead><tr><th class="nr" rowspan="2">NR</th><th rowspan="2">DESCRIZIONE FASE</th><th class="pers" rowspan="2">PERS.</th><th colspan="2">TEMPO PREVISTO LOTTO (hh:mm)</th><th colspan="2" class="eff">TEMPO EFFETTIVO LOTTO (hh:mm)</th></tr>
       <tr><th class="t">CICLO</th><th class="t">UOMO</th><th class="t eff">CICLO</th><th class="t eff">UOMO</th></tr></thead>
     <tbody>${perGruppo(fasi).map(g => html`
       <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="t">${ore(tot(g.fasi))}</td><td class="t">${ore(totUomo(g.fasi))}</td>
