@@ -140,7 +140,7 @@ export const PARAMETRI: ParametroDef[] = [
   // Materiali di consumo (quantità)
   P('crema', 'Pasta saldante per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,6–1,5–2,6 gr (0,0034 gr/comp.; 500 comp. ≈ 1,5 gr/scheda)'),
   P('stagno', 'Stagno saldatrice per scheda', 'reofori', 'MATERIALE DI CONSUMO', 0, '0,45 gr/comp — 0,016 gr/foro'),
-  P('stagnoPerSaldature', 'Stagno saldatrice in peso per scheda', 'gr', 'MATERIALE DI CONSUMO', 0),
+  P('stagnoPerSaldature', 'Stagno saldatrice per scheda', 'gr', 'MATERIALE DI CONSUMO', 0),
   P('scorieSaldatrice', 'Scorie stagno saldatrice', '%', 'MATERIALE DI CONSUMO', 20, 'Si aggiungono allo stagno della saldatrice (reofori e peso)'),
   P('stagnoInFilo', 'Stagno in filo per scheda', 'gr', 'MATERIALE DI CONSUMO', 0, '0,125 gr a pin'),
   P('rivetto', 'Rivetti per scheda', 'pz', 'MATERIALE DI CONSUMO', 0),
