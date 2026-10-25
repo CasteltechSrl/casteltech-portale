@@ -14,7 +14,7 @@ import { q } from './db.js';
 export const TABELLE_BACKUP = [
   'utenti', 'impostazioni', 'parametri', 'fasi', 'voci_costo', 'materiali',
   'clienti', 'prodotti', 'alias_clienti', 'alias_prodotti', 'prodotti_revisioni', 'preventivi', 'commesse', 'commesse_fasi',
-  'scansioni', 'rilevazioni', 'segnalazioni', 'analisi_commesse', 'migrazioni_applicate',
+  'scansioni', 'rilevazioni', 'notifiche', 'segnalazioni', 'analisi_commesse', 'migrazioni_applicate',
 ];
 
 export async function creaBackup(): Promise<Buffer> {

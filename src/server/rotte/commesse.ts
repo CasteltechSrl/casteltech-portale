@@ -16,6 +16,8 @@ import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '..
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { layout, VERSIONE } from '../views/layout.js';
+import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
+import { partiRoma } from '../../engine/promemoria.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
 
 const STATI_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
@@ -162,6 +164,7 @@ export function rotteCommesse() {
       giaConfermata: ['rientrata', 'analizzata', 'chiusa'].includes(c.stato),
       segnalazione: testoSegn ? { testo: testoSegn, prossime: !!b.segnalazione?.prossime, faseCodice: String(b.segnalazione?.fase ?? '') || undefined } : undefined,
     });
+    void ricaricaPromemoria().catch(e => console.error(e)); // le righe sono state riscritte: si rifanno i timer
     if (vuoleConferma && !conferma) {
       const agg = await leggiCommessa(c.id);
       return res.status(400).send(await paginaRientro(req, agg, await rilevazioniCommessa(c.id),
@@ -197,6 +200,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const fasi = salvata ? await fasiCommessa(salvata) : fasiPreviste(prev, d.quantita || prev.n_schede, d.primoLotto);
   const storico = (prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : []).filter(s => !salvata || s.numero !== salvata.numero || s.origine !== 'ufficio');
   const st = d.scheda;
+  const aperte = salvata ? await fasiAperte({ commessaId: salvata.id }) : [];
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
@@ -212,6 +216,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
       </div>
     </div>
+    ${aperte.length ? html`<div class="avviso">Fasi aperte dal telefono e non ancora chiuse: ${aperte.map((f, k) => html`${k ? ', ' : ''}<b>${f.numero}</b> ${f.nome}
+      (${f.sigla}, dalle ${f.inizio}${f.data !== partiRoma(new Date()).data ? ` del ${f.data.slice(8, 10)}/${f.data.slice(5, 7)}` : ''}) <a href="/r/chiudi/${f.id}">chiudi</a>`)}</div>` : ''}
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">

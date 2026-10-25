@@ -13,6 +13,9 @@ import { rotteAnagrafiche } from './anagrafiche.js';
 import { creaBackup, elencoBackup, nomeFileBackup, salvaBackupSuDisco } from '../backup.js';
 import { leggiOperatori } from '../../engine/operatori.js';
 import { caricaOperatori } from '../commesse-servizio.js';
+import { caricaPin } from './reparto.js';
+import { fasiAperte, inviaAdesso, orariPromemoria, ricaricaPromemoria } from '../promemoria.js';
+import { leggiOrari } from '../../engine/promemoria.js';
 import { join, basename } from 'node:path';
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
@@ -92,13 +95,84 @@ export function rotteImpostazioni() {
   // ── Operatori: sigle per la colonna OPERATORE del foglio tempi ──
   r.get('/operatori', async (req, res) => {
     const op = await caricaOperatori();
+    const pin = await caricaPin();
     res.send(pag(req, 'Operatori', html`
       <form method="post" class="blocco stretto-form">
         <p class="nota">Una riga per persona, nella forma <code>AG = Adriano Gambi</code>. Se scrivi solo il nome, la sigla
           (2 lettere) si propone da sola. Le sigle sono stampate in fondo ai fogli tempi e proposte nel rientro.</p>
         <textarea name="operatori" rows="14" spellcheck="false">${op.map(o => `${o.sigla} = ${o.nome}`).join('\n')}</textarea>
         <button class="primario">Salva operatori</button>
-      </form>`, req.query.ok ? 'Operatori salvati.' : undefined));
+      </form>
+      <section class="blocco stretto-form">
+        <h2>Accesso dal telefono (reparto)</h2>
+        <p class="nota">Ogni operatore entra nelle pagine del reparto (<code>/r</code>, oppure inquadrando il QR della scheda) con la sua
+          sigla e un PIN di 4–6 cifre. Il telefono lo ricorda per 120 giorni. Il PIN non si può rileggere: se lo dimentica, se ne imposta uno nuovo.</p>
+        <table class="tabella"><thead><tr><th>Sigla</th><th>Nome</th><th>PIN</th><th></th></tr></thead><tbody>
+        ${op.map(o => html`<tr><td><b>${o.sigla}</b></td><td>${o.nome}</td><td>${pin[o.sigla] ? '✓ impostato' : '—'}</td>
+          <td><form method="post" action="/impostazioni/operatori/pin" class="inline">
+            <input type="hidden" name="sigla" value="${o.sigla}">
+            <input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="nuovo PIN" autocomplete="new-password" class="corto">
+            <button>Salva PIN</button>
+            ${pin[o.sigla] ? html`<button name="togli" value="1" class="link">togli</button>` : ''}
+          </form></td></tr>`)}
+        </tbody></table>
+      </section>`, req.query.ok ? 'Operatori salvati.' : req.query.pin ? String(req.query.pin) : undefined));
+  });
+  r.post('/operatori/pin', async (req, res) => {
+    const sigla = String(req.body.sigla ?? '').toUpperCase();
+    if (!(await caricaOperatori()).some(o => o.sigla === sigla)) return res.redirect('/impostazioni/operatori?pin=' + encodeURIComponent('Operatore non trovato'));
+    const pin = await caricaPin();
+    if (req.body.togli) delete pin[sigla];
+    else {
+      const nuovo = String(req.body.pin ?? '').trim();
+      if (!/^\d{4,6}$/.test(nuovo)) return res.redirect('/impostazioni/operatori?pin=' + encodeURIComponent('Il PIN deve avere da 4 a 6 cifre'));
+      pin[sigla] = await bcrypt.hash(nuovo, 10);
+    }
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('pin_operatori', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(pin)]);
+    res.redirect('/impostazioni/operatori?pin=' + encodeURIComponent(req.body.togli ? `PIN di ${sigla} tolto` : `PIN di ${sigla} salvato`));
+  });
+
+  // ── Promemoria delle fasi aperte dal telefono ──
+  r.get('/promemoria', async (req, res) => {
+    const o = orariPromemoria();
+    const aperte = await fasiAperte();
+    const ultime = await q(`SELECT sigla, tipo, testo, canale, esito, letta_il, creato_il FROM notifiche ORDER BY creato_il DESC LIMIT 50`);
+    const TIPI: Record<string, string> = { durata: 'aperta da troppo', fine_giornata: 'fine giornata', giorno_dopo: 'giorno dopo' };
+    const quando = (d: Date) => new Date(d).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    res.send(pag(req, 'Promemoria', html`
+      <form method="post" class="blocco stretto-form">
+        <p class="nota">Promemoria per le fasi aperte dal telefono e non chiuse. Per ora i messaggi compaiono sul telefono dell'operatore
+          (pagina del reparto) e qui sotto; SMS / WhatsApp / Telegram si aggiungeranno quando sceglieremo la piattaforma.</p>
+        <label>Fase aperta da troppo: dopo <input name="fattore" inputmode="decimal" value="${o.fattore}" class="corto"> volte il tempo previsto,
+          ma non prima di <input name="minimoMin" inputmode="numeric" value="${o.minimoMin}" class="corto"> minuti e non dopo le
+          <input name="fineLavoro" type="time" value="${o.fineLavoro}"></label>
+        <label>Promemoria a tutti quelli con fasi aperte (lun–ven) alle <input name="fineGiornata" type="time" value="${o.fineGiornata}"></label>
+        <label>Messaggio di chiusura il giorno lavorativo dopo (lun–ven) alle <input name="giornoDopo" type="time" value="${o.giornoDopo}"></label>
+        <button class="primario">Salva orari</button>
+      </form>
+      <h2>Fasi aperte adesso (${aperte.length})</h2>
+      ${aperte.length ? html`<table class="tabella"><thead><tr><th>Operatore</th><th>Commessa</th><th>Fase</th><th>Aperta</th><th></th></tr></thead><tbody>
+        ${aperte.map(f => html`<tr><td>${f.sigla}</td><td><a href="/commesse/${f.commessa_id}">${f.commessa}</a></td><td>${f.numero} ${f.nome}</td>
+          <td>${quando(f.aperta_il)}</td><td><a href="/r/chiudi/${f.id}">chiudi</a></td></tr>`)}</tbody></table>` : html`<p class="nota">Nessuna.</p>`}
+      ${aperte.length ? html`<form method="post" action="/impostazioni/promemoria/invia" class="barra-azioni">
+        <button name="tipo" value="fine_giornata">Manda adesso il promemoria a chi ha fasi aperte</button>
+        <button name="tipo" value="giorno_dopo">Manda adesso il messaggio di chiusura (fasi dei giorni prima)</button>
+        <span class="nota">Uno solo al giorno per operatore.</span></form>` : ''}
+      <h2>Ultimi promemoria</h2>
+      ${ultime.length ? html`<table class="tabella"><thead><tr><th>Quando</th><th>A</th><th>Tipo</th><th>Messaggio</th><th>Letto</th></tr></thead><tbody>
+        ${ultime.map(n => html`<tr><td>${quando(n.creato_il)}</td><td>${n.sigla}</td><td>${TIPI[n.tipo] ?? n.tipo}</td><td>${n.testo}</td>
+          <td>${n.letta_il ? quando(n.letta_il) : '—'}</td></tr>`)}</tbody></table>` : html`<p class="nota">Ancora nessuno.</p>`}`,
+      req.query.ok ? 'Orari salvati.' : req.query.inviati ? 'Promemoria inviati.' : undefined));
+  });
+  r.post('/promemoria/invia', async (req, res) => {
+    await inviaAdesso(req.body.tipo === 'giorno_dopo' ? 'giorno_dopo' : 'fine_giornata');
+    res.redirect('/impostazioni/promemoria?inviati=1');
+  });
+  r.post('/promemoria', async (req, res) => {
+    const o = leggiOrari({ ...req.body, fattore: String(req.body.fattore ?? '').replace(',', '.') });
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('promemoria', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(o)]);
+    await ricaricaPromemoria();
+    res.redirect('/impostazioni/promemoria?ok=1');
   });
   r.post('/operatori', async (req, res) => {
     const op = leggiOperatori(String(req.body.operatori ?? ''));
@@ -287,7 +361,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

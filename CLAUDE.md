@@ -61,7 +61,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Pagina commessa: inserimento rapido dei tempi per fase (pre-produzione, tempi dimenticati, anche dopo il rientro:
    righe "solo totale" S in coda al foglio tempi, già confermate se la commessa è rientrata). Correggere una commessa
    già rientrata dalla pagina Rientro mantiene la conferma.
-   Gli operatori per ora scrivono solo sulla carta (app da telefono in futuro).
+   ✅ Reparto da telefono/tablet (`rotte/reparto.ts`, `/r`, migrazione 020): sigla + PIN (Impostazioni → Operatori, il telefono
+   lo ricorda 120 giorni), QR `/c/<codice>` → scelta fase → apri tempo (ora attuale o scritta) o tempo totale → chiudi con pezzi,
+   S/P, note. Righe in `rilevazioni` (origine tablet, aperta_il/chiusa_il); il rientro dell'ufficio le conserva.
+   Promemoria (`engine/promemoria.ts`, `server/promemoria.ts`): dopo 2× il tempo previsto (min 30'), alle 16:30 a tutti,
+   il giorno lavorativo dopo con link di chiusura; timer in memoria, database solo all'ora giusta. Orari in Impostazioni → Promemoria.
+   Canale: per ora solo nel portale (tabella notifiche); SMS/WhatsApp/Telegram da scegliere (numeri da Adriano).
+   Una fase per volta dal telefono (sulla carta resta possibile "10+12").
    ⬜ Lettura automatica: scanner con ADF (PDF multipagina, il QR riconosce la commessa), API Anthropic, conferma ufficio.
    Sul foglio tempi la DATA è solo gg/mm ("/" prestampato): l'anno si ricava da data scansione / consegna / ordine.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo

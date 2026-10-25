@@ -15,6 +15,8 @@ import { rottePreventivi } from './rotte/preventivi.js';
 import { rotteImpostazioni } from './rotte/impostazioni.js';
 import { rotteCommesse } from './rotte/commesse.js';
 import { avviaBackupNotturno } from './backup.js';
+import { rotteReparto } from './rotte/reparto.js';
+import { avviaPromemoria } from './promemoria.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -87,24 +89,27 @@ app.post('/login', async (req, res) => {
 app.post('/esci', (req, res) => req.session.destroy(() => res.redirect('/login')));
 
 app.get('/', (req, res) => {
-  if (!req.session.utente) return res.redirect('/login');
-  res.redirect(req.session.utente.ruolo === 'ufficio' ? '/preventivi' : '/produzione');
+  if (!req.session.utente) return res.redirect(req.session.operatore ? '/r' : '/login');
+  res.redirect(req.session.utente.ruolo === 'ufficio' ? '/preventivi' : '/r');
 });
-app.get('/produzione', (req, res) => {
-  if (!req.session.utente) return res.redirect('/login');
-  res.send(String(layout({ titolo: 'Produzione', utente: req.session.utente, contenuto: html`<h1>Produzione</h1><p>Qui arriveranno le schede di produzione da compilare.</p>` })));
-});
+// la produzione lavora dalle pagine del reparto (telefono/tablet)
+app.get('/produzione', (_req, res) => res.redirect('/r'));
 // controllo di Render: NON interroga il database, così Neon (piano gratuito) può spegnersi quando nessuno lavora
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());
-// QR stampato sulla scheda di produzione: apre la commessa
-app.get('/c/:codice', soloUfficio, async (req, res) => {
+app.use('/r', rotteReparto());
+// QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
+// all'ufficio apre la commessa; chi non è entrato va all'accesso del reparto
+app.get('/c/:codice', async (req, res) => {
   const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE codice_qr = $1`, [req.params.codice]);
   if (!c) return res.status(404).send('Commessa non trovata');
-  res.redirect(`/commesse/${c.id}`);
+  const reparto = `/r/c/${encodeURIComponent(req.params.codice)}`;
+  if (req.session.operatore) return res.redirect(reparto);
+  if (req.session.utente?.ruolo === 'ufficio') return res.redirect(`/commesse/${c.id}`);
+  res.redirect('/r/accesso?torna=' + encodeURIComponent(reparto));
 });
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -115,5 +120,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 await applicaMigrazioni();
 await primoAvvio();
 avviaBackupNotturno();
+avviaPromemoria();
 const porta = Number(process.env.PORT ?? 3000);
 app.listen(porta, () => console.log(`Portale attivo su http://localhost:${porta}`));

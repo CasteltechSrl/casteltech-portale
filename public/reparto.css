@@ -1,0 +1,55 @@
+/* Pagine del reparto: telefono e tablet, tasti grandi da usare anche con i guanti. */
+body.reparto { font-size: 17px; }
+body.reparto main { max-width: 640px; padding: 1rem 1rem 3rem; }
+.reparto-testata { display: flex; align-items: center; justify-content: space-between; padding: .6rem 1rem; background: var(--carta);
+  border-bottom: 1px solid var(--bordo); position: sticky; top: 0; z-index: 5; }
+.reparto-testata .chi { display: inline-grid; place-items: center; min-width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--accento-chiaro);
+  color: var(--accento); font-weight: 800; margin-right: .3rem; }
+.reparto h1 { font-size: 1.4rem; margin: .4rem 0 1rem; }
+.reparto h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.riquadro { background: var(--carta); border: 1px solid var(--bordo); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+.riquadro.aperte { border-color: var(--accento); box-shadow: 0 0 0 2px var(--accento-chiaro); }
+.conferma { background: #e3f4ea; border: 1px solid #a9d8bb; color: var(--positivo); padding: .8rem 1rem; border-radius: var(--raggio); margin-bottom: 1rem; font-weight: 600; }
+.promemoria { background: var(--avviso); border: 1px solid #f0d98c; padding: .8rem 1rem; border-radius: var(--raggio); margin-bottom: .8rem; }
+button.grande, .bottone.grande { width: 100%; padding: .95rem 1rem; font-size: 1.1rem; border-radius: 10px; margin-top: .4rem; }
+.bottone.piccolo { padding: .35rem .8rem; font-size: .9rem; }
+
+/* elenchi da toccare */
+.elenco-tocco { list-style: none; margin: 0; padding: 0; }
+.elenco-tocco li + li { border-top: 1px solid var(--bordo); }
+.elenco-tocco a { display: flex; align-items: center; gap: .8rem; padding: .85rem .2rem; color: var(--testo); text-decoration: none; min-height: 2.6rem; }
+.elenco-tocco a:active { background: var(--accento-chiaro); }
+.elenco-tocco a > span:not(.bottone) { flex: 1; display: flex; flex-direction: column; }
+.elenco-tocco small { color: var(--tenue); font-size: .85rem; }
+.elenco-tocco small.aperta-da { color: #9a6a00; }
+.elenco-tocco .previsto { font-variant-numeric: tabular-nums; }
+.num-fase { display: inline-grid; place-items: center; min-width: 2.6rem; height: 2.6rem; padding: 0 .3rem; border-radius: 8px; background: var(--accento);
+  color: #fff; font-weight: 800; font-size: 1.05rem; }
+.titolo-fase { display: flex; align-items: center; gap: .7rem; }
+.testata-commessa { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .7rem; margin-bottom: .6rem; }
+.testata-commessa b { font-size: 1.15rem; }
+.testata-commessa small { color: var(--tenue); width: 100%; }
+#filtro-fasi, .riga-cerca input { width: 100%; font-size: 1.05rem; padding: .7rem .8rem; border-radius: 8px; border: 1px solid var(--bordo); }
+.riga-cerca { display: flex; gap: .5rem; }
+.riga-cerca button { flex: none; }
+details summary { cursor: pointer; padding: .8rem 0; color: var(--accento); font-weight: 600; }
+.indietro { display: inline-block; margin-top: .5rem; }
+
+/* moduli */
+.modulo-reparto label { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .8rem; font-weight: 600; }
+.modulo-reparto label small { font-weight: 400; color: var(--tenue); }
+.modulo-reparto input, .modulo-reparto textarea { font: inherit; font-size: 1.1rem; padding: .65rem .7rem; border: 1px solid var(--bordo); border-radius: 8px; width: 100%; box-sizing: border-box; }
+.scelta-sp { border: 0; padding: 0; margin: 0 0 .8rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+.scelta-sp legend { font-weight: 600; margin-bottom: .3rem; }
+.scelta-sp label { flex: 1; flex-direction: row; align-items: center; gap: .4rem; border: 1px solid var(--bordo); border-radius: 8px; padding: .65rem .8rem; margin: 0; font-weight: 400; }
+.scelta-sp input { width: auto; }
+
+/* accesso */
+.griglia-sigle { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .5rem; margin-bottom: 1rem; }
+.griglia-sigle .sigla { display: flex; flex-direction: column; align-items: center; padding: .7rem .4rem; border: 2px solid var(--bordo); border-radius: 10px; background: var(--carta); cursor: pointer; text-align: center; }
+.griglia-sigle .sigla b { font-size: 1.3rem; }
+.griglia-sigle .sigla small { color: var(--tenue); font-size: .8rem; }
+.griglia-sigle input { position: absolute; opacity: 0; pointer-events: none; }
+.griglia-sigle .sigla:has(input:checked) { border-color: var(--accento); background: var(--accento-chiaro); }
+.accesso .pin { display: flex; flex-direction: column; gap: .3rem; font-weight: 600; }
+.accesso .pin input { font-size: 1.6rem; letter-spacing: .4em; text-align: center; padding: .6rem; border-radius: 8px; border: 1px solid var(--bordo); }

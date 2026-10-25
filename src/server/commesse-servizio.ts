@@ -188,15 +188,27 @@ export async function salvaRientro(opz: {
 }): Promise<void> {
   const righeConfermate = opz.conferma || !!opz.giaConfermata;
   await transazione(async c => {
+    // righe arrivate dal telefono: se l'ufficio le lascia uguali (fase, operatore, giorno, inizio) restano "del telefono",
+    // e quelle ancora aperte si possono chiudere dal telefono (con i loro promemoria)
+    const chiave = (fase: string, op: string | null | undefined, data: string | null | undefined, inizio: string | null | undefined) =>
+      [fase, (op ?? '').trim().toUpperCase(), data ?? '', inizio ?? ''].join('|');
+    const daTelefono = new Map<string, { aperta_il: Date | null; chiusa_il: Date | null }[]>();
+    for (const t of (await c.query(`SELECT fase_codice, operatore_nome, to_char(data, 'YYYY-MM-DD') AS data, to_char(ora_inizio, 'HH24:MI') AS inizio, aperta_il, chiusa_il
+        FROM rilevazioni WHERE commessa_id = $1 AND origine = 'tablet'`, [opz.commessaId])).rows) {
+      const k = chiave(t.fase_codice, t.operatore_nome, t.data, t.inizio);
+      daTelefono.set(k, [...(daTelefono.get(k) ?? []), { aperta_il: t.aperta_il, chiusa_il: t.chiusa_il }]);
+    }
     await c.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [opz.commessaId]);
     for (const [i, r] of opz.righe.entries()) {
+      const tel = daTelefono.get(chiave(r.fase, r.operatore, r.data, r.inizio))?.shift();
+      const chiusa = tel && (tel.chiusa_il ?? (r.fine || r.durataMin ? new Date() : null));
       await c.query(`INSERT INTO rilevazioni (commessa_id, fase_codice, operatore_nome, data, ora_inizio, ora_fine, durata_min, totale_scritto_min,
-          persone, pezzi, tipo, causa, materiale, resp, note, riga, origine, confermata_da, confermata_il)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manuale',$17,$18)`,
+          persone, pezzi, tipo, causa, materiale, resp, note, riga, origine, confermata_da, confermata_il, aperta_il, chiusa_il)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
         [opz.commessaId, r.fase, r.operatore || null, r.data || null, r.inizio || null, r.fine || null, r.durataMin ?? null, r.totaleScrittoMin ?? null,
          r.persone ?? 1, r.pezzi ?? null, r.tipo, r.tipo === 'P' ? (r.causa || null) : null, r.materiale || null, r.resp || null,
-         r.tipo === 'P' ? null : (r.note || null), i,
-         righeConfermate ? opz.utenteId : null, righeConfermate ? new Date() : null]);
+         r.tipo === 'P' ? null : (r.note || null), i, tel ? 'tablet' : 'manuale',
+         righeConfermate ? opz.utenteId : null, righeConfermate ? new Date() : null, tel?.aperta_il ?? null, chiusa ?? null]);
     }
     await c.query(`UPDATE commesse SET consumi = $2, spedizioni = $3, aggiornato_il = now(),
         stato = CASE WHEN $4 THEN 'rientrata' WHEN stato = 'aperta' AND $5 THEN 'in_produzione' ELSE stato END,
