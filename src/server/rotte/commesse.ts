@@ -487,6 +487,9 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
 // ───────────────────────────── stampa A4 ─────────────────────────────
 
 const RIGHE_RILEVAZIONE = 14;
+/** Segno prestampato in grigio al centro delle celle del foglio tempi: FASE e OPERATORE "+" (più fasi o più persone),
+ *  DATA "/" (solo giorno e mese), APERTURA e CHIUSURA ":" (ore e minuti). */
+const SEGNO_CELLA: Record<number, string> = { 0: '+', 1: '+', 2: '/', 3: ':', 4: ':' };
 
 /** Fasi del catalogo del preventivo, con il numero di oggi (la numerazione può essere cambiata dopo il preventivo). */
 async function fasiConNumeroAttuale(prev: any): Promise<{ codice: string; numero: string; nome: string }[]> {
@@ -587,10 +590,12 @@ ${[1, 2].map(n => html`
     ${colonne.map(col => html`<td><span>${col}</span></td>`)}</tr></table>` : ''}
   <table class="tabella-rilevazioni">
     <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>Nr. PERS FASE</th><th>PZ</th><th>S / P</th><th>RESP</th><th>NOTE</th></tr></thead>
-    <tbody>${Array.from({ length: n === 1 ? RIGHE_RILEVAZIONE - 2 : RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 11 }, (_, i) => i === 2 ? html`<td class="data-ggmm">/</td>` : html`<td></td>`)}</tr>`)}</tbody>
+    <tbody>${Array.from({ length: n === 1 ? RIGHE_RILEVAZIONE - 2 : RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 11 }, (_, i) => SEGNO_CELLA[i] ? html`<td class="segno">${SEGNO_CELLA[i]}</td>` : html`<td></td>`)}</tr>`)}</tbody>
   </table>
-  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · DATA: solo giorno / mese · FASE: numero della fase (anche più fasi fatte insieme, es. 10+12) · OPERATORE: sigla (anche più persone, es. MM+NG) · Nr. PERS FASE = persone che lavorano sulla fase · S = tempo standard · P = problema contingente (causa nelle note) · MATERIALE IMPIEGATO (foglio 1): quantità totale usata nel lotto</p>
-  <p class="legenda operatori"><strong>OPERATORI:</strong> ${operatori.length ? operatori.map(o => html`<span><b>${o.sigla}</b> ${o.nome}</span>`) : html`<span>sigle da inserire in Impostazioni → Operatori</span>`}</p>
+  <p class="legenda"><b>TEMPO</b>: apertura e chiusura oppure solo il totale ore · <b>DATA</b>: giorno/mese ·
+    <b>FASE</b>: numero (più fasi insieme 10+12) · <b>OPERATORE</b>: sigla (più persone MM+NG) · <b>NR. PERS FASE</b>: persone sulla fase ·
+    <b>S</b>: tempo standard · <b>P</b>: problema contingente (causa nelle note) · <b>MATERIALE IMPIEGATO</b> (foglio 1): totale usato nel lotto ·
+    <b>OPERATORI</b>: ${operatori.length ? operatori.map((o, k) => html`${k ? ', ' : ''}<b>${o.sigla}</b> ${o.nome}`) : 'sigle da inserire in Impostazioni → Operatori'}</p>
   <p class="numero-foglio">Foglio tempi ${n} / 2</p>
 </section>`)}
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
