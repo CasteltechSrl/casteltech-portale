@@ -87,3 +87,11 @@ test('operatori: sigle di 2 caratteri dalle iniziali, senza doppioni; si possono
   assert.equal(s['Singh Harpreet'], 'SH');
   assert.equal(new Set(o.map(x => x.sigla)).size, o.length);
 });
+
+test('prog. forno: TOP STD con solo TOP; TOP+BOT STD e BOT TOP STD con due lati; vale quello scritto', async () => {
+  const { programmaForno } = await import('../src/engine/forno.js');
+  const vuoto = { programmi: {} as Record<string, { top: string; bot: string }> };
+  assert.deepEqual(programmaForno(vuoto, false), { top: 'TOP STD', bot: '' });
+  assert.deepEqual(programmaForno(vuoto, true), { top: 'TOP+BOT STD', bot: 'TOP STD' });
+  assert.deepEqual(programmaForno({ programmi: { progForno: { top: 'PROFILO_X', bot: '' } } }, true), { top: 'PROFILO_X', bot: 'TOP STD' });
+});

@@ -16,7 +16,7 @@ import type { Operatore } from '../engine/operatori.js';
 /** Campi con TOP e BOT, nell'ordine della scheda. */
 export const PROGRAMMI: [string, string][] = [
   ['progArmadio', 'Prog. armadio'], ['progSerigrafia', 'Prog. serigrafia'], ['lamina', 'Lamina'],
-  ['progPePFox', 'Prog. P&P FOX'], ['progPePIpulse', 'Prog. P&P iPulse'], ['progAOI', 'Prog. AOI'],
+  ['progPePFox', 'Prog. P&P FOX'], ['progPePIpulse', 'Prog. P&P iPulse'], ['progAOI', 'Prog. AOI'], ['progForno', 'Prog. forno'],
 ];
 /** Vecchio campo "materiali di saldatura" (tipo): non più usato, sostituito dalla riga Materiale di consumo. */
 export const MATERIALI_SALDATURA: [string, string][] = [
@@ -26,7 +26,7 @@ export const MATERIALI_SALDATURA: [string, string][] = [
 export interface SchedaTecnica {
   programmi: Record<string, { top: string; bot: string }>;
   pasta: string;
-  forno: string;                 // programma del forno: vuoto = "TOP" o "TOP+BOT" secondo i lati
+  forno: string;                 // (vecchio campo unico del forno: ora è progForno con TOP e BOT)
   materiali: Record<string, string>;
   noteMontaggio: string;
 }
@@ -259,3 +259,5 @@ export async function schedaTecnicaDaProporre(revisioneId: number | null, prodot
     WHERE r.prodotto_id = $1 ORDER BY c.creato_il DESC, c.id DESC LIMIT 1`, [prodottoId]) : null;
   return schedaTecnica(ultima?.scheda_tecnica);
 }
+
+export { programmaForno } from '../engine/forno.js';

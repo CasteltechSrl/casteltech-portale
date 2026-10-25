@@ -8,7 +8,7 @@ import { q, q1 } from '../db.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
-  salvaCommessa, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
+  programmaForno, salvaCommessa, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
 import { oreDa } from '../preventivi-servizio.js';
@@ -242,13 +242,13 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         <table class="tabella-programmi">
           <thead><tr><th></th><th>TOP</th>${doppia ? html`<th>BOT</th>` : ''}</tr></thead>
           <tbody>${PROGRAMMI.map(([k, nome]) => html`<tr><th>${nome}</th>
-            <td><input name="scheda[programmi][${k}][top]" value="${st.programmi[k]?.top}" maxlength="80"></td>
-            ${doppia ? html`<td><input name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}" maxlength="80"></td>`
+            <td><input name="scheda[programmi][${k}][top]" value="${st.programmi[k]?.top}" maxlength="80" placeholder="${k === 'progForno' ? (doppia ? 'TOP+BOT STD' : 'TOP STD') : ''}"></td>
+            ${doppia ? html`<td><input name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}" maxlength="80" placeholder="${k === 'progForno' ? 'TOP STD' : ''}"></td>`
               : html`<input type="hidden" name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}">`}</tr>`)}
           </tbody></table>
         <div class="riga-campi">
           <label>Pasta <input name="scheda[pasta]" value="${st.pasta}" maxlength="80"></label>
-          <label>Prog. forno <input name="scheda[forno]" value="${st.forno}" maxlength="80" placeholder="${doppia ? 'TOP+BOT' : 'TOP'}" title="Vuoto = ${doppia ? 'TOP+BOT' : 'TOP'}"></label>
+          <input type="hidden" name="scheda[forno]" value="${st.forno}">
         </div>
       </fieldset>
 
@@ -499,6 +499,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const misura = (t: string) => (t.length > 26 ? 'xs' : t.length > 21 ? 's' : t.length > 17 ? 'm' : '');
   const lato = (nome: string, t: string) => html`<div class="tb"><span>${nome}:</span><b class="${misura(t)}">${t}</b></div>`;
   const prog = (k: string) => html`${lato('TOP', st.programmi[k]?.top ?? '')}${lato('BOT', bot(st.programmi[k]?.bot ?? ''))}`;
+  const forno = programmaForno(st, doppia);
   const cella = (etichetta: string, contenuto: unknown, cls = '', colonne = 1) => html`<td class="${cls}" colspan="${colonne}"><div class="etic">${etichetta}</div><div class="val">${contenuto}</div></td>`;
   const testata = html`
     <div class="testata-stampa">
@@ -532,7 +533,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <tr>${cella('CLIENTE', i.cliente)}${cella('REFERENTE CLIENTE', c.referente_cliente)}${cella('NR. ORDINE CLIENTE', c.ordine_cliente)}${cella("QTA' / PANN.", quantita, 'forte')}</tr>
     <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo)}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
     <tr>${cella('PROG. ARMADIO', prog('progArmadio'))}${cella('PROG. SERIGRAFIA', prog('progSerigrafia'))}${cella('LAMINA', prog('lamina'))}${cella('PASTA', st.pasta)}</tr>
-    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'))}${cella('PROG. FORNO', st.forno || (doppia ? 'TOP+BOT' : 'TOP'))}</tr>
+    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'))}${cella('PROG. FORNO', html`${lato('TOP', forno.top)}${lato('BOT', doppia ? forno.bot : '—')}`)}</tr>
   </table>
   <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>
@@ -576,12 +577,15 @@ ${[1, 2].map(n => html`
 <section class="pagina rilevazioni">
   ${testata}
   <table class="griglia"><tr>${cella('CLIENTE', i.cliente)}${cella('CODICE / DESC.', html`${i.codice} — ${i.descrizione}`, 'larga')}${cella('NR. COMMESSA', c.numero, 'forte')}${cella('QTA', num(c.quantita, 0), 'forte')}</tr></table>
+  ${n === 1 ? html`<table class="materiale-impiegato"><tr><th>MATERIALE IMPIEGATO<br><small>totale del lotto</small></th>
+    ${colonne.map(col => html`<td><span>${col}</span></td>`)}</tr></table>` : ''}
   <table class="tabella-rilevazioni">
-    <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>PERS.</th><th>PZ</th><th>S / P</th><th>RESP</th><th>MATERIALE IMPIEGATO</th><th>NOTE</th></tr></thead>
-    <tbody>${Array.from({ length: RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 12 }, () => html`<td></td>`)}</tr>`)}</tbody>
+    <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>Nr. PERS FASE</th><th>PZ</th><th>S / P</th><th>RESP</th><th>NOTE</th></tr></thead>
+    <tbody>${Array.from({ length: n === 1 ? RIGHE_RILEVAZIONE - 2 : RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 11 }, () => html`<td></td>`)}</tr>`)}</tbody>
   </table>
-  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · FASE: numero della fase (anche più fasi fatte insieme, es. 4-5) · S = tempo standard · P = problema contingente (causa nelle note) · PERS. = persone sulla fase · MATERIALE IMPIEGATO: voce e quantità (es. pasta 350 gr) · Foglio ${n}</p>
-  ${operatori.length ? html`<p class="legenda operatori"><strong>OPERATORI:</strong> ${operatori.map(o => html`<span><b>${o.sigla}</b> ${o.nome}</span>`)}</p>` : ''}
+  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · FASE: numero della fase (anche più fasi fatte insieme, es. 10+12) · OPERATORE: sigla (anche più persone, es. MM+NG) · Nr. PERS FASE = persone che lavorano sulla fase · S = tempo standard · P = problema contingente (causa nelle note) · MATERIALE IMPIEGATO (foglio 1): quantità totale usata nel lotto</p>
+  <p class="legenda operatori"><strong>OPERATORI:</strong> ${operatori.length ? operatori.map(o => html`<span><b>${o.sigla}</b> ${o.nome}</span>`) : html`<span>sigle da inserire in Impostazioni → Operatori</span>`}</p>
+  <p class="numero-foglio">Foglio tempi ${n} / 2</p>
 </section>`)}
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
 </body></html>`;

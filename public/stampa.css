@@ -63,11 +63,17 @@ h3.gruppo span { font-weight: 400; text-decoration: none; font-size: 8.5pt; }
 
 .tabella-rilevazioni { margin-top: 3mm; }
 .tabella-rilevazioni th { background: #e6e6e6; font-weight: 400; font-size: 7.5pt; border: 1px solid #000; padding: 1mm; }
-.tabella-rilevazioni td { border: 1px solid #000; height: 9.2mm; }
-.tabella-rilevazioni th:nth-child(1) { width: 32mm; } .tabella-rilevazioni th:nth-child(2) { width: 16mm; }
+.tabella-rilevazioni td { border: 1px solid #000; height: 8.4mm; }
+.tabella-rilevazioni th:nth-child(1) { width: 18mm; } .tabella-rilevazioni th:nth-child(2) { width: 20mm; }
 .tabella-rilevazioni th:nth-child(3) { width: 18mm; } .tabella-rilevazioni th:nth-child(4), .tabella-rilevazioni th:nth-child(5) { width: 18mm; }
-.tabella-rilevazioni th:nth-child(6) { width: 15mm; } .tabella-rilevazioni th:nth-child(7), .tabella-rilevazioni th:nth-child(8), .tabella-rilevazioni th:nth-child(9) { width: 11mm; }
-.tabella-rilevazioni th:nth-child(10) { width: 14mm; } .tabella-rilevazioni th:nth-child(11) { width: 34mm; }
+.tabella-rilevazioni th:nth-child(6) { width: 15mm; } .tabella-rilevazioni th:nth-child(7) { width: 14mm; }
+.tabella-rilevazioni th:nth-child(8), .tabella-rilevazioni th:nth-child(9) { width: 11mm; } .tabella-rilevazioni th:nth-child(10) { width: 14mm; }
+table.materiale-impiegato { margin-top: 1.5mm; table-layout: fixed; }
+table.materiale-impiegato th { width: 26mm; border: 1px solid #000; background: #e6e6e6; font-weight: 600; font-size: 7pt; padding: .8mm 1.5mm; text-align: left; }
+table.materiale-impiegato th small { font-weight: 400; font-style: italic; }
+table.materiale-impiegato td { border: 1px solid #000; height: 8mm; vertical-align: top; padding: .6mm 1mm; }
+table.materiale-impiegato td span { font-size: 6.5pt; font-style: italic; text-transform: uppercase; }
+.numero-foglio { text-align: center; font-weight: 700; font-size: 9pt; margin: 2mm 0 0; }
 .legenda { font-size: 7.5pt; margin-top: 2mm; }
 .legenda.operatori { display: flex; flex-wrap: wrap; gap: 1mm 4mm; margin-top: 1mm; }
 .legenda.operatori b { display: inline-block; min-width: 5mm; }
