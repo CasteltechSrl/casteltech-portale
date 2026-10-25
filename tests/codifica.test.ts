@@ -148,3 +148,23 @@ test('numeri: il punto delle migliaia c\'è anche con 4 cifre (1.000)', async ()
   assert.equal(num(1234), '1.234');
   assert.equal(euro(999), '999,00 €');
 });
+
+test('BOM collegata al preventivo: costo a scheda per le schede del preventivo, con le offerte già lette', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
+  const { costoMaterialiPer, ESITI } = await import('../src/server/codifica-servizio.js');
+  const { REGOLE_SCARTO_DEFAULT } = await import('../src/engine/acquisti.js');
+  const riga = (n: number, qtaScheda: number, offerte: Offerta[], extra: object = {}) => ({ n, pn: 'P' + n, produttore: null, designatori: null, valore: null, footprint: null,
+    descrizioneBom: null, qtaScheda, esito: ESITI.DB, famiglia: 'IC', attributi: {}, codiceProduzione: null, codiceGestionale: null, descrizione: null,
+    fonti: [], note: [], offerte, acquisti: [], ...extra });
+  const off = offerta({ scaglioni: [{ qta: 1, prezzo: 5 }, { qta: 500, prezzo: 4 }] });
+  const righe = [riga(1, 2, [off]), riga(2, 1, [off], { clienteFornisce: true }), riga(3, 1, [])];
+  // 300 schede (non tra le quantità della BOM): 600 pz a 4 € (oltre 3 € niente scarto) = 2400 € → 8 € a scheda
+  const x = costoMaterialiPer(righe as any, 300, REGOLE_SCARTO_DEFAULT);
+  assert.equal(x.schede, 300);
+  assert.equal(x.totale, 2400);
+  assert.equal(x.aScheda, 8);
+  assert.equal(x.senzaPrezzo, 1);            // la riga 3 non ha offerte; quella fornita dal cliente non conta
+  // 100 schede: 200 pz a 5 € → 10 € a scheda; le righe della BOM non cambiano
+  assert.equal(costoMaterialiPer(righe as any, 100, REGOLE_SCARTO_DEFAULT).aScheda, 10);
+  assert.deepEqual(righe[0].acquisti, []);
+});

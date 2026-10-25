@@ -34,8 +34,9 @@ export function rotteComponenti() {
 
   // ── BOM: elenco e caricamento ──
   r.get('/bom', async (req, res) => {
-    const elenco = await q<any>(`SELECT id, nome, file_nome, quantita, stato, riepilogo, creato_il FROM bom_analisi
-      WHERE file_nome IS DISTINCT FROM $1 ORDER BY creato_il DESC LIMIT 100`, [FILE_SINGOLA]);
+    const elenco = await q<any>(`SELECT b.id, b.nome, b.file_nome, b.quantita, b.stato, b.riepilogo, b.creato_il,
+        (SELECT count(*)::int FROM preventivi p WHERE p.bom_id = b.id) AS preventivi FROM bom_analisi b
+      WHERE b.file_nome IS DISTINCT FROM $1 ORDER BY b.creato_il DESC LIMIT 100`, [FILE_SINGOLA]);
     res.send(pag(req, 'BOM', 'bom', html`
       ${statoCollegamenti()}
       <section class="blocco stretto-form" id="carica-bom">
@@ -51,12 +52,13 @@ export function rotteComponenti() {
       </section>
       <h2>BOM caricate</h2>
       ${elenco.length ? html`<div class="tabella-scorre"><table><thead><tr><th>Nome</th><th>File</th><th>Caricata</th><th class="n">Righe</th>
-        <th class="n">Schede</th><th class="n">Materiali a scheda</th><th>Reperibilità</th><th>Stato</th></tr></thead><tbody>
+        <th class="n">Schede</th><th class="n">Materiali a scheda</th><th>Reperibilità</th><th>Stato</th><th class="n" title="Preventivi che prendono da questa BOM il costo componenti">Preventivi</th><th></th></tr></thead><tbody>
         ${elenco.map(a => { const rp: Riepilogo = a.riepilogo ?? {}; const p = rp.perQuantita?.[0]; return html`<tr>
           <td><a href="/componenti/bom/${a.id}">${a.nome}</a></td><td class="taglia">${a.file_nome}</td><td>${new Date(a.creato_il).toLocaleDateString('it-IT')}</td>
           <td class="n">${rp.righe ?? ''}</td><td class="n">${(a.quantita ?? []).join(', ')}</td><td class="n">${p ? euro2(p.aScheda) : ''}</td>
           <td>${rp.critici ? html`<span class="livello critico">${rp.critici} critici</span> ` : ''}${rp.attenzione ? html`<span class="livello attenzione">${rp.attenzione} attenzione</span>` : ''}</td>
-          <td>${a.stato === 'pronta' ? '' : a.stato.replace('_', ' ')}</td></tr>`; })}
+          <td>${a.stato === 'pronta' ? '' : a.stato.replace('_', ' ')}</td><td class="n">${a.preventivi || ''}</td>
+          <td><form method="post" action="/componenti/bom/${a.id}/elimina" class="inline conferma-elimina" data-preventivi="${a.preventivi}"><button class="link negativo">Elimina</button></form></td></tr>`; })}
         </tbody></table></div>` : html`<p class="vuoto">Nessuna BOM caricata.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
@@ -216,6 +218,7 @@ function paginaAnalisi(a: any): Raw {
       ${!inCorso && daSalvare ? html`<form method="post" action="/componenti/bom/${a.id}/salva" class="inline"><button class="primario" title="Mette nell'archivio i codici nuovi completi">Salva ${daSalvare} codici nell'archivio</button></form>` : ''}
       ${!inCorso && righe.length ? html`<a class="bottone" href="/componenti/bom/${a.id}/excel">Scarica Excel</a>` : ''}
       ${!inCorso ? html`<form method="post" action="/componenti/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>` : ''}
+      <form method="post" action="/componenti/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>
   ${inCorso ? html`<div class="avviso info" id="avanzamento" data-id="${a.id}">Elaborazione in corso…</div>` : ''}
   ${a.stato === 'errore' ? html`<div class="avviso">${a.messaggio}</div>` : a.messaggio ? html`<div class="avviso info">${a.messaggio}</div>` : ''}
@@ -232,7 +235,6 @@ function paginaAnalisi(a: any): Raw {
         ${(a.colonne as string[]).map(c => html`<option ${mappa[k] === c ? raw('selected') : ''}>${c}</option>`)}</select></label>`)}
       <button>Applica e rielabora</button></form>
     <form method="post" action="/componenti/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>
-    <form method="post" action="/componenti/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="link negativo">Elimina questa BOM</button></form>
   </details>` : ''}
   ${righe.length ? html`
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>

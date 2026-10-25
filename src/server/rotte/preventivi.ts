@@ -13,6 +13,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
+import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -77,13 +78,20 @@ export function rottePreventivi() {
     // i valori standard sono già scritti nelle caselle (modificabili), spunte comprese (es. prima produzione)
     const standard = Object.fromEntries(cat.parametri.filter(p => p.default != null && p.gruppo !== 'GENERALE' && p.gruppo !== 'PRE-PRODUZIONE').map(p => [p.codice, p.default]));
     const dati = normalizza({ tariffe, nSchedeInPCB: 1, parametri: standard }, cat);
-    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti()));
+    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti(), [], await elencoBom()));
   });
 
   // prodotti (prima di '/:id', altrimenti "prodotti" verrebbe letto come numero di preventivo)
   // selezionabili per il cliente scelto
   r.get('/prodotti', async (req, res) => {
     res.json(await prodottiPerCliente(Number(req.query.cliente) || 0));
+  });
+
+  // costo componenti a scheda dalla BOM scelta, ricalcolato sulle schede del preventivo
+  r.get('/costo-bom', async (req, res) => {
+    const x = await costoBomPerPreventivo(Number(req.query.bom) || 0, Number(req.query.schede) || 0);
+    if (!x) return res.status(404).json({ errore: 'BOM non trovata (forse eliminata)' });
+    res.json(x);
   });
 
   // ── Apri esistente (calcolato col catalogo salvato nel preventivo) ──
@@ -93,7 +101,8 @@ export function rottePreventivi() {
     if (!p) return res.status(404).send('Preventivo non trovato');
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
-    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : []));
+    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
+      await elencoBom(dati.bomId)));
   });
 
   // ── Anteprima di stampa (per il cliente: solo prezzi) ──
@@ -219,6 +228,11 @@ async function duplica(id: number, utenteId: number): Promise<number | null> {
   return salvaPreventivo({ dati, catalogo: cat, utenteId });
 }
 
+/** BOM elaborate che si possono collegare a un preventivo (più quella già collegata, anche se in elaborazione). */
+const elencoBom = (collegata?: number | null) => q<{ id: number; nome: string; creato_il: string }>(`SELECT id, nome, creato_il FROM bom_analisi
+  WHERE file_nome IS DISTINCT FROM $1 AND (stato = 'pronta' OR id = $2) ORDER BY creato_il DESC LIMIT 200`, [FILE_SINGOLA, collegata ?? null]);
+type VoceBom = Awaited<ReturnType<typeof elencoBom>>[number];
+
 const elencoClienti = () => q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
 
 async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
@@ -231,7 +245,7 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
-function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = []): string {
+function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = [], bom: VoceBom[] = []): string {
   const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE' && g !== 'LATI' && g !== 'INFORMAZIONI GENERALI');
   const generali = cat.parametri.filter(p => p.gruppo === 'INFORMAZIONI GENERALI');
   // campi e sezioni che contano solo con una spunta delle informazioni generali: nascosti se la spunta è tolta
@@ -276,7 +290,17 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       ${PROVENIENZE.map(([v, testo, spiega]) => html`<label class="spunta" title="${spiega}"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
       <span class="info" title="Tempo = numero item × tempo per item, a ogni lotto">ⓘ</span>
     </div>`;
-  const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
+  // costo componenti: si può prendere da una BOM caricata in Componenti (scelta qui sopra il campo)
+  const sceltaBom = () => html`
+    <label class="largo scelta-bom"${dipende(DIPENDE.costoComponentiScheda)} title="Il costo componenti a scheda si calcola dal preventivo materiali della BOM, sulle schede di questo preventivo">BOM caricata
+      <select data-id="bomId" id="sel-bom">
+        <option value="">— nessuna: costo scritto a mano —</option>
+        ${bom.map(b => html`<option value="${b.id}" ${b.id === d.bomId ? raw('selected') : ''}>${b.nome} (${data(b.creato_il)})</option>`)}
+      </select>
+      <output id="esito-bom" class="nota">${d.bomId && !bom.some(b => b.id === d.bomId) ? 'La BOM collegata è stata eliminata: il costo resta quello salvato.' : ''}</output>
+      <small class="nota"><a href="/componenti/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/componenti/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
+  const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}` : campoBase(p);
+  const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`
     : p.tipo === 'durata'

@@ -399,7 +399,9 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
 
 /** Quantità, scarto, fornitore migliore e reperibilità per ogni quantità di schede. */
 export async function calcolaAcquisti(righe: RigaBom[], quantita: number[], perPnDist?: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>) {
-  const regole = await caricaRegoleScarto();
+  calcolaAcquistiCon(righe, quantita, await caricaRegoleScarto(), perPnDist);
+}
+export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole: RegoleScarto, perPnDist?: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>) {
   for (const r of righe) {
     const pn = r.pn ?? r.mpnAcquisto ?? null;
     if (perPnDist && pn) r.offerte = Object.values(perPnDist.get(pnKey(pn)!) ?? {}).flatMap(x => x?.offerte ?? []);
@@ -443,6 +445,21 @@ export function riepilogo(righe: RigaBom[], quantita: number[]): Riepilogo {
     critici: attive.filter(r => r.reperibilita?.livello === 'critico').length,
     attenzione: attive.filter(r => r.reperibilita?.livello === 'attenzione').length,
   };
+}
+
+/** Costo dei materiali della BOM per un numero qualsiasi di schede, con le offerte già lette (non chiama i distributori). */
+export function costoMaterialiPer(righe: RigaBom[], schede: number, regole: RegoleScarto) {
+  const copia: RigaBom[] = structuredClone(righe);
+  calcolaAcquistiCon(copia, [schede], regole);
+  return riepilogo(copia, [schede]).perQuantita[0];
+}
+
+/** BOM collegata a un preventivo: costo dei componenti a scheda per le schede del preventivo. */
+export async function costoBomPerPreventivo(id: number, schede: number) {
+  const a = await q1<any>(`SELECT id, nome, righe, stato, aggiornato_il FROM bom_analisi WHERE id = $1 AND file_nome IS DISTINCT FROM $2`, [id, FILE_SINGOLA]);
+  if (!a) return null;
+  const x = costoMaterialiPer(a.righe ?? [], Math.max(1, schede), await caricaRegoleScarto());
+  return { id: a.id, nome: a.nome, stato: a.stato, prezziDel: a.aggiornato_il, ...x };
 }
 
 export async function salvaRighe(id: number, righe: RigaBom[]) {

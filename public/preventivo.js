@@ -108,6 +108,46 @@
     const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
   }));
 
+  // ── Costo componenti dalla BOM caricata in Componenti ──
+  // scegliendo la BOM (o cambiando le schede) il costo a scheda si ricalcola sulle schede del preventivo;
+  // scrivendo il costo a mano il collegamento con la BOM si toglie
+  const selBom = document.getElementById('sel-bom');
+  const costoComp = form.querySelector('[data-param=costoComponentiScheda]');
+  const esitoBom = document.getElementById('esito-bom');
+  let timerBom;
+  async function costoDaBom() {
+    if (!selBom || !selBom.value || !costoComp) return;
+    const schede = form.querySelector('[data-campo=nSchede]').value;
+    esitoBom.textContent = 'Calcolo del costo dalla BOM…';
+    const res = await fetch(`/preventivi/costo-bom?bom=${encodeURIComponent(selBom.value)}&schede=${encodeURIComponent(schede)}`);
+    const x = await res.json().catch(() => ({}));
+    if (!res.ok) { esitoBom.textContent = x.errore || 'Errore nel calcolo dalla BOM'; return; }
+    costoComp.value = (Math.round(x.aScheda * 10000) / 10000).toString().replace('.', ',');
+    const spuntaComp = casella('acquistoComponenti');
+    if (spuntaComp && !spuntaComp.checked) { spuntaComp.checked = true; aggiornaDipendenze(); }
+    const avvisi = [x.senzaPrezzo ? `${x.senzaPrezzo} righe senza prezzo (non contate)` : '', x.nonDisponibili ? `${x.nonDisponibili} non disponibili` : '',
+      x.stato !== 'pronta' ? 'BOM non ancora elaborata del tutto' : ''].filter(Boolean);
+    esitoBom.textContent = `Per ${x.schede} schede: ${euro(x.totale)}, cioè ${euro(x.aScheda)} a scheda` +
+      ` (prezzi del ${new Date(x.prezziDel).toLocaleDateString('it-IT')})` + (avvisi.length ? ' · ' + avvisi.join(' · ') : '');
+    esitoBom.classList.toggle('negativo', avvisi.length > 0);
+    modificato = true; statoEl.textContent = 'Modifiche non salvate';
+    ricalcola();
+  }
+  if (selBom) {
+    selBom.addEventListener('change', () => {
+      const apri = document.getElementById('apri-bom');
+      apri.hidden = !selBom.value;
+      apri.querySelector('a').href = '/componenti/bom/' + selBom.value;
+      if (selBom.value) costoDaBom(); else { esitoBom.textContent = 'Costo componenti scritto a mano.'; esitoBom.classList.remove('negativo'); }
+    });
+    form.querySelector('[data-campo=nSchede]').addEventListener('input', () => { clearTimeout(timerBom); timerBom = setTimeout(costoDaBom, 500); });
+    if (costoComp) costoComp.addEventListener('input', () => {
+      if (!selBom.value) return;
+      selBom.value = ''; document.getElementById('apri-bom').hidden = true;
+      esitoBom.textContent = 'Costo scritto a mano: il collegamento con la BOM è stato tolto.'; esitoBom.classList.remove('negativo');
+    });
+  }
+
   // ── Solo TOP / TOP + BOT ──
   form.querySelectorAll('input[name=lati]').forEach(r => r.addEventListener('change', () => {
     const soloTop = r.value === '0' && r.checked;
