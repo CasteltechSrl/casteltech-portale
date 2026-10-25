@@ -285,3 +285,55 @@ label.spunta input { width: auto; margin: 0; }
 table.acquisti { background: var(--carta); margin-bottom: 1rem; }
 details.blocco summary { cursor: pointer; font-weight: 600; }
 details.blocco .riga-campi { margin-top: .8rem; align-items: end; }
+
+/* ordini clienti: stati, cruscotto, Gantt */
+:root { --serie-fatturato: #2a78d6; --serie-da-evadere: #eb6834; }
+.stato.da_evadere { background: #fff2cc; color: #8a6100; }
+.stato.parziale { background: #e1ecfb; color: #1f55a6; }
+.stato.evaso { background: #ddf3e5; color: var(--positivo); }
+.stato.annullato { background: #eceeed; color: #8a948f; }
+.ritardo { color: var(--negativo); font-weight: 600; white-space: nowrap; }
+table.ordini tr.scaduta td:first-child { box-shadow: inset 4px 0 0 var(--negativo); }
+table.elenco tr.servizio td { color: var(--tenue); }
+table.righe-ordine input[type=date] { width: 9.5rem; }
+table.righe-ordine select { width: auto; }
+tr.corrente td { background: var(--accento-chiaro); }
+dl.dati-ordine { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; margin: 0 0 1rem; }
+dl.dati-ordine dt { color: var(--tenue); }
+dl.dati-ordine dd { margin: 0; }
+.cifre { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin: 1rem 0; }
+.cifra { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .8rem 1rem; display: flex; flex-direction: column; gap: .15rem; }
+.cifra span { color: var(--tenue); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+.cifra b { font-size: 1.5rem; font-weight: 650; }
+.cifra small { color: var(--tenue); }
+.legenda { font-size: .85rem; color: var(--tenue); display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: .3rem 0 .6rem; }
+.legenda .campione { width: .9rem; height: .9rem; border-radius: 3px; display: inline-block; margin-left: .6rem; }
+.legenda .campione:first-child { margin-left: 0; }
+.campione.fatturato { background: var(--serie-fatturato); }
+.campione.da-evadere { background: var(--serie-da-evadere); }
+.campione.barra { background: var(--accento); }
+.campione.barra-ritardo { background: var(--negativo); }
+.campione.barra-stimata { background: repeating-linear-gradient(45deg, var(--accento) 0 3px, #9cc9bf 3px 6px); }
+.campione.consegna { background: #1d2421; transform: rotate(45deg) scale(.7); border-radius: 1px; }
+.tabella-scorre.grafico { padding: .6rem; }
+svg text { font-family: var(--font); }
+svg .asse { font-size: 11px; fill: var(--tenue); }
+svg .griglia { stroke: #eef0ee; stroke-width: 1; }
+svg .base { stroke: #b9c0bc; stroke-width: 1; }
+.grafico-mesi .sfondo { fill: transparent; }
+.grafico-mesi .mese:hover .sfondo { fill: #f1f3f1; }
+.grafico-mesi .fatturato { fill: var(--serie-fatturato); }
+.grafico-mesi .da-evadere { fill: var(--serie-da-evadere); }
+.gantt .festivo { fill: #f4f5f3; }
+.gantt .riga { stroke: #f0f2f0; }
+.gantt .etichetta { font-size: 11.5px; fill: var(--testo); }
+.gantt .barra { fill: var(--accento); }
+.gantt .barra.stimata { fill: #9cc9bf; stroke: var(--accento); stroke-dasharray: 3 2; }
+.gantt .barra.ritardo { fill: var(--negativo); }
+.gantt .barra.ritardo.stimata { fill: #e9a7a2; stroke: var(--negativo); }
+.gantt g:hover .barra { opacity: .8; }
+.gantt .consegna { fill: #1d2421; }
+.gantt .carico { fill: #9cc9bf; }
+.gantt .carico.oltre { fill: var(--negativo); }
+.gantt .oggi { stroke: var(--negativo); stroke-width: 1.5; }
+.gantt text.oggi { fill: var(--negativo); stroke: none; font-weight: 600; }

@@ -16,6 +16,7 @@ import { caricaOperatori } from '../commesse-servizio.js';
 import { caricaPin } from './reparto.js';
 import { fasiAperte, inviaAdesso, orariPromemoria, ricaricaPromemoria } from '../promemoria.js';
 import { leggiOrari } from '../../engine/promemoria.js';
+import { caricaOreGiorno, importaOrdini, leggiFileOrdini } from '../ordini-servizio.js';
 import { conteggiComponenti, importaComponenti, caricaRegoleScarto } from '../codifica-servizio.js';
 import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
@@ -186,6 +187,37 @@ export function rotteImpostazioni() {
   r.post('/componenti/importa', express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res) => {
     try { res.json(await importaComponenti(req.body as Buffer)); }
     catch (e: any) { res.status(400).json({ errore: `File non valido: ${e.message}` }); }
+  });
+  // ── Ordini: import da Fatture in Cloud / ordini dei clienti, ore di lavoro al giorno per il Gantt ──
+  r.get('/ordini', async (req, res) => {
+    const conti = (await q(`SELECT (SELECT count(*) FROM ordini)::int AS ordini, (SELECT count(*) FROM ordini_righe)::int AS righe,
+      (SELECT count(*) FROM ddt_righe)::int AS ddt, (SELECT count(*) FROM fatture_righe)::int AS fatture`))[0];
+    res.send(pag(req, 'Ordini', html`
+      <section class="blocco stretto-form">
+        <h2>Import degli ordini</h2>
+        <p class="nota">Nel portale: ${conti.ordini} ordini (${conti.righe} righe), ${conti.ddt} righe di DDT, ${conti.fatture} righe di fattura.
+          Si carica il file <code>ordini_AAAA.json.gz</code> preparato dall'incrocio di ordini, DDT e fatture di Fatture in Cloud con gli ordini dei clienti.
+          Si può ripetere: ordini e righe si aggiornano, restano le date di arrivo materiale, i ritardi, gli stati e le note scritti nel portale;
+          DDT e fatture dell'anno si sostituiscono. Clienti e prodotti si collegano solo se sono già in anagrafica (nessuno viene aggiunto).</p>
+        <label>File <input type="file" id="file-ordini" accept=".gz,.json"></label>
+        <button id="avvia-import-ordini">Importa</button>
+        <output id="esito-import-ordini" class="nota"></output>
+      </section>
+      <form method="post" action="/impostazioni/ordini/pianificazione" class="blocco stretto-form">
+        <h2>Gantt</h2>
+        <label>Ore di lavoro al giorno <input name="oreGiorno" value="${await caricaOreGiorno()}" inputmode="decimal" class="corto"></label>
+        <button class="primario">Salva</button>
+      </form>`, req.query.ok ? 'Salvato.' : undefined, 'ordini.js'));
+  });
+  r.post('/ordini/importa', express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
+    try { res.json(await importaOrdini(leggiFileOrdini(req.body as Buffer))); }
+    catch (e: any) { res.status(400).json({ errore: `File non valido: ${e.message}` }); }
+  });
+  r.post('/ordini/pianificazione', async (req, res) => {
+    const n = Number(String(req.body.oreGiorno ?? '').replace(',', '.'));
+    const valore = { oreGiorno: n > 0 && n <= 24 ? n : 8 };
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('pianificazione', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(valore)]);
+    res.redirect('/impostazioni/ordini?ok=1');
   });
   r.post('/componenti/prova', async (req, res) => {
     const f = String(req.body.fornitore) as Fornitore;
@@ -427,7 +459,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

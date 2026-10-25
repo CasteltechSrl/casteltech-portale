@@ -18,6 +18,7 @@ import { avviaBackupNotturno } from './backup.js';
 import { rotteReparto } from './rotte/reparto.js';
 import { avviaPromemoria } from './promemoria.js';
 import { rotteComponenti } from './rotte/componenti.js';
+import { rotteOrdini } from './rotte/ordini.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -102,6 +103,7 @@ app.get('/salute', (_req, res) => { res.send('ok'); });
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());
+app.use('/ordini', soloUfficio, rotteOrdini());
 app.use('/componenti', soloUfficio, rotteComponenti());
 app.use('/r', rotteReparto());
 // QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
