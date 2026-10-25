@@ -133,6 +133,24 @@ export function quantitaRiga(qta: unknown, designatori: unknown): { qta: number;
   return d ? { qta: d, nota: 'quantità contata dai designatori' } : { qta: 0, nota: 'quantità mancante' };
 }
 
+/** Valori standard Casteltech dei condensatori ceramici quando la BOM non li indica. */
+export const STANDARD_CONDENSATORI = { dielettrico: 'X5R', tolleranza: '20', tensione: '25V' } as const;
+/** Inizio della nota che rende il codice "DA VERIFICARE" (si toglie quando la riga viene corretta a mano). */
+export const NOTA_DA_VALIDARE = 'CODICE DA VALIDARE';
+
+/**
+ * Condensatori ceramici: dielettrico, tolleranza e tensione mancanti si completano con i valori standard
+ * (X5R, 20%, 25V) e la nota rende il codice da validare. Si applica ai componenti nuovi, dopo l'eventuale lettura con l'IA.
+ */
+export function regolaCondensatori(famiglia: string | null, a: Attributi): { attributi: Attributi; note: string[] } {
+  if (famiglia !== 'CC') return { attributi: a, note: [] };
+  const out: Attributi = { ...a }, messi: string[] = [];
+  if (!String(a.dielettrico ?? '').trim()) { out.dielettrico = STANDARD_CONDENSATORI.dielettrico; messi.push('dielettrico X5R'); }
+  if (!String(a.tolleranza ?? '').trim()) { out.tolleranza = STANDARD_CONDENSATORI.tolleranza; messi.push('tolleranza 20%'); }
+  if (!String(a.tensione ?? '').trim()) { out.tensione = STANDARD_CONDENSATORI.tensione; messi.push('tensione 25V'); }
+  return { attributi: out, note: messi.length ? [`${NOTA_DA_VALIDARE}: mancavano dei dati, usati i valori standard (${messi.join(', ')})`] : [] };
+}
+
 /**
  * Resistenze: Casteltech compra solo all'1% (o meglio, se la BOM chiede meno dell'1%); le 5% non si comprano.
  * Si applica prima di calcolare i codici quando il componente è nuovo.

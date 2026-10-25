@@ -11,6 +11,7 @@ import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, cercaComponenti, conteggiComponenti, correggiRiga,
   creaAnalisi, creaCodificaSingola, excelAnalisi, leggiFileBom, salvaInArchivio, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
+import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { NOMI_FORNITORI, prezzoUnitario, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { fornitoriConfigurati } from '../fornitori.js';
@@ -249,7 +250,7 @@ function paginaAnalisi(a: any): Raw {
       ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${NOMI_FORNITORI[x.scelta.fornitore]}
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
-      <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
+      <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
       <td><a href="/componenti/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a></td></tr>`)}
   </tbody></table></div>
   <p class="nota">Esiti: <span class="esito archivio">in archivio</span> codici esistenti · <span class="esito nuovo">nuovo</span> codici calcolati, da salvare ·
@@ -282,7 +283,7 @@ function paginaRiga(a: any, r: RigaBom): Raw {
       <div class="codici"><div><span>Codice produzione</span><b class="codice">${r.codiceProduzione ?? '—'}</b></div>
         <div><span>Codice gestionale</span><b class="codice">${r.codiceGestionale ?? '—'}</b></div></div>
       <p>${r.descrizione}</p>
-      ${r.note.length ? html`<ul class="note-riga">${r.note.map(n => html`<li>${n}</li>`)}</ul>` : ''}
+      ${r.note.length ? html`<ul class="note-riga">${r.note.map(n => html`<li>${n.startsWith(NOTA_DA_VALIDARE) ? html`<strong class="da-validare">${n}</strong>` : n}</li>`)}</ul>` : ''}
       ${bloccata ? html`<p class="nota">${r.esito === ESITI.DB ? 'Componente già in archivio: i codici non si cambiano da qui.' : ''}</p>` : html`
       <div class="riga-campi"><label>Famiglia<select name="famiglia"><option value="">—</option>
         ${Object.entries(FAMIGLIE).map(([k, f]) => html`<option value="${k}" ${r.famiglia === k ? raw('selected') : ''}>${k} · ${f.nome}</option>`)}</select></label>

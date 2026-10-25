@@ -125,3 +125,18 @@ test('BOM: colonne riconosciute anche con titoli diversi o dal contenuto', () =>
   // "Commento" resta una descrizione, non un valore
   assert.equal(rilevaColonne(['Commento', 'Designator']).descrizione, 'Commento');
 });
+
+test('condensatori ceramici: senza dielettrico, tolleranza e tensione si usano X5R, 20%, 25V e il codice è da validare', async () => {
+  const { regolaCondensatori, NOTA_DA_VALIDARE } = await import('../src/engine/codifica/bom.js');
+  const [fam, a] = daColonneBom(null, '100n', '0603', null, 'C5');
+  assert.equal(fam, 'CC');
+  const x = regolaCondensatori(fam, a);
+  assert.equal(x.attributi.dielettrico, 'X5R'); assert.equal(x.attributi.tolleranza, '20'); assert.equal(x.attributi.tensione, '25V');
+  assert.ok(x.note[0].startsWith(NOTA_DA_VALIDARE));
+  const c = calcola(fam, x.attributi, null);
+  assert.ok(c.prod && c.root, 'codici completi');
+  // dati già presenti: non si toccano e il codice non è da validare
+  const y = regolaCondensatori('CC', { case: '0603', valore: '100NF', dielettrico: 'X7R', tolleranza: '10', tensione: '50V' });
+  assert.equal(y.attributi.dielettrico, 'X7R'); assert.deepEqual(y.note, []);
+  assert.deepEqual(regolaCondensatori('RS', {}).note, []);
+});

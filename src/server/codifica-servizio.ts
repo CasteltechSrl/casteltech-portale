@@ -15,7 +15,7 @@ import { q, q1, transazione } from './db.js';
 import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attributi } from '../engine/codifica/regole.js';
 import { daColonneBom, decodificaMpn } from '../engine/codifica/decoder.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
-import { ETICHETTE_RUOLI, completo, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
+import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, regolaCondensatori, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, digikeyParametri, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa } from './lettura-ia.js';
@@ -272,6 +272,11 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
       }
     } catch (e: any) { notaIa = `Lettura IA non riuscita: ${e.message}`; }
   } else if (daLeggereIa.length) notaIa = `${daLeggereIa.length} righe incomplete: con la chiave ANTHROPIC_API_KEY le leggerebbe l'IA`;
+  // condensatori ceramici nuovi: valori standard dove mancano (codice da validare)
+  for (const r of righe) {
+    if (r.dbId || r.esito !== ESITI.INC) continue;
+    const x = regolaCondensatori(r.famiglia, r.attributi); r.attributi = x.attributi; r.note = unico([...r.note, ...x.note]);
+  }
   // 6. codici
   await ricalcola(righe);
   // 7. prezzi dei componenti senza P/N (passivi): il più economico con gli stessi dati
@@ -332,6 +337,7 @@ export async function ricalcola(righe: RigaBom[]) {
     const completoRiga = !!gest && !!prod && (inArchivio || !!c.prod);
     r.esito = inArchivio ? (gest ? ESITI.DB_FATTO : ESITI.DB_INC)
       : completoRiga && c.stato !== MAN ? (c.stato === OK ? ESITI.NUOVO : ESITI.NUOVO_VER) : ESITI.INC;
+    if (r.esito === ESITI.NUOVO && note.some(n => n.startsWith(NOTA_DA_VALIDARE))) r.esito = ESITI.NUOVO_VER;
     if (c.attrs) r.attributi = { ...c.attrs, tecnologia: c.T ?? r.attributi.tecnologia };
     r.codiceProduzione = prod; r.codiceGestionale = gest; r.descrizione = c.descr; r.note = unico(note);
   }
@@ -456,6 +462,7 @@ export async function correggiRiga(id: number, n: number, dati: { famiglia: stri
     r.famiglia = dati.famiglia; r.attributi = dati.attributi;
     if (r.esito === ESITI.DB_PROD) { r.esito = ESITI.INC; r.dbId = null; r.mpnAcquisto = null; }
     if (!r.fonti.includes('modifica a mano')) r.fonti.push('modifica a mano');
+    r.note = r.note.filter(x => !x.startsWith(NOTA_DA_VALIDARE)); // controllata a mano: non è più da validare
     await ricalcola(righe);
   }
   await calcolaAcquisti(righe, a.quantita);

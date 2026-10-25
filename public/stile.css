@@ -260,6 +260,7 @@ td.codice, b.codice { font-family: var(--mono); font-size: .82rem; white-space: 
 .esito.nuovo { background: #ddf3e5; color: var(--positivo); }
 .esito.verifica { background: #fff2cc; color: #8a6100; }
 .esito.manca { background: #fbe2e0; color: var(--negativo); }
+.da-validare { color: #8a6100; }
 .esito.escluso { background: #eceeed; color: #8a948f; }
 .livello.ok { background: #ddf3e5; color: var(--positivo); }
 .livello.attenzione { background: #fff2cc; color: #8a6100; }
