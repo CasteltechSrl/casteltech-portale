@@ -74,3 +74,16 @@ test('etichette corte del preventivo: unità e "a scheda" tra parentesi', async 
   assert.equal(etichettaBreve({ etichetta: 'Smontaggio P&P per feeder', unita: 'min' }), 'Smontaggio P&P (min a feeder)');
   assert.equal(etichettaBreve({ etichetta: 'Saldatura a onda prevista', unita: 'sì/no' }), 'Saldatura a onda prevista');
 });
+
+test('operatori: sigle di 2 caratteri dalle iniziali, senza doppioni; si possono scrivere a mano', async () => {
+  const { leggiOperatori } = await import('../src/engine/operatori.js');
+  const o = leggiOperatori('Norberto Gambi\nAdriano Gambi\nAdriano Croci\nAndrea Gatti\nZZ = Mario Rossi\nSingh Harpreet');
+  const s = Object.fromEntries(o.map(x => [x.nome, x.sigla]));
+  assert.equal(s['Norberto Gambi'], 'NG');
+  assert.equal(s['Adriano Gambi'], 'AG');
+  assert.equal(s['Adriano Croci'], 'AC');
+  assert.equal(s['Andrea Gatti'], 'AA');          // AG è già usata: iniziale + 2ª lettera del cognome
+  assert.equal(s['Mario Rossi'], 'ZZ');           // sigla scritta a mano
+  assert.equal(s['Singh Harpreet'], 'SH');
+  assert.equal(new Set(o.map(x => x.sigla)).size, o.length);
+});

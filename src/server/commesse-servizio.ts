@@ -10,6 +10,7 @@ import { q, q1, transazione } from './db.js';
 import { calcola, datiDaRiga, leggiPreventivo, nPannelli } from './preventivi-servizio.js';
 import type { Catalogo } from './catalogo-db.js';
 import type { Rilevazione } from '../engine/consuntivo.js';
+import type { Operatore } from '../engine/operatori.js';
 
 // ───────────────────────────── scheda tecnica (intestazione della MASTERspec) ─────────────────────────────
 /** Campi con TOP e BOT, nell'ordine della scheda. */
@@ -25,6 +26,7 @@ export const MATERIALI_SALDATURA: [string, string][] = [
 export interface SchedaTecnica {
   programmi: Record<string, { top: string; bot: string }>;
   pasta: string;
+  forno: string;                 // programma del forno: vuoto = "TOP" o "TOP+BOT" secondo i lati
   materiali: Record<string, string>;
   noteMontaggio: string;
 }
@@ -34,6 +36,7 @@ export function schedaTecnica(x: any): SchedaTecnica {
   return {
     programmi: Object.fromEntries(PROGRAMMI.map(([k]) => [k, { top: testo(x?.programmi?.[k]?.top), bot: testo(x?.programmi?.[k]?.bot) }])),
     pasta: testo(x?.pasta),
+    forno: testo(x?.forno),
     materiali: Object.fromEntries(MATERIALI_SALDATURA.map(([k]) => [k, testo(x?.materiali?.[k])])),
     noteMontaggio: testo(x?.noteMontaggio),
   };
@@ -123,6 +126,10 @@ export async function salvaCommessa(opz: { id?: number; preventivoId: number; da
         VALUES ($1,$2,$3,$4,$5,$6)`, [id, f.codice, i, f.persone, Math.round(f.cicloSec), Math.round(f.uomoSec)]);
     // la scheda tecnica si ripropone alla prossima commessa dello stesso prodotto/revisione
     await c.query(`UPDATE prodotti_revisioni SET scheda_tecnica = $2 WHERE id = $1`, [prev.revisione_id, d.scheda]);
+    // le segnalazioni scritte nella commessa vanno nello storico del prodotto: stampate anche sulle prossime schede
+    await c.query(`DELETE FROM segnalazioni WHERE commessa_id = $1 AND origine = 'ufficio'`, [id]);
+    if (d.segnalazioni) await c.query(`INSERT INTO segnalazioni (prodotto_id, revisione_id, commessa_id, origine, testo, rilevante_prossime, autore_id)
+      VALUES ((SELECT prodotto_id FROM prodotti_revisioni WHERE id = $1), $1, $2, 'ufficio', $3, true, $4)`, [prev.revisione_id, id, d.segnalazioni, opz.utenteId]);
     return { id };
   });
 }
@@ -135,7 +142,7 @@ export async function fasiCommessa(commessa: any): Promise<FaseScheda[]> {
     WHERE cf.commessa_id = $1 ORDER BY cf.ordine`, [commessa.id]);
   return righe.map(r => {
     const f = cat?.fasi.find(x => x.codice === r.fase_codice);
-    return { codice: r.fase_codice, numero: f?.numero ?? r.numero, nome: f?.nome ?? r.nome, gruppo: f?.gruppo ?? r.gruppo,
+    return { codice: r.fase_codice, numero: r.numero ?? f?.numero, nome: f?.nome ?? r.nome, gruppo: f?.gruppo ?? r.gruppo,
       unaTantum: f?.unaTantum ?? r.una_tantum, tariffa: f?.tariffa ?? r.tariffa, persone: Number(r.persone_previste),
       cicloSec: Number(r.ciclo_previsto_sec), uomoSec: Number(r.uomo_previsto_sec) };
   });
@@ -227,4 +234,28 @@ export async function aggiungiTempi(commessaId: number, righe: { fase: string; d
     await c.query(`UPDATE commesse SET stato = CASE WHEN stato = 'aperta' THEN 'in_produzione' ELSE stato END, aggiornato_il = now() WHERE id = $1`, [commessaId]);
     return righe.length;
   });
+}
+
+/** Operatori con le sigle (Impostazioni → Operatori). */
+export async function caricaOperatori(): Promise<Operatore[]> {
+  const r = await q1<{ valore: Operatore[] }>(`SELECT valore FROM impostazioni WHERE chiave = 'operatori'`);
+  return Array.isArray(r?.valore) ? r!.valore : [];
+}
+
+/** Numeri delle fasi come sono ora nel catalogo (la scheda stampa la numerazione attuale). */
+export async function numeriFasi(): Promise<Map<string, string>> {
+  return new Map((await q<{ codice: string; numero: string }>(`SELECT codice, numero FROM fasi`)).map(f => [f.codice, f.numero]));
+}
+
+/**
+ * Scheda tecnica da proporre a una nuova commessa: quella della revisione; se è vuota (es. revisione nuova)
+ * quella dell'ultima commessa dello stesso codice prodotto.
+ */
+export async function schedaTecnicaDaProporre(revisioneId: number | null, prodottoId: number | null): Promise<SchedaTecnica> {
+  const vuota = (x: any) => !x || JSON.stringify(schedaTecnica(x)) === JSON.stringify(schedaTecnica({}));
+  const rev = revisioneId ? await q1<{ scheda_tecnica: any }>(`SELECT scheda_tecnica FROM prodotti_revisioni WHERE id = $1`, [revisioneId]) : null;
+  if (!vuota(rev?.scheda_tecnica)) return schedaTecnica(rev!.scheda_tecnica);
+  const ultima = prodottoId ? await q1<{ scheda_tecnica: any }>(`SELECT c.scheda_tecnica FROM commesse c JOIN prodotti_revisioni r ON r.id = c.revisione_id
+    WHERE r.prodotto_id = $1 ORDER BY c.creato_il DESC, c.id DESC LIMIT 1`, [prodottoId]) : null;
+  return schedaTecnica(ultima?.scheda_tecnica);
 }

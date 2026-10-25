@@ -291,6 +291,13 @@ export const FASI: FaseCatalogo[] = [
   F('36R', 'resoMaterialeCliente', 'Reso materiale avanzato al cliente', 'IMBALLAGGIO', 'se(provenienzaMateriale == 1, minResoMateriale * 60, 0)', { scala: 'fisso' }),
 ];
 
+// Numerazione (Adriano, 25/10/2026): pre-produzione (lettere) e gestione materiale (M1…) restano come sono;
+// tutte le altre fasi hanno un numero progressivo semplice (1, 2, 3…) nell'ordine della scheda.
+{
+  let n = 0;
+  for (const f of FASI) if (f.gruppo !== PRE && f.gruppo !== GM) f.numero = String(++n);
+}
+
 // ───────────────────────────── VOCI DI COSTO ─────────────────────────────
 const CONSUMO = [
   'crema * prezzo_cremaLF * nSchede',

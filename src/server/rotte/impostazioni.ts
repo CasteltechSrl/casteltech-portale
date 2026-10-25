@@ -11,6 +11,8 @@ import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
 import { rotteAnagrafiche } from './anagrafiche.js';
 import { creaBackup, elencoBackup, nomeFileBackup, salvaBackupSuDisco } from '../backup.js';
+import { leggiOperatori } from '../../engine/operatori.js';
+import { caricaOperatori } from '../commesse-servizio.js';
 import { join, basename } from 'node:path';
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
@@ -85,6 +87,23 @@ export function rotteImpostazioni() {
     const t = { costoAziendaH: n('costoAziendaH'), costoOperatoreProduzioneH: n('costoOperatoreProduzioneH'), costoOperatoreUfficioH: n('costoOperatoreUfficioH'), ricarico: n('ricarico') };
     await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('tariffe', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(t)]);
     res.redirect('/impostazioni/tariffe?ok=1');
+  });
+
+  // ── Operatori: sigle per la colonna OPERATORE del foglio tempi ──
+  r.get('/operatori', async (req, res) => {
+    const op = await caricaOperatori();
+    res.send(pag(req, 'Operatori', html`
+      <form method="post" class="blocco stretto-form">
+        <p class="nota">Una riga per persona, nella forma <code>AG = Adriano Gambi</code>. Se scrivi solo il nome, la sigla
+          (2 lettere) si propone da sola. Le sigle sono stampate in fondo ai fogli tempi e proposte nel rientro.</p>
+        <textarea name="operatori" rows="14" spellcheck="false">${op.map(o => `${o.sigla} = ${o.nome}`).join('\n')}</textarea>
+        <button class="primario">Salva operatori</button>
+      </form>`, req.query.ok ? 'Operatori salvati.' : undefined));
+  });
+  r.post('/operatori', async (req, res) => {
+    const op = leggiOperatori(String(req.body.operatori ?? ''));
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('operatori', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(op)]);
+    res.redirect('/impostazioni/operatori?ok=1');
   });
 
   // ── Tabelle del catalogo ──
@@ -268,7 +287,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

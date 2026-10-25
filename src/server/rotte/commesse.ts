@@ -8,7 +8,7 @@ import { q, q1 } from '../db.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
-  salvaCommessa, salvaRientro, schedaTecnica, segnalazioniCommessa, segnalazioniProdotto,
+  salvaCommessa, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
 import { oreDa } from '../preventivi-servizio.js';
@@ -57,13 +57,12 @@ export function rotteCommesse() {
   r.get('/nuova', async (req, res) => {
     const prev = await leggiPreventivo(Number(req.query.preventivo) || 0);
     if (!prev) return res.status(404).send('Preventivo non trovato');
-    const ultimaScheda = prev.revisione_id ? await q1<{ scheda_tecnica: any }>(`SELECT scheda_tecnica FROM prodotti_revisioni WHERE id = $1`, [prev.revisione_id]) : null;
     const dati: DatiCommessa = {
       numero: await proponiNumero(), ordineCliente: '', referenteCliente: '', dataOrdine: null, dataConsegna: null,
       quantita: prev.n_schede,
       // primo lotto: il preventivo è una prima produzione e il prodotto non ha ancora avuto commesse
       primoLotto: prev.parametri?.primaProduzione !== 0 && (prev.prodotto_id ? !(await haCommessePrecedenti(prev.prodotto_id)) : true),
-      segnalazioni: '', scheda: schedaTecnica(ultimaScheda?.scheda_tecnica),
+      segnalazioni: '', scheda: await schedaTecnicaDaProporre(prev.revisione_id, prev.prodotto_id),
     };
     res.send(await paginaCommessa(req, prev, dati));
   });
@@ -106,9 +105,9 @@ export function rotteCommesse() {
     const storico = await segnalazioniProdotto(c.prodotto_id);
     const qr = await QRCode.toString(indirizzoQr(req, c.codice_qr), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
     const reali = tempiRealiPerFase(await rilevazioniCommessa(c.id));
-    const catFasi: { codice: string; numero: string; nome: string }[] = prev?.catalogo?.fasi ?? [];
+    const catFasi = await fasiConNumeroAttuale(prev);
     const nomeFase = (cod: string) => catFasi.find(f => f.codice === cod) ?? { numero: '', nome: cod };
-    res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr), reali, nomeFase)));
+    res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr), reali, nomeFase, await caricaOperatori())));
   });
 
   // ── Inserimento rapido dei tempi dalla pagina della commessa ──
@@ -196,7 +195,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const i = prev.intestazione ?? {};
   const doppia = !!prev.parametri?.doppiaFaccia;
   const fasi = salvata ? await fasiCommessa(salvata) : fasiPreviste(prev, d.quantita || prev.n_schede, d.primoLotto);
-  const storico = prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : [];
+  const storico = (prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : []).filter(s => !salvata || s.numero !== salvata.numero || s.origine !== 'ufficio');
   const st = d.scheda;
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
@@ -247,7 +246,10 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
             ${doppia ? html`<td><input name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}" maxlength="80"></td>`
               : html`<input type="hidden" name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}">`}</tr>`)}
           </tbody></table>
-        <label>Pasta <input name="scheda[pasta]" value="${st.pasta}" maxlength="80"></label>
+        <div class="riga-campi">
+          <label>Pasta <input name="scheda[pasta]" value="${st.pasta}" maxlength="80"></label>
+          <label>Prog. forno <input name="scheda[forno]" value="${st.forno}" maxlength="80" placeholder="${doppia ? 'TOP+BOT' : 'TOP'}" title="Vuoto = ${doppia ? 'TOP+BOT' : 'TOP'}"></label>
+        </div>
       </fieldset>
 
       <fieldset class="blocco">
@@ -258,7 +260,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
 
       <fieldset class="blocco">
         <legend>Segnalazioni</legend>
-        <textarea name="segnalazioni" rows="3" placeholder="Segnalazioni per questa commessa">${d.segnalazioni}</textarea>
+        <textarea name="segnalazioni" rows="3" placeholder="Segnalazioni per questa commessa (restano nello storico del prodotto e si stampano anche sulle prossime schede)">${d.segnalazioni}</textarea>
         ${storico.length ? html`<p class="nota">Dallo storico del prodotto (stampate anche sulla scheda):</p>
           <ul class="storico">${storico.map(s => html`<li>${s.testo} <span class="nota">— ${s.origine}${s.numero ? `, commessa ${s.numero}` : ''}, ${data(s.creato_il)}</span></li>`)}</ul>` : ''}
       </fieldset>
@@ -277,7 +279,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
 /** Tabella fasi della commessa salvata: previsto, effettivo già registrato e caselle per aggiungere tempi. */
 async function tabellaFasiConTempi(c: any, fasi: FaseScheda[], prev: any): Promise<Raw> {
   const reali = tempiRealiPerFase(await rilevazioniCommessa(c.id));
-  const tutte: { codice: string; numero: string; nome: string }[] = (prev?.catalogo?.fasi ?? []);
+  const tutte = await fasiConNumeroAttuale(prev);
   const altre = [...Object.keys(reali).filter(k => !fasi.some(f => f.codice === k))];
   const nomeFase = (cod: string) => tutte.find(x => x.codice === cod) ?? { numero: '', nome: cod };
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
@@ -352,7 +354,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
   const i = c.intestazione ?? {};
   const prev = await leggiPreventivo(c.preventivo_id);
   const fasi = await fasiCommessa(c);
-  const tutte: { codice: string; numero: string; nome: string }[] = (prev?.catalogo?.fasi ?? []);
+  const tutte = await fasiConNumeroAttuale(prev);
   const altre = tutte.filter(f => !fasi.some(x => x.codice === f.codice));
   const nomeFase = (cod: string) => { const f = tutte.find(x => x.codice === cod); return f ? `${f.numero} ${f.nome}` : cod; };
   const controlli = controllaRientro(righe, fasi, nomeFase);
@@ -383,7 +385,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
       <td><button type="button" class="link togli-riga" title="Togli la riga">✕</button></td>
     </tr>`;
   const righeConErrore = new Set(controlli.filter(x => x.livello === 'errore' && x.riga != null).map(x => x.riga));
-  const operatori = await q<{ nome: string }>(`SELECT DISTINCT upper(operatore_nome) AS nome FROM rilevazioni WHERE operatore_nome IS NOT NULL ORDER BY 1`);
+  const operatori = await caricaOperatori();
   const errori = controlli.filter(x => x.livello === 'errore'), avvisi = controlli.filter(x => x.livello === 'avviso');
   return String(layout({
     titolo: `Rientro ${c.numero}`, utente: req.session.utente, attiva: 'commesse', largo: true, script: 'rientro.js', avviso: esito?.errore,
@@ -411,7 +413,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
           ${Array.from({ length: righe.length ? 2 : 8 }, (_, k) => riga({}, righe.length + k))}</tbody>
       </table></div>
       <template id="modello-riga">${riga({}, '__N__')}</template>
-      <datalist id="operatori">${operatori.map(o => html`<option value="${o.nome}">`)}</datalist>
+      <datalist id="operatori">${operatori.map(o => html`<option value="${o.sigla}">${o.nome}</option>`)}</datalist>
       <p><button type="button" id="aggiungi-riga">+ Aggiungi riga</button></p>
 
       <div class="due-colonne">
@@ -480,8 +482,14 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
 
 const RIGHE_RILEVAZIONE = 14;
 
+/** Fasi del catalogo del preventivo, con il numero di oggi (la numerazione può essere cambiata dopo il preventivo). */
+async function fasiConNumeroAttuale(prev: any): Promise<{ codice: string; numero: string; nome: string }[]> {
+  const numeri = await numeriFasi();
+  return (prev?.catalogo?.fasi ?? []).map((f: any) => ({ codice: f.codice, nome: f.nome, numero: numeri.get(f.codice) ?? f.numero }));
+}
+
 function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: string; numero: string | null }[], qr: Raw,
-  reali: Record<string, { cicloSec: number; uomoSec: number }>, nomeFase: (cod: string) => { numero: string; nome: string }): Raw {
+  reali: Record<string, { cicloSec: number; uomoSec: number }>, nomeFase: (cod: string) => { numero: string; nome: string }, operatori: { sigla: string; nome: string }[] = []): Raw {
   const i = c.intestazione ?? {};
   const st: SchedaTecnica = schedaTecnica(c.scheda_tecnica);
   const doppia = !!prev?.parametri?.doppiaFaccia;
@@ -509,7 +517,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const testoConsumo = (v: VoceConsumo) => { const r = consumoReale(v, consumi[v.codice], c.quantita); return r == null ? '' : `${formatoQuantita(r)} ${v.unita}`; };
   const nonPreviste = Object.keys(reali).filter(k => !fasi.some(f => f.codice === k));
   const sped: Partial<Spedizione>[] = [0, 1, 2].map(k => c.spedizioni?.[k] ?? {});
-  const segnalazioni = [...(c.segnalazioni ? [c.segnalazioni] : []), ...storico.map(s => s.testo + (s.numero ? ` (comm. ${s.numero})` : ''))];
+  const segnalazioni = storico.map(s => s.testo + (s.numero && s.numero !== c.numero ? ` (comm. ${s.numero})` : ''));
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Scheda ${c.numero} · ${i.codice}</title>
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
@@ -524,7 +532,7 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <tr>${cella('CLIENTE', i.cliente)}${cella('REFERENTE CLIENTE', c.referente_cliente)}${cella('NR. ORDINE CLIENTE', c.ordine_cliente)}${cella("QTA' / PANN.", quantita, 'forte')}</tr>
     <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo)}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
     <tr>${cella('PROG. ARMADIO', prog('progArmadio'))}${cella('PROG. SERIGRAFIA', prog('progSerigrafia'))}${cella('LAMINA', prog('lamina'))}${cella('PASTA', st.pasta)}</tr>
-    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'), '', 2)}</tr>
+    <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'))}${cella('PROG. FORNO', st.forno || (doppia ? 'TOP+BOT' : 'TOP'))}</tr>
   </table>
   <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>
@@ -572,7 +580,8 @@ ${[1, 2].map(n => html`
     <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>PERS.</th><th>PZ</th><th>S / P</th><th>RESP</th><th>MATERIALE IMPIEGATO</th><th>NOTE</th></tr></thead>
     <tbody>${Array.from({ length: RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 12 }, () => html`<td></td>`)}</tr>`)}</tbody>
   </table>
-  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · S = tempo standard · P = problema contingente (causa nelle note) · PERS. = persone sulla fase · MATERIALE IMPIEGATO: voce e quantità (es. pasta 350 gr) · Foglio ${n}</p>
+  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · FASE: numero della fase (anche più fasi fatte insieme, es. 4-5) · S = tempo standard · P = problema contingente (causa nelle note) · PERS. = persone sulla fase · MATERIALE IMPIEGATO: voce e quantità (es. pasta 350 gr) · Foglio ${n}</p>
+  ${operatori.length ? html`<p class="legenda operatori"><strong>OPERATORI:</strong> ${operatori.map(o => html`<span><b>${o.sigla}</b> ${o.nome}</span>`)}</p>` : ''}
 </section>`)}
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
 </body></html>`;
