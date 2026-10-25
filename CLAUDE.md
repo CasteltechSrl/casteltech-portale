@@ -86,7 +86,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Gantt all'indietro dalla consegna con ore ciclo dell'ultimo preventivo del prodotto ÷ ore al giorno, fatture senza ordine.
    Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
    con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).
-   ⬜ Aggiornamento automatico da FIC, acquisizione ordini dalle email.
+   🟡 Acquisizione (`rotte/acquisizioni.ts`, `acquisizioni-servizio.ts`, `lettura-ordini-ia.ts`, `engine/acquisizioni.ts`, migrazione 023):
+   Ordini → Da acquisire, file caricati (poi dalla cartella Google Drive): PDF/foto/email .eml/testo letti dall'IA → proposta
+   da confermare (cliente SOLO dall'anagrafica, prodotti ricollegati al cliente scelto) → ordine origine email, numero dal 9001 nell'anno.
+   ⬜ Lettura della cartella Drive (account di servizio), incrocio con gli export FIC dentro il portale.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

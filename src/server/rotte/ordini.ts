@@ -17,12 +17,12 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const nomeMese = (m: string) => `${MESI[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 
-const VISTE = [['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['cruscotto', 'Cruscotto'], ['gantt', 'Gantt'], ['fatture', 'Fatture senza ordine']] as const;
+const VISTE = [['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['cruscotto', 'Cruscotto'], ['gantt', 'Gantt'], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Da acquisire']] as const;
 function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
-const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string } = {}) =>
+export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string } = {}) =>
   String(layout({ titolo, utente, attiva: 'ordini', largo: true, script: opz.script ?? 'elenco.js', avviso: opz.avviso,
     contenuto: html`<div class="intestazione-pagina"><h1>Ordini clienti</h1></div>${schede(attiva)}${contenuto}` }));
 

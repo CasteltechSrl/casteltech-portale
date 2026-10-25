@@ -337,3 +337,17 @@ svg .base { stroke: #b9c0bc; stroke-width: 1; }
 .gantt .carico.oltre { fill: var(--negativo); }
 .gantt .oggi { stroke: var(--negativo); stroke-width: 1.5; }
 .gantt text.oggi { fill: var(--negativo); stroke: none; font-weight: 600; }
+
+/* Ordini → Da acquisire */
+.stato.acq-nuovo { background: #eef0ee; color: var(--tenue); }
+.stato.acq-da_confermare { background: #fff2cc; color: #8a6100; }
+.stato.acq-confermato { background: #ddf3e5; color: var(--positivo); }
+.stato.acq-scartato { background: #eceeed; color: #8a948f; }
+.stato.acq-errore { background: #fbe2e0; color: var(--negativo); }
+.campi-ordine { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .6rem 1rem; margin-bottom: 1rem; }
+.campi-ordine label { display: flex; flex-direction: column; gap: .2rem; }
+.campi-ordine label.largo { grid-column: 1 / -1; }
+input.lungo { min-width: 18rem; }
+.pulsanti { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+form.in-linea { display: inline; margin: 0; }
+.avviso-riga { background: #fff2cc; color: #8a6100; padding: .5rem .8rem; border-radius: 6px; }

@@ -1,0 +1,119 @@
+/**
+ * Acquisizione di ordini e aggiornamenti: i file arrivano dalla cartella Google Drive o si caricano dal portale
+ * (Ordini → Da acquisire). Gli ordini (PDF, foto, email) li legge l'IA e diventano una proposta "da confermare":
+ * l'ordine nasce solo quando l'ufficio conferma. Il cliente si sceglie SOLO dall'anagrafica.
+ */
+import { pool, q, q1, transazione } from './db.js';
+import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
+import { leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
+import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
+
+export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio' }
+/** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
+export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
+
+const DA_LEGGERE = ['ordine', 'email'];
+
+/** Registra un file arrivato. Lo stesso file di Drive non entra due volte. */
+export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 'drive' | 'caricato'; driveId?: string } = {}): Promise<number | null> {
+  const tipo = tipoFile(nome);
+  const r = await q1<{ id: number }>(`INSERT INTO acquisizioni (origine, drive_id, nome_file, tipo, mime, contenuto) VALUES ($1,$2,$3,$4,$5,$6)
+    ON CONFLICT (drive_id) DO NOTHING RETURNING id`, [opz.origine ?? 'caricato', opz.driveId ?? null, nome.slice(0, 250), tipo, mimeDaNome(nome), dati]);
+  return r?.id ?? null;
+}
+
+/** Il file diviso in pezzi da mandare all'IA (per le email: testo e allegati PDF/immagini). */
+function partiDa(nome: string, tipo: string, mime: string, dati: Buffer): { parti: Parte[]; mittente?: string; oggetto?: string } {
+  if (tipo === 'email') {
+    const e = leggiEmail(dati);
+    const parti: Parte[] = [];
+    if (e.testo) parti.push({ tipo: 'testo', nome: `Email da ${e.mittente}, oggetto "${e.oggetto}", del ${e.data}`, testo: e.testo });
+    for (const a of e.allegati) {
+      const m = a.mime === 'application/octet-stream' ? mimeDaNome(a.nome) : a.mime;
+      if (m === 'application/pdf') parti.push({ tipo: 'pdf', mime: m, dati: a.dati, nome: a.nome });
+      else if (/^image\/(png|jpeg|webp|gif)$/.test(m)) parti.push({ tipo: 'immagine', mime: m, dati: a.dati, nome: a.nome });
+    }
+    return { parti, mittente: e.mittente, oggetto: e.oggetto };
+  }
+  if (mime === 'application/pdf') return { parti: [{ tipo: 'pdf', mime, dati, nome }] };
+  if (mime.startsWith('image/')) return { parti: [{ tipo: 'immagine', mime, dati, nome }] };
+  return { parti: [{ tipo: 'testo', nome, testo: dati.toString('utf8') }] };
+}
+
+/** Collega cliente e prodotti della proposta all'anagrafica (non aggiunge niente). */
+async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null): Promise<PropostaDb> {
+  let clienteId: number | null = null;
+  if (clienteScelto) clienteId = (await q1<{ id: number }>(`SELECT id FROM clienti WHERE id = $1`, [clienteScelto]))?.id ?? null;
+  else if (p.cliente) clienteId = (await risolvi(pool, p.cliente, '')).clienteId;
+  const nomeCliente = clienteId ? (await q1<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti WHERE id = $1`, [clienteId]))!.r : p.cliente;
+  const righe: RigaPropostaDb[] = [];
+  for (const r of p.righe) {
+    const x = r as Partial<RigaPropostaDb>;
+    let prodottoId = x.prodottoId ?? null;
+    // il prodotto scelto deve essere del cliente (o senza cliente); altrimenti si cerca dal codice letto
+    if (prodottoId && !(await q1(`SELECT 1 FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [prodottoId, clienteId ?? -1]))) prodottoId = null;
+    if (!prodottoId && x.prodottoId === undefined && r.codice && clienteId) prodottoId = (await risolvi(pool, nomeCliente, r.codice)).prodottoId;
+    righe.push({ ...r, prodottoId, tipo: x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`)) });
+  }
+  return { ...p, clienteId, cliente: maiuscolo(nomeCliente), righe };
+}
+
+/** Legge un ordine con l'IA e lo mette "da confermare". Gli export di Fatture in Cloud restano in attesa. */
+export async function elabora(id: number): Promise<void> {
+  const a = await q1(`SELECT id, nome_file, tipo, mime, contenuto FROM acquisizioni WHERE id = $1`, [id]);
+  if (!a || !DA_LEGGERE.includes(a.tipo) || !a.contenuto) return;
+  try {
+    const { parti, mittente, oggetto } = partiDa(a.nome_file, a.tipo, a.mime ?? '', a.contenuto);
+    if (!parti.length) throw new Error("nell'email non ci sono testo né allegati PDF o immagini");
+    const clienti = (await q<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti ORDER BY ragione_sociale`)).map(c => c.r);
+    const proposta = await collega(await leggiOrdineConIa(parti, clienti));
+    if (mittente) proposta.mittente = mittente;
+    if (oggetto) proposta.oggetto = oggetto;
+    await q(`UPDATE acquisizioni SET stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`, [id, JSON.stringify(proposta)]);
+  } catch (e: any) {
+    await q(`UPDATE acquisizioni SET stato = 'errore', errore = $2, elaborato_il = now() WHERE id = $1`, [id, String(e?.message ?? e).slice(0, 500)]);
+  }
+}
+
+/** Salva le correzioni dell'ufficio alla proposta (senza creare l'ordine) e ricollega i prodotti al cliente scelto. */
+export async function salvaProposta(id: number, p: PropostaDb): Promise<PropostaDb> {
+  const nuova = await collega(p, p.clienteId);
+  await q(`UPDATE acquisizioni SET proposta = $2 WHERE id = $1 AND stato IN ('da_confermare', 'errore')`, [id, JSON.stringify(nuova)]);
+  return nuova;
+}
+
+/**
+ * Conferma: nasce l'ordine (origine email, numero dal 9001 nell'anno, data di oggi) con le righe controllate dall'ufficio.
+ * Il cliente deve essere in anagrafica; i prodotti non in anagrafica restano con il codice del cliente (come nell'import).
+ */
+export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi: string): Promise<number> {
+  const pr = await collega(p, p.clienteId);
+  if (!pr.clienteId) throw new Error("scegli il cliente dall'anagrafica");
+  const righe = pr.righe.filter(r => r.quantita > 0 && (r.codice || r.descrizione || r.prodottoId));
+  if (!righe.length) throw new Error('serve almeno una riga con la quantità');
+  return transazione(async c => {
+    const a = (await c.query(`SELECT id, nome_file, stato FROM acquisizioni WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!a) throw new Error('acquisizione non trovata');
+    if (a.stato === 'confermato') throw new Error("l'ordine è già stato creato");
+    const anno = Number(oggi.slice(0, 4));
+    const massimo = (await c.query(`SELECT max(numero) AS m FROM ordini WHERE anno = $1 AND numero >= $2`, [anno, PRIMO_NUMERO_EMAIL])).rows[0].m;
+    const { id: ordineId } = (await c.query(`INSERT INTO ordini (anno, numero, data_ordine, cliente_id, cliente_nome, rif_cliente, data_ordine_cliente, origine, file, note)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'email',$8,$9) RETURNING id`,
+      [anno, numeroOrdineEmail(massimo), oggi, pr.clienteId, pr.cliente, pr.rifCliente || null, pr.dataOrdine, a.nome_file, pr.note || null])).rows[0];
+    for (const [i, r] of righe.entries()) {
+      const prodotto = r.prodottoId ? (await c.query(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [r.prodottoId])).rows[0] : null;
+      await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, codice_cliente, descrizione_cliente, tipo, quantita, prezzo, consegna_richiesta)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [ordineId, `A${id}-${i + 1}`, i, r.prodottoId, prodotto?.codice ?? (r.codice || null), prodotto?.descrizione || r.descrizione || null,
+          r.codice || null, r.descrizione || null, r.tipo, r.quantita, r.prezzo ?? 0, r.consegna]);
+    }
+    await c.query(`UPDATE acquisizioni SET stato = 'confermato', ordine_id = $2, confermato_da = $3, proposta = $4 WHERE id = $1`,
+      [id, ordineId, utenteId, JSON.stringify(pr)]);
+    return ordineId;
+  });
+}
+
+/** Scartato (non è un ordine, doppione…): il file si svuota, resta la riga per non rileggerlo da Drive. */
+export async function scarta(id: number): Promise<void> {
+  await q(`UPDATE acquisizioni SET stato = 'scartato', contenuto = NULL WHERE id = $1 AND stato <> 'confermato'`, [id]);
+}
