@@ -79,6 +79,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Farnell, TME (`fornitori.ts`, chiavi solo su Render, cache 24 h) → scarto (`engine/acquisti.ts`: passivi <0,10 € +10%,
    <1 € +5%, 1–3 € +1 pz, oltre 0; Impostazioni → Componenti), miglior fornitore, reperibilità. Excel con codifica e acquisti.
    Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
+4c. 🟡 Ordini clienti (`rotte/ordini.ts`, `ordini-servizio.ts`, `engine/ordini.ts`, migrazione 022): righe d'ordine con stato da evadere /
+   parziale / evaso (schede: quantità spedita con DDT; servizi: fatturati o tutte le schede evase; lo stato scritto dall'ufficio vince),
+   date del foglio "Schedulazione produzione" (lavorazione = arrivo materiale + 3 gg, prevista = lavorazione + 5 gg + ritardi),
+   consegne a programma (es. Univac 15 mesi), cruscotto (fatturato, media mesi chiusi, da evadere per mese, previsione anno),
+   Gantt all'indietro dalla consegna con ore ciclo dell'ultimo preventivo del prodotto ÷ ore al giorno, fatture senza ordine.
+   Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
+   con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).
+   ⬜ Aggiornamento automatico da FIC, acquisizione ordini dalle email.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.
