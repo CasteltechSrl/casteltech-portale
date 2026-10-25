@@ -2,7 +2,7 @@
  * Lettura delle risposte dell'API v2 di TME (documentazione: developers.tme.eu/openapi.json).
  *   GET /products?mpns[]=…            → data.elements[]: symbol, manufacturer_symbols[], manufacturer{name}, description,
  *                                        minimal_amount, multiples, product_status[]
- *   GET /products/data?symbols[]=…&scope[]=prices&scope[]=stock&amounts[]=…
+ *   GET /products/data?symbols[]=…&scope[]=prices&scope[]=stock (senza amounts[])
  *                                      → data.elements[]: symbol, stock_quantity, prices{elements[]{amount, price}, currency}
  * Separata dalle chiamate di rete per poterla provare nei test.
  */

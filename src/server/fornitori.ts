@@ -199,9 +199,8 @@ async function tmeGet(percorso: string, par: Record<string, string | string[]>):
 async function tmePn(pns: string[]): Promise<Map<string, RisultatoFornitore>> {
   const prodotti = elementiTme(await tmeGet('products', { mpns: pns.slice(0, 50) }));
   const simboli = prodotti.map(p => String(p.symbol)).slice(0, 50);
-  // amounts[] è obbligatorio (una quantità per codice): si passa il minimo d'ordine; gli scaglioni arrivano in prices.elements
-  const dati = simboli.length ? elementiTme(await tmeGet('products/data', { symbols: simboli, scope: ['prices', 'stock'], currency: 'EUR',
-    amounts: prodotti.slice(0, 50).map(p => String(Number(p.minimal_amount) || 1)) })) : [];
+  // amounts[] serve solo per le consegne (delivery): con prices e stock TME lo rifiuta come campo in più
+  const dati = simboli.length ? elementiTme(await tmeGet('products/data', { symbols: simboli, scope: ['prices', 'stock'], currency: 'EUR' })) : [];
   const offerte = offerteTme(pns, prodotti, dati);
   return new Map(pns.map(pn => [pn, { offerte: offerte.get(pn) ?? [] }]));
 }
