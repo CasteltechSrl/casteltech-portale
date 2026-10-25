@@ -1,4 +1,4 @@
-# Casteltech — portale preventivi e produzione
+# Portale Casteltech (preventivi, ordini e produzione)
 
 Preventivi, schede di produzione con QR code, consuntivi, storico prodotto e collegamento con mOKa.
 Sostituirà il vecchio portale `portalepreventivicasteltech.ovh`, che resta attivo fino al passaggio completo.
