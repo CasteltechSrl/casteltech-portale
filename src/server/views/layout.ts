@@ -24,7 +24,7 @@ ${opz.utente ? html`
   <nav>
     ${opz.utente.ruolo === 'ufficio' ? html`
       ${voce('/preventivi', 'Preventivi', 'preventivi')}
-      ${voce('/ordini', 'Ordini', 'ordini')}
+      ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
       ${voce('/commesse', 'Commesse', 'commesse')}
       ${voce('/componenti', 'Componenti', 'componenti')}
       ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
