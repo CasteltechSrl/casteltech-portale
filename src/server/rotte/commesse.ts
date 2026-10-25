@@ -581,9 +581,9 @@ ${[1, 2].map(n => html`
     ${colonne.map(col => html`<td><span>${col}</span></td>`)}</tr></table>` : ''}
   <table class="tabella-rilevazioni">
     <thead><tr><th>FASE</th><th>OPERATORE</th><th>DATA</th><th>APERTURA TEMPO</th><th>CHIUSURA TEMPO</th><th>TOTALE ORE</th><th>Nr. PERS FASE</th><th>PZ</th><th>S / P</th><th>RESP</th><th>NOTE</th></tr></thead>
-    <tbody>${Array.from({ length: n === 1 ? RIGHE_RILEVAZIONE - 2 : RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 11 }, () => html`<td></td>`)}</tr>`)}</tbody>
+    <tbody>${Array.from({ length: n === 1 ? RIGHE_RILEVAZIONE - 2 : RIGHE_RILEVAZIONE }, () => html`<tr>${Array.from({ length: 11 }, (_, i) => i === 2 ? html`<td class="data-ggmm">/</td>` : html`<td></td>`)}</tr>`)}</tbody>
   </table>
-  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · FASE: numero della fase (anche più fasi fatte insieme, es. 10+12) · OPERATORE: sigla (anche più persone, es. MM+NG) · Nr. PERS FASE = persone che lavorano sulla fase · S = tempo standard · P = problema contingente (causa nelle note) · MATERIALE IMPIEGATO (foglio 1): quantità totale usata nel lotto</p>
+  <p class="legenda">Scrivere apertura e chiusura oppure solo il totale ore · DATA: solo giorno / mese · FASE: numero della fase (anche più fasi fatte insieme, es. 10+12) · OPERATORE: sigla (anche più persone, es. MM+NG) · Nr. PERS FASE = persone che lavorano sulla fase · S = tempo standard · P = problema contingente (causa nelle note) · MATERIALE IMPIEGATO (foglio 1): quantità totale usata nel lotto</p>
   <p class="legenda operatori"><strong>OPERATORI:</strong> ${operatori.length ? operatori.map(o => html`<span><b>${o.sigla}</b> ${o.nome}</span>`) : html`<span>sigle da inserire in Impostazioni → Operatori</span>`}</p>
   <p class="numero-foglio">Foglio tempi ${n} / 2</p>
 </section>`)}

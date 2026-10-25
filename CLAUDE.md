@@ -63,6 +63,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    già rientrata dalla pagina Rientro mantiene la conferma.
    Gli operatori per ora scrivono solo sulla carta (app da telefono in futuro).
    ⬜ Lettura automatica: scanner con ADF (PDF multipagina, il QR riconosce la commessa), API Anthropic, conferma ufficio.
+   Sul foglio tempi la DATA è solo gg/mm ("/" prestampato): l'anno si ricava da data scansione / consegna / ordine.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

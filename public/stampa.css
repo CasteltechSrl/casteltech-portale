@@ -64,6 +64,7 @@ h3.gruppo span { font-weight: 400; text-decoration: none; font-size: 8.5pt; }
 .tabella-rilevazioni { margin-top: 3mm; }
 .tabella-rilevazioni th { background: #e6e6e6; font-weight: 400; font-size: 7.5pt; border: 1px solid #000; padding: 1mm; }
 .tabella-rilevazioni td { border: 1px solid #000; height: 8.4mm; }
+.tabella-rilevazioni td.data-ggmm { text-align: center; font-size: 13pt; color: #888; }
 .tabella-rilevazioni th:nth-child(1) { width: 18mm; } .tabella-rilevazioni th:nth-child(2) { width: 20mm; }
 .tabella-rilevazioni th:nth-child(3) { width: 18mm; } .tabella-rilevazioni th:nth-child(4), .tabella-rilevazioni th:nth-child(5) { width: 18mm; }
 .tabella-rilevazioni th:nth-child(6) { width: 15mm; } .tabella-rilevazioni th:nth-child(7) { width: 14mm; }
