@@ -44,23 +44,71 @@ export function nomiColonne(intestazione: string[]): string[] {
   });
 }
 
-/** Colonna della BOM per ogni ruolo (P/N, quantità, designatori…). */
-export function rilevaColonne(colonne: string[]): Partial<Record<Ruolo, string>> {
+/**
+ * Colonna della BOM per ogni ruolo (P/N, quantità, designatori…).
+ * 1. titolo uguale a un nome noto; 2. titolo che contiene un nome noto (es. "Part / Valore");
+ * 3. con le righe della BOM (dati), per i ruoli ancora senza colonna: si guarda cosa c'è dentro
+ *    (designatori "R1,R2", quantità che tornano con i designatori, case "0603", valori "10k"/"100n", P/N, descrizioni).
+ */
+export function rilevaColonne(colonne: string[], dati: string[][] = []): Partial<Record<Ruolo, string>> {
   const mappa: Partial<Record<Ruolo, string>> = {}, usate = new Set<string>();
   const norm = Object.fromEntries(colonne.map(c => [c, normH(c)]));
-  for (const ruolo of ['pn', 'designatori', 'quantita', 'valore', 'footprint', 'descrizione', 'famiglia', 'produttore'] as Ruolo[]) {
-    let scelta: string | undefined;
-    for (const kw of RUOLI[ruolo]) { scelta = colonne.find(c => !usate.has(c) && norm[c] === kw); if (scelta) break; }
-    if (!scelta && ['pn', 'descrizione', 'footprint', 'designatori'].includes(ruolo)) {
-      for (const kw of RUOLI[ruolo]) {
-        if (kw.length < 4) continue;
-        scelta = colonne.find(c => !usate.has(c) && norm[c].includes(kw));
-        if (scelta) break;
-      }
+  const ordine: Ruolo[] = ['pn', 'designatori', 'quantita', 'valore', 'footprint', 'descrizione', 'famiglia', 'produttore'];
+  for (const ruolo of ordine) {
+    for (const kw of RUOLI[ruolo]) {
+      const scelta = colonne.find(c => !usate.has(c) && norm[c] === kw);
+      if (scelta) { mappa[ruolo] = scelta; usate.add(scelta); break; }
     }
-    if (scelta) { mappa[ruolo] = scelta; usate.add(scelta); }
   }
+  for (const ruolo of ordine) {
+    if (mappa[ruolo]) continue;
+    for (const kw of RUOLI[ruolo]) {
+      if (kw.length < 4 || (ruolo === 'valore' && kw === 'COMMENT')) continue; // "Commento" è una descrizione
+      const scelta = colonne.find(c => !usate.has(c) && norm[c].includes(kw));
+      if (scelta) { mappa[ruolo] = scelta; usate.add(scelta); break; }
+    }
+  }
+  if (dati.length) perContenuto(colonne, dati, mappa, usate);
   return mappa;
+}
+
+// ── riconoscimento dal contenuto ──
+const RE_DESIGNATORI = /^[A-Z]{1,8}_?\d+[A-Z]?(?:\s*[-,;\s]\s*[A-Z]{0,8}_?\d+[A-Z]?)*$/i;
+const RE_INTERO = /^\d+$/;
+const RE_CASE = /\b(?:01005|0201|0402|0603|0805|1206|1210|1806|1812|2010|2220|2512|SOT-?\d*|SOD-?\d*|SOIC|SOP|SSOP|TSSOP|MSOP|QFN|DFN|LFCSP|QFP|LQFP|TQFP|BGA|DPAK|D2PAK|TO-?\d+|SMA|SMB|SMC|MELF|DO-?\d+|THT|SMD|PINHEADER|TESTPOINT)/i;
+/** Valore di un passivo all'inizio della cella: 10k, 4K7, 100n, 4.7u, 2,2uF, 49.9k - 1%, 100nF 50V X7R, 10uH, 50 (max 4 cifre senza unità). */
+const RE_VALORE = /^\d{1,4}(?:[.,]\d+)?\s*(?:[pnuµμmkKMGR]\d*)?\s*(?:F|H|Ω|OHMS?)?(?:$|[\s\-/_,;%]+)/i;
+const RE_PN = /^(?=.*\d)(?=.*[A-Z])[A-Z0-9][A-Z0-9\-+/.#_]{4,}$/i;
+
+function perContenuto(colonne: string[], dati: string[][], mappa: Partial<Record<Ruolo, string>>, usate: Set<string>) {
+  const campione = dati.slice(0, 300);
+  const celle = (c: string) => campione.map(r => String(r[colonne.indexOf(c)] ?? '').trim()).filter(x => x && x.toLowerCase() !== 'nan');
+  const quota = (c: string, prova: (x: string) => boolean) => { const v = celle(c); return v.length ? v.filter(prova).length / v.length : 0; };
+  // solo colonne piene almeno per un terzo (una colonna "Note" con poche righe scritte non è una descrizione)
+  const libere = () => colonne.filter(c => !usate.has(c) && celle(c).length >= Math.max(Math.min(3, campione.length), campione.length / 3));
+  const scegli = (ruolo: Ruolo, punteggio: (c: string) => number, soglia: number) => {
+    if (mappa[ruolo]) return;
+    let migliore: string | undefined, max = soglia;
+    for (const c of libere()) { const p = punteggio(c); if (p >= max) { max = p; migliore = c; } }
+    if (migliore) { mappa[ruolo] = migliore; usate.add(migliore); }
+  };
+  const tuttiInteri = (c: string) => quota(c, x => RE_INTERO.test(x)) >= 0.8;
+  scegli('designatori', c => tuttiInteri(c) ? 0 : quota(c, x => RE_DESIGNATORI.test(x)), 0.6);
+  // quantità: la colonna di numeri interi che torna con il numero di designatori (non il numero di riga)
+  if (mappa.designatori) {
+    const iD = colonne.indexOf(mappa.designatori);
+    scegli('quantita', c => {
+      if (!tuttiInteri(c)) return 0;
+      const i = colonne.indexOf(c);
+      const coppie = campione.filter(r => String(r[i] ?? '').trim() && String(r[iD] ?? '').trim());
+      return coppie.length ? coppie.filter(r => Number(r[i]) === elencoDesignatori(r[iD]).length).length / coppie.length : 0;
+    }, 0.6);
+  }
+  scegli('footprint', c => quota(c, x => RE_CASE.test(x) && x.length <= 40 && x.split(/\s+/).length <= 2), 0.5); // non una descrizione "RES 10K 0402"
+  scegli('valore', c => tuttiInteri(c) ? 0 : quota(c, x => RE_VALORE.test(x)), 0.35);
+  scegli('pn', c => quota(c, x => RE_PN.test(x) && !RE_CASE.test(x) && !RE_VALORE.test(x)), 0.5);
+  // descrizione: testo lungo con spazi
+  scegli('descrizione', c => quota(c, x => x.length >= 12 && /\s/.test(x) && /[A-Z]{2}/i.test(x)), 0.5);
 }
 
 /** Designatori → elenco (R1-R4 → R1, R2, R3, R4). */

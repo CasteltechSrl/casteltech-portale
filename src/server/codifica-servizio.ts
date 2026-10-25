@@ -75,7 +75,7 @@ export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: 
   const h = rigaIntestazione(opz.righe);
   const colonne = nomiColonne(opz.righe[h] ?? []);
   const dati = opz.righe.slice(h + 1).map((r, i) => ({ n: h + 2 + i, celle: r })).filter(r => r.celle.some(c => String(c ?? '').trim()));
-  const mappatura = rilevaColonne(colonne);
+  const mappatura = rilevaColonne(colonne, dati.map(r => r.celle.map(c => String(c ?? ''))));
   const r = await q1<{ id: number }>(`INSERT INTO bom_analisi (nome, file_nome, quantita, colonne, mappatura, righe_file, creato_da)
     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [opz.nome, opz.fileNome, opz.quantita, JSON.stringify(colonne), JSON.stringify(mappatura), JSON.stringify(dati), opz.utenteId]);
   return r!.id;

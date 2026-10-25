@@ -105,3 +105,23 @@ test('TME v2: prodotti e prezzi letti con i nomi dei campi della documentazione 
   assert.equal(o.obsoleto, false);
   assert.deepEqual(r.get('ALTRO-PN'), []); // senza prezzi non è un'offerta
 });
+
+test('BOM: colonne riconosciute anche con titoli diversi o dal contenuto', () => {
+  const dati = [
+    ['1', '8', 'C1,C4,C7,C10,C13,C16,C19,C21', '1n', '', '', '0603', ''],
+    ['2', '3', 'R46,R63,R71', '49.9k - 1%', '', '', '0603', ''],
+    ['3', '1', 'U3', 'DS90CR285', 'DS90CR285MTD/NOPB', 'Texas Instruments', 'TSSOP56', ''],
+    ['4', '2', 'J5,J6', 'MTLW-108-05-T-S-190', '90120-0768', 'Molex', 'MTLW-108-05-T-S-190', 'verificare'],
+    ['5', '1', 'R70', '1', '', '', '0603', ''],
+    ['6', '4', 'C215,C218,C230,C237', '1u', '', '', '0603', ''],
+  ];
+  // titolo che contiene "Valore"
+  const m = rilevaColonne(['Item', 'Q.tà', 'Riferimenti', 'Part / Valore', 'Codice produttore', 'Produttore', 'Footprint', 'Note'], dati);
+  assert.equal(m.valore, 'Part / Valore'); assert.equal(m.pn, 'Codice produttore'); assert.equal(m.descrizione, undefined); // "Note" quasi vuota
+  // titoli senza significato: si guarda il contenuto
+  const x = rilevaColonne(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], dati);
+  assert.equal(x.designatori, 'C'); assert.equal(x.quantita, 'B'); // non "A", che è il numero di riga
+  assert.equal(x.valore, 'D'); assert.equal(x.footprint, 'G');
+  // "Commento" resta una descrizione, non un valore
+  assert.equal(rilevaColonne(['Commento', 'Designator']).descrizione, 'Commento');
+});
