@@ -1,7 +1,7 @@
 {
   "name": "casteltech-portale",
   "version": "0.1.0",
-  "description": "Preventivi, schede di produzione e consuntivi Casteltech",
+  "description": "Portale Casteltech: preventivi, ordini, schede di produzione e consuntivi",
   "directories": {
     "doc": "docs"
   },

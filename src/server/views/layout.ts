@@ -13,14 +13,14 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${opz.titolo} · Casteltech</title>
+<title>${opz.titolo} · Portale Casteltech</title>
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/stile.css?v=${VERSIONE}">
 </head>
 <body>
 ${opz.utente ? html`
 <header class="testata">
-  <a class="marchio" href="/"><span class="logo">C</span> Casteltech <small>portale</small></a>
+  <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   <nav>
     ${opz.utente.ruolo === 'ufficio' ? html`
       ${voce('/preventivi', 'Preventivi', 'preventivi')}

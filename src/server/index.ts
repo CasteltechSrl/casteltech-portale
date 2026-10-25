@@ -64,7 +64,7 @@ const paginaLogin = (errore?: string, torna = '/') => String(layout({
   titolo: 'Accesso', avviso: errore,
   contenuto: html`
   <form method="post" action="/login" class="scheda-login">
-    <div class="marchio grande"><span class="logo">C</span> Casteltech</div>
+    <div class="marchio grande"><span class="logo">C</span> Portale Casteltech</div>
     <input type="hidden" name="torna" value="${torna}">
     <label>Email <input name="email" type="email" autocomplete="username" required autofocus></label>
     <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
