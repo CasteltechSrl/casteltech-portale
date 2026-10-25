@@ -83,3 +83,25 @@ test('IA: risposta JSON anche con testo intorno', () => {
   assert.deepEqual(leggiJson('Ecco:\n```json\n[{"riga": 3, "famiglia": "RS"}]\n```'), [{ riga: 3, famiglia: 'RS' }]);
   assert.deepEqual(leggiJson('niente'), []);
 });
+
+test('TME v2: prodotti e prezzi letti con i nomi dei campi della documentazione ufficiale', async () => {
+  const { offerteTme, elementiTme } = await import('../src/engine/tme.js');
+  const prodotti = elementiTme({ data: { elements: [
+    { symbol: 'RC0603FR-072K2L', manufacturer_symbols: ['RC0603FR-072K2L'], manufacturer: { id: 1, name: 'YAGEO' },
+      description: 'Resistore 2,2kΩ 0603', minimal_amount: 100, multiples: 100, product_status: ['AVAILABLE_WHILE_STOCKS_LAST'] },
+    { symbol: 'ALTRO', manufacturer_symbols: ['ALTRO-PN'], manufacturer: { name: 'X' }, minimal_amount: 1, multiples: 1, product_status: [] },
+  ] } });
+  const dati = elementiTme({ data: { elements: [
+    { symbol: 'RC0603FR-072K2L', stock_quantity: 25000, prices: { currency: 'EUR', type: 'NET', elements: [{ amount: 1000, price: 0.0021 }, { amount: 100, price: 0.004 }] } },
+  ] } });
+  const r = offerteTme(['rc0603fr-072k2l', 'ALTRO-PN'], prodotti, dati);
+  const [o] = r.get('rc0603fr-072k2l')!;
+  assert.equal(o.codiceFornitore, 'RC0603FR-072K2L');
+  assert.equal(o.produttore, 'YAGEO');
+  assert.equal(o.stock, 25000);
+  assert.equal(o.moq, 100);
+  assert.deepEqual(o.scaglioni, [{ qta: 100, prezzo: 0.004 }, { qta: 1000, prezzo: 0.0021 }]);
+  assert.equal(o.fineVita, true);
+  assert.equal(o.obsoleto, false);
+  assert.deepEqual(r.get('ALTRO-PN'), []); // senza prezzi non è un'offerta
+});

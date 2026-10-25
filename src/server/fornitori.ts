@@ -6,12 +6,13 @@
  *   FARNELL_API_KEY (FARNELL_STORE, default it.farnell.com)   partner.element14.com
  *   TME_APP_TOKEN, TME_APP_SECRET              developers.tme.eu (API v2, OAuth client credentials)
  * Ogni risposta resta in fornitori_cache per 24 ore (stesso P/N = nessuna nuova chiamata).
- * Le risposte di TME e Farnell sono lette in modo tollerante: i nomi dei campi vanno confermati con le prime chiavi vere.
+ * TME: lettura secondo la documentazione ufficiale v2 (src/engine/tme.ts). Farnell: lettura tollerante, campi da confermare con le prime chiavi vere.
  */
 import { q, q1 } from './db.js';
 import { leggiPrezzo, type Fornitore, type Offerta } from '../engine/acquisti.js';
 import { pnKey } from '../engine/codifica/bom.js';
 import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
+import { elementiTme, offerteTme } from '../engine/tme.js';
 
 const ORE_CACHE = 24;
 const TIMEOUT = 20_000;
@@ -193,45 +194,16 @@ async function tmeGet(percorso: string, par: Record<string, string | string[]>):
   const u = new URL(`https://api.tme.eu/${percorso}`);
   u.searchParams.set('country', 'IT');
   for (const [k, v] of Object.entries(par)) for (const x of Array.isArray(v) ? v : [v]) u.searchParams.append(Array.isArray(v) ? `${k}[]` : k, x);
-  const r = await http(u.toString(), { nome: 'TME', headers: { Authorization: `Bearer ${await tokenTmeValido()}`, 'Accept-Language': 'it', Accept: 'application/json' } });
-  return r?.data ?? r;
+  return http(u.toString(), { nome: 'TME', headers: { Authorization: `Bearer ${await tokenTmeValido()}`, 'Accept-Language': 'it', Accept: 'application/json' } });
 }
-/** Elenchi di oggetti con il campo "symbol" ovunque si trovino nella risposta (formato v2 da confermare). */
-function elencoSimboli(x: any, out: any[] = []): any[] {
-  if (Array.isArray(x)) { for (const y of x) elencoSimboli(y, out); return out; }
-  if (x && typeof x === 'object') {
-    if ('symbol' in x || 'Symbol' in x) out.push(x);
-    else for (const v of Object.values(x)) elencoSimboli(v, out);
-  }
-  return out;
-}
-const campo = (o: any, ...nomi: string[]) => { for (const n of nomi) if (o?.[n] != null) return o[n]; return undefined; };
 async function tmePn(pns: string[]): Promise<Map<string, RisultatoFornitore>> {
-  const prodotti = elencoSimboli(await tmeGet('products', { mpns: pns.slice(0, 50) }));
-  const simboli = prodotti.map(p => String(campo(p, 'symbol', 'Symbol')));
-  const dati = simboli.length ? elencoSimboli(await tmeGet('products/data', { symbols: simboli, scope: ['prices', 'stocks'], currency: 'EUR' })) : [];
-  const perSimbolo = new Map(dati.map(d => [String(campo(d, 'symbol', 'Symbol')), d]));
-  const out = new Map<string, RisultatoFornitore>();
-  for (const pn of pns) {
-    const k = pnKey(pn);
-    const offerte = prodotti.filter(p => pnKey(campo(p, 'original_symbol', 'originalSymbol', 'OriginalSymbol', 'mpn')) === k).map((p): Offerta => {
-      const s = String(campo(p, 'symbol', 'Symbol')); const d = perSimbolo.get(s) ?? {};
-      const prezzi = campo(d, 'prices', 'price_list', 'PriceList') ?? [];
-      const stato = [campo(p, 'product_status', 'productStatus', 'ProductStatusList')].flat().filter(Boolean).join(' ');
-      return {
-        fornitore: 'tme', codiceFornitore: s, mpn: String(campo(p, 'original_symbol', 'originalSymbol', 'OriginalSymbol') ?? ''),
-        produttore: String(campo(p, 'producer', 'Producer') ?? ''), descrizione: String(campo(p, 'description', 'Description') ?? ''),
-        stock: Number(campo(d, 'stock', 'amount', 'Amount', 'quantity') ?? 0) || 0,
-        moq: Number(campo(p, 'min_amount', 'minAmount', 'MinAmount') ?? 1) || 1, multiplo: Number(campo(p, 'multiples', 'Multiples') ?? 1) || 1,
-        scaglioni: (Array.isArray(prezzi) ? prezzi : []).map((x: any) => ({ qta: Number(campo(x, 'amount', 'Amount', 'quantity')), prezzo: leggiPrezzo(campo(x, 'price_value', 'priceValue', 'PriceValue', 'price')) ?? 0 }))
-          .filter((x: any) => x.qta > 0 && x.prezzo > 0),
-        valuta: String(campo(d, 'currency', 'Currency') ?? 'EUR'), ciclo: stato || null, obsoleto: /NOT_IN_OFFER|CANNOT_BE_ORDERED|END_OF_LIFE|WITHDRAWN/i.test(stato),
-        url: `https://www.tme.eu/it/details/${encodeURIComponent(s)}/`,
-      };
-    }).filter(o => o.scaglioni.length);
-    out.set(pn, { offerte });
-  }
-  return out;
+  const prodotti = elementiTme(await tmeGet('products', { mpns: pns.slice(0, 50) }));
+  const simboli = prodotti.map(p => String(p.symbol)).slice(0, 50);
+  // amounts[] è obbligatorio (una quantità per codice): si passa il minimo d'ordine; gli scaglioni arrivano in prices.elements
+  const dati = simboli.length ? elementiTme(await tmeGet('products/data', { symbols: simboli, scope: ['prices', 'stock'], currency: 'EUR',
+    amounts: prodotti.slice(0, 50).map(p => String(Number(p.minimal_amount) || 1)) })) : [];
+  const offerte = offerteTme(pns, prodotti, dati);
+  return new Map(pns.map(pn => [pn, { offerte: offerte.get(pn) ?? [] }]));
 }
 
 // ───────────────────────────── ricerca per elenco di P/N ─────────────────────────────
