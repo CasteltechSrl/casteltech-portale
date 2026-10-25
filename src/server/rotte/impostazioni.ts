@@ -197,7 +197,7 @@ export function rotteImpostazioni() {
         <h2>Import degli ordini</h2>
         <p class="nota">Nel portale: ${conti.ordini} ordini (${conti.righe} righe), ${conti.ddt} righe di DDT, ${conti.fatture} righe di fattura.
           Si carica il file <code>ordini_AAAA.json.gz</code> preparato dall'incrocio di ordini, DDT e fatture di Fatture in Cloud con gli ordini dei clienti.
-          Si può ripetere: ordini e righe si aggiornano, restano le date di arrivo materiale, i ritardi, gli stati e le note scritti nel portale;
+          Si può ripetere: ordini e righe si aggiornano, gli ordini importati che non sono più nel file si tolgono (se non hanno commesse), restano le date di arrivo materiale, i ritardi, gli stati e le note scritti nel portale;
           DDT e fatture dell'anno si sostituiscono. Clienti e prodotti si collegano solo se sono già in anagrafica (nessuno viene aggiunto).</p>
         <label>File <input type="file" id="file-ordini" accept=".gz,.json"></label>
         <button id="avvia-import-ordini">Importa</button>

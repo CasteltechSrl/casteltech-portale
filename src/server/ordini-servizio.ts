@@ -35,7 +35,8 @@ export function leggiFileOrdini(contenuto: Buffer): FileOrdini {
 }
 
 /**
- * Import: gli ordini si aggiornano per numero (stesso anno), le righe per chiave. Restano quelle scritte nel portale:
+ * Import: gli ordini si aggiornano per numero (stesso anno), le righe per chiave. Gli ordini dell'anno importati prima
+ * e non più nel file si tolgono (se senza commesse). Restano quelle scritte nel portale:
  * arrivo materiale, date a mano, ritardi, stato deciso dall'ufficio, commessa collegata, note.
  * DDT e fatture dell'anno si sostituiscono per intero. Clienti e prodotti si collegano solo se sono già in anagrafica.
  */
@@ -86,6 +87,10 @@ export async function importaOrdini(f: FileOrdini) {
       // righe tolte dall'ordine (non collegate a commesse)
       await c.query(`DELETE FROM ordini_righe WHERE ordine_id = $1 AND NOT (chiave = ANY($2)) AND commessa_id IS NULL`, [ordineId, chiavi]);
     }
+    // ordini importati negli anni passati ma tolti dal file (es. annullati): via, se non hanno commesse collegate.
+    // Gli ordini scritti a mano o arrivati per email restano.
+    const tolti = (await c.query(`DELETE FROM ordini o WHERE anno = $1 AND origine IN ('fic', 'ordine_cliente', 'foglio') AND NOT (numero = ANY($2))
+      AND NOT EXISTS (SELECT 1 FROM ordini_righe r WHERE r.ordine_id = o.id AND r.commessa_id IS NOT NULL)`, [f.anno, f.ordini.map(o => o.numero)])).rowCount ?? 0;
     await c.query(`DELETE FROM ddt_righe WHERE anno = $1`, [f.anno]);
     for (const d of f.ddt ?? []) {
       if (!dataValida(d.data)) continue;
@@ -103,7 +108,7 @@ export async function importaOrdini(f: FileOrdini) {
           x.ddt ?? null, !!x.intestazione, x.riga ? idRiga.get(x.riga) ?? null : null]);
     }
     return {
-      ordini: f.ordini.length, righe: nRighe, ddt: f.ddt?.length ?? 0, fatture: f.fatture?.length ?? 0,
+      ordini: f.ordini.length, ordiniTolti: tolti, righe: nRighe, ddt: f.ddt?.length ?? 0, fatture: f.fatture?.length ?? 0,
       clientiNonInAnagrafica: [...clientiFuori].sort(), prodottiNonInAnagrafica: [...prodottiFuori].sort(),
     };
   });
