@@ -16,6 +16,10 @@ import { caricaOperatori } from '../commesse-servizio.js';
 import { caricaPin } from './reparto.js';
 import { fasiAperte, inviaAdesso, orariPromemoria, ricaricaPromemoria } from '../promemoria.js';
 import { leggiOrari } from '../../engine/promemoria.js';
+import { conteggiComponenti, importaComponenti, caricaRegoleScarto } from '../codifica-servizio.js';
+import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
+import { iaConfigurata } from '../lettura-ia.js';
+import { NOMI_FORNITORI, leggiRegoleScarto, type Fornitore } from '../../engine/acquisti.js';
 import { join, basename } from 'node:path';
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
@@ -130,6 +134,68 @@ export function rotteImpostazioni() {
     }
     await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('pin_operatori', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(pin)]);
     res.redirect('/impostazioni/operatori?pin=' + encodeURIComponent(req.body.togli ? `PIN di ${sigla} tolto` : `PIN di ${sigla} salvato`));
+  });
+
+  // ── Componenti: archivio, distributori, scarti ──
+  r.get('/componenti', async (req, res) => {
+    const conti = await conteggiComponenti();
+    const f = fornitoriConfigurati();
+    const rs = await caricaRegoleScarto();
+    const prove = (req.session as any).proveFornitori ?? {};
+    delete (req.session as any).proveFornitori;
+    const ISTRUZIONI: Record<Fornitore, Raw> = {
+      digikey: html`<code>DIGIKEY_CLIENT_ID</code> e <code>DIGIKEY_CLIENT_SECRET</code>: developer.digikey.com → Organizations → Production Apps → app con
+        "Product Information V4" (sono le stesse del vecchio programma di codifica, file config.ini). Limite: 1000 ricerche al giorno.`,
+      mouser: html`<code>MOUSER_API_KEY</code>: mouser.it → My Mouser → APIs → "Search API". Gratuita, 30 ricerche al minuto.`,
+      farnell: html`<code>FARNELL_API_KEY</code>: partner.element14.com → Register → My API Keys. Gratuita. Negozio: <code>FARNELL_STORE</code> (vuoto = it.farnell.com).`,
+      tme: html`<code>TME_APP_TOKEN</code> e <code>TME_APP_SECRET</code>: developers.tme.eu → Sign up → nuova applicazione (API v2). Gratuita.`,
+    };
+    res.send(pag(req, 'Componenti', html`
+      <section class="blocco stretto-form">
+        <h2>Archivio componenti</h2>
+        <p class="nota">${conti.totale} componenti in archivio (${conti.gestionale} con codice gestionale). Si carica il file
+          <code>componenti_casteltech.json.gz</code> preparato dal database del programma "Codifica componenti": i componenti già presenti vengono saltati,
+          si può ripetere.</p>
+        <label>File <input type="file" id="file-componenti" accept=".gz,.json"></label>
+        <button id="avvia-import-componenti">Importa</button>
+        <output id="esito-import-componenti" class="nota"></output>
+      </section>
+      <section class="blocco">
+        <h2>Distributori e IA</h2>
+        <p class="nota">Le chiavi si inseriscono solo su Render (servizio casteltech-portale → Environment), mai qui né in chat. Dopo averle salvate Render riavvia il portale.</p>
+        <table><tbody>${(Object.keys(f) as Fornitore[]).map(k => html`<tr><td><b>${NOMI_FORNITORI[k]}</b></td>
+          <td>${f[k] ? html`<span class="esito nuovo">collegato</span>` : html`<span class="esito escluso">chiavi non impostate</span>`}</td>
+          <td class="nota">${ISTRUZIONI[k]}${prove[k] ? html`<br><b>Prova:</b> ${prove[k]}` : ''}</td>
+          <td>${f[k] ? html`<form method="post" action="/impostazioni/componenti/prova" class="inline"><button name="fornitore" value="${k}">Prova</button></form>` : ''}</td></tr>`)}
+          <tr><td><b>IA (Anthropic)</b></td><td>${iaConfigurata() ? html`<span class="esito nuovo">attiva</span>` : html`<span class="esito escluso">non attiva</span>`}</td>
+          <td class="nota"><code>ANTHROPIC_API_KEY</code> (già usata per la lettura delle schede): legge le righe di BOM senza P/N o non riconosciute.</td><td></td></tr>
+        </tbody></table>
+      </section>
+      <form method="post" action="/impostazioni/componenti/scarto" class="blocco stretto-form">
+        <h2>Scarto negli acquisti</h2>
+        <label>Famiglie dei passivi <input name="famigliePassive" value="${rs.famigliePassive.join(', ')}"></label>
+        <label>Passivi sotto <input name="sogliaPassivoEconomico" value="${rs.sogliaPassivoEconomico}" class="corto"> €/pz: più
+          <input name="percentualePassivi" value="${rs.percentualePassivi}" class="corto"> %</label>
+        <label>Altri sotto <input name="sogliaEconomico" value="${rs.sogliaEconomico}" class="corto"> €/pz: più
+          <input name="percentualeEconomici" value="${rs.percentualeEconomici}" class="corto"> %</label>
+        <label>Fino a <input name="sogliaMedio" value="${rs.sogliaMedio}" class="corto"> €/pz: più <input name="pezziMedi" value="${rs.pezziMedi}" class="corto"> pezzi
+          <small class="unita">oltre: nessuno scarto</small></label>
+        <button class="primario">Salva</button>
+      </form>`, req.query.ok ? 'Salvato.' : undefined, 'componenti.js'));
+  });
+  r.post('/componenti/importa', express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res) => {
+    try { res.json(await importaComponenti(req.body as Buffer)); }
+    catch (e: any) { res.status(400).json({ errore: `File non valido: ${e.message}` }); }
+  });
+  r.post('/componenti/prova', async (req, res) => {
+    const f = String(req.body.fornitore) as Fornitore;
+    if (f in NOMI_FORNITORI) (req.session as any).proveFornitori = { [f]: await provaFornitore(f) };
+    res.redirect('/impostazioni/componenti');
+  });
+  r.post('/componenti/scarto', async (req, res) => {
+    const x = leggiRegoleScarto({ ...req.body, famigliePassive: String(req.body.famigliePassive ?? '').split(/[,\s]+/) });
+    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('regole_scarto', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(x)]);
+    res.redirect('/impostazioni/componenti?ok=1');
   });
 
   // ── Promemoria delle fasi aperte dal telefono ──
@@ -361,7 +427,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

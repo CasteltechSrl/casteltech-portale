@@ -251,3 +251,36 @@ td.selezione, th.selezione { width: 2rem; text-align: center; }
 table.tempi-commessa input { padding: .2rem .35rem; font-size: .85rem; margin: 0; }
 table.tempi-commessa input.corto { width: 4.4rem; } table.tempi-commessa input.cortissimo { width: 3rem; }
 table.tempi-commessa select { width: 100%; font-size: .85rem; }
+
+/* ── Componenti: BOM, codifica, archivio ── */
+.collegamenti { margin-top: 0; }
+td.codice, b.codice { font-family: var(--mono); font-size: .82rem; white-space: nowrap; }
+.esito, .livello { font-size: .72rem; padding: .1rem .5rem; border-radius: 99px; background: #eef0ee; color: var(--tenue); font-weight: 600; white-space: nowrap; }
+.esito.archivio { background: #e1ecfb; color: #1f55a6; }
+.esito.nuovo { background: #ddf3e5; color: var(--positivo); }
+.esito.verifica { background: #fff2cc; color: #8a6100; }
+.esito.manca { background: #fbe2e0; color: var(--negativo); }
+.esito.escluso { background: #eceeed; color: #8a948f; }
+.livello.ok { background: #ddf3e5; color: var(--positivo); }
+.livello.attenzione { background: #fff2cc; color: #8a6100; }
+.livello.critico { background: #fbe2e0; color: var(--negativo); }
+.totali.materiali { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 1rem; }
+.totali.materiali .totale.principale { grid-column: span 1; }
+table.bom td { vertical-align: top; }
+table.bom td.acquisto { white-space: nowrap; font-size: .82rem; }
+table.bom td.note { max-width: 22rem; font-size: .8rem; color: var(--tenue); }
+table.bom td.taglia { max-width: 16rem; }
+.filtri { display: flex; gap: .4rem; margin: .5rem 0; flex-wrap: wrap; }
+.filtri button { font-size: .85rem; padding: .3rem .8rem; }
+.filtri button.attivo { background: var(--accento-chiaro); border-color: var(--accento); color: var(--accento); }
+.codici { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: .8rem 0; }
+.codici > div { background: var(--sfondo); border-radius: var(--raggio); padding: .6rem .8rem; display: grid; }
+.codici span { font-size: .75rem; color: var(--tenue); }
+.codici b.codice { font-size: 1rem; }
+.campi-attributi { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; margin: .8rem 0; }
+.note-riga { font-size: .85rem; color: var(--tenue); padding-left: 1.2rem; }
+label.spunta { display: flex; align-items: center; gap: .5rem; margin: .8rem 0; }
+label.spunta input { width: auto; margin: 0; }
+table.acquisti { background: var(--carta); margin-bottom: 1rem; }
+details.blocco summary { cursor: pointer; font-weight: 600; }
+details.blocco .riga-campi { margin-top: .8rem; align-items: end; }

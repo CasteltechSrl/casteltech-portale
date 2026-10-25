@@ -70,6 +70,15 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Una fase per volta dal telefono (sulla carta resta possibile "10+12").
    ⬜ Lettura automatica: scanner con ADF (PDF multipagina, il QR riconosce la commessa), API Anthropic, conferma ufficio.
    Sul foglio tempi la DATA è solo gg/mm ("/" prestampato): l'anno si ricava da data scansione / consegna / ordine.
+4b. ✅ Componenti (`rotte/componenti.ts`, `codifica-servizio.ts`, migrazione 021): codifica come il programma Python
+   "Codifica componenti" (regole e decodifica P/N portate in `src/engine/codifica/*`, identiche: `tools/verifica-codifica.ts`
+   con i casi generati dal Python, dati reali fuori dal repository). Codice di produzione (armadio, es. RS-0603-2K2-1-100MW) e
+   gestionale (Moka, es. SRS-0603-2K20F-001, progressivo dall'archivio `componenti`). Resistenze solo all'1% (5% non si comprano),
+   potenza standard del case se manca. Righe senza P/N: se il codice di produzione è già in archivio si riprendono i codici.
+   BOM xlsx/csv → archivio, decodifica, DigiKey, colonne, IA (ANTHROPIC_API_KEY) → codici → prezzi da DigiKey, Mouser,
+   Farnell, TME (`fornitori.ts`, chiavi solo su Render, cache 24 h) → scarto (`engine/acquisti.ts`: passivi <0,10 € +10%,
+   <1 € +5%, 1–3 € +1 pz, oltre 0; Impostazioni → Componenti), miglior fornitore, reperibilità. Excel con codifica e acquisti.
+   Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

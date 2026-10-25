@@ -33,3 +33,16 @@ services:
         value: Adriano Gambi
       - key: ANTHROPIC_API_KEY
         sync: false             # inserita a mano su Render: lettura automatica delle schede scansionate
+      # distributori per prezzi e disponibilità dei componenti (Impostazioni → Componenti): tutte facoltative
+      - key: DIGIKEY_CLIENT_ID
+        sync: false
+      - key: DIGIKEY_CLIENT_SECRET
+        sync: false
+      - key: MOUSER_API_KEY
+        sync: false
+      - key: FARNELL_API_KEY
+        sync: false
+      - key: TME_APP_TOKEN
+        sync: false
+      - key: TME_APP_SECRET
+        sync: false
