@@ -65,3 +65,15 @@ test('acquisizioni: righe di servizio riconosciute dalla descrizione', async () 
   assert.equal(tipoRigaDa('Lamina serigrafica'), 'servizio');
   assert.equal(tipoRigaDa('SCHEDA CONTROLLO 1004 REV.B'), 'scheda');
 });
+
+test('acquisizioni: cartella Drive (orario lun–ven 8–20, link della cartella, file leggibili)', async () => {
+  const { orarioDrive, idCartellaDa, fileDaAcquisire } = await import('../src/engine/acquisizioni.js');
+  assert.equal(orarioDrive({ feriale: true, minuti: 8 * 60 }), true);
+  assert.equal(orarioDrive({ feriale: true, minuti: 20 * 60 + 15 }), false);
+  assert.equal(orarioDrive({ feriale: false, minuti: 10 * 60 }), false);
+  assert.equal(idCartellaDa('https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp?usp=sharing'), '1AbCdEfGhIjKlMnOp');
+  assert.equal(idCartellaDa('1AbCdEfGhIjKlMnOp'), '1AbCdEfGhIjKlMnOp');
+  assert.equal(idCartellaDa('cartella ordini'), null);
+  assert.equal(fileDaAcquisire('application/pdf'), true);
+  assert.equal(fileDaAcquisire('application/vnd.google-apps.folder'), false);
+});
