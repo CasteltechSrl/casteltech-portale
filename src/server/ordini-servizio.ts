@@ -7,16 +7,21 @@ import { q, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
 import { dateRiga, residuo, statoRiga, type RigaOrdine, type StatoRiga } from '../engine/ordini.js';
 
-/** File di import: un anno di ordini con le loro righe, più DDT e fatture dello stesso anno. */
+/**
+ * File di import: un anno di ordini con le loro righe, più DDT e fatture dello stesso anno.
+ * Un ordine può avere un suo "anno" (es. ordini dell'anno prima ancora fatturati) e una riga uno "stato" iniziale
+ * (es. evaso per gli ordini vecchi di cui non si hanno i DDT): lo stato scritto dall'ufficio nel portale resta.
+ */
 export interface FileOrdini {
   anno: number;
   ordini: {
-    numero: number; data?: string | null; cliente: string; rif_cliente?: string | null; data_ordine_cliente?: string | null;
+    anno?: number; numero: number; data?: string | null; cliente: string; rif_cliente?: string | null; data_ordine_cliente?: string | null;
     origine?: string; file?: string | null; note?: string | null;
     righe: {
       chiave: string; codice?: string | null; descrizione?: string | null; codice_cliente?: string | null; descrizione_cliente?: string | null;
       tipo?: 'scheda' | 'servizio'; quantita: number; prezzo?: number; consegna_richiesta?: string | null;
       quantita_spedita?: number; importo_fatturato?: number; note?: string | null; consegne?: { data: string; quantita: number }[];
+      stato?: 'evaso' | 'da_evadere' | 'annullato' | null;
     }[];
   }[];
   ddt?: { numero: number; data: string; cliente: string; codice?: string | null; descrizione?: string | null; quantita?: number; imponibile?: number; riga?: string | null }[];
@@ -41,6 +46,7 @@ export function leggiFileOrdini(contenuto: Buffer): FileOrdini {
  * DDT e fatture dell'anno si sostituiscono per intero. Clienti e prodotti si collegano solo se sono già in anagrafica.
  */
 export async function importaOrdini(f: FileOrdini) {
+  const annoDi = (o: FileOrdini['ordini'][number]) => (Number.isInteger(o.anno) ? o.anno! : f.anno);
   return transazione(async c => {
     const cache = new Map<string, Awaited<ReturnType<typeof risolvi>>>();
     const collega = async (cliente: string, codice?: string | null) => {
@@ -60,7 +66,7 @@ export async function importaOrdini(f: FileOrdini) {
         ON CONFLICT (anno, numero) DO UPDATE SET data_ordine = EXCLUDED.data_ordine, cliente_id = EXCLUDED.cliente_id, cliente_nome = EXCLUDED.cliente_nome,
           rif_cliente = EXCLUDED.rif_cliente, data_ordine_cliente = EXCLUDED.data_ordine_cliente, origine = EXCLUDED.origine, file = EXCLUDED.file,
           note = coalesce(ordini.note, EXCLUDED.note), aggiornato_il = now()
-        RETURNING id`, [f.anno, o.numero, dataValida(o.data), cl.clienteId, cl.clienteId ? cl.cliente : maiuscolo(o.cliente), o.rif_cliente || null,
+        RETURNING id`, [annoDi(o), o.numero, dataValida(o.data), cl.clienteId, cl.clienteId ? cl.cliente : maiuscolo(o.cliente), o.rif_cliente || null,
         dataValida(o.data_ordine_cliente), ORIGINI.includes(String(o.origine)) ? o.origine : 'fic', o.file || null, o.note || null])).rows[0];
       const chiavi: string[] = [];
       for (const [i, r] of (o.righe ?? []).entries()) {
@@ -68,8 +74,8 @@ export async function importaOrdini(f: FileOrdini) {
         if (pr && !pr.prodottoId) prodottiFuori.add(`${maiuscolo(o.cliente)} · ${maiuscolo(r.codice)}`);
         const { id } = (await c.query(`
           INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, codice_cliente, descrizione_cliente, tipo,
-            quantita, prezzo, consegna_richiesta, quantita_spedita, importo_fatturato, note)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            quantita, prezzo, consegna_richiesta, quantita_spedita, importo_fatturato, note, stato_manuale)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
           ON CONFLICT (ordine_id, chiave) DO UPDATE SET posizione = EXCLUDED.posizione, prodotto_id = EXCLUDED.prodotto_id, codice = EXCLUDED.codice,
             descrizione = EXCLUDED.descrizione, codice_cliente = EXCLUDED.codice_cliente, descrizione_cliente = EXCLUDED.descrizione_cliente, tipo = EXCLUDED.tipo,
             quantita = EXCLUDED.quantita, prezzo = EXCLUDED.prezzo, consegna_richiesta = EXCLUDED.consegna_richiesta,
@@ -77,7 +83,8 @@ export async function importaOrdini(f: FileOrdini) {
           RETURNING id`, [ordineId, r.chiave, i, pr?.prodottoId ?? null, pr?.prodottoId ? pr.codice : maiuscolo(r.codice) || null,
           (pr?.prodottoId && pr.descrizione) || r.descrizione || null, r.codice_cliente || null, r.descrizione_cliente || null,
           r.tipo === 'servizio' ? 'servizio' : 'scheda', numero(r.quantita), numero(r.prezzo), dataValida(r.consegna_richiesta),
-          numero(r.quantita_spedita), numero(r.importo_fatturato), r.note || null])).rows[0];
+          numero(r.quantita_spedita), numero(r.importo_fatturato), r.note || null,
+          ['evaso', 'da_evadere', 'annullato'].includes(String(r.stato)) ? r.stato : null])).rows[0];
         idRiga.set(r.chiave, id);
         chiavi.push(r.chiave);
         nRighe++;
@@ -89,8 +96,12 @@ export async function importaOrdini(f: FileOrdini) {
     }
     // ordini importati negli anni passati ma tolti dal file (es. annullati): via, se non hanno commesse collegate.
     // Gli ordini scritti a mano o arrivati per email restano.
-    const tolti = (await c.query(`DELETE FROM ordini o WHERE anno = $1 AND origine IN ('fic', 'ordine_cliente', 'foglio') AND NOT (numero = ANY($2))
-      AND NOT EXISTS (SELECT 1 FROM ordini_righe r WHERE r.ordine_id = o.id AND r.commessa_id IS NOT NULL)`, [f.anno, f.ordini.map(o => o.numero)])).rowCount ?? 0;
+    let tolti = 0;
+    for (const anno of new Set(f.ordini.map(annoDi).concat(f.anno))) {
+      tolti += (await c.query(`DELETE FROM ordini o WHERE anno = $1 AND origine IN ('fic', 'ordine_cliente', 'foglio') AND NOT (numero = ANY($2))
+        AND NOT EXISTS (SELECT 1 FROM ordini_righe r WHERE r.ordine_id = o.id AND r.commessa_id IS NOT NULL)`,
+        [anno, f.ordini.filter(o => annoDi(o) === anno).map(o => o.numero)])).rowCount ?? 0;
+    }
     await c.query(`DELETE FROM ddt_righe WHERE anno = $1`, [f.anno]);
     for (const d of f.ddt ?? []) {
       if (!dataValida(d.data)) continue;
