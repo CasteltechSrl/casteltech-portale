@@ -13,7 +13,7 @@
       const fuori = [];
       if (j.clientiNonInAnagrafica.length) fuori.push(`clienti non in anagrafica: ${j.clientiNonInAnagrafica.join(', ')}`);
       if (j.prodottiNonInAnagrafica.length) fuori.push(`${j.prodottiNonInAnagrafica.length} prodotti non in anagrafica: ${j.prodottiNonInAnagrafica.join('; ')}`);
-      out.textContent = `Fatto: ${j.ordini} ordini, ${j.righe} righe, ${j.ddt} righe di DDT, ${j.fatture} righe di fattura.` + (fuori.length ? ' ' + fuori.join('. ') + '.' : '');
+      out.textContent = `Fatto: ${j.ordini} ordini${j.ordiniTolti ? ` (${j.ordiniTolti} tolti perché non più nel file)` : ''}, ${j.righe} righe, ${j.ddt} righe di DDT, ${j.fatture} righe di fattura.` + (fuori.length ? ' ' + fuori.join('. ') + '.' : '');
     } else out.textContent = j.errore || 'Errore';
     imp.disabled = false;
   });
