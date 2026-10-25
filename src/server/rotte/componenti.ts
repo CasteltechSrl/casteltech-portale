@@ -17,8 +17,8 @@ import type { Ruolo } from '../../engine/codifica/bom.js';
 import { fornitoriConfigurati } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
 
-const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(x);
-const euro2 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x) + ' €';
+const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(x);
+const euro2 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x) + ' €';
 const CLASSE_ESITO: Record<string, string> = { [ESITI.DB]: 'archivio', [ESITI.DB_PROD]: 'archivio', [ESITI.DB_INC]: 'manca', [ESITI.DB_FATTO]: 'nuovo',
   [ESITI.NUOVO]: 'nuovo', [ESITI.NUOVO_VER]: 'verifica', [ESITI.INC]: 'manca', [ESITI.NON_MONTATO]: 'escluso', [ESITI.CLIENTE]: 'escluso' };
 const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+/).map(s => parseInt(s, 10)).filter(n => n > 0 && n < 1e7))].slice(0, 4);

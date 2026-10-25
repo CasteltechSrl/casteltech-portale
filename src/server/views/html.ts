@@ -21,10 +21,10 @@ export function html(str: TemplateStringsArray, ...vals: unknown[]): Raw {
   return new Raw(out);
 }
 
-const nf2 = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nf2 = new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const euro = (n: number | null | undefined) => (n == null ? '' : nf2.format(n) + ' €');
 export const num = (n: number | null | undefined, dec = 2) =>
-  n == null ? '' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: dec }).format(n);
+  n == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', maximumFractionDigits: dec }).format(n);
 export const data = (d: string | Date | null | undefined) =>
   d ? new Date(d).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }) : '';
 /** secondi → "h:mm" */

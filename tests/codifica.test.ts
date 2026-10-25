@@ -140,3 +140,11 @@ test('condensatori ceramici: senza dielettrico, tolleranza e tensione si usano X
   assert.equal(y.attributi.dielettrico, 'X7R'); assert.deepEqual(y.note, []);
   assert.deepEqual(regolaCondensatori('RS', {}).note, []);
 });
+
+test('numeri: il punto delle migliaia c\'è anche con 4 cifre (1.000)', async () => {
+  const { euro, num } = await import('../src/server/views/html.js');
+  assert.equal(euro(1000), '1.000,00 €');
+  assert.equal(euro(10000.5), '10.000,50 €');
+  assert.equal(num(1234), '1.234');
+  assert.equal(euro(999), '999,00 €');
+});

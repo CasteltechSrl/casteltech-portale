@@ -3,7 +3,7 @@
   const form = document.getElementById('preventivo');
   const id = form.dataset.id || null;
   const statoEl = document.getElementById('stato-salvataggio');
-  const eur = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const eur = new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const euro = n => eur.format(n || 0) + ' €';
   const ore = sec => { const m = Math.round((sec || 0) / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
   let modificato = false;

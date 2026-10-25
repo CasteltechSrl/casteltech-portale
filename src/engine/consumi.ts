@@ -15,7 +15,7 @@ export interface VoceConsumo {
   previstoTesto: string;     // come stamparlo (per la viteria il preventivo è in €)
 }
 
-const nf = (x: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 3 }).format(x);
+const nf = (x: number) => new Intl.NumberFormat('it-IT', { useGrouping: 'always', maximumFractionDigits: 3 }).format(x);
 
 export function vociConsumo(prev: any, quantita: number): VoceConsumo[] {
   const cat: { parametri?: { codice: string; default?: number | null }[]; materiali?: { codice: string; quantita?: number }[] } | undefined = prev?.catalogo;
