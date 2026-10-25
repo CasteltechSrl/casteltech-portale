@@ -168,3 +168,16 @@ export const numeroOrdineEmail = (massimo: number | null | undefined) => Math.ma
 /** Riga di servizio (spese una tantum) o di schede, dalla descrizione: l'ufficio può cambiarla prima di confermare. */
 export const tipoRigaDa = (descrizione: string): 'scheda' | 'servizio' =>
   /\b(ATTREZZ\w*|SETUP|SET-UP|LAMIN[AE]|STENCIL|PROGRAMMAZION\w*|SPESE|TRASPORTO|IMBALL\w*|CERTIFICAT\w*|NRE)\b/i.test(descrizione) ? 'servizio' : 'scheda';
+
+// ───────────────────────────── cartella Google Drive ─────────────────────────────
+/** La cartella si controlla solo nei giorni feriali dalle 8 alle 20 (ora italiana), come l'uso reale del portale. */
+export const orarioDrive = (p: { feriale: boolean; minuti: number }) => p.feriale && p.minuti >= 8 * 60 && p.minuti <= 20 * 60;
+/** Identificativo della cartella dal link di Drive (o l'identificativo stesso). */
+export function idCartellaDa(s: string): string | null {
+  const t = s.trim();
+  const m = /\/folders\/([A-Za-z0-9_-]{10,})/.exec(t) ?? /[?&]id=([A-Za-z0-9_-]{10,})/.exec(t);
+  if (m) return m[1];
+  return /^[A-Za-z0-9_-]{10,}$/.test(t) ? t : null;
+}
+/** File che si possono leggere: i documenti Google nativi (Documenti, Fogli) e le cartelle no. */
+export const fileDaAcquisire = (mime: string) => !mime.startsWith('application/vnd.google-apps.');

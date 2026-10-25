@@ -6,6 +6,7 @@ import express, { Router } from 'express';
 import { q, q1 } from '../db.js';
 import { aggiungiFile, conferma, elabora, salvaProposta, scarta, type PropostaDb } from '../acquisizioni-servizio.js';
 import { iaConfigurata } from '../lettura-ordini-ia.js';
+import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js';
 import { TIPI_ACQUISIZIONE, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
@@ -48,6 +49,13 @@ export function rotteAcquisizioni() {
     const daFare = elenco.filter(a => a.stato === 'da_confermare').length;
     res.send(pagina(req.session.utente, 'Da acquisire', 'acquisire', html`
       <section class="blocco">
+        <h2>Cartella Google Drive</h2>
+        ${driveConfigurato() ? html`<p class="nota">I file messi nella cartella condivisa con <code>${emailAccountDrive()}</code> si acquisiscono da soli
+          ogni 15 minuti (lun–ven 8–20) e si spostano nella sottocartella «Acquisiti».</p>
+          <form method="post" action="/ordini/acquisire/drive"><button>Controlla adesso la cartella</button></form>`
+        : html`<p class="nota">Non collegata: manca la chiave dell'account di servizio (GOOGLE_SERVICE_ACCOUNT su Render). Intanto i file si caricano qui sotto.</p>`}
+      </section>
+      <section class="blocco">
         <h2>Carica ordini</h2>
         <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt).
           L'IA legge cliente, riferimento, righe, prezzi e consegne e prepara una proposta: l'ordine nasce solo quando lo confermi.
@@ -67,7 +75,16 @@ export function rotteAcquisizioni() {
           <td class="n">${a.righe || ''}</td>
           <td><span class="stato acq-${a.stato}">${STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
             ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>`
-        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: 'acquisizioni.js' }));
+        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: 'acquisizioni.js', avviso: req.query.drive ? String(req.query.drive) : undefined }));
+  });
+
+  r.post('/drive', async (_req, res) => {
+    let messaggio: string;
+    try {
+      const e = await controllaDrive();
+      messaggio = e.file ? `Cartella Drive: ${e.letti.length} file acquisiti${e.errori.length ? `, problemi: ${e.errori.join('; ')}` : ''}.` : 'Cartella Drive: nessun file nuovo.';
+    } catch (e: any) { messaggio = `Cartella Drive non letta: ${e?.message ?? e}`; }
+    res.redirect(`/ordini/acquisire?drive=${encodeURIComponent(messaggio)}`);
   });
 
   r.post('/carica', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
