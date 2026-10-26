@@ -96,6 +96,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    DRIVE_CARTELLA_ORDINI facoltativa, altrimenti l'unica cartella condivisa), ogni 15' lun–ven 8–20, database solo se ci sono
    file nuovi, i file letti vanno nella sottocartella "Acquisiti". Pulsante "Controlla adesso" in Da acquisire.
    ⬜ Incrocio con gli export FIC dentro il portale, script che salva le email d'ordine di info@ nella cartella.
+4d. ✅ CRM (`rotte/crm.ts`, `crm-servizio.ts`, `engine/crm.ts`, migrazione 025): ricerca aziende (nome, città, referenti, telefoni, email, P.IVA),
+   scheda con recapiti e referenti, registro attività (telefonata, email, visita, offerta, fiera, nota) con prossima azione e data
+   (scadute in rosso in prima pagina). Le aziende del CRM NON sono l'anagrafica: si collegano a un cliente in anagrafica (`cliente_id`,
+   per P.IVA o nome uguale) e i clienti dell'anagrafica entrano nel CRM da soli. Base: file CRM_Database_Clienti di Adriano, import da
+   Impostazioni → CRM (file preparato fuori dal repository): solo le aziende sicure, senza le vecchie attività (scelta di Adriano, 26/10/2026);
+   le dubbie (doppioni, nomi rovinati, dati web poco sicuri) sono in un Excel a parte. Colonna `da_verificare` + pagina /crm/verificare pronte se servisse caricarle.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.
