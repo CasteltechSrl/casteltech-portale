@@ -112,13 +112,14 @@ export function rotteAcquisizioni() {
         : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: 'acquisizioni.js', avviso: req.query.drive ? String(req.query.drive) : undefined }));
   });
 
-  r.post('/drive', async (_req, res) => {
+  r.post('/drive', async (req, res) => {
     let messaggio: string;
     try {
       const e = await controllaDrive();
       messaggio = e.file ? `Cartella Drive: ${e.letti.length} file acquisiti${e.errori.length ? `, problemi: ${e.errori.join('; ')}` : ''}.` : 'Cartella Drive: nessun file nuovo.';
     } catch (e: any) { messaggio = `Cartella Drive non letta: ${e?.message ?? e}`; }
-    res.redirect(`/ordini/acquisire?drive=${encodeURIComponent(messaggio)}`);
+    // dal pulsante in Commesse si torna alle commesse
+    res.redirect(req.body?.torna === 'commesse' ? `/commesse?msg=${encodeURIComponent(messaggio)}` : `/ordini/acquisire?drive=${encodeURIComponent(messaggio)}`);
   });
 
   r.post('/carica', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
