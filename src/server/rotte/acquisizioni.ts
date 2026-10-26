@@ -171,7 +171,8 @@ export function rotteAcquisizioni() {
     const nome = decodeURIComponent(String(req.get('x-nome-file') ?? '')).trim();
     const dati = req.body as Buffer;
     if (!nome || !Buffer.isBuffer(dati) || !dati.length) return res.status(400).json({ errore: 'file vuoto' });
-    const id = (await aggiungiFile(nome, dati))!;
+    const { id, doppioneDi } = await aggiungiFile(nome, dati);
+    if (!id) return res.json({ id: doppioneDi, stato: 'già arrivato prima: non riletto' });
     await elabora(id);
     const a = await q1(`SELECT stato, errore FROM acquisizioni WHERE id = $1`, [id]);
     res.json({ id, stato: STATI[a.stato], errore: a.errore });

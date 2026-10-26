@@ -3,6 +3,7 @@
  * (Ordini → Da acquisire). Gli ordini (PDF, foto, email) li legge l'IA e diventano una proposta "da confermare":
  * l'ordine nasce solo quando l'ufficio conferma. Il cliente si sceglie SOLO dall'anagrafica.
  */
+import { createHash } from 'node:crypto';
 import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
 import { leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
@@ -18,12 +19,19 @@ export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number 
 
 const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt'];
 
-/** Registra un file arrivato. Lo stesso file di Drive non entra due volte. */
-export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 'drive' | 'caricato'; driveId?: string } = {}): Promise<number | null> {
+/**
+ * Registra un file arrivato. Lo stesso file di Drive non entra due volte; lo stesso contenuto arrivato di nuovo
+ * (es. messo due volte nella cartella) si registra già scartato, con il rimando al primo, e non si rilegge.
+ */
+export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 'drive' | 'caricato'; driveId?: string } = {}): Promise<{ id: number | null; doppioneDi?: number }> {
   const tipo = tipoFile(nome);
-  const r = await q1<{ id: number }>(`INSERT INTO acquisizioni (origine, drive_id, nome_file, tipo, mime, contenuto) VALUES ($1,$2,$3,$4,$5,$6)
-    ON CONFLICT (drive_id) DO NOTHING RETURNING id`, [opz.origine ?? 'caricato', opz.driveId ?? null, nome.slice(0, 250), tipo, mimeDaNome(nome), dati]);
-  return r?.id ?? null;
+  const impronta = createHash('sha256').update(dati).digest('hex');
+  const primo = await q1<{ id: number; creato_il: Date }>(`SELECT id, creato_il FROM acquisizioni WHERE impronta = $1 AND stato <> 'scartato' ORDER BY id LIMIT 1`, [impronta]);
+  const r = await q1<{ id: number }>(`INSERT INTO acquisizioni (origine, drive_id, nome_file, tipo, mime, contenuto, impronta, stato, errore) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (drive_id) DO NOTHING RETURNING id`, [opz.origine ?? 'caricato', opz.driveId ?? null, nome.slice(0, 250), tipo, mimeDaNome(nome),
+    primo ? null : dati, impronta, primo ? 'scartato' : 'nuovo',
+    primo ? `stesso file già arrivato il ${new Date(primo.creato_il).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}` : null]);
+  return primo ? { id: null, doppioneDi: primo.id } : { id: r?.id ?? null };
 }
 
 /** Il file diviso in pezzi da mandare all'IA (per le email: testo e allegati PDF/immagini). */
