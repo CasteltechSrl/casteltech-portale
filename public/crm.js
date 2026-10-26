@@ -43,6 +43,8 @@ document.querySelectorAll('form.elimina-attivita').forEach(f => f.addEventListen
     if (!res.ok) { out.textContent = j.errore || 'Errore'; conferma.hidden = true; return; }
     const righe = [
       `${definitivo ? 'Importate' : 'Nel file'}: ${j.aziende} aziende (${j.nuove} nuove nel portale), ${j.contatti} referenti.`,
+      j.attivita || j.prossimeAzioni ? `${j.attivita} attività da registrare (quelle già presenti non si ripetono), ${j.prossimeAzioni} prossime azioni (solo dove non ce n'è già una).` : '',
+      j.scollegate && j.scollegate.length ? `Non più collegate al cliente sbagliato: ${j.scollegate.join('; ')}.` : '',
       j.daVerificare ? `${j.daVerificare} vanno nella lista "Da verificare" (fuori dalle ricerche finché non le confermi).` : '',
       j.collegate.length ? `Collegate ai clienti in anagrafica (${j.collegate.length}): ${j.collegate.map(c => `${c.azienda} → ${c.cliente} (${c.come})`).join('; ')}.` : '',
       j.conflitti.length ? `Da controllare: ${j.conflitti.join('; ')}.` : '',

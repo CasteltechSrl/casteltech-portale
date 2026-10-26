@@ -6,7 +6,7 @@ import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
 import { q, transazione } from './db.js';
 import { maiuscolo } from './anagrafiche-servizio.js';
-import { chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, trovaCliente, type ClientePerCollegamento } from '../engine/crm.js';
+import { chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, statoDopoImport, TIPI_ATTIVITA, trovaCliente, unisciElenco, type ClientePerCollegamento, type StatoCrm } from '../engine/crm.js';
 
 type Db = Pick<pg.PoolClient, 'query'>;
 
@@ -19,6 +19,9 @@ export interface FileCrm {
     telefono?: string | null; altri_telefoni?: string | null; email?: string | null; altre_email?: string | null; sito?: string | null;
     altri_nomi?: string | null; ateco?: string | null; dipendenti?: number | null; fatturato?: number | null; note?: string | null;
     da_verificare?: string | null;   // motivo del dubbio: l'azienda va nella lista "Da verificare"
+    responsabile?: string | null; prossima_azione?: string | null; data_prossima_azione?: string | null;
+    scollega_cliente?: boolean;      // era collegata per sbaglio (solo per nome) a un cliente dell'anagrafica
+    attivita?: { data: string; tipo: string; descrizione: string; referente?: string | null }[];
     contatti?: { codice: string; nome: string; ruolo?: string | null; telefono?: string | null; altri_telefoni?: string | null; email?: string | null; note?: string | null }[];
   }[];
 }
@@ -65,25 +68,36 @@ const intero = (v: unknown) => (Number.isFinite(Number(v)) && v !== null && v !=
 
 /**
  * Import (si può ripetere): le aziende si aggiornano per codice. Restano i dati scritti nel portale
- * (stato, priorità, responsabile, prossima azione, attività, aziende già confermate o scartate): il file riempie solo i campi vuoti.
+ * (priorità, responsabile, prossima azione, attività, aziende già confermate o scartate): il file riempie solo i campi vuoti,
+ * aggiunge altri nomi, telefoni, email e note che mancano, cambia lo stato solo alle aziende ancora "Da contattare",
+ * mette la prossima azione solo dove non ce n'è una e aggiunge le attività che non ci sono già (stessa data, tipo e testo).
  * Un'azienda con la stessa partita IVA o lo stesso nome di un cliente in anagrafica si collega a quel cliente (stato Cliente).
  * Con anteprima non scrive niente e dice cosa farebbe.
  */
 export async function importaCrm(f: FileCrm, opz: { anteprima: boolean }) {
   return transazione(async c => {
     const clienti = await clientiPerCollegamento(c);
-    const esistenti = new Map<string, { id: number; cliente_id: number | null }>(
-      (await c.query(`SELECT codice, id, cliente_id FROM crm_aziende WHERE codice IS NOT NULL`)).rows.map((r: any) => [r.codice, r]));
+    type Esistente = { id: number; cliente_id: number | null; stato: StatoCrm; altri_nomi: string | null; altri_telefoni: string | null; altre_email: string | null; note: string | null };
+    const esistenti = new Map<string, Esistente>((await c.query(`SELECT codice, id, cliente_id, stato, altri_nomi, altri_telefoni, altre_email, note
+      FROM crm_aziende WHERE codice IS NOT NULL`)).rows.map((r: any) => [r.codice, r]));
+    // collegamenti sbagliati da togliere prima di cercare i clienti
+    const scollegate: string[] = [];
+    for (const a of f.aziende) {
+      const e = esistenti.get(a.codice);
+      if (a.scollega_cliente && e?.cliente_id) {
+        scollegate.push(`${maiuscolo(a.ragione_sociale)} (${a.codice})`);
+        esistenti.set(a.codice, { ...e, cliente_id: null, stato: e.stato === 'cliente' ? 'da_contattare' : e.stato });
+      }
+    }
     // clienti già collegati a un'azienda del file (import precedente o collegamento a mano)
-    const presi = new Map<number, string>(
-      (await c.query(`SELECT cliente_id, codice FROM crm_aziende WHERE cliente_id IS NOT NULL AND codice IS NOT NULL`)).rows.map((r: any) => [r.cliente_id, r.codice]));
+    const presi = new Map<number, string>([...esistenti].filter(([, e]) => e.cliente_id).map(([codice, e]) => [e.cliente_id!, codice]));
 
     const collegate: { azienda: string; cliente: string; come: string }[] = [];
     const conflitti: string[] = [];
     const righe = f.aziende.map(a => {
       const esiste = esistenti.get(a.codice);
       let clienteId: number | null = null, daVerificare = testo(a.da_verificare);
-      if (!esiste?.cliente_id) {
+      if (!esiste?.cliente_id && !a.scollega_cliente) {
         const t = trovaCliente(a, clienti);
         if (t) {
           const altro = presi.get(t.cliente.id);
@@ -98,26 +112,37 @@ export async function importaCrm(f: FileCrm, opz: { anteprima: boolean }) {
           }
         }
       }
+      const unisci = (k: 'altri_nomi' | 'altri_telefoni' | 'altre_email' | 'note') => unisciElenco(esiste?.[k], formatta(k, a[k]), k === 'note' ? '\n' : ' | ');
+      const prossima = formatta('prossima_azione', a.prossima_azione);
+      const dataProssima = /^\d{4}-\d{2}-\d{2}$/.test(String(a.data_prossima_azione ?? '')) ? a.data_prossima_azione! : null;
       return {
         codice: a.codice, ragione_sociale: formatta('ragione_sociale', a.ragione_sociale)!, cliente_id: clienteId,
-        stato: clienteId ? 'cliente' : statoDa(a.stato) ?? 'da_contattare',
+        stato: clienteId ? 'cliente' : esiste ? statoDopoImport(esiste.stato, statoDa(a.stato)) : statoDa(a.stato) ?? 'da_contattare',
+        responsabile: formatta('responsabile', a.responsabile), prossima_azione: prossima ?? (dataProssima ? 'Da fare' : null), data_prossima_azione: dataProssima,
         settore: formatta('settore', a.settore), descrizione: formatta('descrizione', a.descrizione), indirizzo: formatta('indirizzo', a.indirizzo), cap: formatta('cap', a.cap), citta: formatta('citta', a.citta),
         provincia: formatta('provincia', a.provincia), regione: formatta('regione', a.regione), paese: formatta('paese', a.paese), partita_iva: formatta('partita_iva', a.partita_iva),
-        telefono: formatta('telefono', a.telefono), altri_telefoni: formatta('altri_telefoni', a.altri_telefoni), email: formatta('email', a.email),
-        altre_email: formatta('altre_email', a.altre_email), sito: formatta('sito', a.sito), altri_nomi: formatta('altri_nomi', a.altri_nomi), ateco: formatta('ateco', a.ateco),
-        dipendenti: intero(a.dipendenti), fatturato: intero(a.fatturato), note: formatta('note', a.note), da_verificare: daVerificare,
+        telefono: formatta('telefono', a.telefono), altri_telefoni: unisci('altri_telefoni'), email: formatta('email', a.email),
+        altre_email: unisci('altre_email'), sito: formatta('sito', a.sito), altri_nomi: unisci('altri_nomi'), ateco: formatta('ateco', a.ateco),
+        dipendenti: intero(a.dipendenti), fatturato: intero(a.fatturato), note: unisci('note'), da_verificare: daVerificare,
       };
     });
     const contatti = f.aziende.flatMap(a => (a.contatti ?? []).filter(k => k.codice && testo(k.nome)).map(k => ({
       azienda: a.codice, codice: k.codice, nome: formatta('nome', k.nome)!, ruolo: formatta('ruolo', k.ruolo), telefono: formatta('telefono', k.telefono), altri_telefoni: formatta('altri_telefoni', k.altri_telefoni),
       email: formatta('email', k.email), note: formatta('note', k.note),
     })));
+    const attivita = f.aziende.flatMap(a => (a.attivita ?? [])
+      .filter(x => /^\d{4}-\d{2}-\d{2}$/.test(String(x.data)) && x.tipo in TIPI_ATTIVITA && formatta('descrizione_attivita', x.descrizione))
+      .map(x => ({ azienda: a.codice, data: x.data, tipo: x.tipo, referente: formatta('referente', x.referente), descrizione: formatta('descrizione_attivita', x.descrizione)! })));
     const esito = {
       aziende: righe.length, nuove: righe.filter(r => !esistenti.has(r.codice)).length,
       daVerificare: righe.filter(r => r.da_verificare && !esistenti.has(r.codice)).length,
-      contatti: contatti.length, collegate, conflitti,
+      contatti: contatti.length, attivita: attivita.length, prossimeAzioni: righe.filter(r => r.prossima_azione).length,
+      collegate, conflitti, scollegate,
     };
     if (opz.anteprima) return esito;
+
+    if (scollegate.length) await c.query(`UPDATE crm_aziende SET cliente_id = NULL, stato = CASE WHEN stato = 'cliente' THEN 'da_contattare' ELSE stato END,
+      aggiornato_il = now() WHERE codice = ANY($1) AND cliente_id IS NOT NULL`, [f.aziende.filter(a => a.scollega_cliente).map(a => a.codice)]);
 
     // un cliente entrato da solo nel CRM (senza codice) diventa l'azienda del file: restano le sue attività
     const unisci = righe.filter(r => r.cliente_id);
@@ -125,21 +150,40 @@ export async function importaCrm(f: FileCrm, opz: { anteprima: boolean }) {
       UPDATE crm_aziende a SET codice = x.codice FROM jsonb_to_recordset($1) AS x(codice text, cliente_id int)
       WHERE a.cliente_id = x.cliente_id AND a.codice IS NULL`, [JSON.stringify(unisci.map(r => ({ codice: r.codice, cliente_id: r.cliente_id })))]);
 
-    const campi = ['settore', 'descrizione', 'indirizzo', 'cap', 'citta', 'provincia', 'regione', 'paese', 'partita_iva', 'telefono', 'altri_telefoni',
-      'email', 'altre_email', 'sito', 'altri_nomi', 'ateco', 'dipendenti', 'fatturato', 'note'];
+    // altri nomi, telefoni, email e note arrivano già uniti a quelli del portale: per tutti i campi vince il valore del portale se c'è
+    const campi = ['settore', 'descrizione', 'indirizzo', 'cap', 'citta', 'provincia', 'regione', 'paese', 'partita_iva', 'telefono', 'email', 'sito', 'ateco',
+      'dipendenti', 'fatturato', 'responsabile'];
+    const uniti = ['altri_telefoni', 'altre_email', 'altri_nomi', 'note'];
     await c.query(`
-      INSERT INTO crm_aziende (codice, ragione_sociale, cliente_id, stato, ${campi.join(', ')}, da_verificare)
-      SELECT codice, ragione_sociale, cliente_id, stato, ${campi.join(', ')}, da_verificare
+      INSERT INTO crm_aziende (codice, ragione_sociale, cliente_id, stato, ${campi.join(', ')}, ${uniti.join(', ')}, da_verificare, prossima_azione, data_prossima_azione)
+      SELECT codice, ragione_sociale, cliente_id, stato, ${campi.join(', ')}, ${uniti.join(', ')}, da_verificare, prossima_azione, data_prossima_azione
       FROM jsonb_to_recordset($1) AS x(codice text, ragione_sociale text, cliente_id int, stato text, settore text, descrizione text, indirizzo text,
         cap text, citta text, provincia text, regione text, paese text, partita_iva text, telefono text, altri_telefoni text, email text, altre_email text,
-        sito text, altri_nomi text, ateco text, dipendenti int, fatturato numeric, note text, da_verificare text)
+        sito text, altri_nomi text, ateco text, dipendenti int, fatturato numeric, responsabile text, note text, da_verificare text,
+        prossima_azione text, data_prossima_azione date)
       ON CONFLICT (codice) DO UPDATE SET
         ragione_sociale = CASE WHEN crm_aziende.cliente_id IS NULL THEN EXCLUDED.ragione_sociale ELSE crm_aziende.ragione_sociale END,
         cliente_id = coalesce(crm_aziende.cliente_id, EXCLUDED.cliente_id),
-        stato = CASE WHEN crm_aziende.cliente_id IS NULL AND EXCLUDED.cliente_id IS NOT NULL THEN 'cliente' ELSE crm_aziende.stato END,
+        stato = CASE WHEN crm_aziende.cliente_id IS NULL AND EXCLUDED.cliente_id IS NOT NULL THEN 'cliente' ELSE EXCLUDED.stato END,
         da_verificare = CASE WHEN EXCLUDED.cliente_id IS NOT NULL THEN NULL ELSE crm_aziende.da_verificare END,
         ${campi.map(k => `${k} = coalesce(crm_aziende.${k}, EXCLUDED.${k})`).join(', ')},
+        ${uniti.map(k => `${k} = coalesce(EXCLUDED.${k}, crm_aziende.${k})`).join(', ')},
+        prossima_azione = CASE WHEN crm_aziende.prossima_azione IS NULL AND crm_aziende.data_prossima_azione IS NULL THEN EXCLUDED.prossima_azione ELSE crm_aziende.prossima_azione END,
+        data_prossima_azione = CASE WHEN crm_aziende.prossima_azione IS NULL AND crm_aziende.data_prossima_azione IS NULL THEN EXCLUDED.data_prossima_azione ELSE crm_aziende.data_prossima_azione END,
         aggiornato_il = now()`, [JSON.stringify(righe)]);
+
+    // attività del file che non ci sono già; l'ultimo contatto è la data più recente (le note non contano)
+    await c.query(`
+      INSERT INTO crm_attivita (azienda_id, data, tipo, referente, descrizione)
+      SELECT a.id, x.data, x.tipo, x.referente, x.descrizione
+      FROM jsonb_to_recordset($1) AS x(azienda text, data date, tipo text, referente text, descrizione text)
+      JOIN crm_aziende a ON a.codice = x.azienda
+      WHERE NOT EXISTS (SELECT 1 FROM crm_attivita z WHERE z.azienda_id = a.id AND z.data = x.data AND z.tipo = x.tipo AND z.descrizione = x.descrizione)`,
+      [JSON.stringify(attivita)]);
+    await c.query(`
+      UPDATE crm_aziende a SET ultimo_contatto = greatest(a.ultimo_contatto, x.data)
+      FROM (SELECT azienda, max(data) AS data FROM jsonb_to_recordset($1) AS y(azienda text, data date, tipo text) WHERE tipo <> 'nota' GROUP BY azienda) x
+      WHERE a.codice = x.azienda`, [JSON.stringify(attivita)]);
 
     await c.query(`
       INSERT INTO crm_contatti (azienda_id, codice, nome, ruolo, telefono, altri_telefoni, email, note)

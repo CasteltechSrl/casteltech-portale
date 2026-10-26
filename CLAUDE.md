@@ -113,6 +113,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Clienti in anagrafica evidenziati "già cliente" con la fascia del fatturato medio annuo (migrazione 026, `fatturato_clienti`: totale per cliente
    e anno dagli export fatture FIC, file fatturato_clienti.json.gz da Impostazioni → CRM; media = totale ÷ anni caricati, un anno senza fatture vale 0).
    Un cliente aggiunto in anagrafica dopo l'import si collega da solo all'azienda del CRM con stessa P.IVA o nome (se è una sola).
+   Import che si aggiunge (foglio lead PER_FEDERICO, 26/10/2026): il file può portare attività (non ripetute: stessa data, tipo, testo),
+   prossima azione (solo dove manca), responsabile, stato (solo alle aziende ancora "Da contattare") e `scollega_cliente` per i collegamenti
+   sbagliati; altri nomi, telefoni, email e note si uniscono a quelli del portale (`unisciElenco`). Nome uguale ma P.IVA diversa: non è lo stesso cliente.
 4e. ✅ Anagrafica fornitori (`rotte/fornitori-anagrafica.ts`, `engine/anagrafica-fornitori.ts`, migrazione 028, tabella `fornitori_anagrafica`;
    diversa da `fornitori.ts`, che sono i distributori di componenti): Impostazioni → Fornitori. Regole di Adriano (26/10/2026): solo con P.IVA
    valida (italiana: cifra di controllo; estera: formato del paese, scritta con il prefisso), una P.IVA = un fornitore, tutto MAIUSCOLO (email e PEC minuscolo).
