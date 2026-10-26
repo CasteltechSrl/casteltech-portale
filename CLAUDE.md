@@ -68,8 +68,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    il giorno lavorativo dopo con link di chiusura; timer in memoria, database solo all'ora giusta. Orari in Impostazioni → Promemoria.
    Canale: per ora solo nel portale (tabella notifiche); SMS/WhatsApp/Telegram da scegliere (numeri da Adriano).
    Una fase per volta dal telefono (sulla carta resta possibile "10+12").
-   ⬜ Lettura automatica: scanner con ADF (PDF multipagina, il QR riconosce la commessa), API Anthropic, conferma ufficio.
-   Sul foglio tempi la DATA è solo gg/mm ("/" prestampato): l'anno si ricava da data scansione / consegna / ordine.
+   🟡 Lettura delle schede scansionate (`engine/fogli-tempi.ts`, migrazione 027): stessa cartella Drive / Da acquisire degli ordini;
+   l'IA riconosce la SCHEDA DI PRODUZIONE (n. commessa stampato), legge i fogli tempi, la fase si trova dal numero stampato
+   ("1+2" = fasi insieme: tempo sulla prima, nota), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).
+   Le righe si aggiungono in fondo al Rientro (`/commesse/:id/rientro?acquisizione=N`, evidenziate, quelle già presenti non si ripetono):
+   l'ufficio controlla e salva. ⬜ Provata solo con lettura simulata: manca la prova con scansioni vere.
 4b. ✅ Componenti (`rotte/componenti.ts`, `codifica-servizio.ts`, migrazione 021): codifica come il programma Python
    "Codifica componenti" (regole e decodifica P/N portate in `src/engine/codifica/*`, identiche: `tools/verifica-codifica.ts`
    con i casi generati dal Python, dati reali fuori dal repository). Codice di produzione (armadio, es. RS-0603-2K2-1-100MW) e
