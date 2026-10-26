@@ -9,7 +9,7 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { allineaClienti, aziendaConNome, cercaAziende } from '../crm-servizio.js';
-import { PRIORITA, STATI_CRM, TIPI_ATTIVITA, scadenza, statoDa, type StatoCrm, type TipoAttivita } from '../../engine/crm.js';
+import { PRIORITA, STATI_CRM, formatta, TIPI_ATTIVITA, scadenza, statoDa, type StatoCrm, type TipoAttivita } from '../../engine/crm.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const dataValida = (d: unknown) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
@@ -242,7 +242,7 @@ export function rotteCrm() {
               <div class="riga-campi">
                 <label>Stato <select name="stato">${Object.entries(STATI_CRM).map(([k, v]) => html`<option value="${k}" ${a.stato === k ? raw('selected') : ''}>${v}</option>`)}</select></label>
                 <label>Priorità <select name="priorita"><option value="">—</option>${Object.entries(PRIORITA).map(([k, v]) => html`<option value="${k}" ${a.priorita === k ? raw('selected') : ''}>${v}</option>`)}</select></label>
-                ${campo('responsabile', 'Responsabile')}
+                ${campo('responsabile', 'Responsabile', raw('class="maiuscolo"'))}
               </div>
               <div class="riga-campi">${campo('telefono', 'Telefono')}${campo('altri_telefoni', 'Altri telefoni')}</div>
               <div class="riga-campi">${campo('email', 'Email')}${campo('altre_email', 'Altre email')}</div>
@@ -251,13 +251,15 @@ export function rotteCrm() {
               <div class="riga-campi"><label class="stretto">CAP <input name="cap" value="${a.cap ?? ''}"></label>${campo('citta', 'Città')}
                 <label class="stretto">Prov. <input name="provincia" value="${a.provincia ?? ''}" maxlength="2" class="maiuscolo"></label></div>
               <div class="riga-campi">${campo('regione', 'Regione')}${campo('paese', 'Paese')}</div>
-              <div class="riga-campi">${campo('partita_iva', 'Partita IVA')}${campo('settore', 'Settore')}</div>
+              <div class="riga-campi">${campo('partita_iva', 'Partita IVA', raw('class="maiuscolo"'))}${campo('settore', 'Settore')}</div>
               ${campo('descrizione', 'Cosa fa')}
-              ${campo('altri_nomi', 'Altri nomi (per la ricerca)')}
+              ${campo('altri_nomi', 'Altri nomi (per la ricerca)', raw('class="maiuscolo"'))}
               <label>Note <textarea name="note" rows="3">${a.note ?? ''}</textarea></label>
               <label>Cliente in anagrafica <select name="cliente_id"><option value="">— non è un cliente in anagrafica —</option>
                 ${clientiLiberi.map(c => html`<option value="${c.id}" ${c.id === a.cliente_id ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>
                 <small>Quando diventa cliente: prima aggiungilo in Impostazioni → Anagrafiche, poi collegalo qui.</small></label>
+              <p class="nota">Le scritte si salvano sempre nello stesso formato: nome, provincia, P.IVA e responsabile in MAIUSCOLO; città, indirizzo e nomi
+                delle persone con l'Iniziale maiuscola; settore e descrizione con solo la prima lettera maiuscola; email e sito in minuscolo. Le note restano come le scrivi.</p>
               <div><button class="primario">Salva i dati</button></div>
             </form>
           </details>
@@ -270,16 +272,16 @@ export function rotteCrm() {
     const id = Number(req.params.id);
     const giorno = dataValida(req.body.data) ?? oggiRoma();
     const tipo = String(req.body.tipo) in TIPI_ATTIVITA ? String(req.body.tipo) : 'nota';
-    const descrizione = testo(req.body.descrizione);
+    const descrizione = formatta('descrizione_attivita', req.body.descrizione);
     if (!descrizione) return res.redirect(`/crm/${id}?msg=${encodeURIComponent('Scrivi cosa è stato fatto.')}`);
     const stato = statoDa(req.body.stato);
     await transazione(async c => {
       await c.query(`INSERT INTO crm_attivita (azienda_id, data, tipo, referente, descrizione, utente_id) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [id, giorno, tipo, testo(req.body.referente), descrizione, req.session.utente!.id]);
+        [id, giorno, tipo, formatta('referente', req.body.referente), descrizione, req.session.utente!.id]);
       await c.query(`UPDATE crm_aziende SET prossima_azione = $2, data_prossima_azione = $3, stato = coalesce($4, stato),
           ultimo_contatto = CASE WHEN $5 = 'nota' THEN ultimo_contatto ELSE greatest(ultimo_contatto, $6::date) END,
           da_verificare = NULL, aggiornato_il = now()
-        WHERE id = $1`, [id, testo(req.body.prossima_azione), dataValida(req.body.data_prossima_azione), stato, tipo, giorno]);
+        WHERE id = $1`, [id, formatta('prossima_azione', req.body.prossima_azione), dataValida(req.body.data_prossima_azione), stato, tipo, giorno]);
     });
     res.redirect(`/crm/${id}?msg=${encodeURIComponent('Attività registrata.')}`);
   });
@@ -313,18 +315,17 @@ export function rotteCrm() {
         telefono = $6, altri_telefoni = $7, email = $8, altre_email = $9, sito = $10, indirizzo = $11, cap = $12, citta = $13, provincia = $14,
         regione = $15, paese = $16, partita_iva = $17, settore = $18, descrizione = $19, altri_nomi = $20, note = $21, cliente_id = $22,
         aggiornato_il = now()
-      WHERE id = $1`, [id, maiuscolo(b.ragione_sociale), stato,
-      String(b.priorita) in PRIORITA ? b.priorita : null, testo(b.responsabile), testo(b.telefono), testo(b.altri_telefoni),
-      testo(b.email)?.toLowerCase() ?? null, testo(b.altre_email)?.toLowerCase() ?? null, testo(b.sito), testo(b.indirizzo), testo(b.cap), testo(b.citta),
-      testo(b.provincia)?.toUpperCase() ?? null, testo(b.regione), testo(b.paese), testo(b.partita_iva), testo(b.settore), testo(b.descrizione),
-      testo(b.altri_nomi), testo(b.note), clienteId]);
+      WHERE id = $1`, [id, formatta('ragione_sociale', b.ragione_sociale) ?? '', stato,
+      String(b.priorita) in PRIORITA ? b.priorita : null,
+      ...['responsabile', 'telefono', 'altri_telefoni', 'email', 'altre_email', 'sito', 'indirizzo', 'cap', 'citta', 'provincia', 'regione', 'paese',
+        'partita_iva', 'settore', 'descrizione', 'altri_nomi', 'note'].map(k => formatta(k, b[k])), clienteId]);
     res.redirect(`/crm/${id}?msg=${encodeURIComponent('Dati salvati.')}`);
   });
 
   r.post('/:id/contatti', async (req, res) => {
     const id = Number(req.params.id), b = req.body;
-    if (testo(b.nome)) await q(`INSERT INTO crm_contatti (azienda_id, nome, ruolo, telefono, email, note) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [id, testo(b.nome), testo(b.ruolo), testo(b.telefono), testo(b.email)?.toLowerCase() ?? null, testo(b.note)]);
+    if (formatta('nome', b.nome)) await q(`INSERT INTO crm_contatti (azienda_id, nome, ruolo, telefono, email, note) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, ...['nome', 'ruolo', 'telefono', 'email', 'note'].map(k => formatta(k, b[k]))]);
     res.redirect(`/crm/${id}?msg=${encodeURIComponent('Referente aggiunto.')}`);
   });
 
@@ -333,7 +334,7 @@ export function rotteCrm() {
     const k = b.elimina === '1'
       ? await q1(`DELETE FROM crm_contatti WHERE id = $1 RETURNING azienda_id`, [kid])
       : await q1(`UPDATE crm_contatti SET nome = coalesce($2, nome), ruolo = $3, telefono = $4, email = $5, note = $6 WHERE id = $1 RETURNING azienda_id`,
-        [kid, testo(b.nome), testo(b.ruolo), testo(b.telefono), testo(b.email)?.toLowerCase() ?? null, testo(b.note)]);
+        [kid, ...['nome', 'ruolo', 'telefono', 'email', 'note'].map(k => formatta(k, b[k]))]);
     if (!k) return res.redirect('/crm');
     res.redirect(`/crm/${k.azienda_id}?msg=${encodeURIComponent(b.elimina === '1' ? 'Referente eliminato.' : 'Referente salvato.')}`);
   });

@@ -45,3 +45,21 @@ test('crm: stato scritto come nel vecchio file Excel', () => {
   assert.equal(statoDa('boh'), null);
   assert.equal(statoDa(''), null);
 });
+
+test('crm: scritte uniformi per colonna (le note restano come scritte)', async () => {
+  const { formatta, iniziali } = await import('../src/engine/crm.js');
+  assert.equal(iniziali("REGGIO NELL'EMILIA"), "Reggio nell'Emilia");
+  assert.equal(iniziali("castell'arquato"), "Castell'Arquato");
+  assert.equal(iniziali("CASSANO D'ADDA"), "Cassano d'Adda");
+  assert.equal(iniziali('FRIULI-VENEZIA GIULIA'), 'Friuli-Venezia Giulia');
+  assert.equal(iniziali('SAN GIOVANNI LA PUNTA'), 'San Giovanni la Punta');
+  assert.equal(formatta('nome', 'SIG. GIUSEPPE RIBOLI'), 'Sig. Giuseppe Riboli');
+  assert.equal(formatta('ragione_sociale', 'Audioscope 2K s.r.l.'), 'AUDIOSCOPE 2K S.R.L.');
+  assert.equal(formatta('provincia', ' mi '), 'MI');
+  assert.equal(formatta('settore', 'AUTOMAZIONE INDUSTRIALE'), 'Automazione industriale');
+  assert.equal(formatta('ateco', '262 – FABBRICAZIONE DI COMPUTER'), '262 – Fabbricazione di computer');
+  assert.equal(formatta('email', 'R.Terenghi@2BITS.it'), 'r.terenghi@2bits.it');
+  assert.equal(formatta('prossima_azione', 'mandare le BOM'), 'Mandare le BOM');
+  assert.equal(formatta('note', 'già cliente DVG, sentire  Mario'), 'già cliente DVG, sentire Mario');
+  assert.equal(formatta('citta', '   '), null);
+});

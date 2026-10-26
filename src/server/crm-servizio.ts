@@ -6,7 +6,7 @@ import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
 import { q, transazione } from './db.js';
 import { maiuscolo } from './anagrafiche-servizio.js';
-import { chiaveNome, statoDa, trovaCliente, type ClientePerCollegamento } from '../engine/crm.js';
+import { chiaveNome, formatta, statoDa, trovaCliente, type ClientePerCollegamento } from '../engine/crm.js';
 
 type Db = Pick<pg.PoolClient, 'query'>;
 
@@ -84,18 +84,18 @@ export async function importaCrm(f: FileCrm, opz: { anteprima: boolean }) {
         }
       }
       return {
-        codice: a.codice, ragione_sociale: maiuscolo(a.ragione_sociale), cliente_id: clienteId,
+        codice: a.codice, ragione_sociale: formatta('ragione_sociale', a.ragione_sociale)!, cliente_id: clienteId,
         stato: clienteId ? 'cliente' : statoDa(a.stato) ?? 'da_contattare',
-        settore: testo(a.settore), descrizione: testo(a.descrizione), indirizzo: testo(a.indirizzo), cap: testo(a.cap), citta: testo(a.citta),
-        provincia: testo(a.provincia)?.toUpperCase() ?? null, regione: testo(a.regione), paese: testo(a.paese), partita_iva: testo(a.partita_iva),
-        telefono: testo(a.telefono), altri_telefoni: testo(a.altri_telefoni), email: testo(a.email)?.toLowerCase() ?? null,
-        altre_email: testo(a.altre_email)?.toLowerCase() ?? null, sito: testo(a.sito), altri_nomi: testo(a.altri_nomi), ateco: testo(a.ateco),
-        dipendenti: intero(a.dipendenti), fatturato: intero(a.fatturato), note: testo(a.note), da_verificare: daVerificare,
+        settore: formatta('settore', a.settore), descrizione: formatta('descrizione', a.descrizione), indirizzo: formatta('indirizzo', a.indirizzo), cap: formatta('cap', a.cap), citta: formatta('citta', a.citta),
+        provincia: formatta('provincia', a.provincia), regione: formatta('regione', a.regione), paese: formatta('paese', a.paese), partita_iva: formatta('partita_iva', a.partita_iva),
+        telefono: formatta('telefono', a.telefono), altri_telefoni: formatta('altri_telefoni', a.altri_telefoni), email: formatta('email', a.email),
+        altre_email: formatta('altre_email', a.altre_email), sito: formatta('sito', a.sito), altri_nomi: formatta('altri_nomi', a.altri_nomi), ateco: formatta('ateco', a.ateco),
+        dipendenti: intero(a.dipendenti), fatturato: intero(a.fatturato), note: formatta('note', a.note), da_verificare: daVerificare,
       };
     });
     const contatti = f.aziende.flatMap(a => (a.contatti ?? []).filter(k => k.codice && testo(k.nome)).map(k => ({
-      azienda: a.codice, codice: k.codice, nome: testo(k.nome)!, ruolo: testo(k.ruolo), telefono: testo(k.telefono), altri_telefoni: testo(k.altri_telefoni),
-      email: testo(k.email)?.toLowerCase() ?? null, note: testo(k.note),
+      azienda: a.codice, codice: k.codice, nome: formatta('nome', k.nome)!, ruolo: formatta('ruolo', k.ruolo), telefono: formatta('telefono', k.telefono), altri_telefoni: formatta('altri_telefoni', k.altri_telefoni),
+      email: formatta('email', k.email), note: formatta('note', k.note),
     })));
     const esito = {
       aziende: righe.length, nuove: righe.filter(r => !esistenti.has(r.codice)).length,

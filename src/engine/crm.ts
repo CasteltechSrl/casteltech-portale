@@ -74,3 +74,48 @@ export function trovaCliente(az: { ragione_sociale: string; partita_iva?: string
   const c = clienti.find(c => chiaveNome(c.ragione_sociale) === n || (c.alias ?? []).some(a => chiaveNome(a) === n));
   return c ? { cliente: c, come: 'nome' } : null;
 }
+
+// ── Scritte uniformi per colonna (Adriano, 26/10/2026): ogni campo ha un solo formato, imposto anche quando si scrive; le note restano libere ──
+const PARTICELLE = new Set(['di', 'del', 'della', 'dello', 'dei', 'degli', 'delle', 'da', 'dal', 'dalla', 'e', 'ed', 'il', 'la', 'le', 'lo', 'gli', 'in', 'nel', 'nella', 'sul', 'sulla', 'al', 'alla', 'a', 'de', 'des', 'du', 'van', 'von']);
+const PARTICELLE_APOSTROFO = new Set(['d', 'l', 'nell', 'dell', 'all', 'sull', 'dall']);
+const maiuscolaIniziale = (s: string) => s.replace(/\p{L}/u, c => c.toUpperCase());
+
+/** "REGGIO NELL'EMILIA" → "Reggio nell'Emilia", "mario rossi" → "Mario Rossi", "FRIULI-VENEZIA GIULIA" → "Friuli-Venezia Giulia". */
+export function iniziali(s: string): string {
+  return s.toLowerCase().split(' ').map((parola, i) => {
+    if (i > 0 && PARTICELLE.has(parola)) return parola;
+    return parola.split('-').map(pezzo => {
+      const ap = pezzo.match(/^(\p{L}+)['’](.*)$/u);
+      if (ap) return `${i > 0 && PARTICELLE_APOSTROFO.has(ap[1]) ? ap[1] : maiuscolaIniziale(ap[1])}'${maiuscolaIniziale(ap[2])}`;
+      return maiuscolaIniziale(pezzo);
+    }).join('-');
+  }).join(' ');
+}
+
+/** "AUTOMAZIONE INDUSTRIALE" → "Automazione industriale" (solo la prima lettera maiuscola). */
+export const frase = (s: string) => maiuscolaIniziale(s.toLowerCase());
+
+export type Formato = 'maiuscolo' | 'iniziali' | 'frase' | 'prima' | 'minuscolo' | 'libero';
+export const FORMATI_CRM: Record<string, Formato> = {
+  ragione_sociale: 'maiuscolo', altri_nomi: 'maiuscolo', provincia: 'maiuscolo', partita_iva: 'maiuscolo', cap: 'maiuscolo', responsabile: 'maiuscolo',
+  citta: 'iniziali', regione: 'iniziali', paese: 'iniziali', indirizzo: 'iniziali', nome: 'iniziali', referente: 'iniziali',
+  settore: 'frase', descrizione: 'frase', ateco: 'frase', ruolo: 'frase',
+  // testi scritti come frasi (sigle come BOM o PCB restano): solo la prima lettera diventa maiuscola
+  prossima_azione: 'prima', descrizione_attivita: 'prima',
+  email: 'minuscolo', altre_email: 'minuscolo', sito: 'minuscolo',
+  telefono: 'libero', altri_telefoni: 'libero', note: 'libero',
+};
+
+/** Testo pulito (spazi singoli, null se vuoto) nel formato della sua colonna. */
+export function formatta(campo: string, v: unknown): string | null {
+  const t = String(v ?? '').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  switch (FORMATI_CRM[campo] ?? 'libero') {
+    case 'maiuscolo': return t.toUpperCase();
+    case 'iniziali': return iniziali(t);
+    case 'frase': return frase(t);
+    case 'prima': return maiuscolaIniziale(t);
+    case 'minuscolo': return t.toLowerCase();
+    default: return t;
+  }
+}
