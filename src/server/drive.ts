@@ -94,7 +94,7 @@ export function controllaDrive(): Promise<EsitoDrive> {
         if (Number(f.size ?? 0) > MAX_BYTE) throw new Error('file oltre 30 MB');
         const dati = Buffer.from(await (await chiama(`/files/${f.id}?alt=media&supportsAllDrives=true`)).arrayBuffer());
         // stesso file già registrato (es. spostamento non riuscito l'altra volta): non si rilegge
-        const id = await aggiungiFile(f.name, dati, { origine: 'drive', driveId: f.id });
+        const { id } = await aggiungiFile(f.name, dati, { origine: 'drive', driveId: f.id });
         if (id) await elabora(id);
         await chiama(`/files/${f.id}?addParents=${acquisiti}&removeParents=${ordini}&supportsAllDrives=true`, { method: 'PATCH' });
         esito.letti.push(f.name);
