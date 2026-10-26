@@ -405,3 +405,8 @@ details.modifica > summary { cursor: pointer; color: var(--accento); font-size: 
 details.modifica[open] { margin: .5rem 0; }
 details.modifica form { margin-top: .6rem; }
 form.campi-azienda { display: grid; gap: .7rem; padding: 0 1rem 1rem; }
+table.crm tr.gia-cliente td { background: #f3faf5; }
+.riquadro-cliente { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .7rem 1rem; margin-bottom: 1rem; border-radius: var(--raggio);
+  background: #ddf3e5; border: 1px solid #b9e2c7; }
+.riquadro-cliente a { margin-left: auto; }
+.etichetta.cliente.grande { font-size: .85rem; padding: .2rem .7rem; background: var(--positivo); color: #fff; }

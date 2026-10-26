@@ -63,3 +63,15 @@ test('crm: scritte uniformi per colonna (le note restano come scritte)', async (
   assert.equal(formatta('note', 'già cliente DVG, sentire  Mario'), 'già cliente DVG, sentire Mario');
   assert.equal(formatta('citta', '   '), null);
 });
+
+test('crm: fascia del fatturato medio annuo dei clienti', async () => {
+  const { fasciaFatturato, mediaAnnua } = await import('../src/engine/crm.js');
+  const anni = [2022, 2023, 2024, 2025];
+  assert.equal(mediaAnnua({ 2024: 83_500, 2023: 70_665 }, anni), 38_541.25);   // gli anni senza fatture contano zero
+  assert.equal(fasciaFatturato(38_541.25), '20–50 mila €');
+  assert.equal(fasciaFatturato(4_999), 'meno di 5 mila €');
+  assert.equal(fasciaFatturato(20_000), '20–50 mila €');
+  assert.equal(fasciaFatturato(300_000), 'oltre 250 mila €');
+  assert.equal(fasciaFatturato(0), 'nessuna fattura');
+  assert.equal(mediaAnnua({ 2025: 10 }, []), 0);
+});

@@ -17,7 +17,7 @@ import { caricaPin } from './reparto.js';
 import { fasiAperte, inviaAdesso, orariPromemoria, ricaricaPromemoria } from '../promemoria.js';
 import { leggiOrari } from '../../engine/promemoria.js';
 import { caricaOreGiorno, importaOrdini, leggiFileOrdini } from '../ordini-servizio.js';
-import { importaCrm, leggiFileCrm } from '../crm-servizio.js';
+import { importaCrm, importaFatturato, leggiFileCrm, leggiFileFatturato } from '../crm-servizio.js';
 import { conteggiComponenti, importaComponenti, caricaRegoleScarto } from '../codifica-servizio.js';
 import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
@@ -218,6 +218,7 @@ export function rotteImpostazioni() {
   r.get('/crm', async (req, res) => {
     const conti = (await q(`SELECT (SELECT count(*) FROM crm_aziende)::int AS aziende, (SELECT count(*) FROM crm_aziende WHERE da_verificare IS NOT NULL)::int AS verificare,
       (SELECT count(*) FROM crm_contatti)::int AS contatti, (SELECT count(*) FROM crm_attivita)::int AS attivita`))[0];
+    const anniFatt = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM fatturato_clienti ORDER BY anno`)).map(r => r.anno);
     res.send(pag(req, 'CRM', html`
       <div class="blocco stretto-form">
         <h2>Import delle aziende</h2>
@@ -229,7 +230,20 @@ export function rotteImpostazioni() {
         <button id="controlla-crm" type="button">Controlla il file</button>
         <output id="esito-crm" class="nota"></output>
         <button id="conferma-crm" type="button" class="primario" hidden>Conferma e importa</button>
+      </div>
+      <div class="blocco stretto-form">
+        <h2>Fatturato dei clienti</h2>
+        <p class="nota">${anniFatt.length ? `Caricati gli anni ${anniFatt.join(', ')}.` : 'Nessun anno caricato.'} Si carica il file <code>fatturato_clienti.json.gz</code>
+          preparato da Claude dagli export delle fatture di Fatture in Cloud: nel CRM i clienti mostrano la fascia del fatturato medio annuo.
+          Un nuovo caricamento sostituisce gli anni presenti nel file.</p>
+        <label>File <input type="file" id="file-fatturato" accept=".gz,.json"></label>
+        <button id="carica-fatturato" type="button">Carica</button>
+        <output id="esito-fatturato" class="nota"></output>
       </div>`, undefined, 'crm.js'));
+  });
+  r.post('/crm/fatturato', express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
+    try { res.json(await importaFatturato(leggiFileFatturato(req.body as Buffer))); }
+    catch (e: any) { res.status(400).json({ errore: 'File non valido: ' + (e?.message ?? e) }); }
   });
   r.post('/crm/importa', express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
     try { res.json(await importaCrm(leggiFileCrm(req.body as Buffer), { anteprima: req.query.conferma !== '1' })); }

@@ -8,7 +8,7 @@ import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
-import { allineaClienti, aziendaConNome, cercaAziende } from '../crm-servizio.js';
+import { allineaClienti, aziendaConNome, cercaAziende, fatturatoClienti, type FatturatoCliente } from '../crm-servizio.js';
 import { PRIORITA, STATI_CRM, formatta, TIPI_ATTIVITA, scadenza, statoDa, type StatoCrm, type TipoAttivita } from '../../engine/crm.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -50,6 +50,7 @@ export function rotteCrm() {
       FROM crm_aziende`, [oggi]))[0];
     const responsabili = (await q<{ r: string }>(`SELECT DISTINCT responsabile AS r FROM crm_aziende WHERE responsabile IS NOT NULL ORDER BY 1`)).map(x => x.r);
     const righe = cerca ? await cercaAziende(filtri) : await cercaAziende({ soloAzioni: true }, 100);
+    const { perCliente } = await fatturatoClienti(righe.filter(a => a.cliente_id).map(a => a.cliente_id));
     const recenti = cerca ? [] : await q(`SELECT t.data, t.tipo, t.descrizione, a.id, coalesce(cl.ragione_sociale, a.ragione_sociale) AS nome
       FROM crm_attivita t JOIN crm_aziende a ON a.id = t.azienda_id LEFT JOIN clienti cl ON cl.id = a.cliente_id
       ORDER BY t.data DESC, t.id DESC LIMIT 10`);
@@ -78,8 +79,8 @@ export function rotteCrm() {
       <h2>${cerca ? html`Risultati <span class="nota">(${righe.length}${righe.length === 200 ? '+, restringi la ricerca' : ''})</span>` : 'Prossime azioni'}</h2>
       ${righe.length ? html`<div class="tabella-scorre"><table class="elenco crm">
         <thead><tr><th>Azienda</th><th>Città</th><th>Telefono</th><th>Referente</th><th>Stato</th><th>Prossima azione</th><th>Quando</th></tr></thead>
-        <tbody>${righe.map(a => html`<tr class="cliccabile ${scadenza(a.data_prossima_azione, oggi) ?? ''}" data-href="/crm/${a.id}">
-          <td class="taglia"><a href="/crm/${a.id}">${a.nome}</a>${a.cliente_id ? html` <span class="etichetta cliente">cliente</span>` : ''}</td>
+        <tbody>${righe.map(a => html`<tr class="cliccabile ${scadenza(a.data_prossima_azione, oggi) ?? ''} ${a.cliente_id ? 'gia-cliente' : ''}" data-href="/crm/${a.id}">
+          <td class="taglia"><a href="/crm/${a.id}">${a.nome}</a>${a.cliente_id ? giaCliente(perCliente.get(a.cliente_id)) : ''}</td>
           <td class="nowrap">${a.citta ?? ''}${a.provincia ? html` <span class="nota">(${a.provincia})</span>` : ''}</td>
           <td class="nowrap">${telefono(a.telefono)}</td><td class="taglia">${a.referente ?? ''}</td>
           <td>${statoBadge(a.stato)}</td><td class="taglia">${a.prossima_azione ?? ''}</td><td class="nowrap">${quando(a.data_prossima_azione, oggi)}</td>
@@ -142,6 +143,8 @@ export function rotteCrm() {
     const clientiLiberi = await q(`SELECT id, ragione_sociale FROM clienti c
       WHERE c.id = $1 OR NOT EXISTS (SELECT 1 FROM crm_aziende x WHERE x.cliente_id = c.id) ORDER BY ragione_sociale`, [a.cliente_id ?? 0]);
     const ordini = a.cliente_id ? (await q1(`SELECT count(*)::int AS n FROM ordini WHERE cliente_id = $1`, [a.cliente_id]))!.n : 0;
+    const fatt = a.cliente_id ? await fatturatoClienti([a.cliente_id]) : null;
+    const fc = fatt?.perCliente.get(a.cliente_id);
     const nome = a.cliente ?? a.ragione_sociale;
     const s = scadenza(a.data_prossima_azione, oggi);
     const campo = (k: string, t: string, extra: Raw | string = '') =>
@@ -150,8 +153,14 @@ export function rotteCrm() {
     res.send(pagina(req, nome, html`
       <div class="intestazione-pagina">
         <h1><a href="/crm">CRM</a> › ${nome} ${statoBadge(a.stato)}</h1>
-        ${a.cliente_id ? html`<div class="azioni"><span class="nota">Cliente in anagrafica${ordini ? html` · <a href="/ordini?vista=tutti&q=${encodeURIComponent(a.cliente)}">${ordini} ordini</a>` : ''}</span></div>` : ''}
       </div>
+      ${a.cliente_id ? html`<div class="riquadro-cliente">
+        <span class="etichetta cliente grande">Già cliente</span>
+        <span>${fc ? html`fatturato medio annuo <b>${fc.fascia}</b> <small class="nota">(media ${fatt!.anni[0]}–${fatt!.anni.at(-1)}: ${euro(Math.round(fc.media))};
+          ${fatt!.anni.map(y => `${y}: ${fc.perAnno[y] ? euro(Math.round(fc.perAnno[y])) : '—'}`).join(' · ')})</small>`
+          : fatt?.anni.length ? html`nessuna fattura negli anni ${fatt.anni[0]}–${fatt.anni.at(-1)}` : 'fatturato non ancora caricato'}</span>
+        ${ordini ? html`<a href="/ordini?vista=tutti&q=${encodeURIComponent(a.cliente)}">${ordini} ordini</a>` : ''}
+      </div>` : ''}
       ${a.da_verificare ? html`<div class="avviso">Da verificare: ${collegaCodici(a.da_verificare)}
         <form method="post" action="/crm/${id}/verifica" class="inline"> <button name="esito" value="conferma">Conferma</button> <button name="esito" value="scarta" class="link negativo">Scarta</button></form></div>` : ''}
 
@@ -340,6 +349,11 @@ export function rotteCrm() {
   });
 
   return r;
+}
+
+/** Etichetta "Già cliente" con la fascia del fatturato medio annuo. */
+function giaCliente(f: FatturatoCliente | undefined) {
+  return html` <span class="etichetta cliente" title="${f ? `fatturato medio annuo ${f.fascia}` : 'cliente in anagrafica'}">già cliente${f && f.media > 0 ? ` · ${f.fascia}` : ''}</span>`;
 }
 
 /** "Possibile doppione di AZ00004" → i codici diventano link alla scheda di quell'azienda. */

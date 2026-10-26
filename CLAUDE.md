@@ -104,6 +104,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    le dubbie (doppioni, nomi rovinati, dati web poco sicuri) sono in un Excel a parte.
    Scritte uniformi per colonna (Adriano, 26/10/2026), imposte all'import e a ogni salvataggio (`FORMATI_CRM` in `engine/crm.ts`): nome, P.IVA,
    provincia, responsabile MAIUSCOLO; città, indirizzo, persone Iniziali Maiuscole; settore, descrizione, ruolo solo la prima lettera; email e sito minuscolo; note libere. Colonna `da_verificare` + pagina /crm/verificare pronte se servisse caricarle.
+   Clienti in anagrafica evidenziati "già cliente" con la fascia del fatturato medio annuo (migrazione 026, `fatturato_clienti`: totale per cliente
+   e anno dagli export fatture FIC, file fatturato_clienti.json.gz da Impostazioni → CRM; media = totale ÷ anni caricati, un anno senza fatture vale 0).
+   Un cliente aggiunto in anagrafica dopo l'import si collega da solo all'azienda del CRM con stessa P.IVA o nome (se è una sola).
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

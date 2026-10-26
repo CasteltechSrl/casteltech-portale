@@ -119,3 +119,17 @@ export function formatta(campo: string, v: unknown): string | null {
     default: return t;
   }
 }
+
+// ── Fatturato dei clienti (Adriano, 26/10/2026): fascia della media annua sugli anni caricati ──
+const FASCE: [number, string][] = [[5_000, 'meno di 5 mila €'], [20_000, '5–20 mila €'], [50_000, '20–50 mila €'], [100_000, '50–100 mila €'], [250_000, '100–250 mila €']];
+
+/** Media annua: totale diviso per tutti gli anni caricati (un anno senza fatture conta come zero). */
+export function mediaAnnua(perAnno: Record<number, number>, anni: number[]): number {
+  if (!anni.length) return 0;
+  return anni.reduce((a, y) => a + (perAnno[y] ?? 0), 0) / anni.length;
+}
+
+export function fasciaFatturato(media: number): string {
+  if (media <= 0) return 'nessuna fattura';
+  return FASCE.find(([soglia]) => media < soglia)?.[1] ?? 'oltre 250 mila €';
+}

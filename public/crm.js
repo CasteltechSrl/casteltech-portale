@@ -53,3 +53,21 @@ document.querySelectorAll('form.elimina-attivita').forEach(f => f.addEventListen
   controlla.addEventListener('click', () => invia(false));
   conferma.addEventListener('click', () => invia(true));
 })();
+
+// Impostazioni → CRM: fatturato dei clienti per anno
+(() => {
+  const b = document.getElementById('carica-fatturato');
+  if (!b) return;
+  b.addEventListener('click', async () => {
+    const f = document.getElementById('file-fatturato').files[0];
+    const out = document.getElementById('esito-fatturato');
+    if (!f) { out.textContent = 'Scegli prima il file.'; return; }
+    b.disabled = true; out.textContent = 'Caricamento…';
+    const res = await fetch('/impostazioni/crm/fatturato', { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
+    const j = await res.json().catch(() => ({}));
+    b.disabled = false;
+    out.textContent = res.ok
+      ? `Fatto: anni ${j.anni.join(', ')}, ${j.clienti} clienti.` + (j.nonInAnagrafica.length ? ` Non in anagrafica (non compaiono nel CRM): ${j.nonInAnagrafica.join('; ')}.` : '')
+      : j.errore || 'Errore';
+  });
+})();

@@ -6,7 +6,7 @@ import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
 import { q, transazione } from './db.js';
 import { maiuscolo } from './anagrafiche-servizio.js';
-import { chiaveNome, formatta, statoDa, trovaCliente, type ClientePerCollegamento } from '../engine/crm.js';
+import { chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, trovaCliente, type ClientePerCollegamento } from '../engine/crm.js';
 
 type Db = Pick<pg.PoolClient, 'query'>;
 
@@ -30,13 +30,28 @@ export function leggiFileCrm(contenuto: Buffer): FileCrm {
   return f;
 }
 
-/** I clienti dell'anagrafica che non sono ancora nel CRM vi entrano come "Cliente". */
+/**
+ * I clienti dell'anagrafica che non sono ancora nel CRM: se un'azienda del CRM ha la stessa partita IVA o lo stesso nome
+ * (ed è l'unica) diventa quel cliente, altrimenti il cliente entra come nuova azienda "Cliente".
+ */
 export async function allineaClienti(c?: Db) {
-  const sql = `
-    INSERT INTO crm_aziende (ragione_sociale, cliente_id, stato, partita_iva)
-    SELECT c.ragione_sociale, c.id, 'cliente', c.partita_iva FROM clienti c
-    WHERE NOT EXISTS (SELECT 1 FROM crm_aziende a WHERE a.cliente_id = c.id)`;
-  await (c ? c.query(sql) : q(sql));
+  const esegui = (sql: string, p: unknown[] = []) => (c ? c.query(sql, p).then(r => r.rows) : q(sql, p));
+  const liberi: ClientePerCollegamento[] = await esegui(`SELECT c.id, c.ragione_sociale, c.partita_iva,
+      coalesce(array_agg(a.nome) FILTER (WHERE a.nome IS NOT NULL), '{}') AS alias
+    FROM clienti c LEFT JOIN alias_clienti a ON a.cliente_id = c.id
+    WHERE NOT EXISTS (SELECT 1 FROM crm_aziende x WHERE x.cliente_id = c.id) GROUP BY c.id`);
+  if (!liberi.length) return;
+  const aziende: { id: number; ragione_sociale: string; partita_iva: string | null }[] =
+    await esegui(`SELECT id, ragione_sociale, partita_iva FROM crm_aziende WHERE cliente_id IS NULL AND da_verificare IS NULL AND stato <> 'scartato'`);
+  for (const cl of liberi) {
+    const uguali = aziende.filter(a => trovaCliente(a, [cl]));
+    if (uguali.length === 1) {
+      await esegui(`UPDATE crm_aziende SET cliente_id = $2, stato = 'cliente', aggiornato_il = now() WHERE id = $1`, [uguali[0].id, cl.id]);
+      aziende.splice(aziende.indexOf(uguali[0]), 1);
+    } else {
+      await esegui(`INSERT INTO crm_aziende (ragione_sociale, cliente_id, stato, partita_iva) VALUES ($1, $2, 'cliente', $3)`, [cl.ragione_sociale, cl.id, cl.partita_iva]);
+    }
+  }
 }
 
 async function clientiPerCollegamento(c: Db): Promise<ClientePerCollegamento[]> {
@@ -174,4 +189,56 @@ export async function aziendaConNome(nome: string) {
   const righe = await q<{ id: number; ragione_sociale: string }>(`SELECT a.id, coalesce(cl.ragione_sociale, a.ragione_sociale) AS ragione_sociale
     FROM crm_aziende a LEFT JOIN clienti cl ON cl.id = a.cliente_id`);
   return righe.find(r => chiaveNome(r.ragione_sociale) === k);
+}
+
+// ───────────────────────────── fatturato dei clienti ─────────────────────────────
+/** File: totale fatturato per cliente (nome come nelle fatture) e anno, dagli export di Fatture in Cloud. */
+export interface FileFatturato { fatturato: { cliente: string; anno: number; importo: number }[] }
+
+export function leggiFileFatturato(contenuto: Buffer): FileFatturato {
+  const testo = contenuto[0] === 0x1f && contenuto[1] === 0x8b ? gunzipSync(contenuto).toString('utf8') : contenuto.toString('utf8');
+  const f = JSON.parse(testo) as FileFatturato;
+  if (!Array.isArray(f.fatturato) || f.fatturato.some(r => !r.cliente || !Number.isInteger(r.anno) || !Number.isFinite(Number(r.importo))))
+    throw new Error('serve "fatturato" con cliente, anno e importo');
+  return f;
+}
+
+/** Sostituisce gli anni presenti nel file; i nomi si collegano ai clienti in anagrafica (nome, nomi vecchi, forma giuridica a parte). */
+export async function importaFatturato(f: FileFatturato) {
+  return transazione(async c => {
+    const clienti = await clientiPerCollegamento(c);
+    const anni = [...new Set(f.fatturato.map(r => r.anno))];
+    const righe = new Map<string, { cliente_nome: string; anno: number; importo: number; cliente_id: number | null }>();
+    const fuori = new Set<string>();
+    for (const r of f.fatturato) {
+      const nome = maiuscolo(r.cliente);
+      const t = trovaCliente({ ragione_sociale: nome }, clienti);
+      if (!t) fuori.add(nome);
+      const k = `${nome}|${r.anno}`;
+      const prima = righe.get(k);
+      righe.set(k, { cliente_nome: nome, anno: r.anno, importo: (prima?.importo ?? 0) + Number(r.importo), cliente_id: t?.cliente.id ?? null });
+    }
+    await c.query(`DELETE FROM fatturato_clienti WHERE anno = ANY($1::int[])`, [anni]);
+    await c.query(`INSERT INTO fatturato_clienti (cliente_nome, anno, importo, cliente_id)
+      SELECT cliente_nome, anno, importo, cliente_id FROM jsonb_to_recordset($1) AS x(cliente_nome text, anno int, importo numeric, cliente_id int)`,
+      [JSON.stringify([...righe.values()])]);
+    return { anni: anni.sort(), clienti: new Set([...righe.values()].map(r => r.cliente_nome)).size, nonInAnagrafica: [...fuori].sort() };
+  });
+}
+
+export interface FatturatoCliente { perAnno: Record<number, number>; media: number; fascia: string }
+
+/** Fatturato per cliente dell'anagrafica: importi per anno, media annua sugli anni caricati e fascia. */
+export async function fatturatoClienti(clienteIds?: number[]): Promise<{ anni: number[]; perCliente: Map<number, FatturatoCliente> }> {
+  const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM fatturato_clienti ORDER BY anno`)).map(r => r.anno);
+  const righe = await q<{ cliente_id: number; anno: number; importo: number }>(`SELECT cliente_id, anno, sum(importo)::float AS importo FROM fatturato_clienti
+    WHERE cliente_id IS NOT NULL AND ($1::int[] IS NULL OR cliente_id = ANY($1)) GROUP BY cliente_id, anno`, [clienteIds ?? null]);
+  const perCliente = new Map<number, FatturatoCliente>();
+  for (const r of righe) {
+    const x = perCliente.get(r.cliente_id) ?? { perAnno: {}, media: 0, fascia: '' };
+    x.perAnno[r.anno] = r.importo;
+    perCliente.set(r.cliente_id, x);
+  }
+  for (const x of perCliente.values()) { x.media = mediaAnnua(x.perAnno, anni); x.fascia = fasciaFatturato(x.media); }
+  return { anni, perCliente };
 }
