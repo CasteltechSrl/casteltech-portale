@@ -17,6 +17,8 @@ import { oreDa } from '../preventivi-servizio.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
+import { soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
+import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
 import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
 import { partiRoma } from '../../engine/promemoria.js';
@@ -138,7 +140,19 @@ export function rotteCommesse() {
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
     const msg = req.query.ok === 'conferma' ? 'Rientro confermato' : req.query.ok ? 'Salvato' : undefined;
-    res.send(await paginaRientro(req, c, await rilevazioniCommessa(c.id), { messaggio: msg }));
+    const presenti = await rilevazioniCommessa(c.id);
+    // righe lette dalla scansione della scheda (Ordini → Da acquisire): si aggiungono in fondo, senza ripetere quelle già presenti
+    const acq = Number(req.query.acquisizione) || null;
+    const letta = acq ? (await q1(`SELECT proposta FROM acquisizioni WHERE id = $1 AND tipo = 'scheda_produzione'`, [acq]))?.proposta?.commesse
+      ?.find((x: any) => x.commessaId === c.id) : null;
+    if (letta && !letta.fatto) {   // già salvate una volta: non si riaggiungono
+      const nuove = soloNuove(letta.righe as RigaScansione[], presenti as any[]) as RigaScansione[];
+      return res.send(await paginaRientro(req, c, [...presenti, ...nuove], {
+        messaggio: `${nuove.length} righe lette dalla scansione aggiunte in fondo (evidenziate${letta.righe.length > nuove.length ? `; ${letta.righe.length - nuove.length} erano già presenti` : ''}): controlla e premi Salva.`,
+        lette: { da: presenti.length, incerte: new Set(nuove.flatMap((r, k) => (r.incerta ? [presenti.length + k] : []))), acquisizione: acq! },
+      }));
+    }
+    res.send(await paginaRientro(req, c, presenti, { messaggio: msg }));
   });
 
   r.post('/:id/rientro', async (req, res) => {
@@ -167,6 +181,7 @@ export function rotteCommesse() {
       segnalazione: testoSegn ? { testo: testoSegn, prossime: !!b.segnalazione?.prossime, faseCodice: String(b.segnalazione?.fase ?? '') || undefined } : undefined,
     });
     void ricaricaPromemoria().catch(e => console.error(e)); // le righe sono state riscritte: si rifanno i timer
+    if (Number(b.acquisizione)) await segnaRientroFatto(Number(b.acquisizione), c.id, req.session.utente!.id);
     if (vuoleConferma && !conferma) {
       const agg = await leggiCommessa(c.id);
       return res.status(400).send(await paginaRientro(req, agg, await rilevazioniCommessa(c.id),
@@ -380,7 +395,8 @@ function righeDaForm(b: any, personeFase: Record<string, number>): RigaForm[] {
   });
 }
 
-async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { messaggio?: string; errore?: string }): Promise<string> {
+async function paginaRientro(req: Request, c: any, righe: RigaForm[],
+  esito?: { messaggio?: string; errore?: string; lette?: { da: number; incerte: Set<number>; acquisizione: number } }): Promise<string> {
   const i = c.intestazione ?? {};
   const prev = await leggiPreventivo(c.preventivo_id);
   const fasi = await fasiCommessa(c);
@@ -398,7 +414,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
     <optgroup label="Altre fasi">${altre.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>`;
   const totaleTesto = (r: RigaForm) => { const m = r.inizio && r.fine ? r.totaleScrittoMin : r.durataMin; return m == null ? '' : ore(m * 60); };
   const riga = (r: Partial<RigaForm>, k: number | string, errore = false) => html`
-    <tr class="${errore ? 'riga-errore' : ''}">
+    <tr class="${errore ? 'riga-errore' : ''} ${typeof k === 'number' && esito?.lette && k >= esito.lette.da && k < righe.length ? 'riga-letta' : ''} ${typeof k === 'number' && esito?.lette?.incerte.has(k) ? 'riga-incerta' : ''}">
       <td class="n num-riga">${typeof k === 'number' ? k + 1 : ''}</td>
       <td><select name="righe[${k}][fase]">${opzioniFase(r.fase ?? '')}</select></td>
       <td><input name="righe[${k}][operatore]" value="${r.operatore ?? ''}" class="maiuscolo" list="operatori"></td>
@@ -421,6 +437,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[], esito?: { 
     titolo: `Rientro ${c.numero}`, utente: req.session.utente, attiva: 'commesse', largo: true, script: 'rientro.js', avviso: esito?.errore,
     contenuto: html`
     <form method="post" action="/commesse/${c.id}/rientro" autocomplete="off" id="rientro">
+    ${esito?.lette ? html`<input type="hidden" name="acquisizione" value="${esito.lette.acquisizione}">` : ''}
     <div class="intestazione-pagina">
       <h1>Rientro scheda · <a href="/commesse/${c.id}">${c.numero}</a> <span class="stato ${c.stato}">${STATI_TESTO[c.stato]}</span></h1>
       <div class="azioni">
