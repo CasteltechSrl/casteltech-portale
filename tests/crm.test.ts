@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chiaveNome, chiavePiva, scadenza, statoDa, trovaCliente } from '../src/engine/crm.js';
+import { chiaveNome, chiavePiva, scadenza, formatta, statoDa, statoDopoImport, trovaCliente, unisciElenco } from '../src/engine/crm.js';
 
 test('crm: nomi confrontati senza punteggiatura e forma giuridica (solo in fondo al nome)', () => {
   assert.equal(chiaveNome('Audioscope 2K s.r.l.'), chiaveNome('AUDIOSCOPE 2K S.R.L.'));
@@ -47,7 +47,7 @@ test('crm: stato scritto come nel vecchio file Excel', () => {
 });
 
 test('crm: scritte uniformi per colonna (le note restano come scritte)', async () => {
-  const { formatta, iniziali } = await import('../src/engine/crm.js');
+  const { iniziali } = await import('../src/engine/crm.js');
   assert.equal(iniziali("REGGIO NELL'EMILIA"), "Reggio nell'Emilia");
   assert.equal(iniziali("castell'arquato"), "Castell'Arquato");
   assert.equal(iniziali("CASSANO D'ADDA"), "Cassano d'Adda");
@@ -74,4 +74,22 @@ test('crm: fascia del fatturato medio annuo dei clienti', async () => {
   assert.equal(fasciaFatturato(300_000), 'oltre 250 mila €');
   assert.equal(fasciaFatturato(0), 'nessuna fattura');
   assert.equal(mediaAnnua({ 2025: 10 }, []), 0);
+});
+
+test('crm: con due partite IVA diverse il nome uguale non collega al cliente', () => {
+  const clienti = [{ id: 7, ragione_sociale: 'STEM S.R.L.', partita_iva: '01269760185' }];
+  assert.equal(trovaCliente({ ragione_sociale: 'STEM SRL', partita_iva: '01538380344' }, clienti), null);
+  assert.equal(trovaCliente({ ragione_sociale: 'STEM SRL' }, clienti)?.cliente.id, 7);
+});
+
+test('crm: import che si aggiunge a quello che c\'è (altri nomi, telefoni, email, note, stato)', () => {
+  assert.equal(unisciElenco('ACI SRL', 'aci srl | ACI FARFISA'), 'ACI SRL | ACI FARFISA');
+  assert.equal(unisciElenco('+39 0523 591992', '0523591992 | 0523 523056'), '+39 0523 591992 | 0523 523056');
+  assert.equal(unisciElenco(null, 'info@a.it'), 'info@a.it');
+  assert.equal(unisciElenco('Prima riga\nSeconda', 'Seconda\nTerza', '\n'), 'Prima riga\nSeconda\nTerza');
+  assert.equal(unisciElenco(null, null), null);
+  assert.equal(statoDopoImport('da_contattare', 'non_interessato'), 'non_interessato');
+  assert.equal(statoDopoImport('in_trattativa', 'scartato'), 'in_trattativa');
+  assert.equal(statoDopoImport('da_contattare', null), 'da_contattare');
+  assert.equal(formatta('note', 'riga  uno\n\n  riga due '), 'riga uno\nriga due');
 });

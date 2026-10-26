@@ -61,6 +61,7 @@ export interface ClientePerCollegamento { id: number; ragione_sociale: string; p
 /**
  * Cliente dell'anagrafica che corrisponde a un'azienda del CRM: prima per partita IVA, poi per nome uguale
  * (forma giuridica e punteggiatura a parte, anche tra i nomi "vecchi" collegati al cliente).
+ * Con due partite IVA diverse il nome uguale non basta (STEM SRL di Medesano non è il cliente STEM S.R.L. di Cura Carpignano).
  */
 export function trovaCliente(az: { ragione_sociale: string; partita_iva?: string | null }, clienti: ClientePerCollegamento[]):
   { cliente: ClientePerCollegamento; come: 'partita_iva' | 'nome' } | null {
@@ -71,7 +72,8 @@ export function trovaCliente(az: { ragione_sociale: string; partita_iva?: string
   }
   const n = chiaveNome(az.ragione_sociale);
   if (!n) return null;
-  const c = clienti.find(c => chiaveNome(c.ragione_sociale) === n || (c.alias ?? []).some(a => chiaveNome(a) === n));
+  const c = clienti.find(c => (chiaveNome(c.ragione_sociale) === n || (c.alias ?? []).some(a => chiaveNome(a) === n))
+    && !(p && chiavePiva(c.partita_iva) && chiavePiva(c.partita_iva) !== p));
   return c ? { cliente: c, come: 'nome' } : null;
 }
 
@@ -106,9 +108,11 @@ export const FORMATI_CRM: Record<string, Formato> = {
   telefono: 'libero', altri_telefoni: 'libero', note: 'libero',
 };
 
-/** Testo pulito (spazi singoli, null se vuoto) nel formato della sua colonna. */
+/** Testo pulito (spazi singoli, null se vuoto) nel formato della sua colonna; le note tengono gli a capo. */
 export function formatta(campo: string, v: unknown): string | null {
-  const t = String(v ?? '').replace(/\s+/g, ' ').trim();
+  const t = campo === 'note'
+    ? String(v ?? '').split(/\r?\n/).map(r => r.replace(/[ \t]+/g, ' ').trim()).filter(Boolean).join('\n')
+    : String(v ?? '').replace(/\s+/g, ' ').trim();
   if (!t) return null;
   switch (FORMATI_CRM[campo] ?? 'libero') {
     case 'maiuscolo': return t.toUpperCase();
@@ -118,6 +122,27 @@ export function formatta(campo: string, v: unknown): string | null {
     case 'minuscolo': return t.toLowerCase();
     default: return t;
   }
+}
+
+// ── Import che si aggiunge a quello che c'è (foglio PER_FEDERICO, 26/10/2026) ──
+// cifre di un telefono senza il prefisso internazionale dell'Italia (+39 0523 591992 = 0523591992)
+const cifre = (s: string) => s.replace(/\D/g, '').replace(/^(00)?39(?=\d{9,})/, '');
+
+/**
+ * Elenco scritto nel portale + elenco del file, senza ripetere quello che c'è già (maiuscole a parte; i telefoni
+ * si confrontano per cifre). Altri nomi, telefoni ed email sono separati da " | ", le note vanno a capo.
+ */
+export function unisciElenco(vecchio: string | null | undefined, nuovo: string | null | undefined, sep: ' | ' | '\n' = ' | '): string | null {
+  const dividi = (s: string | null | undefined) => String(s ?? '').split(sep === '\n' ? /\n/ : /\s*\|\s*/).map(x => x.trim()).filter(Boolean);
+  const uguali = (a: string, b: string) => a.toLowerCase() === b.toLowerCase() || (cifre(a).length >= 6 && cifre(a) === cifre(b) && !/[a-z]/i.test(a + b));
+  const out = dividi(vecchio);
+  for (const x of dividi(nuovo)) if (!out.some(y => uguali(x, y))) out.push(x);
+  return out.length ? out.join(sep) : null;
+}
+
+/** Lo stato del file vale solo per le aziende ancora "Da contattare": quello scritto nel portale non si tocca. */
+export function statoDopoImport(nelPortale: StatoCrm, dalFile: StatoCrm | null): StatoCrm {
+  return nelPortale === 'da_contattare' && dalFile ? dalFile : nelPortale;
 }
 
 // ── Fatturato dei clienti (Adriano, 26/10/2026): fascia della media annua sugli anni caricati ──
