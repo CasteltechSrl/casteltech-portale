@@ -8,13 +8,15 @@ import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
 import { leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
+import { abbinaDdt, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
+import { righeOrdini } from './ordini-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
 export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio' }
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
 export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
 
-const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione'];
+const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt'];
 
 /** Registra un file arrivato. Lo stesso file di Drive non entra due volte. */
 export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 'drive' | 'caricato'; driveId?: string } = {}): Promise<number | null> {
@@ -69,6 +71,12 @@ export async function elabora(id: number): Promise<void> {
     if (!parti.length) throw new Error("nell'email non ci sono testo né allegati PDF o immagini");
     const clienti = (await q<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti ORDER BY ragione_sociale`)).map(c => c.r);
     const lettura = await leggiOrdineConIa(parti, clienti);
+    if (lettura.tipo === 'ddt') {
+      const ddt = await collegaDdt({ tipoDocumento: 'ddt', ...lettura.ddt, clienteId: null, righe: lettura.ddt.righe });
+      await q(`UPDATE acquisizioni SET tipo = 'ddt', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
+        [id, JSON.stringify(ddt)]);
+      return;
+    }
     if (lettura.tipo === 'scheda_produzione') {
       const scheda = await leggiScheda(parti, lettura.commesse, oggiRoma());
       await q(`UPDATE acquisizioni SET tipo = 'scheda_produzione', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
@@ -172,4 +180,58 @@ export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi
 /** Scartato (non è un ordine, doppione…): il file si svuota, resta la riga per non rileggerlo da Drive. */
 export async function scarta(id: number): Promise<void> {
   await q(`UPDATE acquisizioni SET stato = 'scartato', contenuto = NULL WHERE id = $1 AND stato <> 'confermato'`, [id]);
+}
+
+// ───────────────────────────── DDT di Casteltech in PDF ─────────────────────────────
+export interface RigaDdtDb extends RigaDdtLetta { rigaId?: number | null }
+export interface DdtDb extends Omit<DdtLetto, 'righe'> { tipoDocumento: 'ddt'; clienteId: number | null; righe: RigaDdtDb[] }
+
+/** Righe d'ordine del cliente ancora da spedire (schede da evadere o parziali), per l'abbinamento. */
+export async function righeAperteCliente(clienteId: number | null) {
+  if (!clienteId) return [];
+  return (await righeOrdini()).filter(r => r.clienteId === clienteId && r.tipo === 'scheda' && ['da_evadere', 'parziale'].includes(r.stato));
+}
+
+/**
+ * Collega il DDT all'anagrafica (cliente scelto o letto) e propone per ogni riga la riga d'ordine aperta.
+ * Una riga già abbinata dall'ufficio (rigaId numero) resta; undefined = da proporre, null = nessun ordine.
+ */
+export async function collegaDdt(d: DdtDb): Promise<DdtDb> {
+  let clienteId = d.clienteId ? (await q1<{ id: number }>(`SELECT id FROM clienti WHERE id = $1`, [d.clienteId]))?.id ?? null : null;
+  if (!clienteId && d.cliente) clienteId = (await risolvi(pool, d.cliente, '')).clienteId;
+  const cliente = clienteId ? (await q1<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti WHERE id = $1`, [clienteId]))!.r : d.cliente;
+  const aperte = await righeAperteCliente(clienteId);
+  const candidate: RigaAperta[] = aperte.map(a => ({ id: a.id, codice: a.codice, codiceCliente: a.codiceCliente, descrizione: a.descrizione,
+    rifCliente: a.rifCliente, residuo: a.residuoQuantita, consegna: a.consegna }));
+  const proposte = abbinaDdt(d.righe, candidate, d.rifOrdine);
+  const valide = new Set(aperte.map(a => a.id));
+  const righe = d.righe.map((r, i) => ({ ...r, rigaId: r.rigaId === undefined || (r.rigaId && !valide.has(r.rigaId)) ? proposte[i] : r.rigaId }));
+  return { ...d, clienteId, cliente: maiuscolo(cliente), righe };
+}
+
+export async function salvaDdt(id: number, d: DdtDb): Promise<DdtDb> {
+  const nuovo = await collegaDdt(d);
+  await q(`UPDATE acquisizioni SET proposta = $2 WHERE id = $1 AND tipo = 'ddt' AND stato IN ('da_confermare', 'errore')`, [id, JSON.stringify(nuovo)]);
+  return nuovo;
+}
+
+/** Conferma: le righe del DDT entrano nei DDT del portale collegate alle righe d'ordine (lo spedito e lo stato si aggiornano). */
+export async function confermaDdt(id: number, d: DdtDb, utenteId: number): Promise<void> {
+  const ddt = await collegaDdt(d);
+  if (!ddt.clienteId) throw new Error("scegli il cliente dall'anagrafica");
+  if (!ddt.numero || !ddt.data) throw new Error('mancano numero o data del DDT');
+  const righe = ddt.righe.filter(r => r.quantita > 0);
+  if (!righe.length) throw new Error('nessuna riga con quantità');
+  const anno = Number(ddt.data.slice(0, 4));
+  await transazione(async c => {
+    const a = (await c.query(`SELECT stato FROM acquisizioni WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!a || a.stato === 'confermato') throw new Error('DDT già confermato');
+    if ((await c.query(`SELECT 1 FROM ddt_righe WHERE anno = $1 AND numero = $2 LIMIT 1`, [anno, ddt.numero])).rowCount)
+      throw new Error(`il DDT ${ddt.numero}/${anno} è già nel portale`);
+    for (const r of righe)
+      await c.query(`INSERT INTO ddt_righe (anno, numero, data, cliente_id, cliente_nome, codice, descrizione, quantita, imponibile, riga_id, origine, acquisizione_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,'acquisito',$10)`,
+        [anno, ddt.numero, ddt.data, ddt.clienteId, ddt.cliente, r.codice || null, r.descrizione || null, r.quantita, r.rigaId ?? null, id]);
+    await c.query(`UPDATE acquisizioni SET stato = 'confermato', confermato_da = $2, proposta = $3 WHERE id = $1`, [id, utenteId, JSON.stringify(ddt)]);
+  });
 }

@@ -5,7 +5,7 @@
  * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5), come la lettura delle BOM.
  */
 import { iaConfigurata } from './lettura-ia.js';
-import { normalizzaProposta, oggettoJson, type Proposta } from '../engine/acquisizioni.js';
+import { normalizzaDdt, normalizzaProposta, oggettoJson, type DdtLetto, type Proposta } from '../engine/acquisizioni.js';
 import type { FoglioLetto } from '../engine/fogli-tempi.js';
 
 export { iaConfigurata };
@@ -28,6 +28,9 @@ Regole: non inventare. Se un dato non c'è, lascialo vuoto (stringa vuota o null
 Se il documento non è un ordine (offerta, DDT, fattura, sollecito, conferma d'ordine di Casteltech, pubblicità), e_ordine = false e spiega in note.
 ECCEZIONE: se è una SCHEDA DI PRODUZIONE di Casteltech (titolo "SCHEDA DI PRODUZIONE", "Fogli tempi", numero commessa tipo C2026-0001 in alto)
 rispondi solo {"scheda_produzione": true, "commesse": ["<numeri di commessa che compaiono>"]}.
+ECCEZIONE: se è un DOCUMENTO DI TRASPORTO (DDT) emesso da Casteltech (Casteltech è il mittente, il cliente è il destinatario)
+rispondi solo {"ddt": true, "numero": "<numero del DDT>", "data": "AAAA-MM-GG", "cliente": "<destinatario>", "rif_ordine": "<ordine del cliente citato, se c'è>",
+"righe": [{"codice": "", "descrizione": "", "quantita": 0}], "note": ""}.
 In note metti in italiano, in breve, quello che l'ufficio deve sapere (condizioni particolari, consegne parziali, dubbi di lettura).
 Rispondi SOLO con un oggetto JSON:
 {"e_ordine": true, "cliente": "", "rif_cliente": "<numero dell'ordine del cliente>", "data_ordine": "AAAA-MM-GG",
@@ -65,7 +68,7 @@ async function chiediIa(parti: Parte[], sistema: string): Promise<any> {
 }
 
 /** Esito della prima lettura: un ordine, oppure le schede di produzione di Casteltech (fogli tempi) con i numeri di commessa. */
-export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_produzione'; commesse: string[] };
+export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_produzione'; commesse: string[] } | { tipo: 'ddt'; ddt: DdtLetto };
 
 /** Legge il documento: se è un ordine restituisce la proposta pulita, se è una scheda di produzione i numeri di commessa. */
 export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promise<Lettura> {
@@ -74,6 +77,7 @@ export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promi
     const commesse = (Array.isArray(x.commesse) ? x.commesse : [x.commessa]).map((c: unknown) => String(c ?? '').toUpperCase().replace(/\s+/g, '')).filter(Boolean);
     return { tipo: 'scheda_produzione', commesse: [...new Set<string>(commesse)] };
   }
+  if (x?.ddt === true) return { tipo: 'ddt', ddt: normalizzaDdt(x) };
   return { tipo: 'ordine', proposta: normalizzaProposta(x) };
 }
 

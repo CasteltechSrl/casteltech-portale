@@ -102,7 +102,8 @@ export async function importaOrdini(f: FileOrdini) {
         AND NOT EXISTS (SELECT 1 FROM ordini_righe r WHERE r.ordine_id = o.id AND r.commessa_id IS NOT NULL)`,
         [anno, f.ordini.filter(o => annoDi(o) === anno).map(o => o.numero)])).rowCount ?? 0;
     }
-    await c.query(`DELETE FROM ddt_righe WHERE anno = $1`, [f.anno]);
+    // DDT dell'import sostituiti per intero; quelli acquisiti in PDF restano, salvo che il file contenga ormai lo stesso DDT
+    await c.query(`DELETE FROM ddt_righe WHERE anno = $1 AND (origine = 'import' OR numero = ANY($2))`, [f.anno, (f.ddt ?? []).map(d => d.numero)]);
     for (const d of f.ddt ?? []) {
       if (!dataValida(d.data)) continue;
       const cl = await collega(d.cliente);
@@ -137,12 +138,13 @@ export interface RigaElenco extends RigaOrdine {
 export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
   const righe = await q(`
     SELECT r.*, o.numero, o.anno, o.data_ordine, o.cliente_nome, o.cliente_id, o.rif_cliente,
-      coalesce((SELECT json_agg(json_build_object('data', k.data, 'quantita', k.quantita) ORDER BY k.data) FROM ordini_consegne k WHERE k.riga_id = r.id), '[]') AS consegne
+      coalesce((SELECT json_agg(json_build_object('data', k.data, 'quantita', k.quantita) ORDER BY k.data) FROM ordini_consegne k WHERE k.riga_id = r.id), '[]') AS consegne,
+      coalesce((SELECT sum(d.quantita) FROM ddt_righe d WHERE d.riga_id = r.id AND d.origine = 'acquisito'), 0) AS spedita_acquisita
     FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id
     WHERE $1::int IS NULL OR o.id = $1
     ORDER BY o.anno, o.numero, r.posizione, r.id`, [ordineId ?? null]);
   const base: RigaOrdine[] = righe.map(r => ({
-    id: r.id, ordineId: r.ordine_id, tipo: r.tipo, quantita: r.quantita, prezzo: r.prezzo, quantitaSpedita: r.quantita_spedita,
+    id: r.id, ordineId: r.ordine_id, tipo: r.tipo, quantita: r.quantita, prezzo: r.prezzo, quantitaSpedita: Number(r.quantita_spedita) + Number(r.spedita_acquisita),   // + DDT in PDF confermati dopo l'import
     importoFatturato: r.importo_fatturato, statoManuale: r.stato_manuale, consegnaRichiesta: r.consegna_richiesta, arrivoMateriale: r.arrivo_materiale,
     dataLavorazione: r.data_lavorazione, ritardiProduzione: r.ritardi_produzione, consegnaPrevista: r.consegna_prevista, consegne: r.consegne,
   }));
