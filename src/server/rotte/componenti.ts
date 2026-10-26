@@ -169,11 +169,20 @@ export function rotteComponenti() {
         <a class="bottone" href="/componenti/archivio.xlsx">Scarica tutto in Excel</a></div>
       <form class="cerca"><input name="q" value="${testo}" placeholder="P/N, codice di produzione o gestionale, descrizione" autofocus><button>Cerca</button></form>
       ${testo ? (righe.length ? html`<div class="tabella-scorre"><table class="componenti"><thead><tr><th>P/N</th><th>Fam.</th><th>Codice produzione</th>
-        <th>Codice gestionale</th><th>Descrizione</th><th>Stato</th><th>Fonte</th><th>Note</th></tr></thead><tbody>
+        <th>Codice gestionale</th><th>Descrizione</th><th>Stato</th><th>Fonte</th><th>Note</th><th></th></tr></thead><tbody>
         ${righe.map(c => html`<tr><td>${c.pn}</td><td>${c.famiglia}</td><td class="codice">${c.codice_produzione}</td><td class="codice">${c.codice_gestionale}</td>
-          <td class="taglia">${c.descrizione}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td></tr>`)}
-        </tbody></table></div>${righe.length === 200 ? html`<p class="nota">Mostrati i primi 200.</p>` : ''}` : html`<p class="vuoto">Nessun componente trovato.</p>`) : ''}`));
+          <td class="taglia">${c.descrizione}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
+          <td><form method="post" action="/componenti/archivio/${c.id}/elimina?q=${encodeURIComponent(testo)}" class="inline"
+            data-conferma="${`Eliminare dall'archivio ${c.codice_gestionale || c.codice_produzione || c.pn}?` + (c.codice_gestionale ? `\n\nSe il codice ${c.codice_gestionale} è già stato creato in Moka, non eliminarlo: il suo numero verrebbe riassegnato al prossimo componente nuovo.` : '')}">
+            <button class="link negativo">Elimina</button></form></td></tr>`)}
+        </tbody></table></div>${righe.length === 200 ? html`<p class="nota">Mostrati i primi 200.</p>` : ''}` : html`<p class="vuoto">Nessun componente trovato.</p>`) : ''}`, req.query.msg ? String(req.query.msg) : undefined));
   });
+  // componente codificato per errore
+  r.post('/archivio/:id/elimina', async (req, res) => {
+    await q(`DELETE FROM componenti WHERE id = $1`, [Number(req.params.id)]);
+    res.redirect(`/componenti/archivio?q=${encodeURIComponent(String(req.query.q ?? ''))}&msg=${encodeURIComponent('Componente eliminato dall\'archivio.')}`);
+  });
+
   r.get('/archivio.xlsx', async (_req, res) => {
     const righe = await q<any>(`SELECT pn, produttore, famiglia, codice_produzione, codice_gestionale, descrizione, stato, fonte, note, attributi FROM componenti ORDER BY codice_gestionale NULLS LAST, id`);
     const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Componenti');

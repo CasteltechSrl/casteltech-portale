@@ -4,7 +4,9 @@
  */
 import { Router, type Request } from 'express';
 import QRCode from 'qrcode';
-import { q, q1 } from '../db.js';
+import { q, q1, transazione } from '../db.js';
+import { salvaBackupSuDisco } from '../backup.js';
+import { confermaEliminaCommessa } from '../../engine/eliminazioni.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
@@ -35,7 +37,7 @@ export function rotteCommesse() {
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
       ORDER BY c.creato_il DESC, c.id DESC LIMIT 300`, [cerca]);
     res.send(String(layout({
-      titolo: 'Commesse', utente: req.session.utente, attiva: 'commesse', largo: true, script: 'elenco.js',
+      titolo: 'Commesse', utente: req.session.utente, attiva: 'commesse', largo: true, script: 'elenco.js', avviso: req.query.msg ? String(req.query.msg) : undefined,
       contenuto: html`
       <div class="intestazione-pagina"><h1>Commesse</h1></div>
       <p class="nota">Una commessa si crea da un preventivo: apri il preventivo e premi <strong>Crea commessa</strong>.</p>
@@ -173,6 +175,24 @@ export function rotteCommesse() {
     res.redirect(`/commesse/${c.id}/rientro?ok=${conferma ? 'conferma' : '1'}`);
   });
 
+  // ── Elimina (commessa creata per errore) ──
+  r.post('/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const c = await q1(`SELECT numero FROM commesse WHERE id = $1`, [id]);
+    if (!c) return res.redirect('/commesse');
+    await salvaBackupSuDisco('prima-di-eliminare-commessa').catch(() => null);
+    await transazione(async t => {
+      // tempi (anche dal telefono), scansioni, segnalazioni e analisi di questa commessa; le righe d'ordine restano, scollegate
+      await t.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [id]);
+      await t.query(`DELETE FROM scansioni WHERE commessa_id = $1`, [id]);
+      await t.query(`DELETE FROM segnalazioni WHERE commessa_id = $1`, [id]);
+      await t.query(`DELETE FROM analisi_commesse WHERE commessa_id = $1`, [id]);
+      await t.query(`DELETE FROM commesse WHERE id = $1`, [id]);
+    });
+    void ricaricaPromemoria().catch(e => console.error(e)); // niente promemoria per le fasi aperte della commessa eliminata
+    res.redirect(`/commesse?msg=${encodeURIComponent(`Commessa ${c.numero} eliminata.`)}`);
+  });
+
   return r;
 }
 
@@ -201,6 +221,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const storico = (prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : []).filter(s => !salvata || s.numero !== salvata.numero || s.origine !== 'ufficio');
   const st = d.scheda;
   const aperte = salvata ? await fasiAperte({ commessaId: salvata.id }) : [];
+  const nTempi = salvata ? (await q1(`SELECT count(*)::int AS n FROM rilevazioni WHERE commessa_id = $1`, [salvata.id]))!.n : 0;
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
@@ -214,6 +235,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
           <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>` : ''}
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
+        ${salvata ? html`<button form="elimina-commessa" class="pericolo" title="Elimina la commessa creata per errore"
+          data-conferma="${confermaEliminaCommessa({ numero: salvata.numero, stato: STATI_TESTO[salvata.stato] ?? salvata.stato, tempi: nTempi })}">Elimina</button>` : ''}
       </div>
     </div>
     ${aperte.length ? html`<div class="avviso">Fasi aperte dal telefono e non ancora chiuse: ${aperte.map((f, k) => html`${k ? ', ' : ''}<b>${f.numero}</b> ${f.nome}
@@ -278,7 +301,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     </section>
     </div>
     </form>
-    ${salvata ? html`<form id="tempi" method="post" action="/commesse/${salvata.id}/tempi"></form>` : ''}`,
+    ${salvata ? html`<form id="tempi" method="post" action="/commesse/${salvata.id}/tempi"></form>
+      <form id="elimina-commessa" method="post" action="/commesse/${salvata.id}/elimina"></form>` : ''}`,
   }));
 }
 

@@ -23,6 +23,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.
 - Pagine HTML: usare `html\`...\`` di `src/server/views/html.ts` (protegge i testi); niente JavaScript inline
   (lo blocca la Content-Security-Policy): gli script stanno in `public/`.
+- Tasto Elimina (Adriano, 26/10/2026: in tutte le sezioni, per le righe inserite per errore): conferma con `data-conferma="testo"`
+  sul modulo o sul pulsante (`public/conferma.js`, caricato in ogni pagina); regole in `src/engine/eliminazioni.ts`. Ciò che è già usato
+  non si elimina (preventivo con commessa, cliente/prodotto usati, fasi/parametri del catalogo di partenza → spunta "Attiva", utenti che hanno lavorato → "Attivo").
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 

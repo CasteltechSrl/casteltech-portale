@@ -4,7 +4,7 @@
  */
 import express, { Router, type Request } from 'express';
 import { gunzipSync } from 'node:zlib';
-import { q, q1 } from '../db.js';
+import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
 import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from '../anagrafiche-servizio.js';
@@ -19,10 +19,13 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
     const filtro = Number(req.query.cliente) || 0;
     const clienti = await q(`SELECT c.id, c.ragione_sociale, c.partita_iva,
         (SELECT count(*)::int FROM prodotti p WHERE p.cliente_id = c.id) AS prodotti,
-        (SELECT count(*)::int FROM preventivi v WHERE v.cliente_id = c.id) AS preventivi
+        (SELECT count(*)::int FROM preventivi v WHERE v.cliente_id = c.id) AS preventivi,
+        (SELECT count(*)::int FROM ordini o WHERE o.cliente_id = c.id) + (SELECT count(*)::int FROM commesse k WHERE k.cliente_id = c.id) AS altri
       FROM clienti c ORDER BY ragione_sociale`);
     const prodotti = await q(`SELECT p.id, p.codice, p.descrizione, p.cliente_id,
-        (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi
+        (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi,
+        (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
+          + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id) AS altri
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
       ORDER BY p.codice LIMIT 1000`, [filtro]);
     const opzClienti = (sel: number | null, conVuoto = true) => html`
@@ -45,6 +48,7 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
         </div>
       </details>
 
+      <p class="nota">Il tasto <b>Elimina</b> compare solo su clienti e prodotti mai usati (preventivi, commesse, ordini): quelli inseriti per errore.</p>
       <h2>Clienti <span class="nota">(${clienti.length})</span></h2>
       <div class="tabella-scorre limitata"><table class="editor">
         <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th class="n">Prodotti</th><th class="n">Preventivi</th><th></th></tr></thead>
@@ -58,7 +62,9 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
             <td class="largo"><input name="ragione_sociale" form="c-${c.id}" value="${c.ragione_sociale}" class="maiuscolo"></td>
             <td><input name="partita_iva" form="c-${c.id}" value="${c.partita_iva ?? ''}" class="maiuscolo"></td>
             <td class="n"><a href="/impostazioni/anagrafiche?cliente=${c.id}#prodotti">${c.prodotti}</a></td><td class="n">${c.preventivi}</td>
-            <td><form method="post" action="/impostazioni/anagrafiche/clienti/${c.id}" id="c-${c.id}"><button>Salva</button></form></td></tr>`)}
+            <td class="nowrap"><form method="post" action="/impostazioni/anagrafiche/clienti/${c.id}" id="c-${c.id}"><button>Salva</button></form>
+              ${eliminabile(c) ? html`<form method="post" action="/impostazioni/anagrafiche/clienti/${c.id}/elimina" class="inline"
+                data-conferma="${`Eliminare il cliente ${c.ragione_sociale} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
 
       <h2 id="prodotti">Prodotti</h2>
@@ -79,7 +85,9 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
             <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo"></td>
             <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
             <td><select name="cliente_id" form="p-${p.id}">${opzClienti(p.cliente_id)}</select></td><td class="n">${p.preventivi}</td>
-            <td><form method="post" action="/impostazioni/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><button>Salva</button></form></td></tr>`)}
+            <td class="nowrap"><form method="post" action="/impostazioni/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><button>Salva</button></form>
+              ${eliminabile(p) ? html`<form method="post" action="/impostazioni/anagrafiche/prodotti/${p.id}/elimina" class="inline"
+                data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>`, req.query.msg ? String(req.query.msg) : undefined));
   });
 
@@ -133,5 +141,51 @@ export function rotteAnagrafiche(menu: (t: string) => Raw) {
       FROM prodotti_revisioni r WHERE r.id = v.revisione_id AND r.prodotto_id = $1`, [id, codice, descrizione]);
     res.redirect(torna(`${codice} salvato.`, `&cliente=${cliente ?? 0}#prodotti`));
   });
+  // ── Elimina (inseriti per errore, mai usati) ──
+  r.post('/clienti/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const c = await q1(`SELECT ragione_sociale FROM clienti WHERE id = $1`, [id]);
+    if (!c) return res.redirect(torna('Cliente non trovato.'));
+    const uso = await q1(`SELECT (SELECT count(*)::int FROM prodotti WHERE cliente_id = $1) AS prodotti,
+        (SELECT count(*)::int FROM preventivi WHERE cliente_id = $1) + (SELECT count(*)::int FROM commesse WHERE cliente_id = $1)
+          + (SELECT count(*)::int FROM ordini WHERE cliente_id = $1) AS altri`, [id]);
+    if (uso!.prodotti) return res.redirect(torna(`${c.ragione_sociale} non eliminato: ha ${uso!.prodotti} prodotti in anagrafica (eliminali o spostali prima).`));
+    if (uso!.altri) return res.redirect(torna(`${c.ragione_sociale} non eliminato: è già usato in preventivi, commesse o ordini.`));
+    try {
+      await transazione(async t => {
+        // nel CRM: l'azienda creata da sola per questo cliente (senza referenti né attività) va via; le altre restano, scollegate
+        await t.query(`DELETE FROM crm_aziende a WHERE a.cliente_id = $1 AND a.codice IS NULL
+          AND NOT EXISTS (SELECT 1 FROM crm_contatti k WHERE k.azienda_id = a.id) AND NOT EXISTS (SELECT 1 FROM crm_attivita x WHERE x.azienda_id = a.id)`, [id]);
+        await t.query(`UPDATE crm_aziende SET cliente_id = NULL, stato = CASE WHEN stato = 'cliente' THEN 'da_contattare' ELSE stato END WHERE cliente_id = $1`, [id]);
+        await t.query(`DELETE FROM clienti WHERE id = $1`, [id]);
+      });
+    } catch (e: any) {
+      if (e?.code === '23503') return res.redirect(torna(`${c.ragione_sociale} non eliminato: è collegato a DDT o fatture già caricati.`));
+      throw e;
+    }
+    res.redirect(torna(`${c.ragione_sociale} eliminato.`));
+  });
+
+  r.post('/prodotti/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const p = await q1(`SELECT codice, cliente_id FROM prodotti WHERE id = $1`, [id]);
+    if (!p) return res.redirect(torna('Prodotto non trovato.', '#prodotti'));
+    const dopo = `&cliente=${p.cliente_id ?? 0}#prodotti`;
+    try {
+      await transazione(async t => {
+        // le revisioni senza preventivi né commesse vanno via con il prodotto; se è usato, il database lo impedisce
+        await t.query(`DELETE FROM prodotti_revisioni WHERE prodotto_id = $1`, [id]);
+        await t.query(`DELETE FROM prodotti WHERE id = $1`, [id]);
+      });
+    } catch (e: any) {
+      if (e?.code === '23503') return res.redirect(torna(`${p.codice} non eliminato: è già usato in preventivi, commesse, ordini o nello storico.`, dopo));
+      throw e;
+    }
+    res.redirect(torna(`${p.codice} eliminato.`, dopo));
+  });
+
   return r;
 }
+
+/** Il tasto Elimina compare solo se il cliente / prodotto non è mai stato usato. */
+const eliminabile = (x: { preventivi: number; altri: number; prodotti?: number }) => !x.preventivi && !x.altri && !x.prodotti;

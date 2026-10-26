@@ -410,3 +410,7 @@ table.crm tr.gia-cliente td { background: #f3faf5; }
   background: #ddf3e5; border: 1px solid #b9e2c7; }
 .riquadro-cliente a { margin-left: auto; }
 .etichetta.cliente.grande { font-size: .85rem; padding: .2rem .7rem; background: var(--positivo); color: #fff; }
+
+/* Tasti Elimina (righe inserite per errore) */
+form.elimina-azienda { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #eee; }
+td.nowrap form.inline { margin-left: .4rem; }

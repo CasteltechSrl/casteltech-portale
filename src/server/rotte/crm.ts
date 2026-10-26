@@ -234,7 +234,7 @@ export function rotteCrm() {
                   <label>Nome <input name="nome" value="${k.nome}" required></label><label>Ruolo <input name="ruolo" value="${k.ruolo ?? ''}"></label>
                   <label>Telefono <input name="telefono" value="${k.telefono ?? ''}"></label><label>Email <input name="email" type="email" value="${k.email ?? ''}"></label>
                   <label>Note <input name="note" value="${k.note ?? ''}"></label>
-                  <div><button class="primario">Salva</button> <button name="elimina" value="1" class="link negativo">Elimina referente</button></div>
+                  <div><button class="primario">Salva</button> <button name="elimina" value="1" class="link negativo" data-conferma="${`Eliminare il referente ${k.nome}?`}">Elimina referente</button></div>
                 </form></details></td></tr>`)}</tbody></table>` : ''}
             <details class="modifica"><summary>+ Aggiungi referente</summary>
               <form method="post" action="/crm/${id}/contatti" class="stretto-form">
@@ -271,6 +271,11 @@ export function rotteCrm() {
                 delle persone con l'Iniziale maiuscola; settore e descrizione con solo la prima lettera maiuscola; email e sito in minuscolo. Le note restano come le scrivi.</p>
               <div><button class="primario">Salva i dati</button></div>
             </form>
+            ${a.cliente_id
+              ? html`<p class="nota">È un cliente in anagrafica: non si elimina dal CRM (ci tornerebbe da solo). Per toglierlo, prima eliminalo da Impostazioni → Anagrafiche.</p>`
+              : html`<form method="post" action="/crm/${id}/elimina" class="elimina-azienda"
+                  data-conferma="${`Eliminare ${a.ragione_sociale} dal CRM, con ${contatti.length} referenti e ${attivita.length} attività? Non si può annullare.`}">
+                  <button class="pericolo">Elimina azienda</button></form>`}
           </details>
         </section>
       </div>`, msg(req)));
@@ -300,6 +305,16 @@ export function rotteCrm() {
     if (!t) return res.redirect('/crm');
     await q(`UPDATE crm_aziende SET ultimo_contatto = (SELECT max(data) FROM crm_attivita WHERE azienda_id = $1 AND tipo <> 'nota') WHERE id = $1`, [t.azienda_id]);
     res.redirect(`/crm/${t.azienda_id}?msg=${encodeURIComponent('Attività eliminata.')}`);
+  });
+
+  // azienda inserita per errore (doppione, nome sbagliato): via con referenti e attività. I clienti in anagrafica no: tornerebbero da soli.
+  r.post('/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const a = await q1(`SELECT ragione_sociale, cliente_id FROM crm_aziende WHERE id = $1`, [id]);
+    if (!a) return res.redirect('/crm');
+    if (a.cliente_id) return res.redirect(`/crm/${id}?msg=${encodeURIComponent('È un cliente in anagrafica: per toglierlo dal CRM eliminalo prima da Impostazioni → Anagrafiche.')}`);
+    await q(`DELETE FROM crm_aziende WHERE id = $1`, [id]);
+    res.redirect(`/crm?msg=${encodeURIComponent(`${a.ragione_sociale} eliminata dal CRM.`)}`);
   });
 
   r.post('/:id/verifica', async (req, res) => {

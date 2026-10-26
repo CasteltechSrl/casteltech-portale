@@ -206,6 +206,7 @@
   }));
 
   form.addEventListener('input', e => {
+    if (e.target.form && e.target.form !== form) return;   // stato del preventivo: ha il suo modulo
     modificato = true;
     statoEl.textContent = 'Modifiche non salvate';
     if (e.target.dataset.campo === 'prezzoTargetScheda') return aggiornaTarget();
