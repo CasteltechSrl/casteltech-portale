@@ -10,6 +10,7 @@ import { maiuscolo } from './anagrafiche-servizio.js';
 export interface DatiPreventivo {
   clienteId: number | null;      // dalle anagrafiche (obbligatorio per i preventivi nuovi)
   prodottoId: number | null;
+  bomId: number | null;          // BOM caricata in Componenti da cui viene il costo componenti (facoltativa)
   cliente: string;               // testi come compaiono nel preventivo (presi dalle anagrafiche, in maiuscolo)
   codice: string;
   revisione: string;
@@ -56,7 +57,7 @@ export function normalizza(d: any, cat: Catalogo): DatiPreventivo {
   for (const m of cat.materiali) prezziMateriali[m.codice] = d?.prezziMateriali?.[m.codice] !== undefined ? numero(d.prezziMateriali[m.codice]) : m.costo;
   const id = (x: unknown) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x));
   return {
-    clienteId: id(d?.clienteId), prodottoId: id(d?.prodottoId),
+    clienteId: id(d?.clienteId), prodottoId: id(d?.prodottoId), bomId: id(d?.bomId),
     cliente: maiuscolo(d?.cliente),
     codice: maiuscolo(d?.codice),
     revisione: maiuscolo(d?.revisione),
@@ -107,18 +108,19 @@ export async function salvaPreventivo(opz: {
     const campi = [dati.clienteId, revId, dati.nSchede, dati.nSchedeInPCB, dati.tariffe,
       dati.parametri, dati.personeFase, catalogo, ris, ris.totali.totalePrimoLotto, ris.totali.totaleSecondoLotto,
       dati.prezzoTargetScheda ?? null, dati.note ?? '',
-      { cliente: dati.cliente, codice: dati.codice, revisione: dati.revisione, descrizione: dati.descrizione }, dati.prezziMateriali];
+      { cliente: dati.cliente, codice: dati.codice, revisione: dati.revisione, descrizione: dati.descrizione }, dati.prezziMateriali, dati.bomId];
     if (opz.id) {
       await c.query(`UPDATE preventivi SET cliente_id=$2, revisione_id=$3, n_schede=$4, n_schede_pannello=$5, tariffe=$6, parametri=$7,
         persone_fase=$8, catalogo=$9, risultato=$10, totale_primo_lotto=$11, totale_secondo_lotto=$12, prezzo_target_scheda=$13, note=$14,
-        intestazione=$15, prezzi_materiali=$16, aggiornato_il=now() WHERE id=$1`, [opz.id, ...campi]);
+        intestazione=$15, prezzi_materiali=$16,
+        bom_id=(SELECT id FROM bom_analisi WHERE id = $17::int), aggiornato_il=now() WHERE id=$1`, [opz.id, ...campi]);
       return opz.id;
     }
     const r = await c.query(`INSERT INTO preventivi (numero, cliente_id, revisione_id, n_schede, n_schede_pannello, tariffe, parametri,
-        persone_fase, catalogo, risultato, totale_primo_lotto, totale_secondo_lotto, prezzo_target_scheda, note, intestazione, prezzi_materiali, creato_da,
+        persone_fase, catalogo, risultato, totale_primo_lotto, totale_secondo_lotto, prezzo_target_scheda, note, intestazione, prezzi_materiali, bom_id, creato_da,
         origine, legacy_id, dati_vecchio_portale, creato_il)
-      VALUES ('P' || to_char(coalesce($20::timestamptz, now()), 'YYYY') || '-' || lpad(nextval('numerazione_preventivi')::text, 4, '0'),
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, coalesce($20::timestamptz, now())) RETURNING id`,
+      VALUES ('P' || to_char(coalesce($21::timestamptz, now()), 'YYYY') || '-' || lpad(nextval('numerazione_preventivi')::text, 4, '0'),
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,(SELECT id FROM bom_analisi WHERE id = $16::int),$17,$18,$19,$20, coalesce($21::timestamptz, now())) RETURNING id`,
       [...campi, opz.utenteId, opz.origine ?? 'nuovo', opz.legacyId ?? null, opz.datiVecchioPortale ?? null, opz.creatoIl ?? null]);
     return r.rows[0].id;
   });
@@ -128,7 +130,7 @@ export async function salvaPreventivo(opz: {
 export function datiDaRiga(r: any): DatiPreventivo {
   const i = r.intestazione ?? {};
   return {
-    clienteId: r.cliente_id ?? null, prodottoId: r.prodotto_id ?? null,
+    clienteId: r.cliente_id ?? null, prodottoId: r.prodotto_id ?? null, bomId: r.bom_id ?? null,
     cliente: i.cliente ?? '', codice: i.codice ?? '', revisione: i.revisione ?? '', descrizione: i.descrizione ?? '',
     nSchede: r.n_schede, nSchedeInPCB: r.n_schede_pannello, tariffe: r.tariffe, parametri: r.parametri ?? {},
     personeFase: r.persone_fase ?? {}, prezziMateriali: r.prezzi_materiali ?? {},

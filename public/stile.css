@@ -43,6 +43,7 @@ button:hover, .bottone:hover { border-color: var(--accento); }
 button.primario, .bottone.primario { background: var(--accento); border-color: var(--accento); color: #fff; }
 button.primario:hover, .bottone.primario:hover { filter: brightness(1.08); }
 button.link { border: 0; background: none; padding: 0; color: var(--accento); font-weight: 400; }
+button.link.negativo { color: var(--negativo); }
 form.inline { display: inline; }
 input, select, textarea { font: inherit; padding: .45rem .55rem; border: 1px solid var(--bordo); border-radius: 6px; background: #fff; color: var(--testo); width: 100%; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accento); outline-offset: -1px; border-color: var(--accento); }

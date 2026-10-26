@@ -40,7 +40,9 @@
   });
 
   document.querySelectorAll('form.conferma-elimina').forEach(f => f.addEventListener('submit', e => {
-    if (!confirm('Eliminare questa BOM e il suo risultato? L\'archivio componenti non cambia.')) e.preventDefault();
+    const n = Number(f.dataset.preventivi) || 0;
+    const usata = n ? `\n\nÈ collegata a ${n} preventiv${n === 1 ? 'o' : 'i'}: il costo componenti già scritto resta, ma non si aggiornerà più dalla BOM.` : '';
+    if (!confirm('Eliminare questa BOM e il suo risultato? L\'archivio componenti non cambia.' + usata)) e.preventDefault();
   }));
 
   // Impostazioni → Componenti: import dell'archivio
