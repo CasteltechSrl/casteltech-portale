@@ -38,11 +38,26 @@ export function rotteCommesse() {
       WHERE $1 = '' OR c.numero ILIKE '%'||$1||'%' OR (c.intestazione->>'cliente') ILIKE '%'||$1||'%'
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
       ORDER BY c.creato_il DESC, c.id DESC LIMIT 300`, [cerca]);
+    // schede scansionate arrivate dalla cartella Drive (o caricate in Ordini → Da acquisire) ancora da portare nel rientro
+    const scansioni = await q(`SELECT a.id, a.nome_file, a.stato, a.errore, a.creato_il, a.proposta FROM acquisizioni a
+      WHERE a.tipo = 'scheda_produzione' AND a.stato IN ('da_confermare', 'errore') ORDER BY a.creato_il DESC LIMIT 50`);
     res.send(String(layout({
       titolo: 'Commesse', utente: req.session.utente, attiva: 'commesse', largo: true, script: 'elenco.js', avviso: req.query.msg ? String(req.query.msg) : undefined,
       contenuto: html`
       <div class="intestazione-pagina"><h1>Commesse</h1></div>
       <p class="nota">Una commessa si crea da un preventivo: apri il preventivo e premi <strong>Crea commessa</strong>.</p>
+      <section class="blocco">
+        <h2>Schede scansionate</h2>
+        <p class="nota">Metti la scansione delle schede compilate nella cartella Google Drive condivisa con il portale (la stessa degli ordini):
+          il portale la controlla ogni 15 minuti (lun–ven 8–20), oppure premi il pulsante. I fogli tempi letti si portano nel rientro della commessa.</p>
+        <form method="post" action="/ordini/acquisire/drive"><input type="hidden" name="torna" value="commesse"><button>Controlla adesso la cartella</button></form>
+        ${scansioni.length ? html`<table class="elenco"><thead><tr><th>Arrivata</th><th>File</th><th>Commesse lette</th></tr></thead><tbody>
+          ${scansioni.map(a => html`<tr><td class="nowrap">${data(a.creato_il)}</td><td><a href="/ordini/acquisire/${a.id}">${a.nome_file}</a></td>
+            <td>${a.stato === 'errore' ? html`<span class="esito manca">errore</span> ${a.errore}` : (a.proposta?.commesse ?? []).map((x: any) => x.commessaId && !x.fatto
+              ? html`<a class="bottone" href="/commesse/${x.commessaId}/rientro?acquisizione=${a.id}">${x.numero}: rientro con ${x.righe.length} righe lette</a> `
+              : html`<span class="nota">${x.numero}${x.fatto ? ' (fatto)' : ' (commessa non trovata)'}</span> `)}</td></tr>`)}</tbody></table>`
+          : html`<p class="nota">Nessuna scheda scansionata da portare nel rientro.</p>`}
+      </section>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button></form>
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
