@@ -10,6 +10,7 @@ import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
 import { rotteAnagrafiche } from './anagrafiche.js';
+import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { creaBackup, elencoBackup, nomeFileBackup, salvaBackupSuDisco } from '../backup.js';
 import { leggiOperatori } from '../../engine/operatori.js';
 import { caricaOperatori } from '../commesse-servizio.js';
@@ -85,6 +86,7 @@ export function rotteImpostazioni() {
 
   r.get('/', (_req, res) => res.redirect('/impostazioni/tariffe'));
   r.use('/anagrafiche', rotteAnagrafiche(menu));
+  r.use('/fornitori', rotteFornitoriAnagrafica(menu));
 
   // ── Tariffe ──
   r.get('/tariffe', async (req, res) => {
@@ -539,7 +541,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['anagrafiche', 'Anagrafiche'], ['fornitori', 'Fornitori'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 
