@@ -10,7 +10,7 @@ import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js
 import { TIPI_ACQUISIZIONE, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
-import type { SchedaLetta } from '../acquisizioni-servizio.js';
+import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta } from '../acquisizioni-servizio.js';
 import type { Request } from 'express';
 import { html, data, euro, num, raw } from '../views/html.js';
 
@@ -67,6 +67,51 @@ function paginaScheda(req: Request, a: any): string {
       ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea"><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`);
 }
 
+/** DDT di Casteltech in PDF: cliente, numero, data e per ogni riga la riga d'ordine a cui va (lo spedito si aggiorna alla conferma). */
+async function paginaDdt(req: Request, a: any): Promise<string> {
+  const d: DdtDb | null = a.proposta;
+  const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!d;
+  const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
+  const aperte = await righeAperteCliente(d?.clienteId ?? null);
+  const dis = modificabile ? '' : raw('disabled');
+  return pagina(req.session.utente, a.nome_file, 'acquisire', html`
+    <h2>${a.nome_file} <span class="stato acq-${a.stato}">${STATI[a.stato] === 'ordine creato' ? 'DDT registrato' : STATI[a.stato]}</span></h2>
+    <dl class="dati-ordine">
+      <dt>Arrivato</dt><dd>${oraRoma(a.creato_il)} · ${a.origine === 'drive' ? 'cartella Google Drive' : 'caricato dal portale'} · DDT di Casteltech</dd>
+      ${a.contenuto ? html`<dt>File</dt><dd><a href="/ordini/acquisire/${a.id}/file" target="_blank" rel="noopener">apri il PDF</a></dd>` : ''}
+      ${a.errore ? html`<dt>Errore</dt><dd>${a.errore}</dd>` : ''}
+    </dl>
+    ${d ? html`<form method="post" action="/ordini/acquisire/${a.id}/ddt">
+      <div class="campi-ordine">
+        <label>Cliente (dall'anagrafica) <select name="cliente" ${dis}><option value="">— scegli —</option>
+          ${clienti.map(c => html`<option value="${c.id}" ${c.id === d.clienteId ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>
+          ${!d.clienteId && d.cliente ? html`<small class="nota">Letto «${d.cliente}», non in anagrafica.</small>` : ''}</label>
+        <label>Numero DDT <input name="numero" value="${d.numero ?? ''}" inputmode="numeric" ${dis}></label>
+        <label>Data <input type="date" name="data" value="${d.data ?? ''}" ${dis}></label>
+        <label>Ordine citato <input name="rif" value="${d.rifOrdine}" ${dis}></label>
+      </div>
+      <div class="tabella-scorre"><table class="elenco">
+        <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>Riga d'ordine</th></tr></thead>
+        <tbody>${d.righe.map((r, i) => html`<tr>
+          <td>${r.codice}<input type="hidden" name="righe[r${i}][codice]" value="${r.codice}"></td>
+          <td>${r.descrizione}<input type="hidden" name="righe[r${i}][descrizione]" value="${r.descrizione}"></td>
+          <td class="n"><input name="righe[r${i}][quantita]" value="${num(r.quantita, 0)}" inputmode="decimal" class="corto" ${dis}></td>
+          <td><select name="righe[r${i}][riga]" ${dis}><option value="0">— nessun ordine —</option>
+            ${aperte.map(o => html`<option value="${o.id}" ${o.id === r.rigaId ? raw('selected') : ''}>ordine ${o.numero}/${o.anno}${o.rifCliente ? ` (${o.rifCliente})` : ''} · ${o.codice ?? ''} · da spedire ${num(o.residuoQuantita, 0)}</option>`)}
+            ${r.rigaId && !aperte.some(o => o.id === r.rigaId) ? html`<option value="${r.rigaId}" selected>riga ${r.rigaId}</option>` : ''}</select>
+            ${modificabile && !r.rigaId ? html`<br><small class="nota">nessuna riga aperta con questo codice</small>` : ''}</td></tr>`)}</tbody>
+      </table></div>
+      ${modificabile ? html`<p class="nota">Alla conferma le quantità si sommano allo spedito delle righe d'ordine scelte: con tutto spedito la riga risulta evasa.
+          Se cambi il cliente premi «Salva le correzioni» per vedere le sue righe aperte.</p>
+        <p class="pulsanti"><button class="primario" name="azione" value="conferma">Conferma il DDT</button>
+          <button name="azione" value="salva">Salva le correzioni</button></p>` : ''}
+    </form>` : ''}
+    ${a.stato !== 'confermato' ? html`<p class="pulsanti">
+      ${a.contenuto ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+      ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea"><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
+    { avviso: req.query.errore ? String(req.query.errore) : req.query.salvato ? 'Salvato' : undefined });
+}
+
 export function rotteAcquisizioni() {
   const r = Router();
 
@@ -107,7 +152,7 @@ export function rotteAcquisizioni() {
           <td>${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</td><td>${a.origine === 'drive' ? 'Drive' : 'caricato'}</td>
           <td class="taglia">${a.cliente}${a.e_ordine === false ? html` <span class="esito verifica">non sembra un ordine</span>` : ''}</td>
           <td class="n">${a.righe || ''}</td>
-          <td><span class="stato acq-${a.stato}">${STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
+          <td><span class="stato acq-${a.stato}">${a.tipo === 'ddt' && a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
             ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>`
         : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: 'acquisizioni.js', avviso: req.query.drive ? String(req.query.drive) : undefined }));
   });
@@ -139,6 +184,7 @@ export function rotteAcquisizioni() {
       LEFT JOIN ordini o ON o.id = a.ordine_id LEFT JOIN utenti u ON u.id = a.confermato_da WHERE a.id = $1`, [Number(req.params.id)]);
     if (!a) return res.status(404).send('Non trovato');
     if (a.tipo === 'scheda_produzione') return res.send(paginaScheda(req, a));
+    if (a.tipo === 'ddt') return res.send(await paginaDdt(req, a));
     const p: PropostaDb | null = a.proposta;
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!p;
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -189,7 +235,7 @@ export function rotteAcquisizioni() {
             <button formaction="/ordini/acquisire/${a.id}/salva">Salva le correzioni</button></p>` : ''}
       </form>` : ''}
       ${a.stato !== 'confermato' ? html`<p class="pulsanti">
-        ${a.contenuto && ['ordine', 'email', 'scheda_produzione'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+        ${a.contenuto && ['ordine', 'email', 'scheda_produzione', 'ddt'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
         ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo documento? Non diventa un ordine e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
       { avviso }));
   });
@@ -223,6 +269,33 @@ export function rotteAcquisizioni() {
       await salvaProposta(id, p);   // le correzioni scritte non si perdono
       res.redirect(`/ordini/acquisire/${id}?errore=${encodeURIComponent(e.message)}`);
     }
+  });
+
+  r.post('/:id/ddt', async (req, res) => {
+    const id = Number(req.params.id);
+    const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1 AND tipo = 'ddt'`, [id]);
+    if (!a?.proposta) return res.status(404).send('Non trovato');
+    const b = req.body ?? {};
+    const prima: DdtDb = a.proposta;
+    const d: DdtDb = {
+      ...prima, clienteId: Number(b.cliente) || null, numero: Number(/\d+/.exec(String(b.numero ?? ''))?.[0]) || null, data: dataDa(b.data),
+      rifOrdine: maiuscolo(b.rif),
+      righe: Object.entries<any>(b.righe ?? {}).filter(([k]) => /^r\d+$/.test(k)).sort(([x], [y]) => Number(x.slice(1)) - Number(y.slice(1)))
+        // 0 = nessun ordine (scelta dell'ufficio); cambiando cliente le righe si ripropongono
+        .map(([, x]) => ({ codice: maiuscolo(x?.codice), descrizione: maiuscolo(x?.descrizione), quantita: numeroDa(x?.quantita) ?? 0,
+          rigaId: Number(b.cliente) !== prima.clienteId ? undefined : Number(x?.riga) || null })),
+    };
+    if (b.azione === 'conferma') {
+      try {
+        await confermaDdt(id, d, req.session.utente!.id);
+        return res.redirect(`/ordini/acquisire/${id}?salvato=1`);
+      } catch (e: any) {
+        await salvaDdt(id, d);
+        return res.redirect(`/ordini/acquisire/${id}?errore=${encodeURIComponent(e.message)}`);
+      }
+    }
+    await salvaDdt(id, d);
+    res.redirect(`/ordini/acquisire/${id}?salvato=1`);
   });
 
   r.post('/:id/rileggi', async (req, res) => {

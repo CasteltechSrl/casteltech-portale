@@ -4,10 +4,10 @@
  */
 import { Buffer } from 'node:buffer';
 
-export type TipoAcquisizione = 'ordine' | 'email' | 'export_ordini' | 'export_ddt' | 'export_fatture' | 'scheda_produzione' | 'altro';
+export type TipoAcquisizione = 'ordine' | 'email' | 'export_ordini' | 'export_ddt' | 'export_fatture' | 'scheda_produzione' | 'ddt' | 'altro';
 export const TIPI_ACQUISIZIONE: Record<TipoAcquisizione, string> = {
   ordine: 'ordine del cliente', email: 'email', export_ordini: 'export ordini FIC', export_ddt: 'export DDT FIC',
-  export_fatture: 'export fatture FIC', scheda_produzione: 'scheda di produzione', altro: 'altro',
+  export_fatture: 'export fatture FIC', scheda_produzione: 'scheda di produzione', ddt: 'DDT di Casteltech', altro: 'altro',
 };
 
 /** Tipo del file dal nome (gli export di Fatture in Cloud si chiamano export_ordini…, export_ddt…, export_fatture…). */
@@ -181,3 +181,44 @@ export function idCartellaDa(s: string): string | null {
 }
 /** File che si possono leggere: i documenti Google nativi (Documenti, Fogli) e le cartelle no. */
 export const fileDaAcquisire = (mime: string) => !mime.startsWith('application/vnd.google-apps.');
+
+// ───────────────────────────── DDT di Casteltech in PDF ─────────────────────────────
+export interface RigaDdtLetta { codice: string; descrizione: string; quantita: number }
+export interface DdtLetto { numero: number | null; data: string | null; cliente: string; rifOrdine: string; righe: RigaDdtLetta[]; note: string }
+
+/** Pulisce il DDT letto dall'IA (numero intero, data, maiuscolo, righe senza quantità tolte). */
+export function normalizzaDdt(x: any): DdtLetto {
+  const n = Number(/\d+/.exec(String(x?.numero ?? ''))?.[0] ?? NaN);   // "n. 312", "312/2026" → 312
+  return {
+    numero: n != null && Number.isInteger(n) && n > 0 ? n : null, data: dataDa(x?.data), cliente: maiuscolo(x?.cliente),
+    rifOrdine: maiuscolo(x?.rif_ordine ?? x?.rifOrdine), note: String(x?.note ?? '').trim().slice(0, 500),
+    righe: (Array.isArray(x?.righe) ? x.righe : []).map((r: any) => ({ codice: maiuscolo(r?.codice), descrizione: maiuscolo(r?.descrizione), quantita: numeroDa(r?.quantita) ?? 0 }))
+      .filter((r: RigaDdtLetta) => (r.codice || r.descrizione) && r.quantita > 0),
+  };
+}
+
+/** Riga d'ordine ancora da spedire, candidata per una riga del DDT. */
+export interface RigaAperta { id: number; codice: string | null; codiceCliente: string | null; descrizione: string | null; rifCliente: string | null; residuo: number; consegna: string | null }
+
+const chiave = (s: string | null | undefined) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/**
+ * Per ogni riga del DDT propone la riga d'ordine: stesso codice (nostro o del cliente), prima quelle ancora da spedire;
+ * a parità vale l'ordine citato nel DDT,
+ * poi la consegna più vicina. Una riga d'ordine già "riempita" dalle righe precedenti del DDT passa alla successiva.
+ */
+export function abbinaDdt(righe: RigaDdtLetta[], aperte: RigaAperta[], rifOrdine = ''): (number | null)[] {
+  const resta = new Map(aperte.map(a => [a.id, a.residuo]));
+  const rif = chiave(rifOrdine);
+  return righe.map(r => {
+    const k = chiave(r.codice);
+    const candidate = aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
+      .sort((a, b) => Number((resta.get(b.id) ?? 0) > 0) - Number((resta.get(a.id) ?? 0) > 0)
+        || Number(!!rif && chiave(b.rifCliente) === rif) - Number(!!rif && chiave(a.rifCliente) === rif)
+        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999'));
+    const scelta = candidate[0];
+    if (!scelta) return null;
+    resta.set(scelta.id, (resta.get(scelta.id) ?? 0) - r.quantita);
+    return scelta.id;
+  });
+}

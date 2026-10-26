@@ -77,3 +77,20 @@ test('acquisizioni: cartella Drive (orario lun–ven 8–20, link della cartella
   assert.equal(fileDaAcquisire('application/pdf'), true);
   assert.equal(fileDaAcquisire('application/vnd.google-apps.folder'), false);
 });
+
+test('acquisizioni: DDT in PDF letto e abbinato alle righe d\'ordine aperte', async () => {
+  const { normalizzaDdt, abbinaDdt } = await import('../src/engine/acquisizioni.js');
+  const d = normalizzaDdt({ numero: 'n. 312', data: '24/10/2026', cliente: 'R Tooling srl', rif_ordine: '26-366',
+    righe: [{ codice: 'rt-100', descrizione: 'scheda', quantita: '50' }, { codice: 'RT-100', quantita: '30' }, { codice: 'X9', quantita: 2 }, { descrizione: 'imballo', quantita: 0 }] });
+  assert.equal(d.numero, 312);
+  assert.equal(d.data, '2026-10-24');
+  assert.equal(d.righe.length, 3);
+  const aperte = [
+    { id: 1, codice: 'RT100', codiceCliente: null, descrizione: null, rifCliente: '26-100', residuo: 40, consegna: '2026-10-01' },
+    { id: 2, codice: 'RT-100', codiceCliente: null, descrizione: null, rifCliente: '26-366', residuo: 50, consegna: '2026-11-01' },
+    { id: 3, codice: 'ALTRO', codiceCliente: 'X9', descrizione: null, rifCliente: null, residuo: 2, consegna: null },
+  ];
+  // la prima va sull'ordine citato nel DDT (26-366); la seconda, con quella ormai piena, sull'altro ordine; X9 è il codice del cliente
+  assert.deepEqual(abbinaDdt(d.righe, aperte, d.rifOrdine), [2, 1, 3]);
+  assert.deepEqual(abbinaDdt([{ codice: 'NESSUNO', descrizione: '', quantita: 1 }], aperte), [null]);
+});
