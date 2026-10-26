@@ -23,6 +23,7 @@ ${opz.utente ? html`
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   <nav>
     ${opz.utente.ruolo === 'ufficio' ? html`
+      ${voce('/crm', 'CRM', 'crm')}
       ${voce('/preventivi', 'Preventivi', 'preventivi')}
       ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
       ${voce('/commesse', 'Commesse', 'commesse')}

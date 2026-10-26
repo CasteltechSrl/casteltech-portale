@@ -352,3 +352,61 @@ input.lungo { min-width: 18rem; }
 .pulsanti { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
 form.in-linea { display: inline; margin: 0; }
 .avviso-riga { background: #fff2cc; color: #8a6100; padding: .5rem .8rem; border-radius: 6px; }
+
+/* ── CRM ── */
+.cerca-crm { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+.cerca-crm input[type=search] { flex: 1 1 22rem; font-size: 1.05rem; padding: .6rem .75rem; }
+.cerca-crm select, .cerca-crm input.corto { width: auto; }
+.cerca-crm input.corto { width: 4.5rem; }
+.cerca-crm label.spunta { white-space: nowrap; }
+form.nuova-azienda { display: flex; gap: .4rem; }
+form.nuova-azienda input { width: 14rem; }
+.bottone .conta { font-size: .72rem; background: var(--avviso); color: var(--testo); padding: .05rem .45rem; border-radius: 99px; margin-left: .2rem; }
+a.cifra { text-decoration: none; color: inherit; }
+a.cifra:hover { border-color: var(--accento); }
+.cifra.allarme b { color: var(--negativo); }
+.scadenza { font-weight: 600; white-space: nowrap; }
+.scadenza.scaduta { color: var(--negativo); }
+.scadenza.oggi { color: #fff; background: var(--accento); padding: .05rem .5rem; border-radius: 99px; }
+table.crm tr.scaduta td:first-child { box-shadow: inset 4px 0 0 var(--negativo); }
+table.crm tr.oggi td:first-child { box-shadow: inset 4px 0 0 var(--accento); }
+.etichetta.cliente { background: #ddf3e5; color: var(--positivo); }
+.stato.crm-cliente { background: #ddf3e5; color: var(--positivo); }
+.stato.crm-in_trattativa, .stato.crm-offerta_inviata { background: #e1ecfb; color: #1f55a6; }
+.stato.crm-contattato, .stato.crm-da_ricontattare { background: var(--accento-chiaro); color: var(--accento); }
+.stato.crm-non_interessato, .stato.crm-scartato { background: #fbe2e0; color: var(--negativo); }
+td.dubbio { font-size: .85rem; color: var(--tenue); max-width: 26rem; }
+.prossima { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; padding: .8rem 1rem; border-radius: var(--raggio); margin-bottom: 1rem;
+  background: var(--carta); border: 1px solid var(--bordo); border-left: 5px solid var(--bordo); }
+.prossima > span:first-child { color: var(--tenue); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+.prossima b { font-size: 1.1rem; }
+.prossima small { color: var(--tenue); margin-left: auto; }
+.prossima.scaduta { border-left-color: var(--negativo); background: #fdf3f2; }
+.prossima.oggi, .prossima.settimana { border-left-color: var(--accento); }
+.griglia-crm { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 1000px) { .griglia-crm { grid-template-columns: 1fr; } }
+.griglia-crm h2 { margin-top: 0; }
+.griglia-crm section > h2 { margin-top: 1.5rem; }
+form.registra { display: grid; gap: .7rem; }
+form.registra .in-fondo { display: flex; align-items: end; justify-content: flex-end; flex: 1 1 8rem; }
+.date-rapide { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: -.3rem; }
+.date-rapide button { padding: .2rem .6rem; font-size: .82rem; font-weight: 500; }
+ul.storico-crm { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+ul.storico-crm li { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .6rem .8rem; }
+ul.storico-crm .testa { font-size: .85rem; display: flex; gap: .4rem; align-items: baseline; flex-wrap: wrap; }
+ul.storico-crm .testa .nota { margin: 0 0 0 auto; }
+ul.storico-crm .testo { margin-top: .2rem; white-space: pre-line; }
+.recapiti dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; margin: 0; }
+.recapiti dt { color: var(--tenue); font-size: .82rem; }
+.recapiti dd { margin: 0; overflow-wrap: anywhere; }
+.a-capo { white-space: pre-line; }
+table.referenti td { vertical-align: top; padding: .45rem .4rem; }
+details.modifica > summary { cursor: pointer; color: var(--accento); font-size: .85rem; }
+details.modifica[open] { margin: .5rem 0; }
+details.modifica form { margin-top: .6rem; }
+form.campi-azienda { display: grid; gap: .7rem; padding: 0 1rem 1rem; }
+table.crm tr.gia-cliente td { background: #f3faf5; }
+.riquadro-cliente { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .7rem 1rem; margin-bottom: 1rem; border-radius: var(--raggio);
+  background: #ddf3e5; border: 1px solid #b9e2c7; }
+.riquadro-cliente a { margin-left: auto; }
+.etichetta.cliente.grande { font-size: .85rem; padding: .2rem .7rem; background: var(--positivo); color: #fff; }
