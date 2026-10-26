@@ -102,7 +102,7 @@ export function rottePreventivi() {
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
-      await elencoBom(dati.bomId)));
+      await elencoBom(dati.bomId), req.query.msg ? String(req.query.msg) : undefined));
   });
 
   // ── Anteprima di stampa (per il cliente: solo prezzi) ──
@@ -171,19 +171,17 @@ export function rottePreventivi() {
       return torna(`Creati ${nuovi.length} preventivi con fasi, tariffe e prezzi attuali.`);
     }
     if (azione === 'elimina') {
-      // i preventivi già diventati commessa restano (la commessa li usa per la scheda e il consuntivo)
-      const conCommessa = await q<{ numero: string }>(`SELECT DISTINCT p.numero FROM preventivi p JOIN commesse c ON c.preventivo_id = p.id WHERE p.id = ANY($1)`, [ids]);
-      const eliminabili = (await q<{ id: number }>(`SELECT id FROM preventivi p WHERE id = ANY($1) AND NOT EXISTS (SELECT 1 FROM commesse c WHERE c.preventivo_id = p.id)`, [ids])).map(x => x.id);
-      if (eliminabili.length) {
-        await salvaBackupSuDisco('prima-di-eliminare-preventivi').catch(() => null);
-        await transazione(async c => {
-          await c.query(`UPDATE analisi_commesse SET nuovo_preventivo_id = NULL WHERE nuovo_preventivo_id = ANY($1)`, [eliminabili]);
-          await c.query(`DELETE FROM preventivi WHERE id = ANY($1)`, [eliminabili]);
-        });
-      }
-      return torna(`Eliminati ${eliminabili.length} preventivi.` + (conCommessa.length ? ` Non eliminati perché già diventati commessa: ${conCommessa.map(x => x.numero).join(', ')}.` : ''));
+      const { eliminati, conCommessa } = await eliminaPreventivi(ids);
+      return torna(`Eliminati ${eliminati} preventivi.` + (conCommessa.length ? ` Non eliminati perché già diventati commessa: ${conCommessa.join(', ')}.` : ''));
     }
     torna('Azione non riconosciuta.');
+  });
+
+  // elimina dalla pagina del preventivo
+  r.post('/:id/elimina', async (req, res) => {
+    const { eliminati, conCommessa } = await eliminaPreventivi([Number(req.params.id)]);
+    if (!eliminati && conCommessa.length) return res.redirect(`/preventivi/${req.params.id}?msg=${encodeURIComponent('Non eliminato: il preventivo è già diventato commessa (elimina prima la commessa).')}`);
+    res.redirect(`/preventivi?msg=${encodeURIComponent(eliminati ? 'Preventivo eliminato.' : 'Preventivo non trovato.')}`);
   });
 
   return r;
@@ -220,6 +218,20 @@ function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) =
 }
 
 /** Duplica con catalogo, tariffe e prezzi materiali ATTUALI. */
+/** Elimina i preventivi; quelli già diventati commessa restano (la commessa li usa per la scheda e il consuntivo). */
+async function eliminaPreventivi(ids: number[]): Promise<{ eliminati: number; conCommessa: string[] }> {
+  const conCommessa = (await q<{ numero: string }>(`SELECT DISTINCT p.numero FROM preventivi p JOIN commesse c ON c.preventivo_id = p.id WHERE p.id = ANY($1)`, [ids])).map(x => x.numero);
+  const eliminabili = (await q<{ id: number }>(`SELECT id FROM preventivi p WHERE id = ANY($1) AND NOT EXISTS (SELECT 1 FROM commesse c WHERE c.preventivo_id = p.id)`, [ids])).map(x => x.id);
+  if (eliminabili.length) {
+    await salvaBackupSuDisco('prima-di-eliminare-preventivi').catch(() => null);
+    await transazione(async c => {
+      await c.query(`UPDATE analisi_commesse SET nuovo_preventivo_id = NULL WHERE nuovo_preventivo_id = ANY($1)`, [eliminabili]);
+      await c.query(`DELETE FROM preventivi WHERE id = ANY($1)`, [eliminabili]);
+    });
+  }
+  return { eliminati: eliminabili.length, conCommessa };
+}
+
 async function duplica(id: number, utenteId: number): Promise<number | null> {
   const p = await leggiPreventivo(id);
   if (!p) return null;
@@ -245,7 +257,7 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
-function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = [], bom: VoceBom[] = []): string {
+function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = [], bom: VoceBom[] = [], avviso?: string): string {
   const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE' && g !== 'LATI' && g !== 'INFORMAZIONI GENERALI');
   const generali = cat.parametri.filter(p => p.gruppo === 'INFORMAZIONI GENERALI');
   // campi e sezioni che contano solo con una spunta delle informazioni generali: nascosti se la spunta è tolta
@@ -317,7 +329,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const compilati = (g: string) => cat.parametri.filter(p => p.gruppo === g && p.codice !== 'provenienzaMateriale' && d.parametri[p.codice]).length;
 
   return String(layout({
-    titolo: salvato ? `Preventivo ${salvato.numero}` : 'Nuovo preventivo', utente, attiva: 'preventivi', script: 'preventivo.js',
+    titolo: salvato ? `Preventivo ${salvato.numero}` : 'Nuovo preventivo', utente, attiva: 'preventivi', script: 'preventivo.js', avviso,
     contenuto: html`
     <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''} ${provenienza === 1 ? 'materiale-da-restituire' : ''}">
     <div class="intestazione-pagina">
@@ -436,18 +448,19 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
 
       ${salvato ? html`
       <div class="azioni-secondarie">
-        <form method="post" action="/preventivi/${salvato.id}/stato" class="inline">
-          <label>Stato <select name="stato">${STATI.map(s => html`<option ${s === salvato.stato ? raw('selected') : ''}>${s}</option>`)}</select></label>
-          <button>Aggiorna stato</button>
-        </form>
+        <label>Stato <select name="stato" form="stato-preventivo">${STATI.map(s => html`<option ${s === salvato.stato ? raw('selected') : ''}>${s}</option>`)}</select></label>
+        <button form="stato-preventivo">Aggiorna stato</button>
         <a class="bottone primario" href="/commesse/nuova?preventivo=${salvato.id}">Crea commessa</a>
-        <form method="post" action="/preventivi/${salvato.id}/duplica" class="inline">
-          <button title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica con prezzi attuali</button>
-        </form>
+        <button form="duplica-preventivo" title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica con prezzi attuali</button>
+        <button form="elimina-preventivo" class="pericolo" title="Elimina il preventivo inserito per errore"
+          data-conferma="${`Eliminare il preventivo ${salvato.numero}? Non si può annullare (prima viene salvato un backup).`}">Elimina</button>
       </div>` : ''}
     </section>
     </div>
     </form>
+    ${salvato ? html`<form method="post" action="/preventivi/${salvato.id}/stato" id="stato-preventivo"></form>
+    <form method="post" action="/preventivi/${salvato.id}/duplica" id="duplica-preventivo"></form>
+    <form method="post" action="/preventivi/${salvato.id}/elimina" id="elimina-preventivo"></form>` : ''}
 `,
   }));
 }

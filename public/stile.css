@@ -413,3 +413,7 @@ table.crm tr.gia-cliente td { background: #f3faf5; }
 /* righe lette dalla scansione della scheda */
 tr.riga-letta td { background: #eef6ff; }
 tr.riga-incerta td { background: #fff2cc; }
+
+/* Tasti Elimina (righe inserite per errore) */
+form.elimina-azienda { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #eee; }
+td.nowrap form.inline { margin-left: .4rem; }

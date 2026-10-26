@@ -3,12 +3,14 @@
  * "Schedulazione produzione", cruscotto (fatturato e previsione), Gantt della produzione, fatture senza ordine.
  */
 import { Router } from 'express';
-import { q, q1 } from '../db.js';
+import { q, q1, transazione } from '../db.js';
+import { salvaBackupSuDisco } from '../backup.js';
 import { caricaOreGiorno, righeOrdini, secondiPerSchedaProdotti, type RigaElenco } from '../ordini-servizio.js';
 import {
   STATI_ORDINE, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, pianifica, piuGiorni, statoOrdine,
   type Barra, type DaPianificare,
 } from '../../engine/ordini.js';
+import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import type { Utente } from '../views/layout.js';
@@ -67,7 +69,8 @@ export function rotteOrdini() {
       </table></div>
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
         Le righe di servizio (attrezzaggio, lamine, programmazioni) sono evase quando sono fatturate o quando tutte le schede dell'ordine sono evase.
-        Consegna prevista = arrivo materiale + ${3} gg + ${5} gg + ritardi di produzione, come nel foglio.</p>`));
+        Consegna prevista = arrivo materiale + ${3} gg + ${5} gg + ritardi di produzione, come nel foglio.</p>`,
+      { avviso: req.query.msg ? String(req.query.msg) : undefined }));
   });
 
   // ── Cruscotto ──
@@ -174,7 +177,10 @@ export function rotteOrdini() {
     const stato = statoOrdine(righe.map(x => x.stato));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
-      <h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
+      <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
+        <form method="post" action="/ordini/${o.id}/elimina" class="inline"
+          data-conferma="${confermaEliminaOrdine({ numero: o.numero, anno: o.anno, origine: o.origine, righe: righe.length, conDocumenti: ddt.length + fatture.length > 0 })}">
+          <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form></div>
       <dl class="dati-ordine">
         <dt>Cliente</dt><dd>${o.cliente_nome}${o.cliente_id ? '' : html` <span class="esito verifica">non in anagrafica</span>`}</dd>
         <dt>Data ordine</dt><dd>${data(o.data_ordine)}</dd>
@@ -185,7 +191,7 @@ export function rotteOrdini() {
       <form method="post" action="/ordini/${o.id}">
       <div class="tabella-scorre"><table class="elenco righe-ordine">
         <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Prezzo</th><th class="n">Fatturato</th>
-          <th>Consegna richiesta</th><th>Arrivo materiale</th><th>Lavorazione</th><th>Ritardi (gg)</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th><th>Commessa</th><th>Note</th></tr></thead>
+          <th>Consegna richiesta</th><th>Arrivo materiale</th><th>Lavorazione</th><th>Ritardi (gg)</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th><th>Commessa</th><th>Note</th><th></th></tr></thead>
         <tbody>${righe.map(x => html`<tr class="${x.tipo === 'servizio' ? 'servizio' : ''}">
           <td class="nowrap">${x.codice}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
           <td class="taglia">${x.descrizione}</td><td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
@@ -202,15 +208,18 @@ export function rotteOrdini() {
             </select></td>
           <td><select name="righe[r${x.id}][commessa]"><option value="">—</option>${commesse.map(k => html`<option value="${k.id}" ${k.id === x.commessaId ? raw('selected') : ''}>${k.numero}</option>`)}</select></td>
           <td><input name="righe[r${x.id}][note]" value="${x.note ?? ''}"></td>
+          <td><button form="elimina-riga-${x.id}" class="link negativo" title="Elimina questa riga"
+            data-conferma="${`Eliminare la riga ${x.codice || x.descrizione || ''} (${num(x.quantita, 0)} pz) dall'ordine ${o.numero}/${o.anno}? Le modifiche non salvate delle altre righe si perdono.`}">Elimina</button></td>
         </tr>`)}</tbody></table></div>
       <p><button class="primario">Salva</button></p>
       </form>
+      ${righe.map(x => html`<form method="post" action="/ordini/${o.id}/righe/${x.id}/elimina" id="elimina-riga-${x.id}" hidden></form>`)}
       <div class="due-colonne">
         <section><h2>DDT</h2>${ddt.length ? html`<table><thead><tr><th>DDT</th><th>Data</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
           <tbody>${ddt.map(d => html`<tr><td>${d.numero}</td><td>${data(d.data)}</td><td>${d.codice || d.descrizione}</td><td class="n">${num(d.quantita, 0)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessun DDT.</p>`}</section>
         <section><h2>Fatture</h2>${fatture.length ? html`<table><thead><tr><th>Fattura</th><th>Data</th><th>Codice</th><th class="n">Imponibile</th></tr></thead>
           <tbody>${fatture.map(f => html`<tr><td>${f.numero}${f.ddt_numero ? html` <small class="nota">(DDT ${f.ddt_numero})</small>` : ''}</td><td>${data(f.data)}</td><td>${f.codice || f.descrizione}</td><td class="n">${euro(f.imponibile)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessuna fattura.</p>`}</section>
-      </div>`, { avviso: req.query.salvato ? 'Salvato' : undefined }));
+      </div>`, { avviso: req.query.salvato ? 'Salvato' : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
   r.post('/:id', async (req, res) => {
@@ -228,6 +237,27 @@ export function rotteOrdini() {
     }
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
     res.redirect(`/ordini/${id}?salvato=1`);
+  });
+
+  // ── Elimina (righe inserite per errore) ──
+  r.post('/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const o = await q1(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
+    if (!o) return res.redirect('/ordini?vista=tutti');
+    await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
+    await transazione(async c => {
+      // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
+      await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);
+      await c.query(`DELETE FROM ordini WHERE id = $1`, [id]);   // righe e consegne vanno via con l'ordine; DDT e fatture restano senza ordine
+    });
+    res.redirect(`/ordini?vista=tutti&msg=${encodeURIComponent(`Ordine ${o.numero}/${o.anno} eliminato.`)}`);
+  });
+
+  r.post('/:id/righe/:riga/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const x = await q1(`DELETE FROM ordini_righe WHERE id = $1 AND ordine_id = $2 RETURNING coalesce(codice, descrizione, '') AS nome`, [Number(req.params.riga), id]);
+    if (x) await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
+    res.redirect(`/ordini/${id}?msg=${encodeURIComponent(x ? `Riga ${x.nome} eliminata.` : 'Riga non trovata.')}`);
   });
 
   return r;

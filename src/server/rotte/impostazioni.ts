@@ -23,6 +23,14 @@ import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, type Fornitore } from '../../engine/acquisti.js';
 import { join, basename } from 'node:path';
+import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
+import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
+
+/** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
+const CODICI_INIZIALI: Record<TabellaCatalogo, Set<string>> = {
+  fasi: new Set(FASI.map(x => x.codice)), parametri: new Set(PARAMETRI.map(x => x.codice)),
+  materiali: new Set(MATERIALI.map(x => x.codice)), voci_costo: new Set(VOCI.map(x => x.codice)),
+};
 
 type Campo = { nome: string; titolo: string; tipo?: 'testo' | 'numero' | 'formula' | 'si_no' | 'scelta' | 'area'; scelte?: string[]; largo?: boolean };
 interface Tabella { tabella: string; chiave: string; titolo: string; spiegazione: string; ordine: string; campi: Campo[]; formula?: string }
@@ -330,7 +338,9 @@ export function rotteImpostazioni() {
           ${righe.map(riga => html`<tr>
             <td><code>${riga[T.chiave]}</code></td>
             ${T.campi.map(c => html`<td class="${c.largo ? 'largo' : ''}">${input(c, riga[c.nome], `f-${slug}-${riga[T.chiave]}`)}</td>`)}
-            <td><form method="post" action="/impostazioni/${slug}/${encodeURIComponent(riga[T.chiave])}" id="f-${slug}-${riga[T.chiave]}"><button>Salva</button></form></td>
+            <td class="nowrap"><form method="post" action="/impostazioni/${slug}/${encodeURIComponent(riga[T.chiave])}" id="f-${slug}-${riga[T.chiave]}"><button>Salva</button></form>
+              ${CODICI_INIZIALI[T.tabella as TabellaCatalogo].has(riga[T.chiave]) ? '' : html`<form method="post" action="/impostazioni/${slug}/${encodeURIComponent(riga[T.chiave])}/elimina"
+                class="inline" data-conferma="${`Eliminare ${riga[T.chiave]}? I preventivi già salvati non cambiano.`}"><button class="link negativo">Elimina</button></form>`}</td>
           </tr>`)}
           <tr class="nuova-riga">
             <td><input name="codice" form="f-${slug}-nuovo" placeholder="nuovoCodice" required pattern="[A-Za-z][A-Za-z0-9_]*"></td>
@@ -353,6 +363,21 @@ export function rotteImpostazioni() {
       if (T.tabella === 'voci_costo' && prezzo) { const e = controllaFormula(prezzo, cat, true); if (e) return `Prezzo fisso: ${e}`; }
       return controllaFormula(String(body[T.formula] ?? ''), cat, T.tabella === 'voci_costo');
     };
+
+    // solo le righe aggiunte a mano e non usate (vedi engine/eliminazioni.ts)
+    r.post(`/${slug}/:codice/elimina`, async (req, res) => {
+      const codice = req.params.codice;
+      const torna = (msg: string) => res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(msg)}`);
+      if (!(await q1(`SELECT 1 FROM ${T.tabella} WHERE ${T.chiave} = $1`, [codice]))) return torna(`${codice} non trovato.`);
+      const formule = await q<{ codice: string; formula: string | null }>(`SELECT codice, formula_secondi AS formula FROM fasi
+        UNION ALL SELECT codice, formula_euro FROM voci_costo UNION ALL SELECT codice, formula_prezzo FROM voci_costo`);
+      const usataInCommesse = T.tabella === 'fasi' && !!(await q1(`SELECT 1 WHERE EXISTS (SELECT 1 FROM commesse_fasi WHERE fase_codice = $1)
+        OR EXISTS (SELECT 1 FROM rilevazioni WHERE fase_codice = $1) OR EXISTS (SELECT 1 FROM segnalazioni WHERE fase_codice = $1)`, [codice]));
+      const motivo = motivoCatalogoNonEliminabile({ tabella: T.tabella as TabellaCatalogo, codice, iniziale: CODICI_INIZIALI[T.tabella as TabellaCatalogo].has(codice), formule, usataInCommesse });
+      if (motivo) return torna(`Non eliminato: ${motivo}`);
+      await q(`DELETE FROM ${T.tabella} WHERE ${T.chiave} = $1`, [codice]);
+      torna(`${codice} eliminato.`);
+    });
 
     r.post(`/${slug}/:codice`, async (req, res) => {
       const errore = await verificaFormula(req.body);
@@ -456,7 +481,9 @@ export function rotteImpostazioni() {
           <td><select name="ruolo" form="u-${u.id}">${['ufficio', 'produzione'].map(x => html`<option ${x === u.ruolo ? raw('selected') : ''}>${x}</option>`)}</select></td>
           <td><input type="checkbox" name="attivo" form="u-${u.id}" ${u.attivo ? raw('checked') : ''}></td>
           <td><input name="password" type="password" form="u-${u.id}" placeholder="lascia vuoto per non cambiarla" autocomplete="new-password"></td>
-          <td><form method="post" action="/impostazioni/utenti/${u.id}" id="u-${u.id}"><button>Salva</button></form></td></tr>`)}
+          <td class="nowrap"><form method="post" action="/impostazioni/utenti/${u.id}" id="u-${u.id}"><button>Salva</button></form>
+            ${u.id === req.session.utente!.id ? '' : html`<form method="post" action="/impostazioni/utenti/${u.id}/elimina" class="inline"
+              data-conferma="${`Eliminare l'utente ${u.nome}? Si può solo se non ha mai lavorato nel portale; altrimenti togli la spunta Attivo.`}"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
           <tr class="nuova-riga">
             <td><input name="nome" form="u-nuovo" required placeholder="Nome e cognome"></td>
             <td><input name="email" form="u-nuovo" type="email" required></td>
@@ -476,6 +503,22 @@ export function rotteImpostazioni() {
     } catch { return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Email già presente.')); }
     res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente aggiunto.'));
   });
+  r.post('/utenti/:id/elimina', async (req, res) => {
+    const id = Number(req.params.id);
+    const torna = (msg: string) => res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(msg));
+    if (id === req.session.utente!.id) return torna('Non puoi eliminare te stesso.');
+    const u = await q1(`SELECT nome FROM utenti WHERE id = $1`, [id]);
+    if (!u) return torna('Utente non trovato.');
+    try {
+      await q(`DELETE FROM utenti WHERE id = $1`, [id]);
+    } catch (e: any) {
+      // ha creato preventivi, commesse, tempi…: resta per lo storico
+      if (e?.code === '23503') return torna(`${u.nome} non eliminato: ha già lavorato nel portale. Togli la spunta Attivo per bloccare l'accesso.`);
+      throw e;
+    }
+    torna(`${u.nome} eliminato.`);
+  });
+
   r.post('/utenti/:id', async (req, res) => {
     const id = Number(req.params.id);
     const ruolo = req.body.ruolo === 'ufficio' ? 'ufficio' : 'produzione';
