@@ -5,14 +5,16 @@
  */
 import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
-import { leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
+import { leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
+import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
+import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
 export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio' }
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
 export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
 
-const DA_LEGGERE = ['ordine', 'email'];
+const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione'];
 
 /** Registra un file arrivato. Lo stesso file di Drive non entra due volte. */
 export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 'drive' | 'caricato'; driveId?: string } = {}): Promise<number | null> {
@@ -66,13 +68,67 @@ export async function elabora(id: number): Promise<void> {
     const { parti, mittente, oggetto } = partiDa(a.nome_file, a.tipo, a.mime ?? '', a.contenuto);
     if (!parti.length) throw new Error("nell'email non ci sono testo né allegati PDF o immagini");
     const clienti = (await q<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti ORDER BY ragione_sociale`)).map(c => c.r);
-    const proposta = await collega(await leggiOrdineConIa(parti, clienti));
+    const lettura = await leggiOrdineConIa(parti, clienti);
+    if (lettura.tipo === 'scheda_produzione') {
+      const scheda = await leggiScheda(parti, lettura.commesse, oggiRoma());
+      await q(`UPDATE acquisizioni SET tipo = 'scheda_produzione', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
+        [id, JSON.stringify(scheda)]);
+      return;
+    }
+    const proposta = await collega(lettura.proposta);
     if (mittente) proposta.mittente = mittente;
     if (oggetto) proposta.oggetto = oggetto;
     await q(`UPDATE acquisizioni SET stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`, [id, JSON.stringify(proposta)]);
   } catch (e: any) {
     await q(`UPDATE acquisizioni SET stato = 'errore', errore = $2, elaborato_il = now() WHERE id = $1`, [id, String(e?.message ?? e).slice(0, 500)]);
   }
+}
+
+// ───────────────────────────── schede di produzione scansionate ─────────────────────────────
+const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+
+/** Righe lette per ciascuna commessa: si propongono nel rientro (fatto = l'ufficio le ha salvate). */
+export interface CommessaLetta { numero: string; commessaId: number | null; righe: RigaScansione[]; fatto?: boolean }
+export interface SchedaLetta { tipoDocumento: 'scheda_produzione'; commesse: CommessaLetta[] }
+
+/** Seconda lettura: i fogli tempi, con le fasi delle commesse per aiutare l'IA e per trovare la fase dal numero. */
+async function leggiScheda(parti: Parte[], numeri: string[], oggi: string): Promise<SchedaLetta> {
+  const trovate = new Map<string, { id: number; fasi: Map<string, string>; testo: string }>();
+  for (const n of numeri) {
+    const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE upper(replace(numero, ' ', '')) = $1`, [n]);
+    if (!c) continue;
+    const fasi = await fasiCommessa(await leggiCommessa(c.id));
+    trovate.set(n, { id: c.id, fasi: new Map(fasi.map(f => [String(f.numero).toUpperCase(), f.codice])), testo: fasi.map(f => `${f.numero} ${f.nome}`).join('; ') });
+  }
+  // fasi non previste sulla scheda ma scritte lo stesso: si cercano nel catalogo con la numerazione attuale
+  const catalogo = new Map((await q<{ codice: string; numero: string }>(`SELECT codice, numero FROM fasi WHERE numero IS NOT NULL`)).map(f => [String(f.numero).toUpperCase(), f.codice]));
+  const fogli = await leggiFogliTempiConIa(parti, [...trovate.entries()].map(([n, t]) => `commessa ${n}: ${t.testo}`).join(' | '));
+  const perCommessa = new Map<string, typeof fogli>();
+  for (const f of fogli) {
+    const n = String(f.commessa ?? numeri[0] ?? '').toUpperCase().replace(/\s+/g, '');
+    perCommessa.set(n, [...(perCommessa.get(n) ?? []), f]);
+  }
+  const commesse: CommessaLetta[] = [];
+  for (const [n, fs] of perCommessa) {
+    const t = trovate.get(n) ?? (await (async () => {
+      const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE upper(replace(numero, ' ', '')) = $1`, [n]);
+      return c ? { id: c.id, fasi: new Map((await fasiCommessa(await leggiCommessa(c.id))).map(f => [String(f.numero).toUpperCase(), f.codice])), testo: '' } : undefined;
+    })());
+    const mappa = new Map([...catalogo, ...(t?.fasi ?? [])]);
+    commesse.push({ numero: n, commessaId: t?.id ?? null, righe: righeDaFoglio(fs, mappa, oggi) });
+  }
+  return { tipoDocumento: 'scheda_produzione', commesse };
+}
+
+/** Il rientro della commessa è stato salvato con le righe lette: quando tutte le commesse sono fatte l'acquisizione è confermata. */
+export async function segnaRientroFatto(acquisizioneId: number, commessaId: number, utenteId: number): Promise<void> {
+  const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1 AND tipo = 'scheda_produzione'`, [acquisizioneId]);
+  if (!a?.proposta?.commesse) return;
+  const p = a.proposta as SchedaLetta;
+  for (const c of p.commesse) if (c.commessaId === commessaId) c.fatto = true;
+  const tutte = p.commesse.every(c => c.fatto || !c.commessaId);
+  await q(`UPDATE acquisizioni SET proposta = $2, stato = CASE WHEN $3 THEN 'confermato' ELSE stato END,
+      confermato_da = CASE WHEN $3 THEN $4::int ELSE confermato_da END WHERE id = $1`, [acquisizioneId, JSON.stringify(p), tutte, utenteId]);
 }
 
 /** Salva le correzioni dell'ufficio alla proposta (senza creare l'ordine) e ricollega i prodotti al cliente scelto. */

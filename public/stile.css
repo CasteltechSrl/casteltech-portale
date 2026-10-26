@@ -410,3 +410,6 @@ table.crm tr.gia-cliente td { background: #f3faf5; }
   background: #ddf3e5; border: 1px solid #b9e2c7; }
 .riquadro-cliente a { margin-left: auto; }
 .etichetta.cliente.grande { font-size: .85rem; padding: .2rem .7rem; background: var(--positivo); color: #fff; }
+/* righe lette dalla scansione della scheda */
+tr.riga-letta td { background: #eef6ff; }
+tr.riga-incerta td { background: #fff2cc; }

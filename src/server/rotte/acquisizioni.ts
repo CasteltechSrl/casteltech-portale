@@ -10,6 +10,8 @@ import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js
 import { TIPI_ACQUISIZIONE, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
+import type { SchedaLetta } from '../acquisizioni-servizio.js';
+import type { Request } from 'express';
 import { html, data, euro, num, raw } from '../views/html.js';
 
 const STATI: Record<string, string> = { nuovo: 'in attesa', da_confermare: 'da confermare', confermato: 'ordine creato', scartato: 'scartato', errore: 'errore' };
@@ -35,13 +37,44 @@ function propostaDa(body: any, prima: PropostaDb | null): PropostaDb {
   };
 }
 
+/** Scheda di produzione scansionata: righe lette per commessa, da controllare e salvare nel rientro. */
+function paginaScheda(req: Request, a: any): string {
+  const p: SchedaLetta | null = a.proposta;
+  const commesse = p?.commesse ?? [];
+  return pagina(req.session.utente, a.nome_file, 'acquisire', html`
+    <h2>${a.nome_file} <span class="stato acq-${a.stato}">${STATI[a.stato]}</span></h2>
+    <dl class="dati-ordine">
+      <dt>Arrivato</dt><dd>${oraRoma(a.creato_il)} · ${a.origine === 'drive' ? 'cartella Google Drive' : 'caricato dal portale'} · scheda di produzione</dd>
+      ${a.contenuto ? html`<dt>File</dt><dd><a href="/ordini/acquisire/${a.id}/file" target="_blank" rel="noopener">apri la scansione</a></dd>` : ''}
+      ${a.errore ? html`<dt>Errore</dt><dd>${a.errore}</dd>` : ''}
+    </dl>
+    ${!commesse.length ? html`<p class="avviso-riga">Nessun foglio tempi letto. Prova «Rileggi con l'IA» o controlla la scansione.</p>` : ''}
+    ${commesse.map(c => html`<section class="blocco">
+      <h2>Commessa ${c.numero} ${c.fatto ? html`<span class="stato acq-confermato">salvata nel rientro</span>` : ''}</h2>
+      ${c.commessaId
+        ? html`<p><a class="bottone ${c.fatto ? '' : 'primario'}" href="/commesse/${c.commessaId}/rientro?acquisizione=${a.id}">Apri il rientro con le ${c.righe.length} righe lette</a>
+            <span class="nota">Le righe lette si aggiungono in fondo al foglio tempi (quelle già presenti, es. dal telefono, non si ripetono): controlla e premi Salva.</span></p>`
+        : html`<p class="avviso-riga">La commessa ${c.numero} non è nel portale: controlla il numero letto.</p>`}
+      <div class="tabella-scorre"><table class="elenco">
+        <thead><tr><th>Fase scritta</th><th>Operatore</th><th>Data</th><th>Apertura</th><th>Chiusura</th><th class="n">Totale</th><th class="n">Pers.</th><th class="n">Pz</th><th>S/P</th><th>Note</th></tr></thead>
+        <tbody>${c.righe.map(r => html`<tr class="${r.incerta ? 'riga-incerta' : ''}">
+          <td>${r.faseScritta}${r.fase ? '' : html` <span class="esito verifica">fase da scegliere</span>`}</td><td>${r.operatore}</td><td>${data(r.data ?? null)}</td>
+          <td>${r.inizio ?? ''}</td><td>${r.fine ?? ''}</td><td class="n">${(r.durataMin ?? r.totaleScrittoMin) != null ? `${Math.floor((r.durataMin ?? r.totaleScrittoMin)! / 60)}:${String((r.durataMin ?? r.totaleScrittoMin)! % 60).padStart(2, '0')}` : ''}</td>
+          <td class="n">${r.persone ?? ''}</td><td class="n">${r.pezzi ?? ''}</td><td>${r.tipo}</td><td>${r.tipo === 'P' ? r.causa : r.note}</td></tr>`)}</tbody>
+      </table></div></section>`)}
+    ${a.stato !== 'confermato' ? html`<p class="pulsanti">
+      ${a.contenuto ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+      ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea"><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`);
+}
+
 export function rotteAcquisizioni() {
   const r = Router();
 
   // ── Elenco dei file arrivati e caricamento ──
   r.get('/', async (req, res) => {
     const elenco = await q(`SELECT a.id, a.origine, a.nome_file, a.tipo, a.stato, a.errore, a.creato_il, a.ordine_id,
-        a.proposta->>'cliente' AS cliente, jsonb_array_length(coalesce(a.proposta->'righe', '[]'::jsonb)) AS righe,
+        coalesce(a.proposta->>'cliente', (SELECT 'COMMESSA ' || string_agg(x->>'numero', ', ') FROM jsonb_array_elements(a.proposta->'commesse') x)) AS cliente,
+        coalesce(jsonb_array_length(a.proposta->'righe'), (SELECT sum(jsonb_array_length(x->'righe'))::int FROM jsonb_array_elements(a.proposta->'commesse') x), 0) AS righe,
         (a.proposta->>'eOrdine')::boolean AS e_ordine, o.numero, o.anno
       FROM acquisizioni a LEFT JOIN ordini o ON o.id = a.ordine_id
       WHERE a.stato IN ('nuovo', 'da_confermare', 'errore') OR a.creato_il > now() - interval '60 days'
@@ -57,7 +90,8 @@ export function rotteAcquisizioni() {
       </section>
       <section class="blocco">
         <h2>Carica ordini</h2>
-        <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt).
+        <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt),
+          oppure la scansione delle schede di produzione compilate (i fogli tempi vanno nel rientro della commessa).
           L'IA legge cliente, riferimento, righe, prezzi e consegne e prepara una proposta: l'ordine nasce solo quando lo confermi.
           ${iaConfigurata() ? '' : html`<b>La chiave dell'IA (ANTHROPIC_API_KEY) non è configurata: i file si registrano ma non si leggono.</b>`}
           Gli export di Fatture in Cloud si registrano qui; la lettura automatica dell'incrocio arriverà con il prossimo passo.</p>
@@ -103,6 +137,7 @@ export function rotteAcquisizioni() {
     const a = await q1(`SELECT a.*, o.numero, o.anno, u.nome AS confermato_nome FROM acquisizioni a
       LEFT JOIN ordini o ON o.id = a.ordine_id LEFT JOIN utenti u ON u.id = a.confermato_da WHERE a.id = $1`, [Number(req.params.id)]);
     if (!a) return res.status(404).send('Non trovato');
+    if (a.tipo === 'scheda_produzione') return res.send(paginaScheda(req, a));
     const p: PropostaDb | null = a.proposta;
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!p;
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -153,7 +188,7 @@ export function rotteAcquisizioni() {
             <button formaction="/ordini/acquisire/${a.id}/salva">Salva le correzioni</button></p>` : ''}
       </form>` : ''}
       ${a.stato !== 'confermato' ? html`<p class="pulsanti">
-        ${a.contenuto && ['ordine', 'email'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+        ${a.contenuto && ['ordine', 'email', 'scheda_produzione'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
         ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea"><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
       { avviso }));
   });
