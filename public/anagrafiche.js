@@ -1,4 +1,6 @@
-// Impostazioni → Anagrafiche: maiuscolo mentre si scrive; caricamento del file in due passi (riepilogo, poi conferma)
+// Anagrafiche → Clienti e Prodotti: maiuscolo mentre si scrive; caricamento del file in due passi (riepilogo, poi conferma)
+// la tendina del cliente (Prodotti) filtra subito, senza tasto
+document.querySelectorAll('select.invia-subito').forEach(s => s.addEventListener('change', () => s.form.submit()));
 document.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
   const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
 }));
@@ -11,7 +13,7 @@ async function invia(definitivo) {
   const togli = document.getElementById('togli-anagrafiche').checked ? '1' : '0';
   controlla.disabled = conferma.disabled = true;
   out.textContent = definitivo ? 'Caricamento in corso…' : 'Controllo del file…';
-  const res = await fetch(`/impostazioni/anagrafiche/carica?togli=${togli}&conferma=${definitivo ? 1 : 0}`,
+  const res = await fetch(`/anagrafiche/carica?togli=${togli}&conferma=${definitivo ? 1 : 0}`,
     { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
   const j = await res.json().catch(() => ({}));
   controlla.disabled = conferma.disabled = false;

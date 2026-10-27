@@ -1,14 +1,13 @@
 /**
- * Sezione Componenti (solo ufficio): BOM con codifica e preventivo materiali, codifica di un P/N, archivio componenti.
+ * Sezione Componenti (solo ufficio): BOM con codifica e preventivo materiali, codifica di un P/N (l'archivio sta in Anagrafiche → Componenti).
  * Logica in src/server/codifica-servizio.ts; regole in src/engine/codifica/* e src/engine/acquisti.ts.
  */
 import express, { Router, type Request } from 'express';
-import ExcelJS from 'exceljs';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
-  ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, cercaComponenti, conteggiComponenti, correggiRiga,
+  ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
   creaAnalisi, creaCodificaSingola, excelAnalisi, leggiFileBom, salvaInArchivio, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
@@ -27,8 +26,9 @@ export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
     String(layout({ titolo, utente: req.session.utente, attiva: 'componenti', largo: true, avviso, script: script ?? 'componenti.js', contenuto: html`
-      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['codifica', 'Codifica un P/N'], ['archivio', 'Archivio componenti']]
-        .map(([s, t]) => html`<a href="/componenti/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>${contenuto}` }));
+      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['codifica', 'Codifica un P/N']]
+        .map(([s, t]) => html`<a href="/componenti/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
+        <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
 
   r.get('/', (_req, res) => res.redirect('/componenti/bom'));
 
@@ -158,43 +158,9 @@ export function rotteComponenti() {
     res.redirect(`/componenti/bom/${id}`);
   });
 
-  // ── Archivio componenti ──
-  r.get('/archivio', async (req, res) => {
-    const testo = String(req.query.q ?? '').trim();
-    const conti = await conteggiComponenti();
-    const righe = testo ? await cercaComponenti(testo) : [];
-    res.send(pag(req, 'Archivio componenti', 'archivio', html`
-      <div class="intestazione-pagina"><p class="nota">${num(conti.totale, 0)} componenti in archivio, ${num(conti.gestionale, 0)} con codice gestionale.
-        ${conti.totale ? '' : html` L'archivio si carica da <a href="/impostazioni/componenti">Impostazioni → Componenti</a>.`}</p>
-        <a class="bottone" href="/componenti/archivio.xlsx">Scarica tutto in Excel</a></div>
-      <form class="cerca"><input name="q" value="${testo}" placeholder="P/N, codice di produzione o gestionale, descrizione" autofocus><button>Cerca</button></form>
-      ${testo ? (righe.length ? html`<div class="tabella-scorre"><table class="componenti"><thead><tr><th>P/N</th><th>Fam.</th><th>Codice produzione</th>
-        <th>Codice gestionale</th><th>Descrizione</th><th>Stato</th><th>Fonte</th><th>Note</th><th></th></tr></thead><tbody>
-        ${righe.map(c => html`<tr><td>${c.pn}</td><td>${c.famiglia}</td><td class="codice">${c.codice_produzione}</td><td class="codice">${c.codice_gestionale}</td>
-          <td class="taglia">${c.descrizione}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
-          <td><form method="post" action="/componenti/archivio/${c.id}/elimina?q=${encodeURIComponent(testo)}" class="inline"
-            data-conferma="${`Eliminare dall'archivio ${c.codice_gestionale || c.codice_produzione || c.pn}?` + (c.codice_gestionale ? `\n\nSe il codice ${c.codice_gestionale} è già stato creato in Moka, non eliminarlo: il suo numero verrebbe riassegnato al prossimo componente nuovo.` : '')}">
-            <button class="link negativo">Elimina</button></form></td></tr>`)}
-        </tbody></table></div>${righe.length === 200 ? html`<p class="nota">Mostrati i primi 200.</p>` : ''}` : html`<p class="vuoto">Nessun componente trovato.</p>`) : ''}`, req.query.msg ? String(req.query.msg) : undefined));
-  });
-  // componente codificato per errore
-  r.post('/archivio/:id/elimina', async (req, res) => {
-    await q(`DELETE FROM componenti WHERE id = $1`, [Number(req.params.id)]);
-    res.redirect(`/componenti/archivio?q=${encodeURIComponent(String(req.query.q ?? ''))}&msg=${encodeURIComponent('Componente eliminato dall\'archivio.')}`);
-  });
-
-  r.get('/archivio.xlsx', async (_req, res) => {
-    const righe = await q<any>(`SELECT pn, produttore, famiglia, codice_produzione, codice_gestionale, descrizione, stato, fonte, note, attributi FROM componenti ORDER BY codice_gestionale NULLS LAST, id`);
-    const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Componenti');
-    ws.columns = [['P/N', 24], ['Produttore', 16], ['Famiglia', 8], ['Codice produzione', 32], ['Codice gestionale', 22], ['Descrizione', 40], ['Stato', 14], ['Fonte', 22], ['Note', 50], ['Attributi', 40]]
-      .map(([header, width]) => ({ header: header as string, width: width as number }));
-    ws.getRow(1).font = { bold: true };
-    for (const c of righe) ws.addRow([c.pn, c.produttore, c.famiglia, c.codice_produzione, c.codice_gestionale, c.descrizione, c.stato, c.fonte, c.note,
-      Object.entries(c.attributi ?? {}).map(([k, v]) => `${k}=${v}`).join('; ')]);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="archivio_componenti_${new Date().toISOString().slice(0, 10)}.xlsx"`);
-    res.send(Buffer.from(await wb.xlsx.writeBuffer()));
-  });
+  // ── Archivio componenti: ora sta in Anagrafiche → Componenti (27/10/2026) ──
+  r.get('/archivio', (req, res) => res.redirect('/anagrafiche/componenti' + (req.query.q ? `?q=${encodeURIComponent(String(req.query.q))}` : '')));
+  r.get('/archivio.xlsx', (_req, res) => res.redirect('/anagrafiche/componenti.xlsx'));
 
   return r;
 }

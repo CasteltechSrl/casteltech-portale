@@ -103,8 +103,13 @@ export const conteggiComponenti = async () => (await q1<{ totale: number; gestio
 
 export function cercaComponenti(testo: string, limite = 200) {
   const t = `%${testo.trim().toUpperCase()}%`, k = `%${pnKey(testo) ?? '@@'}%`;
+  // nei codici trattini e punti non contano: "rs0603" trova RS-0603-2K2-1-100MW
+  const c = testo.toUpperCase().replace(/[^A-Z0-9]/g, '');
   return q<Componente & { aggiornato_il: Date }>(`SELECT * FROM componenti WHERE pn_key LIKE $1 OR upper(codice_produzione) LIKE $2
-    OR upper(codice_gestionale) LIKE $2 OR upper(descrizione) LIKE $2 ORDER BY codice_gestionale NULLS LAST, id LIMIT $3`, [k, t, limite]);
+    OR upper(codice_gestionale) LIKE $2 OR upper(descrizione) LIKE $2
+    OR ($4 <> '' AND (regexp_replace(upper(codice_produzione), '[^A-Z0-9]', '', 'g') LIKE '%' || $4 || '%'
+      OR regexp_replace(upper(codice_gestionale), '[^A-Z0-9]', '', 'g') LIKE '%' || $4 || '%'))
+    ORDER BY codice_gestionale NULLS LAST, id LIMIT $3`, [k, t, limite, c]);
 }
 
 /** Import dal programma "Codifica componenti" (componenti.db convertito in JSON, gz o no). Salta i P/N/codici già presenti. */
