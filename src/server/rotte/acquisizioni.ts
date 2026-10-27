@@ -209,7 +209,7 @@ export function rotteAcquisizioni() {
           <label>Cliente (dall'anagrafica)
             <select name="cliente" ${modificabile ? '' : raw('disabled')}><option value="">— scegli —</option>
               ${clienti.map(c => html`<option value="${c.id}" ${c.id === p.clienteId ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>
-            ${!p.clienteId && p.cliente ? html`<small class="nota">L'IA ha letto «${p.cliente}», che non è in anagrafica: sceglilo dall'elenco (se è un nome diverso, aggiungilo come alias in Impostazioni → Anagrafiche).</small>` : ''}</label>
+            ${!p.clienteId && p.cliente ? html`<small class="nota">L'IA ha letto «${p.cliente}», che non è in anagrafica: sceglilo dall'elenco (se è un altro modo di scrivere un cliente già in elenco, scegli quello).</small>` : ''}</label>
           <label>N. ordine del cliente <input name="rif" value="${p.rifCliente}" ${modificabile ? '' : raw('disabled')}></label>
           <label>Data ordine del cliente <input type="date" name="dataOrdine" value="${p.dataOrdine ?? ''}" ${modificabile ? '' : raw('disabled')}></label>
           <label class="largo">Note <textarea name="note" rows="2" ${modificabile ? '' : raw('disabled')}>${p.note}</textarea></label>

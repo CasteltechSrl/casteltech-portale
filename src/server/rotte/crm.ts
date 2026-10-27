@@ -247,7 +247,7 @@ export function rotteCrm() {
           <details class="blocco" id="dati" ${req.query.msg && String(req.query.msg).includes('completa') ? raw('open') : ''}>
             <summary>Modifica i dati dell'azienda</summary>
             <form method="post" action="/crm/${id}/dati" class="campi-azienda">
-              ${a.cliente_id ? html`<p class="nota">Il nome viene dall'anagrafica clienti (Impostazioni → Anagrafiche).</p>` : campo('ragione_sociale', 'Ragione sociale', raw('class="maiuscolo" required'))}
+              ${a.cliente_id ? html`<p class="nota">Il nome viene dall'anagrafica clienti (Anagrafiche → Clienti).</p>` : campo('ragione_sociale', 'Ragione sociale', raw('class="maiuscolo" required'))}
               <div class="riga-campi">
                 <label>Stato <select name="stato">${Object.entries(STATI_CRM).map(([k, v]) => html`<option value="${k}" ${a.stato === k ? raw('selected') : ''}>${v}</option>`)}</select></label>
                 <label>Priorità <select name="priorita"><option value="">—</option>${Object.entries(PRIORITA).map(([k, v]) => html`<option value="${k}" ${a.priorita === k ? raw('selected') : ''}>${v}</option>`)}</select></label>
@@ -266,13 +266,13 @@ export function rotteCrm() {
               <label>Note <textarea name="note" rows="3">${a.note ?? ''}</textarea></label>
               <label>Cliente in anagrafica <select name="cliente_id"><option value="">— non è un cliente in anagrafica —</option>
                 ${clientiLiberi.map(c => html`<option value="${c.id}" ${c.id === a.cliente_id ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>
-                <small>Quando diventa cliente: prima aggiungilo in Impostazioni → Anagrafiche, poi collegalo qui.</small></label>
+                <small>Quando diventa cliente: prima aggiungilo in Anagrafiche → Clienti, poi collegalo qui.</small></label>
               <p class="nota">Le scritte si salvano sempre nello stesso formato: nome, provincia, P.IVA e responsabile in MAIUSCOLO; città, indirizzo e nomi
                 delle persone con l'Iniziale maiuscola; settore e descrizione con solo la prima lettera maiuscola; email e sito in minuscolo. Le note restano come le scrivi.</p>
               <div><button class="primario">Salva i dati</button></div>
             </form>
             ${a.cliente_id
-              ? html`<p class="nota">È un cliente in anagrafica: non si elimina dal CRM (ci tornerebbe da solo). Per toglierlo, prima eliminalo da Impostazioni → Anagrafiche.</p>`
+              ? html`<p class="nota">È un cliente in anagrafica: non si elimina dal CRM (ci tornerebbe da solo). Per toglierlo, prima eliminalo da Anagrafiche → Clienti.</p>`
               : html`<form method="post" action="/crm/${id}/elimina" class="elimina-azienda"
                   data-conferma="${`Eliminare ${a.ragione_sociale} dal CRM, con ${contatti.length} referenti e ${attivita.length} attività? Non si può annullare.`}">
                   <button class="pericolo">Elimina azienda</button></form>`}
@@ -312,7 +312,7 @@ export function rotteCrm() {
     const id = Number(req.params.id);
     const a = await q1(`SELECT ragione_sociale, cliente_id FROM crm_aziende WHERE id = $1`, [id]);
     if (!a) return res.redirect('/crm');
-    if (a.cliente_id) return res.redirect(`/crm/${id}?msg=${encodeURIComponent('È un cliente in anagrafica: per toglierlo dal CRM eliminalo prima da Impostazioni → Anagrafiche.')}`);
+    if (a.cliente_id) return res.redirect(`/crm/${id}?msg=${encodeURIComponent('È un cliente in anagrafica: per toglierlo dal CRM eliminalo prima da Anagrafiche → Clienti.')}`);
     await q(`DELETE FROM crm_aziende WHERE id = $1`, [id]);
     res.redirect(`/crm?msg=${encodeURIComponent(`${a.ragione_sociale} eliminata dal CRM.`)}`);
   });

@@ -5,7 +5,7 @@ export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).sl
 
 export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
 
-export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string; avviso?: string; largo?: boolean }) {
+export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string | string[]; avviso?: string; largo?: boolean }) {
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
   return html`<!doctype html>
@@ -23,6 +23,7 @@ ${opz.utente ? html`
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   <nav>
     ${opz.utente.ruolo === 'ufficio' ? html`
+      ${voce('/anagrafiche', 'Anagrafiche', 'anagrafiche')}
       ${voce('/crm', 'CRM', 'crm')}
       ${voce('/preventivi', 'Preventivi', 'preventivi')}
       ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
@@ -38,7 +39,7 @@ ${opz.contenuto}
 </main>
 ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
 <script src="/static/tempi.js?v=${VERSIONE}" defer></script>`) : ''}
-${opz.script ? raw(`<script src="/static/${opz.script}?v=${VERSIONE}" defer></script>`) : ''}
+${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>
 </html>`;
 }
