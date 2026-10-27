@@ -71,6 +71,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    il giorno lavorativo dopo con link di chiusura; timer in memoria, database solo all'ora giusta. Orari in Impostazioni → Promemoria.
    Canale: per ora solo nel portale (tabella notifiche); SMS/WhatsApp/Telegram da scegliere (numeri da Adriano).
    Una fase per volta dal telefono (sulla carta resta possibile "10+12").
+   Tempi scritti a mano (telefono, Aggiungi tempi, Rientro: `engine/tempi-scritti.ts` + `public/tempi.js`, Adriano 27/10/2026): base 60 come
+   l'orologio, 1.30 = 1,30 = 1:30 = 1h 30', numero da solo = minuti (o secondi se la casella è in secondi), "1.5" rifiutato (ambiguo);
+   uscendo dalla casella il tempo si riscrive leggibile (1h 30').
    🟡 Lettura delle schede scansionate (`engine/fogli-tempi.ts`, migrazione 027): stessa cartella Drive / Da acquisire degli ordini;
    l'IA riconosce la SCHEDA DI PRODUZIONE (n. commessa stampato), legge i fogli tempi, la fase si trova dal numero stampato
    ("1+2" = fasi insieme: tempo sulla prima, nota), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).

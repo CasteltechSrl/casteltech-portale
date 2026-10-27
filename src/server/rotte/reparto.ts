@@ -10,7 +10,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { q, q1, transazione } from '../db.js';
-import { leggiPreventivo, oreDa } from '../preventivi-servizio.js';
+import { leggiPreventivo } from '../preventivi-servizio.js';
+import { AIUTO_TEMPO, secondiDaTempo } from '../../engine/tempi-scritti.js';
 import { caricaOperatori, fasiCommessa, leggiCommessa, numeriFasi } from '../commesse-servizio.js';
 import { annullaFase, fasiAperte, pianificaFase } from '../promemoria.js';
 import { hhmm, minutiDelGiorno, partiRoma } from '../../engine/promemoria.js';
@@ -53,6 +54,7 @@ ${opz.ok ? html`<div class="conferma">${opz.ok}</div>` : ''}
 ${opz.contenuto}
 </main>
 <script src="/static/reparto.js?v=${VERSIONE}" defer></script>
+<script src="/static/tempi.js?v=${VERSIONE}" defer></script>
 </body>
 </html>`);
 }
@@ -234,8 +236,8 @@ export function rotteReparto() {
     const f = x && [...x.previste, ...x.altre].find(f => f.codice === req.params.fase);
     if (!x || !f) return res.status(404).send('Fase non trovata');
     if (!STATI_APERTI.includes(x.c.stato)) return res.status(400).send(await paginaFase(req, 'Commessa già rientrata in ufficio.'));
-    const durataMin = Math.round(oreDa(req.body.totale) * 60);
-    if (!(durataMin > 0) || durataMin > 16 * 60) return res.status(400).send(await paginaFase(req, 'Scrivi il tempo totale in ore e minuti (es. 1:30).'));
+    const durataMin = Math.round((secondiDaTempo(req.body.totale) ?? 0) / 60);
+    if (!(durataMin > 0) || durataMin > 16 * 60) return res.status(400).send(await paginaFase(req, 'Scrivi il tempo totale in ore.minuti (1.30 = 1h 30\') oppure in minuti (90 = 1h 30\'), al massimo 16 ore.'));
     const oggi = partiRoma(new Date()).data;
     const giorno = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.data ?? '')) && String(req.body.data) <= oggi ? String(req.body.data) : oggi;
     const tipo = req.body.tipo === 'P' ? 'P' : 'S';
@@ -305,7 +307,7 @@ async function paginaFase(req: Request, errore?: string) {
     <section class="riquadro">
       <h2>Oppure scrivo il tempo totale</h2>
       <form method="post" action="${base}/totale" class="modulo-reparto">
-        <label>Tempo totale <small>ore:minuti</small><input name="totale" inputmode="decimal" placeholder="1:30" value="${b.totale ?? ''}" required></label>
+        <label>Tempo totale <small>${AIUTO_TEMPO.minuti}</small><input name="totale" inputmode="decimal" data-tempo="minuti" placeholder="1.30" value="${b.totale ?? ''}" autocomplete="off" required><small class="lettura-tempo" aria-live="polite"></small></label>
         <label>Giorno <input name="data" type="date" max="${oggi}" value="${b.data ?? oggi}"></label>
         <label>Nr. persone sulla fase <input name="persone" inputmode="numeric" value="${b.persone ?? f.persone ?? 1}"></label>
         <label>Pezzi fatti <input name="pezzi" inputmode="numeric" value="${b.pezzi ?? ''}"></label>

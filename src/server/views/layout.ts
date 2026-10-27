@@ -36,7 +36,8 @@ ${opz.utente ? html`
 ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>
-${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></script>`) : ''}
+${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
+<script src="/static/tempi.js?v=${VERSIONE}" defer></script>`) : ''}
 ${opz.script ? raw(`<script src="/static/${opz.script}?v=${VERSIONE}" defer></script>`) : ''}
 </body>
 </html>`;
