@@ -139,4 +139,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    promemoria nel calendario di info@ per le commesse in ritardo su preventivo, capacità produttiva e scadenza.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
-6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.
+6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).
+7. 🟡 Amministrazione (piano: 27/10–4/11, fatture vere dal 5/11): SdI tramite Invoicetronic (`INVOICETRONIC_API_KEY` su Render, per ora
+   chiave di prova; codice destinatario 7HD37X0 da registrare all'Agenzia quando la ricezione funziona; conservazione gratuita dell'Agenzia).
+   ✅ Impostazioni → Amministrazione (`rotte/impostazioni-amministrazione.ts`, `engine/amministrazione.ts`, migrazione 032): dati dell'azienda,
+   numerazioni per tipo/sezionale/anno (numero dato solo all'emissione, `assegnaNumero` in transazione, date in ordine; valori 2026 da FIC
+   da riallineare il giorno del passaggio), aliquote/nature IVA con bollo 2 € oltre 77,47 €, condizioni di pagamento (giorni poi fine mese),
+   dati fiscali dei clienti, lettere d'intento, tabelle `documenti` / `documenti_righe` / `documenti_scadenze` per tutti i documenti.
+   ⬜ Import storico FIC, fatture e note di credito (XML FatturaPA), Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
+   ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

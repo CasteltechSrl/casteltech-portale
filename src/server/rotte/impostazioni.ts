@@ -24,6 +24,7 @@ import { NOMI_FORNITORI, leggiRegoleScarto, type Fornitore } from '../../engine/
 import { join, basename } from 'node:path';
 import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
 import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
+import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
 
 /** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
 const CODICI_INIZIALI: Record<TabellaCatalogo, Set<string>> = {
@@ -86,6 +87,8 @@ export function rotteImpostazioni() {
   // clienti, prodotti e fornitori ora stanno nella sezione Anagrafiche (27/10/2026): i vecchi indirizzi portano lì
   r.get(['/anagrafiche', '/anagrafiche/*resto'], (_req, res) => res.redirect('/anagrafiche/clienti'));
   r.get(['/fornitori', '/fornitori/*resto'], (req, res) => res.redirect('/anagrafiche' + req.path));
+  // dati dell'azienda, numerazioni, aliquote IVA, condizioni di pagamento (fatture e DDT dal portale)
+  r.use('/amministrazione', rotteImpostazioniAmministrazione(pag));
 
   // ── Tariffe ──
   r.get('/tariffe', async (req, res) => {
@@ -540,7 +543,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['amministrazione', 'Amministrazione'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 
