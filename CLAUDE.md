@@ -124,6 +124,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    valida (italiana: cifra di controllo; estera: formato del paese, scritta con il prefisso), una P.IVA = un fornitore, tutto MAIUSCOLO (email e PEC minuscolo).
    Base: elenco fornitori di FIC ripulito fuori dal repository (file fornitori_casteltech.json.gz, ricaricabile: aggiunge e aggiorna, non toglie);
    i dubbi sono stati incrociati con gli export acquisti 2025–26: caricati solo se comprati, con nota "DA VERIFICARE".
+4f. ✅ Suggerimenti del team (`rotte/suggerimenti.ts`, `engine/suggerimenti.ts`, migrazione 031; Adriano 27/10/2026): voce Suggerimenti nel menu,
+   idee da sviluppare più avanti con chi le propone, data, area, priorità, stato (da valutare / in programma / in sviluppo / fatto / scartato) e note.
+   Elenco: aperti in cima per stato e priorità, fatti e scartati nascosti ("mostra tutti"). Elimina sempre possibile (non collegati ad altro).
+   Primi due (Federico): avviso Telegram al responsabile della fase successiva seguendo il Gantt (responsabili di fase ancora da definire);
+   promemoria nel calendario di info@ per le commesse in ritardo su preventivo, capacità produttiva e scadenza.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ⬜ Collegamento mOKa (anagrafiche, invio preventivo, ordini → commesse): in attesa della documentazione API.

@@ -417,3 +417,11 @@ tr.riga-incerta td { background: #fff2cc; }
 /* Tasti Elimina (righe inserite per errore) */
 form.elimina-azienda { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #eee; }
 td.nowrap form.inline { margin-left: .4rem; }
+
+/* ── Suggerimenti del team ── */
+.stato.sugg-in_programma { background: #e1ecfb; color: #1f55a6; }
+.stato.sugg-in_sviluppo { background: var(--accento-chiaro); color: var(--accento); }
+.stato.sugg-fatto { background: #ddf3e5; color: var(--positivo); }
+.stato.sugg-scartato { background: #fbe2e0; color: var(--negativo); }
+.etichetta.prio-alta { background: #fbe2e0; color: var(--negativo); }
+.etichetta.prio-bassa { background: transparent; border: 1px solid var(--bordo); }
