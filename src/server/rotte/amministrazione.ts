@@ -185,6 +185,7 @@ export function rotteAmministrazione() {
           <form method="post" action="/amministrazione/documenti/${id}/emetti" class="inline"
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
+          ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
           <form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
             <button class="pericolo">Elimina bozza</button></form>
         </div>
@@ -233,6 +234,18 @@ export function rotteAmministrazione() {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="IT${piva}_${d.id.toString(36).toUpperCase().padStart(5, '0').slice(-5)}.xml"`);
     res.send(d.xml);
+  });
+
+  // bozza: l'XML che si emetterebbe, con numero 0, per controllarlo (es. sul sito dell'Agenzia) senza consumare la numerazione
+  r.get('/documenti/:id/xml-prova', async (req, res) => {
+    const id = Number(req.params.id);
+    const d = await q1(`SELECT stato FROM documenti WHERE id = $1`, [id]);
+    if (d?.stato !== 'bozza') return res.status(404).send('XML di prova solo per le bozze');
+    const { esito } = await anteprimaDocumento(id);
+    if (esito.errori.length) return res.status(400).send(`Da sistemare prima: ${esito.errori.join(' ')}`);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${esito.nomeFile.replace('.xml', '_PROVA.xml')}"`);
+    res.send(esito.xml);
   });
 
   r.get('/ricevuti', async (req, res) => {

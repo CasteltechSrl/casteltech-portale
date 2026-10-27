@@ -153,7 +153,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    ✅ Menu Amministrazione (`rotte/amministrazione.ts`, `documenti-servizio.ts`): elenco documenti per tipo/anno (anche storico FIC), documenti ricevuti;
    fattura / nota di credito: bozza (cliente SOLO dall'anagrafica, righe, DDT da fatturare del cliente, IVA predefinita del cliente) → Emetti:
    numero in transazione, scadenza dalla condizione di pagamento, XML FatturaPA (`engine/fatturapa.ts`: TD01/TD04, lettera d'intento in
-   AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma.
+   AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma. Bozza senza errori: "Scarica XML di prova" (numero 0, non consuma la numerazione).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
    ⬜ PDF della fattura, Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
