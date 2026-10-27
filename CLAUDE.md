@@ -150,5 +150,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    dati fiscali dei clienti già in anagrafica (`caricaClientiFiscali`) e storico dal 2025 (`caricaStoricoFic`, migrazione 033): fatture, note di
    credito, autofatture, DDT in `documenti` (origine 'fic', `fic_id`), righe, scadenze incassate/aperte con il conto; DDT → fattura (`fattura_id`,
    uniti in FIC o citati in una riga "DDT n. X del"); fatture/NC ricevute in `documenti_ricevuti` (+ scadenze). Le numerazioni salgono all'ultimo n. di FIC.
-   ⬜ Fatture e note di credito (XML FatturaPA), Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
+   ✅ Menu Amministrazione (`rotte/amministrazione.ts`, `documenti-servizio.ts`): elenco documenti per tipo/anno (anche storico FIC), documenti ricevuti;
+   fattura / nota di credito: bozza (cliente SOLO dall'anagrafica, righe, DDT da fatturare del cliente, IVA predefinita del cliente) → Emetti:
+   numero in transazione, scadenza dalla condizione di pagamento, XML FatturaPA (`engine/fatturapa.ts`: TD01/TD04, lettera d'intento in
+   AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma.
+   Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
+   (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
+   ⬜ PDF della fattura, Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

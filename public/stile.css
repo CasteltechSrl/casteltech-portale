@@ -442,3 +442,17 @@ nav.tasti-anagrafiche a.attiva .conta { background: rgba(255,255,255,.2); color:
 .ricerca-veloce { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem; }
 .ricerca-veloce input[type=search] { flex: 1 1 24rem; max-width: 40rem; font-size: 1.05rem; padding: .6rem .75rem; }
 .dentro-blocco { padding: 0 1rem 1rem; }
+
+/* Amministrazione: documenti */
+.tasti-sezione { display: flex; gap: .4rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.tasti-sezione a { padding: .35rem .9rem; border: 1px solid var(--bordo); border-radius: 99px; background: var(--carta); text-decoration: none; color: var(--testo); }
+.tasti-sezione a.attivo { background: var(--accento); border-color: var(--accento); color: #fff; }
+.totali-documento { font-size: 1.05rem; margin: .8rem 0; }
+table.editor input.cortissimo { width: 3.4rem; }
+table.editor tr.riga-testo input { font-style: italic; }
+td.centro { text-align: center; }
+label.riga-spunta { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
+.stato.doc-emesso, .stato.doc-inviato { background: #e1ecfb; color: #1f55a6; }
+.stato.doc-consegnato { background: #ddf3e5; color: var(--positivo); }
+.stato.doc-scartato, .stato.doc-non_consegnato { background: #fbe2e0; color: var(--negativo); }
+.stato.doc-bozza { background: #fff2cc; color: #8a6100; }
