@@ -456,3 +456,12 @@ label.riga-spunta { display: flex; align-items: center; gap: .5rem; margin: .3re
 .stato.doc-consegnato { background: #ddf3e5; color: var(--positivo); }
 .stato.doc-scartato, .stato.doc-non_consegnato { background: #fbe2e0; color: var(--negativo); }
 .stato.doc-bozza { background: #fff2cc; color: #8a6100; }
+
+/* amministrazione: cruscotto e rate */
+:root { --serie-acquisti: #eb6834; }
+.campione.acquisti { background: var(--serie-acquisti); }
+.grafico-mesi .acquisti { fill: var(--serie-acquisti); }
+table.elenco tr.scaduta td:first-child { box-shadow: inset 4px 0 0 var(--negativo); }
+ul.scadenze { list-style: none; padding: 0; }
+ul.scadenze li { padding: .35rem 0; border-bottom: 1px solid var(--bordo); }
+ul.scadenze input[type=date] { width: 9.5rem; }
