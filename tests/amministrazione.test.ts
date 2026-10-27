@@ -111,6 +111,7 @@ test('clienti da FIC: aliquota predefinita dalla descrizione', () => {
   assert.equal(aliquotaDaFic('***Lettera c) per Italia con dichiarazione di intento', 0).codice, 'INTENTO');
   assert.equal(aliquotaDaFic('***Lettera a) per estero trasporto a nostro carico', 0).codice, 'EXPORT');
   assert.equal(aliquotaDaFic('Non imp. art. 41 D.L. 331/93', 0).codice, 'UE_BENI');
+  assert.equal(aliquotaDaFic('Non Imp. Art.72, D.P.R. 633/72', 0).codice, 'ART72');
   assert.match(aliquotaDaFic('R.C. art. 74/7-8 rottami e metalli ferrosi e non', 0).avviso!, /non riconosciuta/);
 });
 
@@ -145,7 +146,7 @@ test('clienti da FIC: dati fiscali uniformi e avvisi', () => {
 test('storico FIC: aliquota delle righe e fattura citata nelle note di credito', () => {
   assert.equal(aliquotaRigaFic({ descrizione: '***IVA 22%', percentuale: 22 }), 'IVA22');
   assert.equal(aliquotaRigaFic({ descrizione: 'Non imp. Art.8/c D.P.R. 633/72', percentuale: 0 }), 'INTENTO');
-  assert.equal(aliquotaRigaFic({ descrizione: 'Non Imp. Art.72, D.P.R. 633/72', percentuale: 0 }), null);
+  assert.equal(aliquotaRigaFic({ descrizione: 'Non Imp. Art.72, D.P.R. 633/72', percentuale: 0 }), 'ART72');
   assert.equal(aliquotaRigaFic({ percentuale: 5 }), null);
   assert.deepEqual(fatturaCitata('Nota di Credito relativa alla fattura nr. 11/2025 del 31/01/2025'), { numero: 11, anno: 2025 });
   assert.deepEqual(fatturaCitata('Rif. Ns Fattura n.21/2025 del 28/02/2025'), { numero: 21, anno: 2025 });

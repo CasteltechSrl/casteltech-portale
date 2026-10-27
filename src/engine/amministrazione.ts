@@ -158,6 +158,7 @@ export function aliquotaDaFic(descrizione: unknown, percentuale: unknown): { cod
   if (/8\s*\/\s*C|LETTERA C|INTENTO/.test(d)) return { codice: 'INTENTO', avviso: null };
   if (/LETTERA A|LETTERA B|ESTERO/.test(d)) return { codice: 'EXPORT', avviso: null };
   if (/41/.test(d)) return { codice: 'UE_BENI', avviso: null };
+  if (/ART\.?\s*72/.test(d)) return { codice: 'ART72', avviso: null };
   return { codice: null, avviso: `aliquota "${String(descrizione)}" non riconosciuta: lasciata IVA 22%, da scegliere a mano` };
 }
 

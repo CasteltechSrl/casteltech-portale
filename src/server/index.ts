@@ -24,6 +24,7 @@ import { rotteOrdini } from './rotte/ordini.js';
 import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
+import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -114,6 +115,7 @@ app.use('/ordini', soloUfficio, rotteOrdini());
 app.use('/componenti', soloUfficio, rotteComponenti());
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
+app.use('/amministrazione', soloUfficio, rotteAmministrazione());
 app.use('/r', rotteReparto());
 // QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
 // all'ufficio apre la commessa; chi non è entrato va all'accesso del reparto

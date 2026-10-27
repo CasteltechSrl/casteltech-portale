@@ -29,6 +29,7 @@ ${opz.utente ? html`
       ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
       ${voce('/commesse', 'Commesse', 'commesse')}
       ${voce('/componenti', 'Componenti', 'componenti')}
+      ${voce('/amministrazione', 'Amministrazione', 'amministrazione')}
       ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}
       ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
   </nav>
