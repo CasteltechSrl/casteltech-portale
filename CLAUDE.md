@@ -15,8 +15,13 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   `src/catalogo/iniziale.ts` serve solo al primo avvio. Per cambiare formule già in uso: nuova migrazione
   che aggiorna solo le righe ancora uguali al valore iniziale (vedi `003_...`).
 - Anagrafiche: nei preventivi cliente, codice e descrizione si scelgono SOLO da clienti/prodotti in anagrafica
-  (Impostazioni → Anagrafiche), mai testo libero; tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi
+  (menu Anagrafiche), mai testo libero; tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi
   preventivi sono collegati con `alias_clienti` / `alias_prodotti`. Clienti/prodotti non in elenco non vanno in anagrafica.
+
+- Sezione Anagrafiche (menu in alto, `rotte/anagrafiche.ts`; Adriano 27/10/2026): TUTTE le anagrafiche stanno lì, non in Impostazioni.
+  Tasti in alto Clienti / Fornitori / Prodotti / Componenti (archivio della codifica), sotto l'elenco con la ricerca veloce
+  (`engine/ricerca.ts` = `public/ricerca.js`: filtra mentre si scrive, più parole, accenti e trattini dei codici non contano).
+  Un'anagrafica nuova si aggiunge come altro tasto qui. I vecchi indirizzi /impostazioni/anagrafiche e /impostazioni/fornitori portano qui.
 
 ## Come lavorare
 - Struttura database: mai modificare un file già esistente in `db/migrazioni/`; aggiungerne uno nuovo (`002_...sql`).
@@ -71,6 +76,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    il giorno lavorativo dopo con link di chiusura; timer in memoria, database solo all'ora giusta. Orari in Impostazioni → Promemoria.
    Canale: per ora solo nel portale (tabella notifiche); SMS/WhatsApp/Telegram da scegliere (numeri da Adriano).
    Una fase per volta dal telefono (sulla carta resta possibile "10+12").
+   Tempi scritti a mano (telefono, Aggiungi tempi, Rientro: `engine/tempi-scritti.ts` + `public/tempi.js`, Adriano 27/10/2026): base 60 come
+   l'orologio, 1.30 = 1,30 = 1:30 = 1h 30', numero da solo = minuti (o secondi se la casella è in secondi), "1.5" rifiutato (ambiguo);
+   uscendo dalla casella il tempo si riscrive leggibile (1h 30').
    🟡 Lettura delle schede scansionate (`engine/fogli-tempi.ts`, migrazione 027): stessa cartella Drive / Da acquisire degli ordini;
    l'IA riconosce la SCHEDA DI PRODUZIONE (n. commessa stampato), legge i fogli tempi, la fase si trova dal numero stampato
    ("1+2" = fasi insieme: tempo sulla prima, nota), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).
@@ -120,7 +128,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    prossima azione (solo dove manca), responsabile, stato (solo alle aziende ancora "Da contattare") e `scollega_cliente` per i collegamenti
    sbagliati; altri nomi, telefoni, email e note si uniscono a quelli del portale (`unisciElenco`). Nome uguale ma P.IVA diversa: non è lo stesso cliente.
 4e. ✅ Anagrafica fornitori (`rotte/fornitori-anagrafica.ts`, `engine/anagrafica-fornitori.ts`, migrazione 028, tabella `fornitori_anagrafica`;
-   diversa da `fornitori.ts`, che sono i distributori di componenti): Impostazioni → Fornitori. Regole di Adriano (26/10/2026): solo con P.IVA
+   diversa da `fornitori.ts`, che sono i distributori di componenti): Anagrafiche → Fornitori. Regole di Adriano (26/10/2026): solo con P.IVA
    valida (italiana: cifra di controllo; estera: formato del paese, scritta con il prefisso), una P.IVA = un fornitore, tutto MAIUSCOLO (email e PEC minuscolo).
    Base: elenco fornitori di FIC ripulito fuori dal repository (file fornitori_casteltech.json.gz, ricaricabile: aggiunge e aggiorna, non toglie);
    i dubbi sono stati incrociati con gli export acquisti 2025–26: caricati solo se comprati, con nota "DA VERIFICARE".

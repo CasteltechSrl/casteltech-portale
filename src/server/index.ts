@@ -19,6 +19,7 @@ import { rotteReparto } from './rotte/reparto.js';
 import { avviaPromemoria } from './promemoria.js';
 import { avviaControlloDrive } from './drive.js';
 import { rotteComponenti } from './rotte/componenti.js';
+import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
 import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteCrm } from './rotte/crm.js';
@@ -104,6 +105,7 @@ app.get('/produzione', (_req, res) => res.redirect('/r'));
 // controllo di Render: NON interroga il database, così Neon (piano gratuito) può spegnersi quando nessuno lavora
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
+app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());

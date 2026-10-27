@@ -36,9 +36,9 @@
     if (!tr || !/\[(apertura|chiusura)\]$/.test(e.target.name)) return;
     const a = minuti(tr.querySelector('[name$="[apertura]"]').value), c = minuti(tr.querySelector('[name$="[chiusura]"]').value);
     const tot = tr.querySelector('[data-totale]');
-    if (a == null || c == null) { tot.placeholder = 'h:mm'; return; }
+    if (a == null || c == null) { tot.placeholder = '1.30'; return; }
     const d = (c - a + 1440) % 1440;
-    tot.placeholder = `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}`;
+    tot.placeholder = window.CasteltechTempi ? window.CasteltechTempi.scriviTempo(d * 60, 'minuti') : `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}`;
   });
 
   form.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {

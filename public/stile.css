@@ -425,3 +425,20 @@ td.nowrap form.inline { margin-left: .4rem; }
 .stato.sugg-scartato { background: #fbe2e0; color: var(--negativo); }
 .etichetta.prio-alta { background: #fbe2e0; color: var(--negativo); }
 .etichetta.prio-bassa { background: transparent; border: 1px solid var(--bordo); }
+
+/* caselle dei tempi (public/tempi.js): come è stato capito il tempo scritto */
+.lettura-tempo { font-weight: 600; color: var(--positivo); min-height: 1.2em; }
+.lettura-tempo.errata { color: #b42318; }
+input.tempo-errato { border-color: #b42318 !important; background: #fdecec; }
+
+/* ── Anagrafiche: tasti in alto e ricerca veloce ── */
+nav.tasti-anagrafiche { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+nav.tasti-anagrafiche a { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem 1.2rem; border: 1px solid var(--bordo); border-radius: var(--raggio);
+  background: var(--carta); color: var(--testo); text-decoration: none; font-weight: 600; font-size: 1.05rem; }
+nav.tasti-anagrafiche a:hover { border-color: var(--accento); }
+nav.tasti-anagrafiche a.attiva { background: var(--accento); border-color: var(--accento); color: #fff; }
+nav.tasti-anagrafiche .conta { font-size: .78rem; font-weight: 500; background: var(--accento-chiaro); color: var(--accento); padding: .05rem .5rem; border-radius: 99px; }
+nav.tasti-anagrafiche a.attiva .conta { background: rgba(255,255,255,.2); color: #fff; }
+.ricerca-veloce { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem; }
+.ricerca-veloce input[type=search] { flex: 1 1 24rem; max-width: 40rem; font-size: 1.05rem; padding: .6rem .75rem; }
+.dentro-blocco { padding: 0 1rem 1rem; }
