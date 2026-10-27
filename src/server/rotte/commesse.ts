@@ -13,7 +13,7 @@ import {
   programmaForno, salvaCommessa, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
-import { oreDa } from '../preventivi-servizio.js';
+import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
@@ -141,7 +141,7 @@ export function rotteCommesse() {
     const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return String(x ?? '').trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined; };
     const righe: { fase: string; durataMin: number; persone: number }[] = [];
     const leggi = (fase: string, x: any) => {
-      const durataMin = String(x?.durata ?? '').trim() ? Math.round(oreDa(x.durata) * 60) : 0;
+      const durataMin = Math.round((secondiDaTempo(x?.durata) ?? 0) / 60);
       if (codici.has(fase) && durataMin > 0) righe.push({ fase, durataMin, persone: numero(x?.persone) ?? persone[fase] ?? 1 });
     };
     for (const [fase, x] of Object.entries(req.body?.tempi ?? {})) leggi(fase, x);
@@ -345,9 +345,10 @@ async function tabellaFasiConTempi(c: any, fasi: FaseScheda[], prev: any): Promi
   const tot = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.cicloSec, 0);
   const totUomo = (fs: FaseScheda[]) => fs.reduce((a, f) => a + f.uomoSec, 0);
   const eff = (cod: string, k: 'cicloSec' | 'uomoSec') => (reali[cod] ? ore(reali[cod][k]) : '');
-  const caselle = (cod: string, pers: number) => html`<td class="n"><input form="tempi" name="tempi[${cod}][durata]" class="corto" placeholder="h:mm" inputmode="text"></td>
+  const caselle = (cod: string, pers: number) => html`<td class="n"><input form="tempi" name="tempi[${cod}][durata]" class="corto" placeholder="1.30" inputmode="decimal" data-tempo="minuti"></td>
     <td class="n"><input form="tempi" name="tempi[${cod}][persone]" class="cortissimo" placeholder="${num(pers, 1)}" inputmode="decimal"></td>`;
-  return html`<p class="nota">Tempi totali dell'intero lotto in ore:minuti. Per aggiungere un tempo (pre-produzione, tempi dimenticati)
+  return html`<p class="nota">Tempi totali dell'intero lotto in ore:minuti. In "Aggiungi" il tempo si scrive come sull'orologio:
+    1.30, 1,30 o 1:30 = 1h 30'; un numero da solo sono minuti (90 = 1h 30'). Per aggiungere un tempo (pre-produzione, tempi dimenticati)
     scrivilo in "Aggiungi" e premi <strong>Aggiungi tempi</strong>: si somma all'effettivo. Per correggere righe già inserite usa
     <a href="/commesse/${c.id}/rientro">Rientro scheda</a>.</p>
   <div class="tabella-scorre"><table class="fasi tempi-commessa">
@@ -362,7 +363,7 @@ async function tabellaFasiConTempi(c: any, fasi: FaseScheda[], prev: any): Promi
         <td class="n"><strong>${eff(k, 'cicloSec')}</strong></td><td class="n">${eff(k, 'uomoSec')}</td>${caselle(k, 1)}</tr>`)}
       <tr><td colspan="6"><select form="tempi" name="nuova[fase]" aria-label="Altra fase"><option value="">+ altra fase (non prevista)…</option>
         ${tutte.filter(f => !fasi.some(x => x.codice === f.codice) && !altre.includes(f.codice)).map(f => html`<option value="${f.codice}">${f.numero} ${f.nome}</option>`)}</select></td>
-        <td class="n"><input form="tempi" name="nuova[durata]" class="corto" placeholder="h:mm"></td><td class="n"><input form="tempi" name="nuova[persone]" class="cortissimo" placeholder="1"></td></tr>
+        <td class="n"><input form="tempi" name="nuova[durata]" class="corto" placeholder="1.30" inputmode="decimal" data-tempo="minuti"></td><td class="n"><input form="tempi" name="nuova[persone]" class="cortissimo" placeholder="1"></td></tr>
       <tr class="riga-gruppo"><td colspan="2">TOTALE</td><td class="n">${ore(tot(fasi))}</td><td class="n">${ore(totUomo(fasi))}</td>
         <td class="n">${ore(Object.values(reali).reduce((a, x) => a + x.cicloSec, 0))}</td><td class="n">${ore(Object.values(reali).reduce((a, x) => a + x.uomoSec, 0))}</td>
         <td colspan="2" class="n"><button form="tempi" class="primario">Aggiungi tempi</button></td></tr>
@@ -398,7 +399,7 @@ function righeDaForm(b: any, personeFase: Record<string, number>): RigaForm[] {
   const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return String(x ?? '').trim() !== '' && Number.isFinite(n) ? n : undefined; };
   return Object.values(b?.righe ?? {}).flatMap((r: any) => {
     const fase = testo(r.fase), inizio = ora(r.apertura), fine = ora(r.chiusura);
-    const totale = String(r.totale ?? '').trim() ? Math.round(oreDa(r.totale) * 60) : undefined;
+    const totale = String(r.totale ?? '').trim() ? Math.round((secondiDaTempo(r.totale) ?? 0) / 60) : undefined;
     if (!fase && !inizio && !fine && totale == null && !testo(r.operatore) && !testo(r.note)) return [];
     const tipo: 'S' | 'P' = r.tipo === 'P' ? 'P' : 'S';
     return [{
@@ -427,7 +428,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
   const opzioniFase = (sel: string) => html`<option value="">—</option>
     <optgroup label="Fasi della commessa">${fasi.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>
     <optgroup label="Altre fasi">${altre.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>`;
-  const totaleTesto = (r: RigaForm) => { const m = r.inizio && r.fine ? r.totaleScrittoMin : r.durataMin; return m == null ? '' : ore(m * 60); };
+  const totaleTesto = (r: RigaForm) => { const m = r.inizio && r.fine ? r.totaleScrittoMin : r.durataMin; return m == null ? '' : scriviTempo(m * 60); };
   const riga = (r: Partial<RigaForm>, k: number | string, errore = false) => html`
     <tr class="${errore ? 'riga-errore' : ''} ${typeof k === 'number' && esito?.lette && k >= esito.lette.da && k < righe.length ? 'riga-letta' : ''} ${typeof k === 'number' && esito?.lette?.incerte.has(k) ? 'riga-incerta' : ''}">
       <td class="n num-riga">${typeof k === 'number' ? k + 1 : ''}</td>
@@ -436,7 +437,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
       <td><input type="date" name="righe[${k}][data]" value="${r.data ?? ''}"></td>
       <td><input type="time" name="righe[${k}][apertura]" value="${r.inizio ?? ''}"></td>
       <td><input type="time" name="righe[${k}][chiusura]" value="${r.fine ?? ''}"></td>
-      <td><input name="righe[${k}][totale]" value="${r.fase ? totaleTesto(r as RigaForm) : ''}" placeholder="h:mm" class="corto" data-totale></td>
+      <td><input name="righe[${k}][totale]" value="${r.fase ? totaleTesto(r as RigaForm) : ''}" placeholder="1.30" class="corto" inputmode="decimal" data-tempo="minuti" data-totale></td>
       <td><input name="righe[${k}][persone]" value="${r.persone ?? ''}" inputmode="decimal" class="cortissimo"></td>
       <td><input name="righe[${k}][pezzi]" value="${r.pezzi ?? ''}" inputmode="numeric" class="cortissimo"></td>
       <td><select name="righe[${k}][tipo]"><option ${r.tipo !== 'P' ? raw('selected') : ''}>S</option><option ${r.tipo === 'P' ? raw('selected') : ''}>P</option></select></td>

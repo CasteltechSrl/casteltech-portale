@@ -53,3 +53,5 @@ details summary { cursor: pointer; padding: .8rem 0; color: var(--accento); font
 .griglia-sigle .sigla:has(input:checked) { border-color: var(--accento); background: var(--accento-chiaro); }
 .accesso .pin { display: flex; flex-direction: column; gap: .3rem; font-weight: 600; }
 .accesso .pin input { font-size: 1.6rem; letter-spacing: .4em; text-align: center; padding: .6rem; border-radius: 8px; border: 1px solid var(--bordo); }
+.modulo-reparto label small.lettura-tempo { font-weight: 700; font-size: 1.05rem; color: var(--positivo); }
+.modulo-reparto label small.lettura-tempo.errata { color: #b42318; }

@@ -417,3 +417,8 @@ tr.riga-incerta td { background: #fff2cc; }
 /* Tasti Elimina (righe inserite per errore) */
 form.elimina-azienda { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #eee; }
 td.nowrap form.inline { margin-left: .4rem; }
+
+/* caselle dei tempi (public/tempi.js): come è stato capito il tempo scritto */
+.lettura-tempo { font-weight: 600; color: var(--positivo); min-height: 1.2em; }
+.lettura-tempo.errata { color: #b42318; }
+input.tempo-errato { border-color: #b42318 !important; background: #fdecec; }
