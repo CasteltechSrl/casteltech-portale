@@ -17,7 +17,7 @@ import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
-import { soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
+import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
 import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
@@ -155,19 +155,30 @@ export function rotteCommesse() {
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
     const msg = req.query.ok === 'conferma' ? 'Rientro confermato' : req.query.ok ? 'Salvato' : undefined;
-    const presenti = await rilevazioniCommessa(c.id);
+    // fasi fatte insieme su una riga ("FASI 5+6 INSIEME"): il tempo si divide come da preventivo, l'ufficio controlla e salva
+    const fasi = await fasiCommessa(c);
+    const numeri = new Map([...(await fasiConNumeroAttuale(await leggiPreventivo(c.preventivo_id))), ...fasi]
+      .map(f => [String(f.numero).toUpperCase(), f.codice] as [string, string]));
+    const ripartisci = <T extends RigaForm>(rs: T[]) => ripartisciFasiInsieme(rs, fasi, numeri);
+    const giaSalvate = ripartisci(await rilevazioniCommessa(c.id));
+    const presenti = giaSalvate.righe;
+    const avvisoRipartite = (rip: { riga: number; fasi: string }[], da = 0) => rip.length
+      ? ` ${rip.map(x => `Riga ${da + x.riga + 1} (fasi ${x.fasi} insieme)`).join(', ')}: tempo diviso tra le fasi in proporzione al preventivo, controlla e premi Salva.` : '';
     // righe lette dalla scansione della scheda (Ordini → Da acquisire): si aggiungono in fondo, senza ripetere quelle già presenti
     const acq = Number(req.query.acquisizione) || null;
     const letta = acq ? (await q1(`SELECT proposta FROM acquisizioni WHERE id = $1 AND tipo = 'scheda_produzione'`, [acq]))?.proposta?.commesse
       ?.find((x: any) => x.commessaId === c.id) : null;
     if (letta && !letta.fatto) {   // già salvate una volta: non si riaggiungono
-      const nuove = soloNuove(letta.righe as RigaScansione[], presenti as any[]) as RigaScansione[];
+      const lette = ripartisci(letta.righe as (RigaScansione & RigaForm)[]);
+      const nuove = soloNuove(lette.righe, presenti as any[]) as RigaScansione[];
       return res.send(await paginaRientro(req, c, [...presenti, ...nuove], {
-        messaggio: `${nuove.length} righe lette dalla scansione aggiunte in fondo (evidenziate${letta.righe.length > nuove.length ? `; ${letta.righe.length - nuove.length} erano già presenti` : ''}): controlla e premi Salva.`,
+        messaggio: `${nuove.length} righe lette dalla scansione aggiunte in fondo (evidenziate${lette.righe.length > nuove.length ? `; ${lette.righe.length - nuove.length} erano già presenti` : ''}): controlla e premi Salva.`
+          + avvisoRipartite(giaSalvate.ripartite) + (lette.ripartite.length ? ' Le righe lette con più fasi insieme sono state divise allo stesso modo.' : ''),
         lette: { da: presenti.length, incerte: new Set(nuove.flatMap((r, k) => (r.incerta ? [presenti.length + k] : []))), acquisizione: acq! },
       }));
     }
-    res.send(await paginaRientro(req, c, presenti, { messaggio: msg }));
+    const rip = avvisoRipartite(giaSalvate.ripartite);
+    res.send(await paginaRientro(req, c, presenti, { messaggio: [msg, rip.trim()].filter(Boolean).join('. ') || undefined }));
   });
 
   r.post('/:id/rientro', async (req, res) => {
