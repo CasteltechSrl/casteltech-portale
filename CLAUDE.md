@@ -153,7 +153,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    ✅ Menu Amministrazione (`rotte/amministrazione.ts`, `documenti-servizio.ts`): elenco documenti per tipo/anno (anche storico FIC), documenti ricevuti;
    fattura / nota di credito: bozza (cliente SOLO dall'anagrafica, righe, DDT da fatturare del cliente, IVA predefinita del cliente) → Emetti:
    numero in transazione, scadenza dalla condizione di pagamento, XML FatturaPA (`engine/fatturapa.ts`: TD01/TD04, lettera d'intento in
-   AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma.
+   AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma. Bozza senza errori: "Scarica XML di prova" (numero 0, non consuma la numerazione).
+   ✅ Cruscotto (`/amministrazione`, `rotte/cruscotto-amministrazione.ts`, conti in `engine/cruscotto-amministrazione.ts`; Adriano 27/10/2026): fatturato e acquisti
+   dell'anno con lo stesso periodo dell'anno prima, grafico per mese, incassi e pagamenti aperti per urgenza (scadute, 7 gg, 30 gg, oltre), DDT da fatturare, bozze.
+   Fatture fornitori (`/amministrazione/ricevuti`): elenco, "solo da pagare", dettaglio; ogni rata (anche delle fatture emesse) si segna incassata/pagata con data e conto.
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
    ⬜ PDF della fattura, Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,

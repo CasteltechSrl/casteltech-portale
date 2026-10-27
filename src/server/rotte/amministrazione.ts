@@ -8,6 +8,7 @@ import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
+import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import {
   TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, salvaBozza,
@@ -21,6 +22,31 @@ const NOMI: Record<string, { uno: string; tanti: string }> = {
 const STATI: Record<string, string> = { bozza: 'Bozza', emesso: 'Emesso', inviato: 'Inviato allo SdI', consegnato: 'Consegnato',
   non_consegnato: 'Non consegnato', scartato: 'Scartato', annullato: 'Annullato' };
 const RIGHE_VUOTE = 3;
+const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+// tabelle delle rate: documenti emessi (incassi) e fatture dei fornitori (pagamenti)
+const SCADENZE = { documenti: 'documenti_scadenze', ricevuti: 'documenti_ricevuti_scadenze' } as const;
+
+/** Conti già usati per incassi e pagamenti (Bper, Carta di Credito…), da proporre quando si segna una rata. */
+async function contiUsati(): Promise<string[]> {
+  const righe = await q<{ conto: string }>(`SELECT conto FROM (SELECT conto FROM documenti_scadenze UNION ALL SELECT conto FROM documenti_ricevuti_scadenze) x
+    WHERE coalesce(conto, '') <> '' GROUP BY conto ORDER BY count(*) DESC`);
+  return righe.map(r => r.conto);
+}
+
+/** Rate di un documento con "Segna incassata/pagata" (data e conto) o "annulla". */
+function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, conti: string[]): Raw {
+  if (!scadenze.length) return html``;
+  const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
+  return html`<h2>Scadenze</h2><datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
+    <ul class="scadenze">${scadenze.map(s => html`<li>${data(s.data)}: <strong>${euro(Number(s.importo))}</strong> ${s.pagata_il
+      ? html`<span class="stato doc-consegnato">${parola} il ${data(s.pagata_il)}${s.conto ? ` (${s.conto})` : ''}</span>
+        <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline" data-conferma="Segnare la rata come non ${parola}?">
+          <input type="hidden" name="annulla" value="1"><button class="link">annulla</button></form>`
+      : html`<span class="stato doc-bozza">da ${sezione === 'documenti' ? 'incassare' : 'pagare'}</span>
+        <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline">
+          <input type="date" name="pagata_il" value="${oggiRoma()}" required> <input name="conto" list="conti" placeholder="Conto" value="${conti[0] ?? ''}" class="corto">
+          <button>Segna ${parola}</button></form>`}</li>`)}</ul>`;
+}
 
 export function rotteAmministrazione() {
   const r = Router();
@@ -28,7 +54,10 @@ export function rotteAmministrazione() {
     String(layout({ titolo, utente: req.session.utente, attiva: 'amministrazione', contenuto, avviso, script, largo: true }));
   const msg = (req: Request) => (req.query.msg ? String(req.query.msg) : undefined);
 
-  r.get('/', (_req, res) => res.redirect('/amministrazione/documenti'));
+  r.get('/', async (req, res) => {
+    res.send(pagina(req, 'Amministrazione', html`<div class="intestazione-pagina"><h1>Amministrazione</h1></div>
+      ${menuAmministrazione('cruscotto')}${await contenutoCruscotto()}`, msg(req)));
+  });
 
   r.get('/documenti', async (req, res) => {
     const tipo = String(req.query.tipo ?? 'fattura');
@@ -47,8 +76,8 @@ export function rotteAmministrazione() {
       <div class="intestazione-pagina"><h1>Amministrazione</h1>
         <div class="azioni">
           <a href="/amministrazione/documenti/nuovo?tipo=fattura" class="bottone primario">+ Nuova fattura</a>
-          <a href="/amministrazione/ricevuti" class="bottone">Documenti ricevuti</a>
         </div></div>
+      ${menuAmministrazione('documenti')}
       <nav class="tasti-sezione">${Object.entries(NOMI).map(([k, v]) =>
         html`<a href="/amministrazione/documenti?tipo=${k}&anno=${anno}" class="${k === tipo ? 'attivo' : ''}">${v.tanti}</a>`)}</nav>
       <form class="cerca" method="get">
@@ -126,8 +155,7 @@ export function rotteAmministrazione() {
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
         </table></div>
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
-        ${scadenze.length ? html`<h2>Scadenze</h2><ul>${scadenze.map(s => html`<li>${data(s.data)}: ${euro(s.importo)} ${s.pagata_il
-          ? html`<span class="stato doc-consegnato">pagata il ${data(s.pagata_il)}${s.conto ? ` (${s.conto})` : ''}</span>` : html`<span class="stato doc-bozza">aperta</span>`}</li>`)}</ul>` : ''}
+        ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
           ${d.tipo === 'fattura' && d.cliente_id ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-credito" class="inline"
@@ -185,6 +213,7 @@ export function rotteAmministrazione() {
           <form method="post" action="/amministrazione/documenti/${id}/emetti" class="inline"
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
+          ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
           <form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
             <button class="pericolo">Elimina bozza</button></form>
         </div>
@@ -235,31 +264,100 @@ export function rotteAmministrazione() {
     res.send(d.xml);
   });
 
+  // bozza: l'XML che si emetterebbe, con numero 0, per controllarlo (es. sul sito dell'Agenzia) senza consumare la numerazione
+  r.get('/documenti/:id/xml-prova', async (req, res) => {
+    const id = Number(req.params.id);
+    const d = await q1(`SELECT stato FROM documenti WHERE id = $1`, [id]);
+    if (d?.stato !== 'bozza') return res.status(404).send('XML di prova solo per le bozze');
+    const { esito } = await anteprimaDocumento(id);
+    if (esito.errori.length) return res.status(400).send(`Da sistemare prima: ${esito.errori.join(' ')}`);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${esito.nomeFile.replace('.xml', '_PROVA.xml')}"`);
+    res.send(esito.xml);
+  });
+
   r.get('/ricevuti', async (req, res) => {
     const anno = Number(req.query.anno) || new Date().getFullYear();
     const cerca = String(req.query.q ?? '').trim();
-    const righe = await q(`SELECT d.*, f.ragione_sociale,
-        (SELECT coalesce(sum(importo), 0) FROM documenti_ricevuti_scadenze s WHERE s.documento_id = d.id AND s.pagata_il IS NULL)::float AS da_pagare
-      FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
-      WHERE extract(year FROM d.data) = $1 AND ($2 = '' OR coalesce(f.ragione_sociale, d.intestatario->>'nome', '') ILIKE '%' || $2 || '%' OR d.numero ILIKE $2)
-      ORDER BY d.data DESC, d.id DESC`, [anno, cerca]);
-    const totale = righe.reduce((s, d) => s + (d.tipo === 'nota_credito' ? -1 : 1) * Number(d.imponibile), 0);
-    res.send(pagina(req, 'Documenti ricevuti', html`
-      <p><a href="/amministrazione/documenti">← Amministrazione</a></p>
-      <h1>Documenti ricevuti</h1>
+    const daPagare = req.query.da_pagare === '1';
+    // "da pagare": tutte quelle con rate aperte, di qualsiasi anno
+    const righe = await q(`SELECT * FROM (SELECT d.*, f.ragione_sociale,
+        (SELECT coalesce(sum(importo), 0) FROM documenti_ricevuti_scadenze s WHERE s.documento_id = d.id AND s.pagata_il IS NULL)::float AS da_pagare,
+        (SELECT min(data) FROM documenti_ricevuti_scadenze s WHERE s.documento_id = d.id AND s.pagata_il IS NULL) AS prossima
+      FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id) d
+      WHERE ($3 OR extract(year FROM d.data) = $1) AND (NOT $3 OR d.da_pagare <> 0)
+        AND ($2 = '' OR coalesce(d.ragione_sociale, d.intestatario->>'nome', '') ILIKE '%' || $2 || '%' OR d.numero ILIKE $2)
+      ORDER BY ${daPagare ? 'd.prossima, d.id' : 'd.data DESC, d.id DESC'}`, [anno, cerca, daPagare]);
+    const anni = (await q<{ anno: number }>(`SELECT DISTINCT extract(year FROM data)::int AS anno FROM documenti_ricevuti ORDER BY 1 DESC`)).map(a => a.anno);
+    if (!anni.includes(anno)) anni.unshift(anno);
+    const segno = (d: any) => (d.tipo === 'nota_credito' ? -1 : 1);
+    const totale = righe.reduce((s, d) => s + segno(d) * Number(d.imponibile), 0);
+    const totaleDaPagare = righe.reduce((s, d) => s + segno(d) * d.da_pagare, 0);
+    const oggi = oggiRoma();
+    res.send(pagina(req, 'Fatture fornitori', html`
+      <div class="intestazione-pagina"><h1>Amministrazione</h1></div>
+      ${menuAmministrazione('ricevuti')}
       <form class="cerca" method="get">
-        <input name="anno" value="${anno}" class="corto" inputmode="numeric">
-        <input name="q" value="${cerca}" placeholder="Fornitore o numero"><button>Cerca</button>
+        <select name="anno" ${daPagare ? raw('disabled') : ''}>${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
+        <input name="q" value="${cerca}" placeholder="Fornitore o numero">
+        <label class="riga-spunta"><input type="checkbox" name="da_pagare" value="1" ${daPagare ? raw('checked') : ''}> solo da pagare (tutti gli anni)</label>
+        <button>Cerca</button>
       </form>
-      <p class="nota">${righe.length} documenti · imponibile ${euro(totale)}. Per ora dallo storico di Fatture in Cloud; poi arriveranno dallo SdI.</p>
+      <p class="nota">${righe.length} documenti${daPagare ? html` · da pagare ${euro(totaleDaPagare)}` : html` · imponibile ${euro(totale)}`}.
+        Per ora dallo storico di Fatture in Cloud; poi arriveranno dallo SdI.</p>
       <div class="tabella-scorre limitata"><table class="elenco">
-        <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th></tr></thead>
-        <tbody>${righe.map(d => html`<tr>
+        <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th><th>Scadenza</th></tr></thead>
+        <tbody>${righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">
           <td>${data(d.data)}</td><td>${d.ragione_sociale ?? d.intestatario?.nome ?? ''}</td>
-          <td>${d.tipo === 'nota_credito' ? html`<span class="etichetta">NC</span> ` : ''}${d.numero}</td>
+          <td><a href="/amministrazione/ricevuti/${d.id}">${d.tipo === 'nota_credito' ? html`<span class="etichetta">NC</span> ` : ''}${d.numero || 'senza n.'}</a></td>
           <td><span class="nota taglia">${d.descrizione ?? ''}</span></td>
           <td class="num">${euro(Number(d.imponibile))}</td><td class="num">${euro(Number(d.totale))}</td>
-          <td class="num">${d.da_pagare ? euro(d.da_pagare) : ''}</td></tr>`)}</tbody></table></div>`, msg(req)));
+          <td class="num">${d.da_pagare ? euro(d.da_pagare) : ''}</td><td>${d.prossima ? data(d.prossima) : ''}</td></tr>`)}</tbody></table></div>`, msg(req)));
+  });
+
+  r.get('/ricevuti/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    const d = await q1(`SELECT d.*, f.ragione_sociale, f.id AS anagrafica_id FROM documenti_ricevuti d
+      LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.id = $1`, [id]);
+    if (!d) return res.status(404).send('Documento non trovato');
+    const scadenze = await q(`SELECT * FROM documenti_ricevuti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
+    const it = d.intestatario ?? {};
+    const titolo = `${d.tipo === 'nota_credito' ? 'Nota di credito' : 'Fattura'} ${d.numero ? `n. ${d.numero}` : ''} di ${d.ragione_sociale ?? it.nome ?? ''}`;
+    res.send(pagina(req, titolo, html`<p><a href="/amministrazione/ricevuti?anno=${d.data.slice(0, 4)}">← Fatture fornitori</a></p>
+      <div class="intestazione-pagina"><h1>${titolo}</h1><div class="azioni">
+        ${d.origine === 'fic' ? html`<span class="etichetta">da Fatture in Cloud</span>` : ''}${d.elettronica ? '' : html` <span class="etichetta">non elettronica</span>`}</div></div>
+      <dl class="dati-ordine">
+        <dt>Data</dt><dd>${data(d.data)}</dd>
+        <dt>Fornitore</dt><dd>${d.anagrafica_id ? html`<a href="/anagrafiche/fornitori/${d.anagrafica_id}">${d.ragione_sociale}</a>`
+          : html`${it.nome ?? ''} <span class="nota">(non in anagrafica)</span>`}</dd>
+        ${it.partita_iva || it.codice_fiscale ? html`<dt>P.IVA / C.F.</dt><dd>${[...new Set([/^(IT|ITALIA)$/i.test(it.paese ?? '') ? '' : it.paese, it.partita_iva, it.codice_fiscale])].filter(Boolean).join(' · ')}</dd>` : ''}
+        ${it.indirizzo ? html`<dt>Indirizzo</dt><dd>${[it.indirizzo, it.cap, it.comune, it.provincia].filter(Boolean).join(' ')}</dd>` : ''}
+        ${d.descrizione ? html`<dt>Descrizione</dt><dd>${d.descrizione}</dd>` : ''}
+        ${d.categoria ? html`<dt>Categoria</dt><dd>${d.categoria}</dd>` : ''}
+      </dl>
+      <p class="totali-documento">Imponibile ${euro(Number(d.imponibile))} · IVA ${euro(Number(d.imposta))} · <strong>Totale ${euro(Number(d.totale))}</strong></p>
+      ${elencoScadenze(scadenze, 'ricevuti', await contiUsati())}
+      ${d.xml ? html`<p><a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : ''}`, msg(req)));
+  });
+
+  r.get('/ricevuti/:id/xml', async (req, res) => {
+    const d = await q1(`SELECT xml, id FROM documenti_ricevuti WHERE id = $1 AND xml IS NOT NULL`, [Number(req.params.id)]);
+    if (!d) return res.status(404).send('XML non disponibile');
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="fattura_fornitore_${d.id}.xml"`);
+    res.send(d.xml);
+  });
+
+  // rata incassata / pagata (data e conto) o annullata; poi si torna al documento
+  for (const sezione of Object.keys(SCADENZE) as (keyof typeof SCADENZE)[]) r.post(`/${sezione}/scadenze/:id`, async (req, res) => {
+    const annulla = req.body.annulla === '1';
+    const giorno = String(req.body.pagata_il ?? '');
+    if (!annulla && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) return res.redirect(req.get('referer') ?? '/amministrazione');
+    const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3 WHERE id = $1 RETURNING documento_id`,
+      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null]);
+    const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
+    res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.`)}`
+      : '/amministrazione');
   });
 
   return r;
