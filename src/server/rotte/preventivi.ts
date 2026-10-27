@@ -42,7 +42,8 @@ export function rottePreventivi() {
       contenuto: html`
       <div class="intestazione-pagina">
         <h1>Preventivi</h1>
-        <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a>
+        <div><a class="bottone" href="/preventivi/documenti" title="Carica BOM, pick and place e Gerber del cliente: il portale li controlla e conta i componenti">Da documenti del cliente</a>
+        <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
       <form method="post" action="/preventivi/azioni" id="azioni-elenco">
