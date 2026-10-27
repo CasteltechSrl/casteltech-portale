@@ -117,3 +117,184 @@ export function preparaAzienda(input: Record<string, unknown>): { azienda: DatiA
   if ((a.rea_ufficio || a.rea_numero) && !(/^[A-Z]{2}$/.test(a.rea_ufficio) && a.rea_numero)) errori.push('REA: servono sigla della provincia dell\'ufficio e numero.');
   return { azienda: a, errori };
 }
+
+// ── Dati fiscali dei clienti (dall'anagrafica di Fatture in Cloud) ──
+
+/** Nome del paese (come in FIC) → sigla ISO della fattura elettronica. */
+const NAZIONI: Record<string, string> = {
+  ITALIA: 'IT', 'STATI UNITI': 'US', SVIZZERA: 'CH', CINA: 'CN', SVEZIA: 'SE', IRLANDA: 'IE', 'PAESI BASSI': 'NL', FRANCIA: 'FR',
+  NORVEGIA: 'NO', GERMANIA: 'DE', SPAGNA: 'ES', AUSTRIA: 'AT', BELGIO: 'BE', POLONIA: 'PL', 'REGNO UNITO': 'GB', 'SAN MARINO': 'SM',
+  'REPUBBLICA CECA': 'CZ', SLOVENIA: 'SI', ROMANIA: 'RO', UNGHERIA: 'HU', PORTOGALLO: 'PT', DANIMARCA: 'DK', FINLANDIA: 'FI', LUSSEMBURGO: 'LU',
+};
+export function siglaNazione(paese: unknown): string | null {
+  const p = String(paese ?? '').trim().toUpperCase();
+  if (!p) return 'IT';
+  if (/^[A-Z]{2}$/.test(p)) return p;
+  return NAZIONI[p] ?? null;
+}
+
+export interface CondizioneDaFile { codice: string; descrizione: string; modalita: string; giorni: number; fine_mese: boolean }
+
+/**
+ * Condizione di pagamento dal metodo di FIC: "RI.BA. …" = RiBa, "Contanti", altrimenti bonifico.
+ * I metodi RiBa "per cliente" di FIC (RI.BA LPS, RI.BA. ARTEL…) diventano la RiBa standard con gli stessi giorni.
+ */
+export function condizioneDaFic(metodo: unknown, giorni: unknown, fineMese: unknown): CondizioneDaFile | null {
+  const m = String(metodo ?? '').toUpperCase();
+  const g = Math.max(0, Math.trunc(Number(giorni) || 0));
+  const fm = !!fineMese && g > 0;
+  if (!m && !g) return null;
+  if (m.includes('CONTANT')) return { codice: 'CONTANTI', descrizione: 'Contanti', modalita: 'MP01', giorni: 0, fine_mese: false };
+  const riba = /RI\.?\s?BA/.test(m);
+  const [sigla, nome, modalita] = riba ? ['RB', 'RiBa', 'MP12'] : ['BB', 'Bonifico bancario', 'MP05'];
+  if (!riba && g === 0) return { codice: 'BB_VISTA', descrizione: 'Bonifico bancario a vista', modalita, giorni: 0, fine_mese: false };
+  return { codice: `${sigla}_${g}${fm ? 'FM' : ''}`, descrizione: `${nome} ${g} gg${fm ? ' f.m.' : ' data fattura'}`, modalita, giorni: g, fine_mese: fm };
+}
+
+/** Aliquota predefinita del cliente dalla descrizione di FIC (null = IVA 22%, quella normale). */
+export function aliquotaDaFic(descrizione: unknown, percentuale: unknown): { codice: string | null; avviso: string | null } {
+  const d = String(descrizione ?? '').toUpperCase();
+  if (Number(percentuale) > 0 || (!d && percentuale == null)) return { codice: null, avviso: null };
+  if (/8\s*\/\s*C|LETTERA C|INTENTO/.test(d)) return { codice: 'INTENTO', avviso: null };
+  if (/LETTERA A|LETTERA B|ESTERO/.test(d)) return { codice: 'EXPORT', avviso: null };
+  if (/41/.test(d)) return { codice: 'UE_BENI', avviso: null };
+  return { codice: null, avviso: `aliquota "${String(descrizione)}" non riconosciuta: lasciata IVA 22%, da scegliere a mano` };
+}
+
+export interface ClienteFiscale {
+  ragione_sociale: string; partita_iva: string | null; codice_fiscale: string | null; indirizzo: string | null; cap: string | null;
+  comune: string | null; provincia: string | null; nazione: string; codice_sdi: string | null; pec: string | null;
+  email_amministrazione: string | null; banca_appoggio: string | null; condizione: CondizioneDaFile | null; aliquota_iva: string | null;
+  intento: { protocollo: string; data: string } | null; pubblica_amministrazione: boolean;
+}
+
+const testo = (v: unknown) => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s || null; };
+const maiusc = (v: unknown) => testo(v)?.toUpperCase() ?? null;
+
+/** Riga del file (anagrafica clienti di FIC) → dati fiscali del cliente nel portale, con gli avvisi da mostrare. */
+export function preparaClienteFiscale(x: any): { cliente: ClienteFiscale; avvisi: string[] } {
+  const avvisi: string[] = [];
+  const nazione = siglaNazione(x.paese);
+  if (!nazione) avvisi.push(`paese "${x.paese}" sconosciuto: messo IT, da correggere`);
+  const iva = aliquotaDaFic(x.iva?.descrizione, x.iva?.percentuale);
+  if (iva.avviso) avvisi.push(iva.avviso);
+  let sdi = maiusc(x.codice_sdi);
+  const pa = String(x.tipo ?? '') === 'pa' || (!!sdi && sdi.length === 6);
+  if (sdi && !(pa ? /^[A-Z0-9]{6}$/ : /^[A-Z0-9]{7}$/).test(sdi)) { avvisi.push(`codice SDI "${sdi}" non valido: tolto`); sdi = null; }
+  const pec = testo(x.pec)?.toLowerCase() ?? null;
+  if ((nazione ?? 'IT') === 'IT' && !sdi && !pec) avvisi.push('senza codice SDI né PEC: la fattura andrà nel cassetto fiscale (codice 0000000)');
+  const piva = maiusc(x.partita_iva)?.replace(/[\s.\-]/g, '').replace(/^IT(?=\d{11}$)/, '') ?? null;
+  const intento = x.intento?.protocollo && /^\d{4}-\d{2}-\d{2}$/.test(String(x.intento.data ?? ''))
+    ? { protocollo: String(x.intento.protocollo).trim(), data: String(x.intento.data) } : null;
+  return {
+    cliente: {
+      ragione_sociale: maiusc(x.ragione_sociale) ?? '', partita_iva: piva, codice_fiscale: maiusc(x.codice_fiscale)?.replace(/\s/g, '') ?? null,
+      indirizzo: maiusc(x.indirizzo), cap: testo(x.cap), comune: maiusc(x.comune), provincia: maiusc(x.provincia), nazione: nazione ?? 'IT',
+      codice_sdi: sdi, pec, email_amministrazione: testo(x.email)?.toLowerCase() ?? null,
+      banca_appoggio: maiusc(x.iban)?.replace(/\s/g, '') ?? null,
+      condizione: condizioneDaFic(x.pagamento?.metodo, x.pagamento?.giorni, x.pagamento?.fine_mese),
+      aliquota_iva: iva.codice, intento, pubblica_amministrazione: pa,
+    },
+    avvisi,
+  };
+}
+
+/**
+ * Anno a cui vale una lettera d'intento: quelle protocollate a dicembre valgono di solito per l'anno dopo
+ * (es. GALILEO 17/12/2025 → 2026). Si corregge a mano se serve.
+ */
+export const annoLetteraIntento = (data: string) => Number(data.slice(0, 4)) + (data.slice(5, 7) === '12' ? 1 : 0);
+
+// ── Storico dei documenti da Fatture in Cloud ──
+
+/** Codice dell'aliquota del portale per una riga di FIC (IVA 22/10/4 % o non imponibile riconosciuto); null se non si sa. */
+export function aliquotaRigaFic(iva: { descrizione?: unknown; percentuale?: unknown } | null | undefined): string | null {
+  const p = Number(iva?.percentuale ?? 0);
+  if (p === 22 || p === 10 || p === 4) return `IVA${p}`;
+  if (p > 0) return null;
+  return aliquotaDaFic(iva?.descrizione, 0).codice;
+}
+
+/**
+ * Numero e anno della fattura citata in una nota di credito ("relativa alla fattura nr. 11/2025 del 31/01/2025",
+ * "Rif. Ns Fattura n.21/2025", "storno parziale Nostra Ft 52 del 30/04/2025"); null se il testo non ne cita una.
+ */
+export function fatturaCitata(testo: unknown): { numero: number; anno: number } | null {
+  const m = /\b(?:fattura|ft)\.?\s*(?:nr?\.?|numero)?\s*(\d{1,6})(?:\s*\/\s*(\d{4}))?(?:\s+del\s+\d{1,2}[\/.-]\d{1,2}[\/.-](\d{4}))?/i.exec(String(testo ?? ''));
+  if (!m) return null;
+  const anno = Number(m[2] ?? m[3]);
+  return anno ? { numero: Number(m[1]), anno } : null;
+}
+
+const TIPI_STORICO = ['fattura', 'nota_credito', 'autofattura', 'ddt'] as const;
+export type TipoStorico = typeof TIPI_STORICO[number];
+const dataIso = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+const numeroO0 = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+export interface ScadenzaStorico { data: string; importo: number; pagata_il: string | null; conto: string | null }
+export interface RigaStorico { posizione: number; solo_descrizione: boolean; codice: string | null; descrizione: string; quantita: number; um: string | null; prezzo: number; sconto: number; aliquota_iva: string | null }
+export interface DocumentoStorico {
+  fic_id: number; tipo: TipoStorico; tipo_sdi: string | null; sezionale: string; anno: number; numero: number; data: string; stato: string;
+  intestatario: Record<string, string>; causale: string | null; note: string | null; modalita: string | null;
+  imponibile: number; imposta: number; bollo: number; totale: number; dati_trasporto: Record<string, unknown> | null;
+  fattura_fic_id: number | null; fattura_citata: { numero: number; anno: number } | null;
+  righe: RigaStorico[]; scadenze: ScadenzaStorico[];
+}
+
+/** Scadenze di FIC: quelle stornate (es. autofatture, che non si pagano al fornitore) non si portano. */
+function scadenzeFic(lista: unknown): ScadenzaStorico[] {
+  return (Array.isArray(lista) ? lista : [])
+    .filter((p: any) => p && p.stato !== 'reversed' && dataIso(p.data))
+    .map((p: any) => ({ data: p.data, importo: arrotonda2(numeroO0(p.importo)), pagata_il: p.stato === 'paid' ? dataIso(p.pagata_il) ?? p.data : null, conto: testo(p.conto) }));
+}
+
+/** Controlla e normalizza un documento emesso preso da FIC (file storico_fic.json.gz). */
+export function preparaDocumentoFic(x: any): { documento: DocumentoStorico | null; errore: string | null } {
+  const tipo = x?.tipo as TipoStorico;
+  const nome = `${x?.tipo ?? '?'} n. ${x?.numero ?? '?'} del ${x?.data ?? '?'}`;
+  if (!TIPI_STORICO.includes(tipo)) return { documento: null, errore: `${nome}: tipo non previsto` };
+  const data = dataIso(x.data);
+  const numero = Number(x.numero);
+  if (!data || !Number.isInteger(numero) || numero < 1 || !Number.isFinite(Number(x.fic_id))) return { documento: null, errore: `${nome}: numero, data o id mancanti` };
+  const intestatario = Object.fromEntries(Object.entries(x.intestatario ?? {}).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v));
+  const righe: RigaStorico[] = (Array.isArray(x.righe) ? x.righe : []).map((r: any, i: number) => {
+    const descrizione = String(r?.descrizione ?? '').trim();
+    const quantita = numeroO0(r?.quantita), prezzo = numeroO0(r?.prezzo);
+    // righe di solo testo: "DDT n. 86 del 27/04/2026", note… (prezzo 0 e senza codice)
+    const solo = prezzo === 0 && !testo(r?.codice) && (/^DDT\b/i.test(descrizione) || quantita <= 1) && tipo !== 'ddt';
+    return { posizione: i + 1, solo_descrizione: solo, codice: testo(r?.codice), descrizione, quantita, um: testo(r?.um), prezzo, sconto: numeroO0(r?.sconto),
+      aliquota_iva: solo ? null : aliquotaRigaFic(r?.iva) };
+  });
+  const stato = tipo === 'ddt' ? 'emesso' : (x.stato_sdi === 'sent' || x.stato_sdi === 'accepted' ? 'consegnato' : 'emesso');
+  return { errore: null, documento: {
+    fic_id: Number(x.fic_id), tipo, tipo_sdi: testo(x.tipo_sdi), sezionale: String(x.sezionale ?? '').trim().toUpperCase(),
+    anno: Number(data.slice(0, 4)), numero, data, stato, intestatario,
+    causale: testo(x.oggetto), note: testo(x.note), modalita: testo(x.pagamento?.modalita),
+    imponibile: arrotonda2(numeroO0(x.imponibile)), imposta: arrotonda2(numeroO0(x.imposta)), bollo: arrotonda2(numeroO0(x.bollo)), totale: arrotonda2(numeroO0(x.totale)),
+    dati_trasporto: tipo === 'ddt' && x.trasporto ? Object.fromEntries(Object.entries(x.trasporto).filter(([, v]) => v != null && v !== '')) : null,
+    fattura_fic_id: Number(x.fattura_fic_id) || null,
+    fattura_citata: tipo === 'nota_credito' ? fatturaCitata(x.oggetto) : null,
+    righe, scadenze: tipo === 'autofattura' || tipo === 'ddt' ? [] : scadenzeFic(x.scadenze),
+  } };
+}
+
+export interface RicevutoStorico {
+  fic_id: number; tipo: 'fattura' | 'nota_credito'; numero: string; data: string; intestatario: Record<string, string>;
+  partita_iva: string | null; descrizione: string | null; categoria: string | null;
+  imponibile: number; imposta: number; totale: number; elettronica: boolean; scadenze: ScadenzaStorico[];
+}
+
+/** Controlla e normalizza un documento ricevuto da un fornitore (fattura d'acquisto o nota di credito). */
+export function preparaRicevutoFic(x: any): { documento: RicevutoStorico | null; errore: string | null } {
+  const data = dataIso(x?.data);
+  if (!data || !Number.isFinite(Number(x?.fic_id))) return { documento: null, errore: `documento ricevuto ${x?.numero ?? '?'}: data o id mancanti` };
+  const f = x.fornitore ?? {};
+  const intestatario = Object.fromEntries(Object.entries(f).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v));
+  const piva = String(f.partita_iva ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^IT(?=\d{11}$)/, '');
+  return { errore: null, documento: {
+    fic_id: Number(x.fic_id), tipo: x.tipo === 'nota_credito' ? 'nota_credito' : 'fattura', numero: String(x.numero ?? '').trim(), data, intestatario,
+    partita_iva: piva || null, descrizione: testo(x.descrizione), categoria: testo(x.categoria),
+    imponibile: arrotonda2(numeroO0(x.imponibile)), imposta: arrotonda2(numeroO0(x.imposta)), totale: arrotonda2(numeroO0(x.totale)),
+    elettronica: x.elettronica !== false, scadenze: scadenzeFic(x.scadenze),
+  } };
+}

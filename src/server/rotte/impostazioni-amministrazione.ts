@@ -3,13 +3,14 @@
  * Sono i dati che finiscono su fatture, note di credito, autofatture e DDT emessi dal portale.
  * Aliquote e condizioni non si eliminano (possono essere già usate da clienti e documenti): si spengono con "Attiva".
  */
-import { Router, type Request } from 'express';
+import express, { Router, type Request } from 'express';
+import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, type CampoAzienda } from '../../engine/amministrazione.js';
-import { caricaAliquote, caricaAzienda, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
+import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
-type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string) => string;
+type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
 
 const ETICHETTE: Record<CampoAzienda, string> = {
   ragione_sociale: 'Ragione sociale', partita_iva: 'Partita IVA', codice_fiscale: 'Codice fiscale', regime_fiscale: 'Regime fiscale',
@@ -120,7 +121,62 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
           <td><input name="ordine" form="f-pag-nuova" inputmode="numeric" class="corto"></td>
           <td><input type="checkbox" name="attiva" form="f-pag-nuova" checked></td>
           <td><form method="post" action="/impostazioni/amministrazione/pagamenti" id="f-pag-nuova"><button class="primario">Aggiungi</button></form></td></tr>
-        </tbody></table></div>`, req.query.msg ? String(req.query.msg) : undefined));
+        </tbody></table></div>
+
+      <h2 id="clienti-fic">Dati fiscali dei clienti da Fatture in Cloud</h2>
+      <details class="blocco">
+        <summary>Carica il file clienti_fiscali_fic.json.gz (preparato da Claude)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Porta nei clienti GIÀ in anagrafica indirizzo, codice SDI, PEC, condizione di pagamento, aliquota predefinita e lettere d'intento.
+            I clienti di FIC che non sono in anagrafica si elencano e non si aggiungono. I campi vuoti nel file non cancellano quelli del portale.
+            Prima mostra un riepilogo e chiede conferma.</p>
+          <label>File <input type="file" id="file-clienti-fic" accept=".gz,.json"></label>
+          <button class="primario" type="button" id="carica-clienti-fic">Controlla il file</button>
+          <output id="esito-clienti-fic"></output>
+          <button class="primario" type="button" id="conferma-clienti-fic" hidden>Conferma e carica</button>
+        </div>
+      </details>
+
+      <h2 id="storico-fic">Storico dei documenti da Fatture in Cloud</h2>
+      <details class="blocco">
+        <summary>Carica il file storico_fic.json.gz (preparato da Claude)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Fatture, note di credito, autofatture e DDT emessi dal 2025, con righe e scadenze (incassate o aperte), più le fatture
+            e note di credito ricevute dai fornitori. Ricaricare il file aggiorna i documenti già caricati senza duplicarli; le numerazioni salgono
+            all'ultimo numero di Fatture in Cloud (mai scendono). I documenti restano anche se il cliente non è in anagrafica (con i suoi dati).
+            Prima mostra un riepilogo e chiede conferma.</p>
+          <label>File <input type="file" id="file-storico-fic" accept=".gz,.json"></label>
+          <button class="primario" type="button" id="carica-storico-fic">Controlla il file</button>
+          <output id="esito-storico-fic"></output>
+          <button class="primario" type="button" id="conferma-storico-fic" hidden>Conferma e carica</button>
+        </div>
+      </details>`, req.query.msg ? String(req.query.msg) : undefined, 'amministrazione.js'));
+  });
+
+  /** Legge il file caricato (JSON, anche compresso .gz). */
+  const leggiFile = (body: unknown): any => {
+    let b = body as Buffer;
+    if (!Buffer.isBuffer(b) || !b.length) throw new Error();
+    if (b[0] === 0x1f && b[1] === 0x8b) b = gunzipSync(b);
+    return JSON.parse(b.toString('utf8'));
+  };
+
+  r.post('/clienti-fic', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+    let righe: unknown[];
+    try {
+      righe = leggiFile(req.body).clienti;
+      if (!Array.isArray(righe)) throw new Error();
+    } catch { return res.status(400).json({ errore: 'File non valido: serve clienti_fiscali_fic.json.gz' }); }
+    res.json(await caricaClientiFiscali(righe, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/storico-fic', express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+    let dati: { documenti?: unknown[]; ricevuti?: unknown[] };
+    try {
+      dati = leggiFile(req.body);
+      if (!Array.isArray(dati.documenti) && !Array.isArray(dati.ricevuti)) throw new Error();
+    } catch { return res.status(400).json({ errore: 'File non valido: serve storico_fic.json.gz' }); }
+    res.json(await caricaStoricoFic(dati, { anteprima: req.query.conferma !== '1' }));
   });
 
   r.post('/azienda', async (req, res) => {

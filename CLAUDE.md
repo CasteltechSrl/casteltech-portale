@@ -146,5 +146,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    numerazioni per tipo/sezionale/anno (numero dato solo all'emissione, `assegnaNumero` in transazione, date in ordine; valori 2026 da FIC
    da riallineare il giorno del passaggio), aliquote/nature IVA con bollo 2 € oltre 77,47 €, condizioni di pagamento (giorni poi fine mese),
    dati fiscali dei clienti, lettere d'intento, tabelle `documenti` / `documenti_righe` / `documenti_scadenze` per tutti i documenti.
-   ⬜ Import storico FIC, fatture e note di credito (XML FatturaPA), Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
+   ✅ Da Fatture in Cloud (Impostazioni → Amministrazione, file preparati fuori dal repository, anteprima poi conferma, ricaricabili):
+   dati fiscali dei clienti già in anagrafica (`caricaClientiFiscali`) e storico dal 2025 (`caricaStoricoFic`, migrazione 033): fatture, note di
+   credito, autofatture, DDT in `documenti` (origine 'fic', `fic_id`), righe, scadenze incassate/aperte con il conto; DDT → fattura (`fattura_id`,
+   uniti in FIC o citati in una riga "DDT n. X del"); fatture/NC ricevute in `documenti_ricevuti` (+ scadenze). Le numerazioni salgono all'ultimo n. di FIC.
+   ⬜ Fatture e note di credito (XML FatturaPA), Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).
