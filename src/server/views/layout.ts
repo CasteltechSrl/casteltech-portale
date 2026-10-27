@@ -29,6 +29,7 @@ ${opz.utente ? html`
       ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
       ${voce('/commesse', 'Commesse', 'commesse')}
       ${voce('/componenti', 'Componenti', 'componenti')}
+      ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}
       ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
