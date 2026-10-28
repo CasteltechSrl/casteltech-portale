@@ -128,7 +128,7 @@ export async function importaOrdini(f: FileOrdini) {
 
 // ───────────────────────────── lettura ─────────────────────────────
 export interface RigaElenco extends RigaOrdine {
-  spedizioni: Abbinamento[];   // DDT e fatture del portale abbinati in automatico (oltre a quelli dell'import)
+  spedizioni: Abbinamento[];   // DDT del portale abbinati in automatico (oltre a quelli dell'import)
   numero: number; anno: number; dataOrdine: string | null; cliente: string; clienteId: number | null; rifCliente: string | null;
   codice: string | null; descrizione: string | null; codiceCliente: string | null; prodottoId: number | null; commessaId: number | null; note: string | null;
   stato: StatoRiga; lavorazione: string | null; prevista: string | null; ritardo: number | null; consegna: string | null;
@@ -136,33 +136,25 @@ export interface RigaElenco extends RigaOrdine {
 }
 
 /**
- * Righe di DDT e fatture che possono evadere gli ordini oltre a quelle già contate nell'import degli ordini:
+ * Righe di DDT che possono evadere gli ordini oltre a quelle già contate nell'import degli ordini:
  * - DDT del portale (storico di Fatture in Cloud ricaricato, poi quelli emessi dal portale) non presenti nell'import;
- * - fatture del portale senza DDT (vendita diretta) non presenti nell'import;
- * - righe di DDT e fatture senza DDT dell'import rimaste senza riga d'ordine.
+ * - righe di DDT dell'import rimaste senza riga d'ordine.
+ * Le fatture non contano: una fattura d'anticipo non vuol dire merce consegnata (Adriano, 28/10/2026, Botilift pagato prima).
  * Così l'evasione si aggiorna da sola anche dopo il 10/11/2026, quando Fatture in Cloud non c'è più.
  */
 async function righeSpedite(): Promise<RigaSpedita[]> {
   const righe = await q(`
     SELECT 'P' || r.id AS chiave, d.tipo, d.numero, d.data, d.cliente_id, r.codice, r.descrizione, r.quantita, r.riga_ordine_id
     FROM documenti d JOIN documenti_righe r ON r.documento_id = d.id
-    WHERE d.cliente_id IS NOT NULL AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato') AND NOT r.solo_descrizione AND r.quantita > 0
-      AND (
-        (d.tipo = 'ddt' AND NOT EXISTS (SELECT 1 FROM ddt_righe x WHERE x.anno = d.anno AND x.numero = d.numero))
-        OR (d.tipo = 'fattura' AND r.ddt_id IS NULL
-          AND NOT EXISTS (SELECT 1 FROM documenti z WHERE z.tipo = 'ddt' AND z.fattura_id = d.id)
-          AND NOT EXISTS (SELECT 1 FROM documenti_righe z WHERE z.documento_id = d.id AND z.solo_descrizione AND ltrim(z.descrizione) ILIKE 'DDT%')
-          AND NOT EXISTS (SELECT 1 FROM fatture_righe x WHERE x.anno = d.anno AND x.numero = d.numero)))
+    WHERE d.tipo = 'ddt' AND d.cliente_id IS NOT NULL AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato') AND NOT r.solo_descrizione AND r.quantita > 0
+      AND NOT EXISTS (SELECT 1 FROM ddt_righe x WHERE x.anno = d.anno AND x.numero = d.numero)
     UNION ALL
     SELECT 'D' || id, 'ddt', numero, data, cliente_id, codice, descrizione, quantita, NULL FROM ddt_righe
-    WHERE riga_id IS NULL AND cliente_id IS NOT NULL AND quantita > 0
-    UNION ALL
-    SELECT 'F' || id, 'fattura', numero, data, cliente_id, codice, descrizione, quantita, NULL FROM fatture_righe
-    WHERE riga_id IS NULL AND cliente_id IS NOT NULL AND quantita > 0 AND NOT intestazione AND ddt_numero IS NULL`);
+    WHERE riga_id IS NULL AND cliente_id IS NOT NULL AND quantita > 0`);
   const gma = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
   return righe.map(r => {
     const d = typeof r.data === 'string' ? r.data.slice(0, 10) : new Date(r.data).toISOString().slice(0, 10);
-    return { chiave: r.chiave, documento: `${r.tipo === 'ddt' ? 'DDT' : 'Fattura'} ${r.numero} del ${gma(d)}`, clienteId: r.cliente_id, data: d,
+    return { chiave: r.chiave, documento: `DDT ${r.numero} del ${gma(d)}`, clienteId: r.cliente_id, data: d,
       codice: r.codice, descrizione: r.descrizione, quantita: Number(r.quantita), rigaOrdineId: r.riga_ordine_id };
   });
 }
@@ -182,7 +174,7 @@ export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
     importoFatturato: r.importo_fatturato, statoManuale: r.stato_manuale, consegnaRichiesta: r.consegna_richiesta, arrivoMateriale: r.arrivo_materiale,
     dataLavorazione: r.data_lavorazione, ritardiProduzione: r.ritardi_produzione, consegnaPrevista: r.consegna_prevista, consegne: r.consegne,
   }));
-  // DDT e fatture del portale non ancora contati: si abbinano alle schede ancora da spedire
+  // DDT del portale non ancora contati: si abbinano alle schede ancora da spedire
   const aperte = base.flatMap((b, i) => b.tipo === 'scheda' && !b.statoManuale && b.quantita > b.quantitaSpedita + 0.01
     ? [{ id: b.id, clienteId: righe[i].cliente_id, dataOrdine: isoData(righe[i].data_ordine), codici: [righe[i].codice, righe[i].codice_cliente],
       descrizione: righe[i].descrizione, daSpedire: b.quantita - b.quantitaSpedita }] : []);

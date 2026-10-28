@@ -111,7 +111,7 @@ test('ordini: i servizi non sono da evadere da soli (Adriano, 28/10/2026)', () =
   assert.equal(statoRiga(s, [a, b, s]), 'evaso');
 });
 
-test('ordini: DDT e fatture del portale evadono le righe aperte dello stesso cliente e codice', () => {
+test('ordini: i DDT del portale evadono le righe aperte dello stesso cliente e codice', () => {
   const aperte = [
     { id: 1, clienteId: 7, dataOrdine: '2026-03-01', codici: ['WPAJZERO6'], descrizione: 'JZERO6', daSpedire: 100 },
     { id: 2, clienteId: 7, dataOrdine: '2026-09-01', codici: ['WPAJZERO6'], descrizione: 'JZERO6', daSpedire: 500 },

@@ -68,7 +68,7 @@ export function rotteOrdini() {
         ${righe.length ? html`<tfoot><tr><td colspan="10">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
       </table></div>
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
-        I DDT (e le fatture senza DDT) caricati nel portale si abbinano da soli alle righe aperte dello stesso cliente con lo stesso codice.
+        I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.
         Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum, trasporto) non sono da evadere da sole:
         sono evase quando sono fatturate o quando l'ordine non ha più schede da spedire.
         Consegna prevista = arrivo materiale + ${3} gg + ${5} gg + ritardi di produzione, come nel foglio.</p>`,
@@ -223,7 +223,7 @@ export function rotteOrdini() {
       <div class="due-colonne">
         <section><h2>DDT</h2>${ddt.length ? html`<table><thead><tr><th>DDT</th><th>Data</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
           <tbody>${ddt.map(d => html`<tr><td>${d.numero}</td><td>${data(d.data)}</td><td>${d.codice || d.descrizione}</td><td class="n">${num(d.quantita, 0)}</td></tr>`)}</tbody></table>` : spedizioni.length ? '' : html`<p class="nota">Nessun DDT.</p>`}
-          ${spedizioni.length ? html`<h3>Abbinati in automatico</h3><p class="nota">DDT e fatture senza DDT del portale con lo stesso cliente e lo stesso codice (o descrizione).
+          ${spedizioni.length ? html`<h3>Abbinati in automatico</h3><p class="nota">DDT del portale con lo stesso cliente e lo stesso codice (o descrizione).
             Se un abbinamento è sbagliato, scegli lo stato della riga a mano.</p>
             <table><thead><tr><th>Documento</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
             <tbody>${spedizioni.map(a => html`<tr><td>${a.documento}</td><td>${a.codice}</td><td class="n">${num(a.quantita, 0)}</td></tr>`)}</tbody></table>` : ''}</section>

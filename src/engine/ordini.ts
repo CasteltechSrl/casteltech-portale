@@ -131,7 +131,7 @@ export interface RigaAperta {
   descrizione: string | null;
   daSpedire: number;                        // quantità ordinata − già spedita
 }
-/** Riga di un DDT (o di una fattura senza DDT) del portale. rigaOrdineId: abbinata a mano, vale quella. */
+/** Riga di un DDT del portale. rigaOrdineId: abbinata a mano, vale quella. */
 export interface RigaSpedita {
   chiave: string;
   documento: string;                        // es. "DDT 215 del 26/10/2026"
@@ -149,7 +149,7 @@ const normale = (s: string | null | undefined) => String(s ?? '').toUpperCase().
 const codiceBuono = (s: string) => s.length >= 4 && !/^\d{1,4}$/.test(s);
 
 /**
- * Evasione dai documenti del portale (DDT e fatture senza DDT, dallo storico di Fatture in Cloud e poi emessi dal portale):
+ * Evasione dai DDT del portale (dallo storico di Fatture in Cloud e poi emessi dal portale; le fatture no: possono essere anticipi):
  * ogni riga spedita va alla riga d'ordine aperta dello stesso cliente con lo stesso codice (o la stessa descrizione),
  * ordinata prima della spedizione; prima gli ordini più vecchi, senza superare la quantità ordinata.
  * Quello che non trova posto resta fuori (spedizioni senza ordine o già contate).
