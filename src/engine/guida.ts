@@ -117,6 +117,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Ogni prodotto appartiene a un cliente. Nei preventivi codice e descrizione si scelgono solo da qui.',
       'Dall\'elenco dei clienti, il numero dei prodotti porta ai prodotti di quel cliente.',
+      'Se stai facendo un preventivo e il codice non c\'è, non serve uscire: nel preventivo premi "+ Nuovo prodotto" (vedi "Prodotto nuovo dal preventivo").',
     ],
     passi: ['Anagrafiche → Prodotti.', 'Scegli il cliente, scrivi codice e descrizione nella riga in alto e premi Aggiungi.'],
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
@@ -151,8 +152,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Il riquadro dei totali mostra prezzo a scheda, costi una tantum (solo nel primo lotto), margini e ore ciclo/uomo.',
       'Un preventivo salvato conserva le tariffe e le fasi del giorno in cui è stato fatto: se poi cambi le tariffe in Impostazioni, i preventivi vecchi non cambiano.',
     ],
-    passi: ['Preventivi → + Nuovo preventivo.', 'Cliente e prodotto, quantità.', 'Spunte delle informazioni generali.', 'Controlla fasi, materiali e altri costi.', 'Salva.'],
+    passi: ['Preventivi → + Nuovo preventivo.', 'Cliente, prodotto e revisione (se non è indicata scrivi 0), quantità.', 'Spunte delle informazioni generali.', 'Controlla fasi, materiali e altri costi.', 'Salva.'],
     pagine: [['/preventivi/nuovo', 'Nuovo preventivo'], ['/preventivi', 'Elenco preventivi']],
+  },
+  {
+    id: 'prodotto-nuovo-preventivo', area: 'preventivi', titolo: 'Prodotto nuovo dal preventivo (codice non in anagrafica)',
+    parole: 'prodotto nuovo codice manca non trovo elenco aggiungere anagrafica revisione zero descrizione scheda nuova inserire manualmente',
+    testo: [
+      'Se il prodotto è nuovo e il codice non è nell\'elenco del cliente, lo aggiungi all\'anagrafica direttamente dal preventivo, senza chiuderlo.',
+      'Servono tre cose, senza non si prosegue: codice, descrizione e revisione. Se il cliente non indica la revisione scrivi 0. Tutto viene salvato in MAIUSCOLO.',
+      'Se il codice c\'è già per quel cliente (anche scritto con trattini o spazi diversi) il portale non fa un doppione: sceglie quello dell\'elenco.',
+      'Nel preventivo compilato dai documenti del cliente codice, descrizione e revisione sono già proposti, letti dai file (righe in alto nella BOM, Gerber, GenCAD, nome della cartella come "EA1002-0"): sono da convalidare, controllali prima di premere "Aggiungi in anagrafica".',
+      'La revisione è obbligatoria anche per salvare qualunque preventivo.',
+    ],
+    passi: ['Nel preventivo scegli il cliente.', 'Premi "+ Nuovo prodotto" vicino al codice.', 'Scrivi codice, descrizione e revisione (0 se non c\'è).', 'Premi "Aggiungi in anagrafica": il prodotto viene scelto nel preventivo.', 'Premi Salva.'],
+    pagine: [['/preventivi/nuovo', 'Nuovo preventivo'], ['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
   },
   {
     id: 'documenti-cliente', area: 'preventivi', titolo: 'Preventivo dai documenti del cliente (BOM, pick and place, Gerber)',
@@ -173,6 +187,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Nella pagina dei documenti della scheda, "Crea il preventivo da validare" (scrivi quante schede) prepara il preventivo con le tariffe di oggi e i numeri letti: SMD e feeder per lato, lamine, THT a onda o a mano, stagno, pasta, item.',
       'Il preventivo resta "da validare": in alto c\'è l\'elenco delle cose da controllare (segnalazioni, lamine del cliente, THT da preparare). Quando l\'hai controllato, il primo Salva lo porta a bozza.',
+      'Se il prodotto non è ancora in anagrafica, codice, descrizione e revisione letti dai file sono già scritti nel riquadro "Nuovo prodotto": controllali e premi "Aggiungi in anagrafica".',
       'Il portale controlla anche le piazzole dei componenti chip sul Gerber con la norma IPC-7351: se la BOM dice 0603 ma le piazzole sono da 0805 (o il contrario) lo segnala come errore, prima di andare in macchina.',
     ],
     passi: ['Apri i documenti della scheda.', 'Scrivi il numero di schede e premi "Crea il preventivo da validare".', 'Controlla l\'elenco giallo, correggi, Salva.'],

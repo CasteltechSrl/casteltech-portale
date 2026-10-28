@@ -4,7 +4,8 @@
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
-import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { chiaveCodice, maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { controllaProdottoNuovo } from '../../engine/scheda/prodotto.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
@@ -88,6 +89,24 @@ export function rottePreventivi() {
     res.json(await prodottiPerCliente(Number(req.query.cliente) || 0));
   });
 
+  // prodotto nuovo scritto nel preventivo (Adriano 28/10/2026): va subito in anagrafica, senza uscire dal preventivo.
+  // Tutto maiuscolo; servono codice, descrizione e revisione (la revisione si salva con il preventivo).
+  r.post('/prodotti', async (req, res) => {
+    const clienteId = Number(req.body?.clienteId) || 0;
+    const cliente = clienteId ? await q1(`SELECT id FROM clienti WHERE id = $1`, [clienteId]) : undefined;
+    if (!cliente) return res.status(400).json({ errore: 'Scegli prima il cliente dall\'elenco.' });
+    const { valori, errore } = controllaProdottoNuovo(req.body ?? {});
+    if (errore) return res.status(400).json({ errore });
+    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente): si usa quello
+    const esistente = await q1<{ id: number; codice: string; descrizione: string | null }>(
+      `SELECT id, codice, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND (cliente_id = $2 OR cliente_id IS NULL)
+       ORDER BY cliente_id NULLS LAST, id LIMIT 1`, [chiaveCodice(valori.codice), clienteId]);
+    if (esistente) return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    const nuovo = await q1<{ id: number; codice: string; descrizione: string }>(
+      `INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1, $2, $3) RETURNING id, codice, descrizione`, [valori.codice, valori.descrizione, clienteId]);
+    res.json({ ...nuovo, revisione: valori.revisione, esisteva: false });
+  });
+
   // costo componenti a scheda dalla BOM scelta, ricalcolato sulle schede del preventivo
   r.get('/costo-bom', async (req, res) => {
     const x = await costoBomPerPreventivo(Number(req.query.bom) || 0, Number(req.query.schede) || 0);
@@ -135,7 +154,8 @@ export function rottePreventivi() {
     if (!cliente) return res.status(400).json({ errore: 'Scegli il cliente dall\'elenco' });
     const prodotto = dati.prodottoId ? await q1<{ codice: string; descrizione: string }>(
       `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [dati.prodottoId, dati.clienteId]) : undefined;
-    if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente' });
+    if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente (o aggiungilo con «Nuovo prodotto»)' });
+    if (!dati.revisione) return res.status(400).json({ errore: 'Scrivi la revisione del prodotto (se il cliente non la indica metti 0)' });
     Object.assign(dati, { cliente: maiuscolo(cliente.ragione_sociale), codice: maiuscolo(prodotto.codice), descrizione: maiuscolo(prodotto.descrizione) });
     if (!dati.nSchede) return res.status(400).json({ errore: 'Indica la quantità di schede' });
     if (!(dati.tariffe.ricarico > 0)) return res.status(400).json({ errore: 'Il ricarico deve essere maggiore di zero' });
@@ -261,6 +281,29 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
+/**
+ * Prodotto nuovo scritto nel preventivo (Adriano 28/10/2026): codice, descrizione e revisione obbligatori, tutto maiuscolo.
+ * Nel preventivo compilato dai documenti del cliente si apre già con i valori letti dai file, da convalidare.
+ */
+function riquadroNuovoProdotto(d: DatiPreventivo, salvato?: any): Raw {
+  const proposto = salvato?.stato === 'da_validare' && !d.prodottoId && !!d.codice;
+  return html`<div id="nuovo-prodotto" class="nuovo-prodotto" ${proposto ? '' : raw('hidden')}>
+    <p class="nota">${proposto
+      ? html`<b>Proposto dai documenti del cliente: da convalidare.</b> Controlla codice, descrizione e revisione, poi premi <b>Aggiungi in anagrafica</b>.`
+      : html`Prodotto non ancora in anagrafica: scrivi codice, descrizione e revisione (se il cliente non la indica scrivi <b>0</b>). Si salva tutto in maiuscolo.`}</p>
+    <div class="riga-campi">
+      <label>Codice <input id="np-codice" class="maiuscolo" maxlength="60" value="${proposto ? d.codice : ''}"></label>
+      <label class="largo">Descrizione <input id="np-descrizione" class="maiuscolo" maxlength="200" value="${proposto ? d.descrizione : ''}"></label>
+      <label class="stretto">Rev. <input id="np-revisione" class="maiuscolo" maxlength="20" placeholder="0" value="${proposto ? d.revisione : ''}"></label>
+    </div>
+    <div class="azioni-riga">
+      <button type="button" id="np-aggiungi" class="primario">Aggiungi in anagrafica</button>
+      <button type="button" id="np-annulla" class="link">Annulla</button>
+      <span id="np-esito" class="nota"></span>
+    </div>
+  </div>`;
+}
+
 function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = [], bom: VoceBom[] = [], avviso?: string): string {
   const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE' && g !== 'LATI' && g !== 'INFORMAZIONI GENERALI');
   const generali = cat.parametri.filter(p => p.gruppo === 'INFORMAZIONI GENERALI');
@@ -368,9 +411,13 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
               <option value="">${d.clienteId ? '— scegli il codice —' : '— prima scegli il cliente —'}</option>
               ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}${x.da_assegnare ? ' (non assegnato)' : ''}</option>`)}
             </select></label>
-          <label class="stretto">Rev. <input data-campo="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20"></label>
+          <label class="stretto">Rev. <input data-campo="revisione" id="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20" required
+            placeholder="0" title="Revisione del prodotto: se il cliente non la indica scrivi 0"></label>
+          <button type="button" id="apri-nuovo-prodotto" class="link" ${d.clienteId ? '' : raw('disabled')}
+            title="Il codice non è in elenco? Scrivilo qui e si aggiunge all'anagrafica del cliente">+ Nuovo prodotto</button>
         </div>
         <label>Descrizione <input id="descrizione" value="${d.descrizione}" readonly tabindex="-1" class="sola-lettura"></label>
+        ${riquadroNuovoProdotto(d, salvato)}
         ${!d.clienteId && d.cliente ? html`<p class="nota">Nel preventivo originale: <strong>${d.cliente}</strong> ${d.codice} — non presente nelle anagrafiche. Per salvarlo scegli cliente e codice dall'elenco.</p>` : ''}
         <div class="riga-campi">
           <label>Schede <input inputmode="numeric" data-campo="nSchede" value="${d.nSchede || ''}" required></label>

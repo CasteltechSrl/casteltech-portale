@@ -18,6 +18,8 @@ import { leggiForatura, type Foratura } from '../engine/scheda/foratura.js';
 import { leggiGenCad } from '../engine/scheda/gencad.js';
 import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerber.js';
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
+import { propostaProdotto } from '../engine/scheda/prodotto.js';
+import { rigaIntestazione } from '../engine/codifica/bom.js';
 
 /** byte e conservato servono per i file tenuti solo nell'elenco (PDF, 3D, immagini: restano sul Drive del cliente). */
 export interface FileCaricato { nome: string; dati: Buffer; byte?: number; conservato?: boolean }
@@ -56,11 +58,13 @@ export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
 export const testoDi = (b: Buffer) => { try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^\uFEFF/, ''); } catch { return b.toString('latin1'); } };
 const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani = 0; for (const c of p) if (c === 0 || (c < 9)) strani++; return strani < 5; };
 
-/** Legge tutti i file del pacchetto e fa l'incrocio. */
-export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elaborazione> {
+/** Legge tutti i file del pacchetto e fa l'incrocio. Il nome del pacchetto serve a proporre codice e revisione del prodotto. */
+export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = ''): Promise<Elaborazione> {
   const file = espandiArchivi(caricati);
   const elenco: FileElenco[] = [];
-  const bomCandidate: { nome: string; righe: RigaBomScheda[] }[] = [];
+  const bomCandidate: { nome: string; righe: RigaBomScheda[]; intestazione: string[][] }[] = [];
+  const inizioGerber: string[] = [];
+  let inizioGenCad: string | null = null;
   const pickPlace: { nome: string; lettura: LetturaPickPlace }[] = [];
   const forature: { nome: string; foratura: Foratura }[] = [];
   const strati: ConPiazzole[] = [];
@@ -88,8 +92,10 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
     if (f.dati.length > MAX_FILE) { voce.nota = 'troppo grande'; continue; }
     try {
       if (tipo === 'bom') {
-        const righe = leggiBomScheda(await leggiFileBom(f.nome.split(/[\\/]/).pop()!, f.dati));
-        if (righe.righe.length) bomCandidate.push({ nome: f.nome, righe: righe.righe });
+        const grezze = await leggiFileBom(f.nome.split(/[\\/]/).pop()!, f.dati);
+        const righe = leggiBomScheda(grezze);
+        // le righe sopra i titoli delle colonne (progetto, titolo, revisione) servono a proporre il prodotto
+        if (righe.righe.length) bomCandidate.push({ nome: f.nome, righe: righe.righe, intestazione: grezze.slice(0, rigaIntestazione(grezze)) });
         else voce.nota = 'nessuna riga riconosciuta';
         if (righe.avvisi.length) voce.nota = righe.avvisi.join(' ');
       } else if (tipo === 'pick-place' && testo != null) {
@@ -97,10 +103,11 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
       } else if (tipo === 'foratura' && testo != null) {
         forature.push({ nome: f.nome, foratura: leggiForatura(f.nome.split(/[\\/]/).pop()!, testo) }); voce.usato = true;
       } else if (tipo === 'gencad' && testo != null) {
-        cad = { nome: f.nome, componenti: leggiGenCad(testo).componenti }; voce.usato = true;
+        cad = { nome: f.nome, componenti: leggiGenCad(testo).componenti }; voce.usato = true; inizioGenCad = testo.slice(0, 5000);
       } else if (tipo === 'gerber' && testo != null) {
         const { ruolo, lato } = ruoloStrato(f.nome, testo);
         const g = leggiGerber(testo, `s${k++}`);
+        inizioGerber.push(testo.slice(0, 3000));
         strati.push({ nome: f.nome, ruolo, lato, defs: g.defs, corpo: g.corpo, riquadro: g.riquadro, piazzole: g.piazzole });
         voce.usato = true;
         voce.nota = [ruolo === 'altro' ? 'strato non riconosciuto' : `${ruolo}${lato ? ' ' + lato : ''}`, ...g.avvisi].join(' · ');
@@ -130,6 +137,8 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
     bom, pickPlace, cad, forature,
     strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno, piazzole,
   });
+  // codice, descrizione e revisione proposti dai file (da convalidare in ufficio)
+  analisi.prodotto = propostaProdotto({ nomePacchetto, nomiFile: file.map(f => f.nome), bomIntestazione: bom?.intestazione, gerber: inizioGerber, gencad: inizioGenCad });
   const disegno: Disegno = {
     strati: strati.map(({ piazzole: _, ...s }) => s), riquadro: contorno ?? unione(strati.map(s => s.riquadro)),
     forature: forature.flatMap(f => f.foratura.fori).slice(0, 20000),
@@ -173,7 +182,8 @@ export async function aggiungiFile(id: number, nome: string, dati: Buffer) {
 export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
   const righe = await q<{ nome: string; byte: number; dati: Buffer }>(`SELECT nome, byte, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 ORDER BY nome`, [id]);
   const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
-  const el = await elaboraPacchetto(caricati);
+  const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
+  const el = await elaboraPacchetto(caricati, nome);
   const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== 'troppo grande').map(f => f.nome));
   const presenti = new Set(righe.map(r => r.nome));
   for (const f of espandiArchivi(caricati.filter(r => r.conservato !== false && /\.zip$/i.test(r.nome))))
@@ -196,7 +206,9 @@ export async function fileBom(id: number): Promise<{ nome: string; dati: Buffer 
 /**
  * Preventivo compilato dai documenti (Adriano 28/10/2026): catalogo e tariffe attuali, valori standard come un preventivo nuovo,
  * più i numeri dell'incrocio. Resta "da validare": lo si controlla e salvando diventa una bozza normale.
- * Cliente e prodotto solo dall'anagrafica: il prodotto si trova se il nome del pacchetto contiene il suo codice.
+ * Cliente e prodotto solo dall'anagrafica: il prodotto si trova se il nome del pacchetto contiene il suo codice, o se è uguale al
+ * codice letto dai file. Se non c'è, codice, descrizione e revisione letti dai file restano proposti nel preventivo: l'ufficio
+ * li controlla e li aggiunge in anagrafica dal preventivo stesso (Adriano 28/10/2026).
  */
 export async function creaPreventivoDaPacchetto(id: number, nSchede: number, utenteId: number): Promise<number> {
   const p = await q1<any>(`SELECT p.*, c.ragione_sociale FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id WHERE p.id = $1`, [id]);
@@ -205,6 +217,7 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   const standard = Object.fromEntries(cat.parametri.filter(x => x.default != null && x.gruppo !== 'GENERALE' && x.gruppo !== 'PRE-PRODUZIONE').map(x => [x.codice, x.default]));
   const { parametri, voci, daControllare } = parametriDaAnalisi(conAccettate(p.analisi, p.accettate));
   const esistenti = new Set(cat.parametri.map(x => x.codice));
+  const proposta = (p.analisi as AnalisiScheda).prodotto ?? null;
   const compilati = voci.filter(v => esistenti.has(v.codice));
 
   // prodotto del cliente il cui codice compare nel nome del pacchetto (il più lungo, se più d'uno)
@@ -213,9 +226,16 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   if (p.cliente_id) {
     const prodotti = await q<{ id: number; codice: string; descrizione: string | null }>(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1`, [p.cliente_id]);
     prodotto = prodotti.filter(x => pulito(x.codice).length >= 3 && pulito(p.nome).includes(pulito(x.codice))).sort((a, b) => b.codice.length - a.codice.length)[0];
+    if (!prodotto && proposta?.codice) prodotto = prodotti.find(x => pulito(x.codice) === pulito(proposta.codice!));
   }
+  const fonte = (campo: 'codice' | 'descrizione' | 'revisione') => proposta?.fonti[campo] ? ` (da ${proposta.fonti[campo]})` : '';
+  if (proposta?.revisione) daControllare.unshift(`revisione ${proposta.revisione} letta dai documenti${fonte('revisione')}`);
+  else daControllare.unshift('scrivere la revisione (se non è indicata: 0)');
+  if (!prodotto && proposta?.codice) daControllare.unshift(`prodotto nuovo: codice ${proposta.codice}${fonte('codice')}`
+    + (proposta.descrizione ? `, descrizione ${proposta.descrizione}${fonte('descrizione')}` : ', manca la descrizione')
+    + ': controllare e premere «Aggiungi in anagrafica»');
+  else if (!prodotto) daControllare.unshift('scegliere il codice prodotto dall\'anagrafica o aggiungerlo con «Nuovo prodotto»');
   if (!p.cliente_id) daControllare.unshift('scegliere il cliente dall\'anagrafica');
-  if (!prodotto) daControllare.unshift('scegliere il codice prodotto dall\'anagrafica');
 
   // BOM già codificata: costo componenti a scheda con le offerte lette (la spunta "Componenti" la decide l'ufficio)
   let costo: Record<string, number> = {};
@@ -231,7 +251,8 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   const dati = normalizza({
     tariffe, nSchede, nSchedeInPCB: 1, parametri: { ...standard, ...parametri, ...costo },
     clienteId: p.cliente_id, prodottoId: prodotto?.id ?? null, bomId: p.bom_id ?? null,
-    cliente: p.ragione_sociale ?? '', codice: prodotto?.codice ?? '', descrizione: prodotto?.descrizione ?? '', revisione: '', note,
+    cliente: p.ragione_sociale ?? '', codice: prodotto?.codice ?? proposta?.codice ?? '', descrizione: prodotto?.descrizione ?? proposta?.descrizione ?? '',
+    revisione: proposta?.revisione ?? '', note,
   }, cat);
   return segnaDaValidare(await salvaPreventivo({ dati, catalogo: cat, utenteId }), id);
 }

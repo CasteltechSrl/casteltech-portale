@@ -557,3 +557,9 @@ svg.pcb .prot-zona { fill: rgba(240, 0, 190, .25); stroke: #ff3cd2; stroke-width
 ul.segnalazioni li.accettata { opacity: .7; border-color: #2d6a2d; background: #f3f8f3; }
 ul.segnalazioni li.accettata .livello-segn { background: #e3efe3; color: #2d6a2d; }
 ul.segnalazioni button.va-bene { font-size: .85rem; margin-left: .3rem; }
+/* prodotto nuovo scritto nel preventivo (codice non ancora in anagrafica) */
+.riga-campi > button.link { align-self: end; padding-bottom: .55rem; white-space: nowrap; }
+button.link:disabled { color: var(--tenue); cursor: default; }
+.nuovo-prodotto { border: 1px dashed var(--accento); border-radius: 6px; padding: .6rem .8rem; margin: .6rem 0; display: grid; gap: .5rem; }
+.nuovo-prodotto .nota { margin: 0; }
+.nuovo-prodotto .azioni-riga { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
