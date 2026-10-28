@@ -62,3 +62,9 @@ test('guida: preventivo da validare e stampe di montaggio si trovano', () => {
 test('guida: segnalazione che va bene', () => {
   assert.ok(primi('segnalazione va bene', 2).includes('documenti-cliente'));
 });
+
+test('guida: prodotto nuovo dal preventivo si trova', () => {
+  assert.ok(primi('prodotto nuovo nel preventivo', 2).includes('prodotto-nuovo-preventivo'));
+  assert.ok(primi('non trovo il codice nell\'elenco', 3).includes('prodotto-nuovo-preventivo'));
+  assert.ok(primi('revisione 0', 3).includes('prodotto-nuovo-preventivo'));
+});

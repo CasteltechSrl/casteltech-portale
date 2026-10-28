@@ -124,6 +124,11 @@ export function rotteSchedeCliente() {
                 <label>Schede da quotare <input name="schede" inputmode="numeric" value="100" required></label>
                 <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare">Crea il preventivo da validare</button></form>`}
           <table class="dati-scheda"><tbody>
+            ${a.prodotto ? html`<tr><th>Prodotto letto dai file <small class="nota">(da convalidare)</small></th><td>${[
+              a.prodotto.codice && `codice ${a.prodotto.codice}`, a.prodotto.descrizione && `descrizione ${a.prodotto.descrizione}`,
+              a.prodotto.revisione && `rev. ${a.prodotto.revisione}`].filter(Boolean).join(' · ')}
+              <small class="nota">${new Set(Object.values(a.prodotto.fonti)).size === 1 ? `da ${Object.values(a.prodotto.fonti)[0]}`
+                : Object.entries(a.prodotto.fonti).map(([k, v]) => `${k} da ${v}`).join('; ')}</small></td></tr>` : ''}
             <tr><th>Lati SMD</th><td>${testoLati(l)}</td></tr>
             <tr><th>SMD</th><td>TOP ${c.smdTop} · BOT ${c.smdBot}</td></tr>
             <tr><th>Feeder (codici SMD diversi)</th><td>TOP ${c.feederTop} · BOT ${c.feederBot}</td></tr>

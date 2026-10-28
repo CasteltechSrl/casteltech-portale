@@ -87,6 +87,7 @@
   const selProdotto = document.getElementById('sel-prodotto');
   const descrizione = document.getElementById('descrizione');
   selCliente.addEventListener('change', async () => {
+    document.getElementById('apri-nuovo-prodotto').disabled = !selCliente.value;
     selProdotto.innerHTML = '<option value="">Caricamento…</option>';
     descrizione.value = '';
     if (!selCliente.value) { selProdotto.innerHTML = '<option value="">— prima scegli il cliente —</option>'; return; }
@@ -103,6 +104,44 @@
   selProdotto.addEventListener('change', () => {
     descrizione.value = selProdotto.selectedOptions[0]?.dataset.descrizione || '';
   });
+
+  // ── Prodotto nuovo: codice non ancora in anagrafica, si aggiunge senza uscire dal preventivo ──
+  // servono codice, descrizione e revisione (se il cliente non la indica: 0); tutto maiuscolo
+  const nuovo = document.getElementById('nuovo-prodotto');
+  const np = k => document.getElementById('np-' + k);
+  const revisione = document.getElementById('revisione');
+  document.getElementById('apri-nuovo-prodotto').addEventListener('click', () => {
+    nuovo.hidden = false;
+    if (!np('revisione').value && revisione.value) np('revisione').value = revisione.value;
+    np('codice').focus();
+  });
+  np('annulla').addEventListener('click', () => { nuovo.hidden = true; np('esito').textContent = ''; });
+  np('aggiungi').addEventListener('click', async () => {
+    const esito = np('esito');
+    esito.classList.add('negativo');
+    const valori = { codice: np('codice').value.trim(), descrizione: np('descrizione').value.trim(), revisione: np('revisione').value.trim() };
+    const mancano = [!valori.codice && 'il codice', !valori.descrizione && 'la descrizione', !valori.revisione && 'la revisione (se non è indicata scrivi 0)'].filter(Boolean);
+    if (!selCliente.value) { esito.textContent = 'Scegli prima il cliente.'; return; }
+    if (mancano.length) { esito.textContent = 'Manca ' + mancano.join(', ') + '.'; return; }
+    esito.textContent = 'Salvataggio in anagrafica…';
+    const res = await fetch('/preventivi/prodotti', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clienteId: selCliente.value, ...valori }) });
+    const p = await res.json().catch(() => ({}));
+    if (!res.ok) { esito.textContent = p.errore || 'Errore nel salvataggio'; return; }
+    // il prodotto entra nell'elenco del cliente e viene scelto; la revisione va nel preventivo
+    let o = [...selProdotto.options].find(x => x.value === String(p.id));
+    if (!o) { o = new Option(p.codice, p.id); selProdotto.add(o); }
+    o.dataset.descrizione = p.descrizione || '';
+    selProdotto.value = String(p.id);
+    descrizione.value = p.descrizione || '';
+    revisione.value = p.revisione;
+    nuovo.hidden = true;
+    esito.textContent = '';
+    modificato = true;
+    statoEl.classList.remove('negativo');
+    statoEl.textContent = p.esisteva ? `${p.codice} era già in anagrafica: scelto dall'elenco. Premi Salva.` : `${p.codice} aggiunto in anagrafica. Premi Salva.`;
+  });
+
   // tutto in maiuscolo mentre si scrive
   form.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
     const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
@@ -207,6 +246,7 @@
 
   form.addEventListener('input', e => {
     if (e.target.form && e.target.form !== form) return;   // stato del preventivo: ha il suo modulo
+    if (e.target.closest('#nuovo-prodotto')) return;        // prodotto nuovo: si salva con il suo pulsante
     modificato = true;
     statoEl.textContent = 'Modifiche non salvate';
     if (e.target.dataset.campo === 'prezzoTargetScheda') return aggiornaTarget();

@@ -12,6 +12,7 @@ import { contaRefori, type Foratura } from './foratura.js';
 import type { Lato, LetturaPickPlace, Posizione } from './pick-place.js';
 import type { Piazzola } from './gerber.js';
 import { controllaPiazzole } from './piazzole.js';
+import type { PropostaProdotto } from './prodotto.js';
 
 export const CONSUMI = {
   ondaGrammiForo: 0.016,
@@ -72,6 +73,8 @@ export interface AnalisiScheda {
   noteCliente: { refs: string[]; nota: string }[];
   segnalazioni: Segnalazione[];
   piazzole?: { controllati: number; misurati: number; diversi: number };
+  /** codice, descrizione e revisione letti dai file (da convalidare); manca nei pacchetti analizzati prima del 28/10/2026 */
+  prodotto?: PropostaProdotto | null;
 }
 
 // ───────────────────────────── BOM ─────────────────────────────
