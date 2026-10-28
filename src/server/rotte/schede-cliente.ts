@@ -7,10 +7,13 @@ import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiungiFile, analizzaPacchetto, creaPacchetto, fileBom, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiungiFile, analizzaPacchetto, creaPacchetto, creaPreventivoDaPacchetto, fileBom, type FileElenco } from '../schede-cliente-servizio.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
 import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
+import { TITOLI_FOGLIO, type Foglio } from '../../engine/scheda/documentazione.js';
+import { decomprimi, type Disegno } from '../schede-cliente-servizio.js';
+import { paginaStampa, type Protezioni } from '../views/stampa-scheda-cliente.js';
 
 const ETICHETTE_LIVELLO: Record<Segnalazione['livello'], string> = { errore: 'Da chiarire', avviso: 'Attenzione', info: 'Nota' };
 const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `${num(Math.max(1, b / 1024), 0)} KB`;
@@ -88,8 +91,9 @@ export function rotteSchedeCliente() {
   // ── risultato ──
   r.get('/:id', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
-    const p = await q1<any>(`SELECT p.*, c.ragione_sociale AS cliente, b.nome AS bom_nome FROM pacchetti_scheda p
-      LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN bom_analisi b ON b.id = p.bom_id WHERE p.id = $1`, [req.params.id]);
+    const p = await q1<any>(`SELECT p.*, c.ragione_sociale AS cliente, b.nome AS bom_nome, v.numero AS preventivo_numero, v.stato AS preventivo_stato
+      FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN bom_analisi b ON b.id = p.bom_id
+      LEFT JOIN preventivi v ON v.id = p.preventivo_id WHERE p.id = $1`, [req.params.id]);
     if (!p) return next();
     const a: AnalisiScheda | null = p.analisi;
     const file: FileElenco[] = p.file_elenco ?? [];
@@ -113,6 +117,11 @@ export function rotteSchedeCliente() {
       <div class="griglia-scheda-cliente">
         <section class="blocco">
           <h2>Per il preventivo</h2>
+          ${p.preventivo_id
+            ? html`<p class="avviso info">Preventivo <a href="/preventivi/${p.preventivo_id}">${p.preventivo_numero}</a> <span class="stato ${p.preventivo_stato}">${p.preventivo_stato.replace('_', ' ')}</span></p>`
+            : html`<form method="post" action="/preventivi/documenti/${p.id}/preventivo" class="crea-preventivo">
+                <label>Schede da quotare <input name="schede" inputmode="numeric" value="100" required></label>
+                <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare">Crea il preventivo da validare</button></form>`}
           <table class="dati-scheda"><tbody>
             <tr><th>Lati SMD</th><td>${testoLati(l)}</td></tr>
             <tr><th>SMD</th><td>TOP ${c.smdTop} · BOT ${c.smdBot}</td></tr>
@@ -122,6 +131,7 @@ export function rotteSchedeCliente() {
             <tr><th>Refori</th><td>${c.refori ?? '—'}${c.reforiDa ? html` <small class="nota">(da ${c.reforiDa === 'CAD' ? 'file CAD' : 'file di foratura'})</small>` : ''}${c.vias != null ? html` · vias ${c.vias}` : ''}${c.foriNonMetallizzati ? html` · non metallizzati ${c.foriNonMetallizzati}` : ''}</td></tr>
             <tr><th>Codici (item)</th><td>${c.item}${c.nonMontati ? html` · ${c.nonMontati} non montati` : ''}</td></tr>
             <tr><th>Fiducial</th><td>TOP ${c.fiducialTop} · BOT ${c.fiducialBot}</td></tr>
+            ${a.piazzole ? html`<tr><th>Piazzole / case</th><td>${a.piazzole.misurati} componenti chip controllati su ${a.piazzole.controllati}${a.piazzole.diversi ? html` · <b class="negativo">${a.piazzole.diversi} con piazzole di un altro case</b>` : ' · tutto a posto'}</td></tr>` : ''}
             <tr><th>Misure scheda</th><td>${a.dimensioni ? html`${num(a.dimensioni.larghezza, 1)} × ${num(a.dimensioni.altezza, 1)} mm${a.dimensioni.stima ? html` <small class="nota">(stima dal rame: manca il contorno)</small>` : ''}` : '—'}</td></tr>
           </tbody></table>
           <h3>Consumi a scheda <small class="nota">(indicativi)</small></h3>
@@ -140,12 +150,23 @@ export function rotteSchedeCliente() {
         </section>
       </div>
 
+      <section class="blocco stampe-produzione">
+        <h2>Documentazione per la produzione</h2>
+        <p class="nota">Fogli A4 orizzontali con il disegno del lato, i riferimenti e la BOM di montaggio; in rosso i componenti con note del cliente o segnalazioni.</p>
+        <div class="bottoni">${(['TOP', 'BOT', 'THT', 'protezioni'] as Foglio[])
+          .filter(f => f === 'TOP' ? c.smdTop > 0 : f === 'BOT' ? c.smdBot > 0 : f === 'THT' ? c.tht > 0 : l.saldaturaTht === 'onda')
+          .map(f => html`<a class="bottone" href="/preventivi/documenti/${p.id}/stampa?foglio=${f}" target="_blank" rel="noopener">${TITOLI_FOGLIO[f]}</a>`)}</div>
+        ${l.saldaturaTht === 'onda' ? html`<p class="nota">Protezioni per l'onda: ${(p.protezioni?.fori?.length ?? 0)} fori e ${(p.protezioni?.zone?.length ?? 0)} zone segnate. Si segnano qui sotto con «Segna le protezioni».</p>` : ''}
+      </section>
+
       <h2>Disegno della scheda</h2>
-      <div class="visore" id="visore" data-id="${p.id}">
+      <div class="visore" id="visore" data-id="${p.id}" data-lato-saldature="${l.latoCorpiTht === 'BOT' ? 'TOP' : 'BOT'}">
         <div class="visore-comandi">
           <span class="gruppo"><button type="button" data-vista="TOP" class="attivo">Lato TOP</button><button type="button" data-vista="BOT" title="Vista da sotto (specchiata)">Lato BOT</button></span>
           <span class="gruppo"><label class="spunta piccola"><input type="checkbox" id="mostra-componenti" checked> componenti</label>
             <label class="spunta piccola"><input type="checkbox" id="mostra-fori" checked> fori</label></span>
+          ${l.saldaturaTht === 'onda' ? html`<span class="gruppo"><button type="button" id="modo-protezioni" title="Clic su un foro per proteggerlo, trascina per segnare una zona; clic su una zona per toglierla">Segna le protezioni</button>
+            <button type="button" id="salva-protezioni" hidden class="primario">Salva protezioni</button></span>` : ''}
           <span class="gruppo"><button type="button" id="zoom-piu">+</button><button type="button" id="zoom-meno">−</button><button type="button" id="zoom-tutto">Adatta</button></span>
           <span id="strati" class="strati"></span>
         </div>
@@ -184,6 +205,45 @@ export function rotteSchedeCliente() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const p = await q1<{ analisi: AnalisiScheda | null }>(`SELECT analisi FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
     res.json((p?.analisi?.componenti ?? []).filter(k => k.pp).map(k => ({ ref: k.ref, lato: k.lato, tipo: k.tipo, x: k.pp!.x, y: k.pp!.y, rot: k.pp!.rot, segnalato: k.segnalazioni.length > 0 })));
+  });
+
+  r.post('/:id/preventivo', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const schede = Math.round(Number(String(req.body.schede ?? '').replace(',', '.')));
+    if (!(schede > 0)) return res.redirect(`/preventivi/documenti/${req.params.id}`);
+    const esistente = await q1<{ preventivo_id: number | null }>(`SELECT preventivo_id FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
+    if (esistente?.preventivo_id) return res.redirect(`/preventivi/${esistente.preventivo_id}`);
+    try { res.redirect(`/preventivi/${await creaPreventivoDaPacchetto(Number(req.params.id), schede, req.session.utente!.id)}`); }
+    catch (e: any) { res.redirect(`/preventivi/documenti?errore=${encodeURIComponent(e.message)}`); }
+  });
+
+  // ── documentazione di produzione (stampa) ──
+  r.get('/:id/stampa', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const p = await q1<any>(`SELECT p.id, p.nome, p.analisi, p.disegno, p.protezioni, c.ragione_sociale AS cliente FROM pacchetti_scheda p
+      LEFT JOIN clienti c ON c.id = p.cliente_id WHERE p.id = $1`, [req.params.id]);
+    if (!p?.analisi) return next();
+    const foglio = (['TOP', 'BOT', 'THT', 'protezioni'].includes(String(req.query.foglio)) ? String(req.query.foglio) : 'TOP') as Foglio;
+    const d = decomprimi<Disegno>(p.disegno) ?? { strati: [], riquadro: null, forature: [] };
+    res.send(paginaStampa({ id: p.id, nome: p.nome, cliente: p.cliente }, p.analisi, d, foglio, p.protezioni ?? null));
+  });
+
+  // ── zone da proteggere per l'onda: fori e aree segnate sul disegno ──
+  r.get('/:id/protezioni', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const p = await q1<{ protezioni: Protezioni | null }>(`SELECT protezioni FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
+    res.json(p?.protezioni ?? { fori: [], zone: [] });
+  });
+  r.post('/:id/protezioni', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const n = (x: unknown) => { const v = Number(x); return Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null; };
+    const fori = (Array.isArray(req.body?.fori) ? req.body.fori : []).slice(0, 2000)
+      .map((f: any) => ({ x: n(f?.x), y: n(f?.y), d: n(f?.d) })).filter((f: any) => f.x != null && f.y != null && f.d != null);
+    const zone = (Array.isArray(req.body?.zone) ? req.body.zone : []).slice(0, 200)
+      .map((z: any) => ({ x0: n(z?.x0), y0: n(z?.y0), x1: n(z?.x1), y1: n(z?.y1) }))
+      .filter((z: any) => [z.x0, z.y0, z.x1, z.y1].every(v => v != null) && z.x1 > z.x0 && z.y1 > z.y0);
+    await q(`UPDATE pacchetti_scheda SET protezioni = $2 WHERE id = $1`, [req.params.id, JSON.stringify({ fori, zone })]);
+    res.json({ ok: true, fori: fori.length, zone: zone.length });
   });
 
   // BOM → sezione Componenti (codifica Casteltech, prezzi, reperibilità)

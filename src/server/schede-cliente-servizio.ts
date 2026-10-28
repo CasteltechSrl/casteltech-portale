@@ -7,18 +7,22 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import { q, q1 } from './db.js';
-import { leggiFileBom } from './codifica-servizio.js';
+import { costoBomPerPreventivo, leggiFileBom } from './codifica-servizio.js';
+import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
+import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
+import { parametriDaAnalisi } from '../engine/scheda/preventivo.js';
 import { analizzaScheda, leggiBomScheda, type AnalisiScheda, type RigaBomScheda, type StratoGerberInfo } from '../engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
 import { leggiForatura, type Foratura } from '../engine/scheda/foratura.js';
 import { leggiGenCad } from '../engine/scheda/gencad.js';
-import { leggiGerber, type Riquadro } from '../engine/scheda/gerber.js';
+import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerber.js';
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 
 /** byte e conservato servono per i file tenuti solo nell'elenco (PDF, 3D, immagini: restano sul Drive del cliente). */
 export interface FileCaricato { nome: string; dati: Buffer; byte?: number; conservato?: boolean }
 export interface FileElenco { nome: string; tipo: TipoFile; byte: number; usato: boolean; nota?: string }
 export interface StratoDisegno extends StratoGerberInfo { defs: string; corpo: string; riquadro: Riquadro | null }
+type ConPiazzole = StratoDisegno & { piazzole: Piazzola[] };
 export interface Disegno { strati: StratoDisegno[]; riquadro: Riquadro | null; forature: { x: number; y: number; d: number; metallizzato: boolean | null }[] }
 export interface Elaborazione { file: FileElenco[]; analisi: AnalisiScheda; disegno: Disegno; fonti: { bom: string | null; pickPlace: string[]; cad: string | null; forature: string[]; gerber: string[] } }
 
@@ -57,7 +61,7 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
   const bomCandidate: { nome: string; righe: RigaBomScheda[] }[] = [];
   const pickPlace: { nome: string; lettura: LetturaPickPlace }[] = [];
   const forature: { nome: string; foratura: Foratura }[] = [];
-  const strati: StratoDisegno[] = [];
+  const strati: ConPiazzole[] = [];
   let cad: { nome: string; componenti: ReturnType<typeof leggiGenCad>['componenti'] } | null = null;
   let k = 0;
   // ODB++ scompattato (cartelle matrix/, steps/, fonts/…): una sola riga nell'elenco invece di centinaia di file
@@ -95,7 +99,7 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
       } else if (tipo === 'gerber' && testo != null) {
         const { ruolo, lato } = ruoloStrato(f.nome, testo);
         const g = leggiGerber(testo, `s${k++}`);
-        strati.push({ nome: f.nome, ruolo, lato, defs: g.defs, corpo: g.corpo, riquadro: g.riquadro });
+        strati.push({ nome: f.nome, ruolo, lato, defs: g.defs, corpo: g.corpo, riquadro: g.riquadro, piazzole: g.piazzole });
         voce.usato = true;
         voce.nota = [ruolo === 'altro' ? 'strato non riconosciuto' : `${ruolo}${lato ? ' ' + lato : ''}`, ...g.avvisi].join(' · ');
       } else if (tipo === 'odb') voce.nota = 'ODB++: non ancora letto (si usano Gerber e forature)';
@@ -113,12 +117,19 @@ export async function elaboraPacchetto(caricati: FileCaricato[]): Promise<Elabor
   // contorno della scheda: lo strato del contorno, altrimenti il rame
   const veroContorno = unione(strati.filter(s => s.ruolo === 'contorno').map(s => s.riquadro));
   const contorno = veroContorno ?? riquadroSensato(unione(strati.filter(s => s.ruolo === 'rame').map(s => s.riquadro)), pickPlace);
+  // piazzole per lato: dal rame, o dalla pasta se il rame di quel lato manca
+  const piazzole: Partial<Record<'TOP' | 'BOT', Piazzola[]>> = {};
+  for (const lato of ['TOP', 'BOT'] as const) {
+    const di = (ruolo: string) => strati.filter(s => s.ruolo === ruolo && s.lato === lato).flatMap(s => s.piazzole);
+    const v = di('rame').length ? di('rame') : di('pasta');
+    if (v.length) piazzole[lato] = v;
+  }
   const analisi = analizzaScheda({
     bom, pickPlace, cad, forature,
-    strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno,
+    strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno, piazzole,
   });
   const disegno: Disegno = {
-    strati, riquadro: contorno ?? unione(strati.map(s => s.riquadro)),
+    strati: strati.map(({ piazzole: _, ...s }) => s), riquadro: contorno ?? unione(strati.map(s => s.riquadro)),
     forature: forature.flatMap(f => f.foratura.fori).slice(0, 20000),
   };
   return { file: elenco, analisi, disegno, fonti: { bom: bom?.nome ?? null, pickPlace: pickPlace.map(p => p.nome), cad: cad?.nome ?? null, forature: forature.map(f => f.nome), gerber: strati.map(s => s.nome) } };
@@ -178,4 +189,52 @@ export async function fileBom(id: number): Promise<{ nome: string; dati: Buffer 
   if (!nome) return null;
   const f = await q1<{ dati: Buffer }>(`SELECT dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 AND nome = $2`, [id, nome]);
   return f ? { nome, dati: gunzipSync(f.dati) } : null;
+}
+
+/**
+ * Preventivo compilato dai documenti (Adriano 28/10/2026): catalogo e tariffe attuali, valori standard come un preventivo nuovo,
+ * più i numeri dell'incrocio. Resta "da validare": lo si controlla e salvando diventa una bozza normale.
+ * Cliente e prodotto solo dall'anagrafica: il prodotto si trova se il nome del pacchetto contiene il suo codice.
+ */
+export async function creaPreventivoDaPacchetto(id: number, nSchede: number, utenteId: number): Promise<number> {
+  const p = await q1<any>(`SELECT p.*, c.ragione_sociale FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id WHERE p.id = $1`, [id]);
+  if (!p?.analisi) throw new Error('Il pacchetto non è ancora analizzato.');
+  const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
+  const standard = Object.fromEntries(cat.parametri.filter(x => x.default != null && x.gruppo !== 'GENERALE' && x.gruppo !== 'PRE-PRODUZIONE').map(x => [x.codice, x.default]));
+  const { parametri, voci, daControllare } = parametriDaAnalisi(p.analisi);
+  const esistenti = new Set(cat.parametri.map(x => x.codice));
+  const compilati = voci.filter(v => esistenti.has(v.codice));
+
+  // prodotto del cliente il cui codice compare nel nome del pacchetto (il più lungo, se più d'uno)
+  const pulito = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let prodotto: { id: number; codice: string; descrizione: string | null } | undefined;
+  if (p.cliente_id) {
+    const prodotti = await q<{ id: number; codice: string; descrizione: string | null }>(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1`, [p.cliente_id]);
+    prodotto = prodotti.filter(x => pulito(x.codice).length >= 3 && pulito(p.nome).includes(pulito(x.codice))).sort((a, b) => b.codice.length - a.codice.length)[0];
+  }
+  if (!p.cliente_id) daControllare.unshift('scegliere il cliente dall\'anagrafica');
+  if (!prodotto) daControllare.unshift('scegliere il codice prodotto dall\'anagrafica');
+
+  // BOM già codificata: costo componenti a scheda con le offerte lette (la spunta "Componenti" la decide l'ufficio)
+  let costo: Record<string, number> = {};
+  if (p.bom_id) {
+    const b = await costoBomPerPreventivo(p.bom_id, nSchede);
+    if (b && b.stato === 'pronta' && b.aScheda > 0) costo = { costoComponentiScheda: Math.round(b.aScheda * 10000) / 10000 };
+    daControllare.push('componenti: spuntare "Componenti" se li compriamo noi');
+  }
+
+  const note = [`Compilato in automatico dai documenti del cliente «${p.nome}».`,
+    `Valori presi dai documenti: ${compilati.map(v => `${v.codice} = ${String(v.valore).replace('.', ',')}`).join(', ')}.`,
+    daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : ''].filter(Boolean).join('\n');
+  const dati = normalizza({
+    tariffe, nSchede, nSchedeInPCB: 1, parametri: { ...standard, ...parametri, ...costo },
+    clienteId: p.cliente_id, prodottoId: prodotto?.id ?? null, bomId: p.bom_id ?? null,
+    cliente: p.ragione_sociale ?? '', codice: prodotto?.codice ?? '', descrizione: prodotto?.descrizione ?? '', revisione: '', note,
+  }, cat);
+  return segnaDaValidare(await salvaPreventivo({ dati, catalogo: cat, utenteId }), id);
+}
+async function segnaDaValidare(preventivoId: number, pacchettoId: number) {
+  await q(`UPDATE preventivi SET stato = 'da_validare' WHERE id = $1`, [preventivoId]);
+  await q(`UPDATE pacchetti_scheda SET preventivo_id = $2 WHERE id = $1`, [pacchettoId, preventivoId]);
+  return preventivoId;
 }

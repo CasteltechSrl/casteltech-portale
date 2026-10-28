@@ -14,6 +14,7 @@ export interface ComponenteCad {
   piediniTht: number;
   piedini: number;
   montaggioDichiarato?: string; // attributo Mounting_Type del CAD (es. SMT), se c'è
+  pin1?: { x: number; y: number }; // posizione del piedino 1 sulla scheda (mm): dice il verso di montaggio
 }
 
 export const sembraGenCad = (testo: string) => /^\$HEADER/m.test(testo.slice(0, 2000)) && /GENCAD/i.test(testo.slice(0, 2000));
@@ -22,7 +23,8 @@ export function leggiGenCad(testo: string): { componenti: ComponenteCad[]; unita
   const righe = testo.replace(/\r/g, '').split('\n');
   const unita = /^UNITS\s+(\S+)/m.exec(testo)?.[1]?.toUpperCase() ?? 'MM';
   const fattore = unita.startsWith('INCH') ? 25.4 : unita.startsWith('MIL') || unita.startsWith('THOU') ? 0.0254 : unita === 'USER' ? 1 : 1;
-  const forme = new Map<string, { tht: boolean; piedini: number; piediniTht: number }>();
+  const forme = new Map<string, { tht: boolean; piedini: number; piediniTht: number; pin1?: [number, number] }>();
+  const specchiati = new Set<ComponenteCad>();
   const padstackForati = new Set<string>();
   const componenti: ComponenteCad[] = [];
   let sez = '', forma = '', pad = '';
@@ -45,6 +47,10 @@ export function leggiGenCad(testo: string): { componenti: ComponenteCad[]; unita
       else if (t.startsWith('PIN ')) {
         const s = forme.get(forma); if (!s) continue;
         s.piedini++;
+        // "PIN nome pad x y layer rot mirror": il piedino "1" (o "A", o il primo) dice il verso
+        const campi = t.match(/"[^"]*"|\S+/g) ?? [];
+        const nomePin = (campi[1] ?? '').replace(/"/g, ''), px = Number(campi[3]), py = Number(campi[4]);
+        if (Number.isFinite(px) && Number.isFinite(py) && (!s.pin1 || /^(1|A|A1|P1)$/i.test(nomePin)) && (s.piedini === 1 || /^(1|A|A1|P1)$/i.test(nomePin))) s.pin1 = [px, py];
         const padNome = /"([^"]*)"/.exec(t)?.[1] ?? t.split(/\s+/)[2] ?? '';
         if (padstackForati.has(padNome) || /Hole/i.test(padNome)) s.piediniTht++;
       }
@@ -54,7 +60,7 @@ export function leggiGenCad(testo: string): { componenti: ComponenteCad[]; unita
       else if (t.startsWith('PLACE ')) { const [, x, y] = t.split(/\s+/); c.x = Number(x) * fattore; c.y = Number(y) * fattore; }
       else if (t.startsWith('LAYER ')) c.lato = /BOT/i.test(t) ? 'BOT' : 'TOP';
       else if (t.startsWith('ROTATION ')) c.rot = Number(t.split(/\s+/)[1]) || 0;
-      else if (t.startsWith('SHAPE ')) c.impronta = nome(t);
+      else if (t.startsWith('SHAPE ')) { c.impronta = nome(t); if (/\bMIRRORX\b/i.test(t)) specchiati.add(c); }
       else if (/ATTRIBUTE\s+\S+\s+Mounting_Type\s+/i.test(t)) c.montaggioDichiarato = t.split(/\s+/).pop()!.replace(/"/g, '');
     }
   }
@@ -64,6 +70,12 @@ export function leggiGenCad(testo: string): { componenti: ComponenteCad[]; unita
     k.piedini = s.piedini;
     k.piediniTht = s.tht ? Math.max(s.piediniTht, s.piedini) : s.piediniTht;
     k.tht = s.tht || s.piediniTht > 0;
+    if (s.pin1 && s.piedini > 1) {
+      // forma specchiata (lato BOTTOM): x cambia segno, poi rotazione e posizione
+      const [px0, py0] = s.pin1, px = (specchiati.has(k) ? -px0 : px0) * fattore, py = py0 * fattore;
+      const a = (specchiati.has(k) ? -k.rot : k.rot) * Math.PI / 180;
+      k.pin1 = { x: k.x + px * Math.cos(a) - py * Math.sin(a), y: k.y + px * Math.sin(a) + py * Math.cos(a) };
+    }
   }
   return { componenti, unita };
 }

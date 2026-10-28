@@ -18,7 +18,7 @@ import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
   [2, 'Nostro magazzino', 'Gestito a nostro magazzino: acquistato da noi, del cliente o misto']];
-const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
+const STATI = ['da_validare', 'bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
   const r = Router();
@@ -60,7 +60,7 @@ export function rottePreventivi() {
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
             <td class="selezione"><input type="checkbox" name="ids" value="${p.id}" aria-label="Seleziona ${p.numero}"></td>
-            <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}</td>
+            <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}${p.stato === 'da_validare' ? html` <span class="stato da_validare" title="Compilato dai documenti del cliente: da controllare e salvare">da validare</span>` : ''}</td>
             <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
             <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
@@ -100,6 +100,7 @@ export function rottePreventivi() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const p = await leggiPreventivo(Number(req.params.id));
     if (!p) return res.status(404).send('Preventivo non trovato');
+    if (p.stato === 'da_validare') p.pacchetto = await q1(`SELECT id, nome FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
@@ -139,6 +140,8 @@ export function rottePreventivi() {
     if (!dati.nSchede) return res.status(400).json({ errore: 'Indica la quantità di schede' });
     if (!(dati.tariffe.ricarico > 0)) return res.status(400).json({ errore: 'Il ricarico deve essere maggiore di zero' });
     const nuovoId = await salvaPreventivo({ id, dati, catalogo: cat, utenteId: req.session.utente!.id });
+    // preventivo compilato dai documenti del cliente: salvarlo dopo il controllo lo convalida
+    await q(`UPDATE preventivi SET stato = 'bozza' WHERE id = $1 AND stato = 'da_validare'`, [nuovoId]);
     res.json({ id: nuovoId });
   });
 
@@ -334,13 +337,18 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     contenuto: html`
     <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''} ${provenienza === 1 ? 'materiale-da-restituire' : ''}">
     <div class="intestazione-pagina">
-      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato}</span>` : 'Nuovo preventivo'}</h1>
+      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
         ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>
     </div>
+    ${salvato?.stato === 'da_validare' ? html`
+      <div class="avviso da-validare"><strong>Preventivo da validare.</strong> L'ha compilato il portale dai documenti del cliente${salvato.pacchetto
+        ? html` (<a href="/preventivi/documenti/${salvato.pacchetto.id}">${salvato.pacchetto.nome}</a>)` : ''}: controlla i valori, completa quello che manca
+        e premi <b>Salva</b>, così diventa una bozza normale.
+        <ul>${String(salvato.note ?? '').split('\n').filter(r => r.startsWith('Da controllare:')).flatMap(r => r.replace(/^Da controllare: /, '').replace(/\.$/, '').split('; ')).map(x => html`<li>${x}</li>`)}</ul></div>` : ''}
     ${salvato?.origine === 'vecchio_portale' && salvato.dati_vecchio_portale ? html`
       <p class="avviso info">Importato dal vecchio portale. Lì il totale 1° lotto era ${euro(salvato.dati_vecchio_portale.totalePrimoLotto)};
       qui è ricalcolato con le fasi e le regole nuove.</p>` : ''}

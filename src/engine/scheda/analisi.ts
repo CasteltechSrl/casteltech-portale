@@ -10,6 +10,8 @@ import { elencoDesignatori, nomiColonne, pnKey, rigaIntestazione, rilevaColonne 
 import type { ComponenteCad } from './gencad.js';
 import { contaRefori, type Foratura } from './foratura.js';
 import type { Lato, LetturaPickPlace, Posizione } from './pick-place.js';
+import type { Piazzola } from './gerber.js';
+import { controllaPiazzole } from './piazzole.js';
 
 export const CONSUMI = {
   ondaGrammiForo: 0.016,
@@ -43,6 +45,7 @@ export interface Componente {
   pp?: { valore: string; footprint: string; x: number; y: number; rot: number; codice?: string };
   codiceCliente: string;     // P/N della BOM, o codice scritto dal cliente nel pick and place
   segnalazioni: string[];
+  pin1?: { x: number; y: number }; // piedino 1 dal file CAD (verso di montaggio)
 }
 
 export interface StratoGerberInfo { nome: string; ruolo: RuoloStrato; lato: Lato | null }
@@ -67,6 +70,7 @@ export interface AnalisiScheda {
   dimensioni: { larghezza: number; altezza: number; stima: boolean } | null;
   noteCliente: { refs: string[]; nota: string }[];
   segnalazioni: Segnalazione[];
+  piazzole?: { controllati: number; misurati: number; diversi: number };
 }
 
 // ───────────────────────────── BOM ─────────────────────────────
@@ -167,6 +171,7 @@ export interface IngressoAnalisi {
   strati?: StratoGerberInfo[];
   contorno?: { x0: number; y0: number; x1: number; y1: number } | null;
   contornoStimato?: boolean; // true = non c'è lo strato del contorno: misure prese dal rame
+  piazzole?: Partial<Record<Lato, Piazzola[]>>; // piazzole del rame (o della pasta) per lato, per il controllo del case
 }
 
 export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
@@ -234,6 +239,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
       ...(p ? { pp: { valore: p.valore, footprint: p.footprint, x: arrot(p.x, 3), y: arrot(p.y, 3), rot: p.rot, ...(p.codice ? { codice: p.codice } : {}) } } : {}),
       codiceCliente: b?.pn || p?.codice || '',
       segnalazioni: note,
+      ...(c?.pin1 ? { pin1: { x: arrot(c.pin1.x, 3), y: arrot(c.pin1.y, 3) } } : {}),
     });
   }
 
@@ -262,6 +268,25 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   if (caseDiversi.length) S('avviso', `${caseDiversi.length} componenti hanno un case diverso tra BOM e pick and place.`, caseDiversi.map(c => c.ref));
   const latiDiversi = montati.filter(c => c.segnalazioni.some(s => s.startsWith('lato diverso')));
   if (latiDiversi.length) S('errore', `${latiDiversi.length} componenti hanno il lato diverso tra CAD e pick and place.`, latiDiversi.map(c => c.ref));
+  // piazzole del Gerber contro il case della BOM (IPC-7351)
+  let controlloPiazzole: AnalisiScheda['piazzole'];
+  if (ing.piazzole && Object.values(ing.piazzole).some(v => v?.length)) {
+    const chip = montati.filter(c => c.tipo === 'SMD' && c.pp && c.lato).map(c => ({
+      ref: c.ref, lato: c.lato!, x: c.pp!.x, y: c.pp!.y,
+      caseAtteso: (c.bom ? caseDi(`${c.bom.footprint} ${c.bom.valore} ${c.bom.descrizione}`) : null) ?? caseDi(`${c.pp!.footprint} ${c.pp!.valore}`) ?? '',
+    })).filter(c => c.caseAtteso);
+    const esiti = controllaPiazzole(chip, ing.piazzole);
+    const misurati = esiti.filter(e => e.misura), diversi = esiti.filter(e => e.ok === false);
+    controlloPiazzole = { controllati: esiti.length, misurati: misurati.length, diversi: diversi.length };
+    for (const e of diversi) {
+      const k = componenti.find(c => c.ref === e.ref)!;
+      k.segnalazioni.push(`piazzole da ${e.caseSimile} (passo ${arrot(e.misura!.passo, 2)} mm, larghezza ${arrot(e.misura!.larghezza, 2)} mm), case in BOM ${e.caseAtteso}`);
+    }
+    if (diversi.length) S('errore', `${diversi.length} componenti hanno le piazzole del Gerber di un altro case rispetto alla BOM (norma IPC-7351): controllare prima di andare in macchina.`, diversi.map(e => e.ref));
+    if (esiti.length >= 5 && misurati.length < esiti.length * 0.3)
+      S('info', `Controllo piazzole: trovate solo per ${misurati.length} componenti chip su ${esiti.length} (origine delle coordinate diversa o piazzole disegnate a tratti).`);
+  }
+
   // due componenti nello stesso punto dello stesso lato
   const conPos = montati.filter(c => c.pp && c.tipo === 'SMD');
   const sovrapposti = new Set<string>();
@@ -279,7 +304,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   // ── conteggi ──
   const smd = montati.filter(c => c.tipo === 'SMD'), tht = montati.filter(c => c.tipo === 'THT');
   const smdTop = smd.filter(c => c.lato !== 'BOT'), smdBot = smd.filter(c => c.lato === 'BOT');
-  const chiave = (c: Componente) => pnKey(c.codiceCliente) ?? pulisci(`${c.bom?.valore ?? c.pp?.valore ?? ''}|${c.bom?.footprint ?? c.pp?.footprint ?? ''}`);
+  const chiave = chiaveCodice;
   const codici = (l: Componente[]) => new Set(l.map(chiave)).size;
   const feederTop = codici(smdTop), feederBot = codici(smdBot), codiciTht = codici(tht);
   const item = new Set(smd.map(chiave)).size + codiciTht + 1; // + il PCB
@@ -351,10 +376,14 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     lavorazione: { latiSmd, latoSmdUnico, latoCorpiTht, saldaturaTht, motivo },
     consumi, dimensioni, noteCliente,
     segnalazioni: seg.sort((a, b) => ordine[a.livello] - ordine[b.livello]),
+    ...(controlloPiazzole ? { piazzole: controlloPiazzole } : {}),
   };
 }
 
 /** R2 prima di R10; prima le lettere. */
+/** Stesso codice = stesso componente da montare (stesso feeder, stessa riga di BOM di montaggio, stesso colore nei disegni THT). */
+export const chiaveCodice = (c: Componente) => pnKey(c.codiceCliente) ?? pulisci(`${c.bom?.valore ?? c.pp?.valore ?? ''}|${c.bom?.footprint ?? c.pp?.footprint ?? ''}`);
+
 export function ordinaRef(a: string, b: string): number {
   const ma = /^([A-Z_]*)(\d*)(.*)$/.exec(a)!, mb = /^([A-Z_]*)(\d*)(.*)$/.exec(b)!;
   return ma[1].localeCompare(mb[1]) || (Number(ma[2]) - Number(mb[2])) || ma[3].localeCompare(mb[3]);
