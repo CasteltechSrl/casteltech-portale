@@ -26,6 +26,7 @@ import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
+import { rotteGuida } from './rotte/guida.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -118,6 +119,8 @@ app.use('/componenti', soloUfficio, rotteComponenti());
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
 app.use('/amministrazione', soloUfficio, rotteAmministrazione());
+// la guida la può leggere chiunque sia entrato (ufficio e produzione)
+app.use('/guida', (req, res, next) => req.session.utente ? next() : res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl)), rotteGuida());
 app.use('/r', rotteReparto());
 // QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
 // all'ufficio apre la commessa; chi non è entrato va all'accesso del reparto
