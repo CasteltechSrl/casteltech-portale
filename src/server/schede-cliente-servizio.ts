@@ -11,6 +11,7 @@ import { costoBomPerPreventivo, leggiFileBom } from './codifica-servizio.js';
 import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
 import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
 import { parametriDaAnalisi } from '../engine/scheda/preventivo.js';
+import { conAccettate } from '../engine/scheda/accettate.js';
 import { analizzaScheda, leggiBomScheda, type AnalisiScheda, type RigaBomScheda, type StratoGerberInfo } from '../engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
 import { leggiForatura, type Foratura } from '../engine/scheda/foratura.js';
@@ -202,7 +203,7 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   if (!p?.analisi) throw new Error('Il pacchetto non è ancora analizzato.');
   const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
   const standard = Object.fromEntries(cat.parametri.filter(x => x.default != null && x.gruppo !== 'GENERALE' && x.gruppo !== 'PRE-PRODUZIONE').map(x => [x.codice, x.default]));
-  const { parametri, voci, daControllare } = parametriDaAnalisi(p.analisi);
+  const { parametri, voci, daControllare } = parametriDaAnalisi(conAccettate(p.analisi, p.accettate));
   const esistenti = new Set(cat.parametri.map(x => x.codice));
   const compilati = voci.filter(v => esistenti.has(v.codice));
 

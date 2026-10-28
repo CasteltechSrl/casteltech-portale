@@ -11,6 +11,7 @@ import { ruoloStrato, tipoFile } from '../src/engine/scheda/classifica.js';
 import { parametriDaAnalisi } from '../src/engine/scheda/preventivo.js';
 import { controllaPiazzole, misuraPiazzole, PIAZZOLE_IPC } from '../src/engine/scheda/piazzole.js';
 import { latoFoglio, righeFoglio } from '../src/engine/scheda/documentazione.js';
+import { chiaveSegnalazione, conAccettate } from '../src/engine/scheda/accettate.js';
 import type { Piazzola } from '../src/engine/scheda/gerber.js';
 
 // ───────────── pick and place ─────────────
@@ -369,4 +370,20 @@ J_RS232   Opened    SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm   30.0  -5.0  0.0  t
     pickPlace: [{ nome: 'scheda-all.pos', lettura: l }],
   });
   assert.deepEqual(a.segnalazioni.filter(s => s.livello === 'errore'), []);
+});
+
+test('segnalazione "Va bene": non conta più e i componenti non sono più critici', () => {
+  const a = analizzaScheda({
+    bom: bomDa([['Designator', 'Quantity', 'Value', 'Manufacturer P/N', 'Footprint'], ['R1', '1', '10k', 'RC0603FR-0710K', 'R0603'], ['R2', '1', '4k7', 'RC0603FR-074K7', 'R0603']]),
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('R1', 'TOP', '22k', 'R0603', 1), pos('R2', 'TOP', '4k7', 'R0603', 5)]) }],
+  });
+  const errore = a.segnalazioni.find(s => s.livello === 'errore' && s.refs?.includes('R1'))!;
+  assert.ok(errore);
+  assert.ok(righeFoglio(a, 'TOP').find(r => r.refs.includes('R1'))!.critico);
+  const b = conAccettate(a, { [chiaveSegnalazione(errore)]: { da: 'ADRIANO', il: '2026-10-28' } });
+  assert.equal(b.segnalazioni.find(s => s.testo === errore.testo)!.accettata?.da, 'ADRIANO');
+  assert.deepEqual(b.componenti.find(c => c.ref === 'R1')!.segnalazioni, []);
+  assert.ok(!righeFoglio(b, 'TOP').find(r => r.refs.includes('R1'))!.critico);
+  assert.ok(!parametriDaAnalisi(b).daControllare.some(d => /segnalazioni da chiarire/.test(d)));
+  assert.equal(a.componenti.find(c => c.ref === 'R1')!.segnalazioni.length, 1, 'l\'analisi salvata non cambia');
 });

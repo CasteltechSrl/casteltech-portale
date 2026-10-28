@@ -58,3 +58,7 @@ test('guida: preventivo da validare e stampe di montaggio si trovano', () => {
   assert.ok(primi('preventivo da validare', 2).includes('preventivo-da-validare'));
   assert.ok(primi('proteggere fori onda', 2).includes('documentazione-produzione'));
 });
+
+test('guida: segnalazione che va bene', () => {
+  assert.ok(primi('segnalazione va bene', 2).includes('documenti-cliente'));
+});
