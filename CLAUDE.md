@@ -232,5 +232,9 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ✅ Fatture dei fornitori dallo SdI (`engine/fattura-ricevuta.ts`: XML o .p7m firmato, `registraRicevuta` in `server/invoicetronic.ts`): webhook receive.add
    o "Scarica dallo SdI" in Fatture fornitori (GET /receive?unread=true, gratis) → `documenti_ricevuti` origine 'sdi' con scadenze; fornitore per P.IVA
    (nuovo = aggiunto con nota DA VERIFICARE); doppioni con lo storico FIC (numero+data+fornitore) e copie delle nostre autofatture ignorati. Chiave di prova: solo riepilogo.
-   ⬜ PDF della fattura, DDT, conferme d'ordine,
+   ✅ DDT emessi dal portale (Adriano 28/10/2026; `engine/ddt.ts`, `documenti-servizio.ts`, stampa `views/stampa-documento.ts` → `/amministrazione/documenti/:id/stampa`):
+   "Crea DDT" nella pagina dell'ordine (schede ancora da spedire, `riga_ordine_id` collegata: l'evasione la conta) o "+ Nuovo DDT"; trasporto in `dati_trasporto`
+   (causale, a_cura, trasportatore, porto, colli, peso, aspetto, destinazione, inizio) proposto dall'ultimo DDT del cliente; prezzo non stampato (serve alla fattura).
+   Emetti = numero in transazione (`controlliDdt`); "Annulla DDT" se la merce non parte (numero usato, stato annullato; non se è in una fattura); "Fattura questo DDT".
+   ⬜ PDF della fattura, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

@@ -251,6 +251,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
   {
+    id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT e stamparlo',
+    parole: 'ddt nuovo emettere fare bolla documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
+    testo: [
+      'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
+      'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
+      'Con "Emetti" il DDT prende il numero successivo e non si modifica più. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
+      'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
+      'Se la merce non parte, "Annulla DDT": il numero resta usato e il DDT resta nell\'elenco come annullato. Un DDT già messo in una fattura non si annulla.',
+      'Per fatturarlo: "Fattura questo DDT" prepara la fattura con le sue righe; si possono aggiungere altri DDT dello stesso cliente.',
+    ],
+    passi: ['Apri l\'ordine e premi Crea DDT (oppure + Nuovo DDT e scegli il cliente).', 'Controlla quantità, colli, peso, vettore e destinazione, poi Salva.', 'Premi Emetti.', 'Premi Stampa / PDF e stampa due copie.'],
+    pagine: [['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/ordini', 'Ordini']],
+  },
+  {
     id: 'ddt-acquisiti', area: 'ordini', titolo: 'DDT spediti: segnare la merce consegnata',
     parole: 'ddt spedizione spedito consegnato evaso parziale bolla documento trasporto',
     testo: [

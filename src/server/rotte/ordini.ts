@@ -179,6 +179,9 @@ export function rotteOrdini() {
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
+    const ddtPortale = await q(`SELECT DISTINCT d.id, d.numero, d.data, d.stato FROM documenti d LEFT JOIN documenti_righe x ON x.documento_id = d.id
+      LEFT JOIN ordini_righe y ON y.id = x.riga_ordine_id
+      WHERE d.tipo = 'ddt' AND d.stato <> 'annullato' AND (d.ordine_id = $1 OR y.ordine_id = $1) ORDER BY d.data, d.numero`, [o.id]);
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
       <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
         <form method="post" action="/ordini/${o.id}/elimina" class="inline"
@@ -186,7 +189,10 @@ export function rotteOrdini() {
           <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form>
         ${['da_evadere', 'parziale'].includes(stato) ? html`<form method="post" action="/ordini/${o.id}/evaso" class="inline"
           data-conferma="${`Segnare come evase tutte le righe ancora aperte dell'ordine ${o.numero}/${o.anno}? Usalo quando la merce è stata consegnata ma il DDT ha un codice diverso o manca. Si torna indietro scegliendo "automatico" nello stato delle righe.`}">
-          <button title="Merce consegnata: tutte le righe aperte diventano evase">Segna tutto evaso</button></form>` : ''}</div>
+          <button title="Merce consegnata: tutte le righe aperte diventano evase">Segna tutto evaso</button></form>` : ''}
+        ${['da_evadere', 'parziale'].includes(stato) && o.cliente_id ? html`<form method="post" action="/amministrazione/documenti/ddt-da-ordine/${o.id}" class="inline">
+          <button class="primario" title="DDT (bozza) con le schede ancora da spedire">Crea DDT</button></form>` : ''}</div>
+      ${ddtPortale.length ? html`<p class="nota">DDT del portale: ${ddtPortale.map((x, i) => html`${i ? ', ' : ''}<a href="/amministrazione/documenti/${x.id}">${x.numero == null ? 'bozza' : `n. ${x.numero}`} del ${data(x.data)}</a>`)}</p>` : ''}
       <dl class="dati-ordine">
         <dt>Cliente</dt><dd>${o.cliente_nome}${o.cliente_id ? '' : html` <span class="esito verifica">non in anagrafica</span>`}</dd>
         <dt>Data ordine</dt><dd>${data(o.data_ordine)}</dd>
