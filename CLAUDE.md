@@ -126,6 +126,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    BOM xlsx/csv → archivio, decodifica, DigiKey, colonne, IA (ANTHROPIC_API_KEY) → codici → prezzi da DigiKey, Mouser,
    Farnell, TME (`fornitori.ts`, chiavi solo su Render, cache 24 h) → scarto (`engine/acquisti.ts`: passivi <0,10 € +10%,
    <1 € +5%, 1–3 € +1 pz, oltre 0; Impostazioni → Componenti), miglior fornitore, reperibilità. Excel con codifica e acquisti.
+   Reperibilità (Adriano 28/10/2026): si cerca presso tutti i distributori; critico SOLO se non disponibile da nessuna parte, attenzione solo
+   se la quantità va divisa o un distributore non ha risposto (`nonControllati`); fine vita/scorte basse solo note. P/N critico → alternative
+   (`cercaAlternative`: varianti dello stesso P/N + stesse caratteristiche = stesso codice di produzione, solo famiglie senza RID/PN nel codice),
+   prezzate da tutti; l'operatore sceglie ("Usa questa", `alternativaScelta`) o ne scrive una a mano (POST `/componenti/bom/:id/riga/:n/alternativa`);
+   scelte e alternative a mano restano dopo Rielabora. Prezzo a mano per riga (`prezzoManuale`, POST `.../riga/:n/prezzo`): vale al posto di quello proposto.
    Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
    BOM collegata al preventivo (migrazione 024, `preventivi.bom_id`): nel gruppo ACQUISTI si sceglie una BOM caricata e il costo
    componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette (`costoMaterialiPer`, niente chiamate ai

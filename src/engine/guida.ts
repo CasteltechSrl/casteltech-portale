@@ -366,6 +366,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/componenti', 'Componenti']],
   },
   {
+    id: 'alternative-componenti', area: 'componenti', titolo: 'Componente non trovato: alternative e reperibilità',
+    parole: 'alternativa alternative equivalente sostituto prezzo a mano manuale scrivere prezzo p/n non trovato introvabile critico reperibilità disponibile negozi distributori obsoleto',
+    testo: [
+      'Ogni P/N si cerca presso TUTTI i distributori collegati (DigiKey, Mouser, Farnell, TME). Se uno non lo ha ma un altro sì, va bene: nessuna segnalazione, si compra da chi lo ha al prezzo migliore.',
+      '"Critico" solo se il componente non è disponibile da nessuna parte (non trovato o pezzi insufficienti sommando tutti). "Attenzione" solo se la quantità c\'è ma va divisa tra più distributori, o se un distributore non ha risposto (premi "Aggiorna prezzi"). Fine vita, scorte basse e simili restano come note nella riga, senza segnalazione.',
+      'Per un P/N che non si trova il portale cerca da solo le alternative: varianti dello stesso P/N (confezione o suffisso diverso) e componenti con le stesse caratteristiche, cioè con lo stesso codice di produzione (es. stessa resistenza 2K2 1% 0603 100 mW di un altro produttore). Ognuna è prezzata presso tutti i distributori.',
+      'La scelta è dell\'operatore: nella riga della BOM, riquadro "Alternative", "Usa questa" la fa diventare il componente da comprare (prezzo e reperibilità si ricalcolano). Nel campo "Alternativa scritta a mano" puoi scrivere un P/N tuo: si cerca presso tutti i distributori e, se si trova, si usa. "Torna al P/N della BOM" annulla la scelta.',
+      'Le caratteristiche identiche si controllano solo per i componenti il cui codice dice tutto (resistenze, condensatori, induttanze, LED, quarzi…). Per integrati, connettori e simili il portale propone solo le varianti dello stesso P/N: un sostituto va scelto a mano ed è segnato "da controllare".',
+      'Le alternative scritte a mano e quella scelta restano anche dopo Rielabora o Aggiorna prezzi; nell\'Excel degli acquisti la riga mostra "P/N → alternativa".',
+      'Prezzo a mano: nella riga della BOM, sotto Acquisto, scrivi il prezzo €/pz (es. 0,125) e "Salva prezzo": vale al posto di quello proposto dai distributori, anche per un componente non trovato, e lo scarto si calcola su quel prezzo. Nell\'elenco compare "prezzo a mano". "Torna al prezzo proposto" lo toglie. Resta anche dopo Rielabora.',
+    ],
+    passi: ['Componenti → apri la BOM.', 'Filtro "Reperibilità" o link "N alternative: scegli" nella colonna P/N.', 'Nella riga: "Usa questa" oppure scrivi un P/N in "Alternativa scritta a mano".', 'Se la BOM è di un preventivo: "Torna al preventivo per la quota".'],
+    pagine: [['/componenti', 'Componenti → BOM caricate']],
+  },
+  {
     id: 'codifica-singola', area: 'componenti', titolo: 'Codificare un solo componente',
     parole: 'codifica singolo componente p/n codice resistenza condensatore',
     testo: [

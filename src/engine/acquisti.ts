@@ -9,7 +9,7 @@
  *  - Prezzo: scaglione del distributore per la quantità, rispettando minimo d'ordine e multipli; se lo scaglione
  *    successivo costa meno in totale (es. 100 pezzi costano meno di 80) si propone quello.
  *  - Fornitore: il totale più basso tra quelli con disponibilità sufficiente.
- *  - Reperibilità: componenti obsoleti / fine vita, disponibilità insufficiente, un solo distributore, scorte basse.
+ *  - Reperibilità: si cerca da tutti i distributori; critico solo se il componente non si trova da nessuna parte (Adriano, 28/10/2026).
  */
 
 export type Fornitore = 'digikey' | 'mouser' | 'farnell' | 'tme';
@@ -101,15 +101,18 @@ export function acquisto(o: Offerta, qta: number): Acquisto | null {
 
 export interface Scelta { offerta: Offerta; acquisto: Acquisto; disponibile: boolean }
 
-/** Offerta migliore: totale più basso tra quelle con disponibilità sufficiente; altrimenti quella con più pezzi. */
+/**
+ * Offerta migliore: totale più basso tra quelle con disponibilità sufficiente (prima quelle non obsolete: un obsoleto in magazzino
+ * si compra lo stesso); altrimenti quella con più pezzi.
+ */
 export function sceltaMigliore(offerte: Offerta[], qta: number): Scelta | null {
   const valide = offerte.filter(o => o.valuta === 'EUR' || !o.valuta)
     .map(o => ({ offerta: o, acquisto: acquisto(o, qta) }))
     .filter((x): x is { offerta: Offerta; acquisto: Acquisto } => !!x.acquisto);
   if (!valide.length) return null;
-  const disponibili = valide.filter(x => x.offerta.stock >= x.acquisto.qta && !x.offerta.obsoleto);
+  const disponibili = valide.filter(x => x.offerta.stock >= x.acquisto.qta);
   if (disponibili.length) {
-    disponibili.sort((a, b) => a.acquisto.totale - b.acquisto.totale);
+    disponibili.sort((a, b) => Number(!!a.offerta.obsoleto) - Number(!!b.offerta.obsoleto) || a.acquisto.totale - b.acquisto.totale);
     return { ...disponibili[0], disponibile: true };
   }
   valide.sort((a, b) => b.offerta.stock - a.offerta.stock || a.acquisto.totale - b.acquisto.totale);
@@ -120,22 +123,36 @@ export type Livello = 'ok' | 'attenzione' | 'critico';
 export interface Reperibilita { livello: Livello; motivi: string[] }
 
 const OBSOLETO = /OBSOLETE|OBSOLETO|DISCONTINUED|NO LONGER|NO_LONGER|END OF LIFE|EOL|NOT RECOMMENDED|NRND|LAST TIME BUY|NOT FOR NEW DESIGN/i;
+export const fineVita = (o: Offerta) => !!(o.obsoleto || o.fineVita || OBSOLETO.test(o.ciclo ?? ''));
+const elencoNomi = (fs: Fornitore[]) => fs.map(f => NOMI_FORNITORI[f]).join(', ');
 
-/** Il componente è difficile da trovare? */
-export function reperibilita(offerte: Offerta[], qta: number): Reperibilita {
+/**
+ * Il componente si trova? (Adriano, 28/10/2026) Si cerca presso TUTTI i distributori: se uno non lo ha ma un altro sì, va bene
+ * (nessun "critico" né "attenzione"). Critico SOLO se non è disponibile da nessuna parte nella quantità che serve.
+ * "Attenzione" solo se la quantità c'è ma divisa tra più distributori, o se qualche distributore non ha risposto.
+ * Le altre informazioni (fine vita, un solo distributore, scorte basse) restano come note, senza segnalazione.
+ * nonControllati = distributori collegati che per questo P/N non hanno risposto (errore, limite di richieste).
+ */
+export function reperibilita(offerte: Offerta[], qta: number, nonControllati: Fornitore[] = []): Reperibilita {
   const motivi: string[] = []; let livello: Livello = 'ok';
   const alza = (l: Livello, m: string) => { motivi.push(m); if (l === 'critico' || (l === 'attenzione' && livello === 'ok')) livello = l; };
-  if (!offerte.length) return { livello: 'critico', motivi: ['non trovato presso i distributori'] };
-  const fineVita = offerte.find(o => o.obsoleto || o.fineVita || OBSOLETO.test(o.ciclo ?? ''));
-  if (fineVita) alza(offerte.every(o => o.obsoleto) ? 'critico' : 'attenzione', `${NOMI_FORNITORI[fineVita.fornitore]}: ${fineVita.ciclo || 'fine vita'}`);
+  const daRiprovare = nonControllati.length ? ` (${elencoNomi(nonControllati)} non ha risposto: premi "Aggiorna prezzi")` : '';
+  if (!offerte.length) {
+    return nonControllati.length ? { livello: 'attenzione', motivi: [`non trovato${daRiprovare}`] }
+      : { livello: 'critico', motivi: ['non trovato presso nessun distributore'] };
+  }
   const perFornitore = new Map<Fornitore, number>();
   for (const o of offerte) perFornitore.set(o.fornitore, Math.max(perFornitore.get(o.fornitore) ?? 0, o.stock));
   const totale = [...perFornitore.values()].reduce((a, b) => a + b, 0);
-  const sufficienti = [...perFornitore.entries()].filter(([, s]) => s >= qta);
-  if (qta > 0 && totale < qta) alza('critico', `disponibili ${totale} pz in tutto contro ${qta} necessari`);
-  else if (qta > 0 && !sufficienti.length) alza('attenzione', `nessun distributore ha da solo ${qta} pz (in tutto ${totale})`);
-  else if (qta > 0 && sufficienti.length === 1 && perFornitore.size > 1) alza('attenzione', `solo ${NOMI_FORNITORI[sufficienti[0][0]]} ha la quantità`);
-  if (qta > 0 && sufficienti.length && Math.max(...sufficienti.map(([, s]) => s)) < 3 * qta) alza('attenzione', 'scorte basse (meno di 3 volte il fabbisogno)');
+  const sufficienti = [...perFornitore.entries()].filter(([, s]) => s >= qta).map(([f]) => f);
+  if (qta > 0 && totale < qta) {
+    if (nonControllati.length) alza('attenzione', `disponibili ${totale} pz contro ${qta} necessari${daRiprovare}`);
+    else alza('critico', `non disponibile da nessuna parte: ${totale} pz in tutto contro ${qta} necessari`);
+  } else if (qta > 0 && !sufficienti.length) alza('attenzione', `nessun distributore ha da solo ${qta} pz: vanno presi da più distributori (in tutto ${totale})`);
+  else if (qta > 0) motivi.push(`disponibile da ${elencoNomi(sufficienti)}`);
+  const fv = offerte.find(fineVita);
+  if (fv) motivi.push(`${NOMI_FORNITORI[fv.fornitore]}: ${fv.ciclo || 'fine vita'}`);
+  if (qta > 0 && sufficienti.length && Math.max(...sufficienti.map(f => perFornitore.get(f)!)) < 3 * qta) motivi.push('scorte basse (meno di 3 volte il fabbisogno)');
   const attese = offerte.filter(o => o.stock < qta && (o.consegnaSettimane ?? 0) > 8).map(o => o.consegnaSettimane!);
   if (attese.length && totale < qta) motivi.push(`consegna dal produttore ${Math.min(...attese)} settimane`);
   return { livello, motivi };

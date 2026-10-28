@@ -6,7 +6,9 @@
  *     qualcosa, dalla lettura con l'IA; regole d'acquisto (resistenze solo 1%); codici calcolati con le regole;
  *     una riga senza P/N che dà un codice di produzione già in archivio riprende i codici esistenti;
  *  3. prezzi e disponibilità dai distributori; per i passivi senza P/N si cerca il più economico con gli stessi dati;
- *  4. quantità da acquistare con lo scarto, fornitore migliore, componenti difficili da trovare.
+ *  4. quantità da acquistare con lo scarto, fornitore migliore, componenti difficili da trovare;
+ *  5. P/N non trovato da nessun distributore: alternative con le stesse caratteristiche (stesso codice di produzione) o varianti
+ *     dello stesso P/N, più quelle scritte a mano; le sceglie l'operatore (Adriano, 28/10/2026).
  * L'elaborazione gira in background: la pagina segue l'avanzamento.
  */
 import { gunzipSync } from 'node:zlib';
@@ -28,7 +30,7 @@ export type Esito = typeof ESITI[keyof typeof ESITI];
 
 export interface AcquistoRiga {
   schede: number; netta: number; scarto: number; regolaScarto: string; lorda: number;
-  scelta?: { fornitore: Fornitore; codice: string; mpn: string; qta: number; prezzo: number; totale: number; nota?: string; disponibile: boolean; url?: string | null };
+  scelta?: { fornitore: Fornitore | typeof PREZZO_A_MANO; codice: string; mpn: string; qta: number; prezzo: number; totale: number; nota?: string; disponibile: boolean; url?: string | null };
 }
 export interface RigaBom {
   n: number; pn: string | null; produttore: string | null; designatori: string | null; valore: string | null; footprint: string | null; descrizioneBom: string | null;
@@ -36,6 +38,25 @@ export interface RigaBom {
   codiceProduzione: string | null; codiceGestionale: string | null; descrizione: string | null;
   fonti: string[]; note: string[]; dbId?: number | null; prodDb?: string | null;
   mpnAcquisto?: string | null; offerte: Offerta[]; acquisti: AcquistoRiga[]; reperibilita?: Reperibilita; clienteFornisce?: boolean;
+  /** distributori collegati che per questo P/N non hanno risposto (errore, limite di richieste) */
+  nonControllati?: Fornitore[];
+  /** alternative al P/N della BOM e quella scelta dall'operatore (si compra quella al posto del P/N) */
+  alternative?: Alternativa[]; alternativaScelta?: string | null;
+  /** prezzo €/pz scritto dall'operatore: vale al posto di quello dei distributori (Adriano 28/10/2026) */
+  prezzoManuale?: number | null;
+}
+
+export const PREZZO_A_MANO = 'manuale' as const;
+/** Nome da mostrare per chi vende: distributore o prezzo scritto a mano. */
+export const nomeFornitore = (f: Fornitore | typeof PREZZO_A_MANO) => f === PREZZO_A_MANO ? 'prezzo a mano' : NOMI_FORNITORI[f];
+
+export const FONTI_ALTERNATIVA = { STESSE: 'stesse caratteristiche', VARIANTE: 'variante dello stesso P/N', MANO: 'scritta a mano' } as const;
+export interface Alternativa {
+  mpn: string; produttore: string; descrizione: string;
+  fonte: typeof FONTI_ALTERNATIVA[keyof typeof FONTI_ALTERNATIVA];
+  /** stesse caratteristiche controllate con il codice di produzione: true sì, false no, null da controllare a mano */
+  identica: boolean | null;
+  offerte: Offerta[];
 }
 
 // ───────────────────────────── lettura del file ─────────────────────────────
@@ -188,6 +209,13 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
       footprint: val(celle, 'footprint'), descrizioneBom: val(celle, 'descrizione'), qtaScheda: qt.qta, esito: ESITI.INC, famiglia: null, attributi: {},
       codiceProduzione: null, codiceGestionale: null, descrizione: null, fonti: [], note: qt.nota ? [qt.nota] : [], offerte: [], acquisti: [],
       clienteFornisce: precedenti.get(n)?.clienteFornisce };
+    // le alternative scritte a mano e quella scelta restano anche dopo "Rielabora" (se il P/N della riga è lo stesso)
+    const prima = precedenti.get(n);
+    if (prima && pnKey(prima.pn) === pnKey(r.pn)) {
+      r.alternative = (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
+      r.alternativaScelta = prima.alternativaScelta ?? null;
+      r.prezzoManuale = prima.prezzoManuale ?? null;
+    }
     (r as any)._fam = val(celle, 'famiglia');
     return r;
   });
@@ -242,7 +270,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
       famDk = d.famiglia; aDk = d.attributi;
       if (!r.produttore && d.produttore) r.produttore = d.produttore;
       if (!famDk) r.note.push(`DigiKey: categoria non riconosciuta (${d.descrizione})`);
-    } else if (r.pn && fornitoriConfigurati().digikey && dk && !dk.prodotto) r.note.push('non trovato su DigiKey');
+    } else if (r.pn && fornitoriConfigurati().digikey && dk && !dk.prodotto && !Object.values(dist(r.pn)).some(x => x?.offerte.length)) r.note.push('non trovato su DigiKey');
     const fam = famDec ?? famDk ?? famBom;
     if (famDk && famDk !== fam) aDk = {};
     r.famiglia = fam;
@@ -289,6 +317,10 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   await prezziGenerici(righe, ricerca.perPn);
   // 8. acquisti
   await calcolaAcquisti(righe, a.quantita ?? [], ricerca.perPn);
+  // 9. P/N non trovati da nessuna parte: alternative da proporre all'operatore
+  av.fase = 'ricerca delle alternative';
+  await alternativeRighe(righe, opz.forzaPrezzi);
+  await calcolaAcquisti(righe, a.quantita ?? []);
   const errori = Object.entries(ricerca.errori).map(([f, m]) => `${NOMI_FORNITORI[f as Fornitore]}: ${m}`);
   await salvaRighe(id, righe);
   return [notaIa, ...errori].filter(Boolean).join(' · ');
@@ -402,22 +434,233 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
   }
 }
 
+// ───────────────────────────── alternative ─────────────────────────────
+const MAX_ALTERNATIVE = 5, MAX_RIGHE_ALTERNATIVE = 30;
+/** Famiglie il cui codice di produzione dice tutte le caratteristiche (senza P/N dentro): lì "stesso codice" = componente identico. */
+const SENZA_PN = (fam: string | null) => !!fam && !!FAMIGLIE[fam] && !FAMIGLIE[fam].prod.some(c => c === 'RID' || c === 'PN');
+
+/** Stesso componente nelle caratteristiche? Confronta il codice di produzione calcolato (o la radice del gestionale). */
+export function stesseCaratteristiche(r: Pick<RigaBom, 'famiglia' | 'codiceProduzione' | 'codiceGestionale'>, fam: string | null, attr: Attributi, mpn: string): boolean | null {
+  if (!fam || !r.famiglia) return null;
+  if (fam !== r.famiglia) return false;
+  const c = calcola(fam, regolaResistenze(fam, attr).attributi, mpn);
+  if (r.codiceProduzione && c.prod) return c.prod.toUpperCase() === r.codiceProduzione.toUpperCase();
+  const radice = r.codiceGestionale?.slice(0, -4);
+  if (radice && c.root) return c.root === radice;
+  return null;
+}
+
+/** Parole per cercare dai distributori un componente con le stesse caratteristiche. */
+function paroleAlternative(r: RigaBom): string | null {
+  const p = paroleRicerca(r);
+  if (p) return p;
+  if (!SENZA_PN(r.famiglia) || !r.descrizione) return null;
+  // la descrizione Casteltech finisce con il P/N: per cercare un equivalente il P/N non serve
+  const k = pnKey(r.pn);
+  return r.descrizione.split(/\s+/).filter(w => !k || pnKey(w) !== k).join(' ').trim() || null;
+}
+
+/**
+ * Alternative per una riga il cui P/N non si trova da nessuna parte (Adriano, 28/10/2026):
+ *  1. varianti dello stesso P/N (confezione o suffisso diverso, es. -TR, /R7) cercate per parola;
+ *  2. componenti con le stesse caratteristiche (stesso codice di produzione), cercati per parametri.
+ * Ognuna poi si prezza presso TUTTI i distributori; si tengono solo quelle che qualcuno vende, le più economiche prima.
+ */
+export async function cercaAlternative(r: RigaBom, qta: number): Promise<Alternativa[]> {
+  const attivi = fornitoriConfigurati();
+  const k = pnKey(r.pn ?? r.mpnAcquisto);
+  const candidate = new Map<string, Omit<Alternativa, 'offerte'>>();
+  const aggiungi = (a: Omit<Alternativa, 'offerte'>) => {
+    const ka = pnKey(a.mpn);
+    if (!ka || ka === k || candidate.has(ka) || a.identica === false) return;
+    candidate.set(ka, a);
+  };
+  const variante = (mpn: string) => { const x = pnKey(mpn); return !!k && !!x && k.length >= 6 && x.length >= 6 && (x.startsWith(k) || k.startsWith(x)); };
+  // 1. varianti dello stesso P/N
+  if (k && k.length >= 6) {
+    const pn = (r.pn ?? r.mpnAcquisto)!;
+    if (attivi.digikey) {
+      try {
+        for (const x of await digikeyParametri(pn)) {
+          const mpn = x.prodotto.ManufacturerProductNumber ?? '';
+          if (!variante(mpn) || !x.offerte.length) continue;
+          const d = daDigikey(x.prodotto);
+          aggiungi({ mpn, produttore: x.prodotto.Manufacturer?.Name ?? '', descrizione: x.offerte[0].descrizione, fonte: FONTI_ALTERNATIVA.VARIANTE,
+            identica: stesseCaratteristiche(r, d.famiglia, d.attributi, mpn) || null });
+          await memorizza('digikey', mpn, { offerte: x.offerte, prodotto: x.prodotto });
+        }
+      } catch (e: any) { r.note.push(`ricerca delle varianti su DigiKey non riuscita: ${e.message}`); }
+    }
+    if (attivi.mouser) {
+      try {
+        for (const o of await mouserParametri(pn)) {
+          if (!variante(o.mpn)) continue;
+          aggiungi({ mpn: o.mpn, produttore: o.produttore, descrizione: o.descrizione, fonte: FONTI_ALTERNATIVA.VARIANTE, identica: null });
+        }
+      } catch (e: any) { r.note.push(`ricerca delle varianti su Mouser non riuscita: ${e.message}`); }
+    }
+  }
+  // 2. stesse caratteristiche (solo dove il codice di produzione le dice tutte)
+  const parole = paroleAlternative(r);
+  if (parole && (r.codiceProduzione || r.codiceGestionale)) {
+    if (attivi.digikey) {
+      try {
+        for (const x of await digikeyParametri(parole)) {
+          const mpn = x.prodotto.ManufacturerProductNumber ?? '';
+          if (!x.offerte.length) continue;
+          const d = daDigikey(x.prodotto);
+          if (stesseCaratteristiche(r, d.famiglia, d.attributi, mpn) !== true) continue;
+          aggiungi({ mpn, produttore: x.prodotto.Manufacturer?.Name ?? '', descrizione: x.offerte[0].descrizione, fonte: FONTI_ALTERNATIVA.STESSE, identica: true });
+          await memorizza('digikey', mpn, { offerte: x.offerte, prodotto: x.prodotto });
+        }
+      } catch (e: any) { r.note.push(`ricerca delle alternative su DigiKey non riuscita: ${e.message}`); }
+    }
+    if (attivi.mouser) {
+      try {
+        for (const o of await mouserParametri(parole)) {
+          const [fam, attr] = decodificaMpn(o.mpn);
+          if (stesseCaratteristiche(r, fam, attr, o.mpn) !== true) continue;
+          aggiungi({ mpn: o.mpn, produttore: o.produttore, descrizione: o.descrizione, fonte: FONTI_ALTERNATIVA.STESSE, identica: true });
+        }
+      } catch (e: any) { r.note.push(`ricerca delle alternative su Mouser non riuscita: ${e.message}`); }
+    }
+  }
+  if (!candidate.size) return [];
+  // prezzi e disponibilità da tutti i distributori
+  const es = await cercaPn([...candidate.values()].map(a => a.mpn));
+  const alternative = [...candidate.entries()].map(([ka, a]) => ({ ...a, offerte: Object.values(es.perPn.get(ka) ?? {}).flatMap(x => x?.offerte ?? []) }))
+    .filter(a => a.offerte.length);
+  return ordinaAlternative(alternative, qta).slice(0, MAX_ALTERNATIVE);
+}
+
+/** Prima quelle con le stesse caratteristiche e disponibili, poi le più economiche per la quantità. */
+export function ordinaAlternative(alternative: Alternativa[], qta: number): Alternativa[] {
+  const valuta = (a: Alternativa) => { const s = sceltaMigliore(a.offerte, Math.max(1, qta)); return { disp: !!s?.disponibile, tot: s?.acquisto.totale ?? Infinity }; };
+  return [...alternative].map(a => ({ a, v: valuta(a) }))
+    .sort((x, y) => Number(y.v.disp) - Number(x.v.disp) || Number(y.a.identica === true) - Number(x.a.identica === true) || x.v.tot - y.v.tot)
+    .map(x => x.a);
+}
+
+/** Alternative per le righe non trovate (o non disponibili) da nessun distributore; aggiorna i prezzi di quelle già scelte o scritte a mano. */
+async function alternativeRighe(righe: RigaBom[], forza?: boolean) {
+  if (!Object.values(fornitoriConfigurati()).some(Boolean)) return;
+  // quelle già presenti (scritte a mano o scelte): prezzi aggiornati
+  const tenute = righe.flatMap(r => r.alternative ?? []);
+  if (tenute.length) {
+    const es = await cercaPn(unico(tenute.map(a => a.mpn)), { forza });
+    for (const a of tenute) a.offerte = Object.values(es.perPn.get(pnKey(a.mpn)!) ?? {}).flatMap(x => x?.offerte ?? []);
+  }
+  let cercate = 0;
+  for (const r of righe) {
+    if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.pn || r.mpnAcquisto)) continue;
+    if (r.alternativaScelta || r.reperibilita?.livello !== 'critico') continue;
+    if (cercate++ >= MAX_RIGHE_ALTERNATIVE) { r.note.push('alternative non cercate (troppe righe non trovate): scrivila a mano dalla riga'); continue; }
+    const qta = Math.max(0, ...r.acquisti.map(x => x.lorda));
+    try {
+      const trovate = await cercaAlternative(r, qta);
+      const giaQui = new Set((r.alternative ?? []).map(a => pnKey(a.mpn)));
+      r.alternative = [...trovate.filter(a => !giaQui.has(pnKey(a.mpn))), ...(r.alternative ?? [])];
+      if (trovate.length) r.note.push(`${trovate.length === 1 ? '1 alternativa trovata' : `${trovate.length} alternative trovate`}: scegli dalla riga`);
+      else r.note.push('nessuna alternativa trovata dai distributori: puoi scriverne una a mano dalla riga');
+    } catch (e: any) { r.note.push(`ricerca delle alternative non riuscita: ${e.message}`); }
+  }
+}
+
+/** Prezzo €/pz scritto a mano su una riga (null = torna al prezzo dei distributori). Ricalcola gli acquisti. */
+export async function impostaPrezzoManuale(id: number, n: number, prezzo: number | null): Promise<string> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  const righe: RigaBom[] = a?.righe ?? [];
+  const r = righe.find(x => x.n === n);
+  if (!r) return 'Riga non trovata.';
+  r.prezzoManuale = prezzo;
+  await calcolaAcquisti(righe, a.quantita ?? []);
+  await salvaRighe(id, righe);
+  return prezzo == null ? 'Prezzo a mano tolto: vale di nuovo quello dei distributori.' : `Prezzo a mano salvato: ${String(prezzo).replace('.', ',')} €/pz.`;
+}
+
+/**
+ * Scelta dell'operatore sulla riga: usa un'alternativa proposta, ne scrive una a mano (cercata presso tutti i distributori)
+ * o torna al P/N della BOM. Ricalcola gli acquisti.
+ */
+export async function scegliAlternativa(id: number, n: number, dati: { usa?: string; nuova?: string; originale?: boolean; togli?: string }): Promise<string> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  const righe: RigaBom[] = a?.righe ?? [];
+  const r = righe.find(x => x.n === n);
+  if (!r) return 'Riga non trovata.';
+  let messaggio = '';
+  const pnRiga = r.pn ?? r.mpnAcquisto;
+  if (dati.nuova) {
+    const mpn = dati.nuova.trim().toUpperCase();
+    const ka = pnKey(mpn);
+    if (!ka) return 'Scrivi il P/N dell\'alternativa.';
+    if (ka === pnKey(pnRiga)) return 'È lo stesso P/N della BOM.';
+    const es = await cercaPn([mpn]);
+    const trovati = es.perPn.get(ka) ?? {};
+    const offerte = Object.values(trovati).flatMap(x => x?.offerte ?? []);
+    const dk = trovati.digikey?.prodotto;
+    const d = dk ? daDigikey(dk) : null;
+    const [famDec, aDec] = decodificaMpn(mpn);
+    const identica = d?.famiglia ? stesseCaratteristiche(r, d.famiglia, d.attributi, mpn) : famDec ? stesseCaratteristiche(r, famDec, aDec, mpn) : null;
+    const alt: Alternativa = { mpn: offerte[0]?.mpn || mpn, produttore: offerte[0]?.produttore ?? '', descrizione: offerte[0]?.descrizione ?? '',
+      fonte: FONTI_ALTERNATIVA.MANO, identica, offerte };
+    r.alternative = [alt, ...(r.alternative ?? []).filter(x => pnKey(x.mpn) !== ka)];
+    if (offerte.length) {
+      r.alternativaScelta = alt.mpn;
+      messaggio = `Alternativa ${alt.mpn} trovata e scelta.` + (identica === false ? ' Attenzione: le caratteristiche risultano diverse da quelle della BOM.' : identica === null ? ' Controlla che abbia le stesse caratteristiche.' : '');
+    } else messaggio = `${mpn} non si trova presso nessun distributore: aggiunto all'elenco ma non scelto.` +
+      (Object.keys(es.errori).length ? ` (${Object.keys(es.errori).map(f => NOMI_FORNITORI[f as Fornitore]).join(', ')} non ha risposto)` : '');
+  } else if (dati.usa) {
+    const alt = r.alternative?.find(x => x.mpn === dati.usa);
+    if (!alt) return 'Alternativa non trovata.';
+    r.alternativaScelta = alt.mpn; messaggio = `Si compra ${alt.mpn} al posto di ${pnRiga ?? 'quello della BOM'}.`;
+  } else if (dati.togli) {
+    r.alternative = (r.alternative ?? []).filter(x => x.mpn !== dati.togli);
+    if (r.alternativaScelta === dati.togli) r.alternativaScelta = null;
+    messaggio = `Alternativa ${dati.togli} tolta.`;
+  }
+  if (dati.originale || (!r.alternativaScelta && (dati.togli || dati.originale))) {
+    r.alternativaScelta = null;
+    if (pnRiga) {
+      const es = await cercaPn([pnRiga]);
+      calcolaAcquistiCon([r], a.quantita ?? [], await caricaRegoleScarto(), es.perPn);
+    }
+    if (dati.originale) messaggio = `Si torna al P/N della BOM${pnRiga ? ` ${pnRiga}` : ''}.`;
+  }
+  await calcolaAcquisti(righe, a.quantita ?? []);
+  await salvaRighe(id, righe);
+  return messaggio;
+}
+
 /** Quantità, scarto, fornitore migliore e reperibilità per ogni quantità di schede. */
 export async function calcolaAcquisti(righe: RigaBom[], quantita: number[], perPnDist?: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>) {
   calcolaAcquistiCon(righe, quantita, await caricaRegoleScarto(), perPnDist);
 }
 export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole: RegoleScarto, perPnDist?: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>) {
+  const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f]);
   for (const r of righe) {
     const pn = r.pn ?? r.mpnAcquisto ?? null;
-    if (perPnDist && pn) r.offerte = Object.values(perPnDist.get(pnKey(pn)!) ?? {}).flatMap(x => x?.offerte ?? []);
+    const alt = r.alternativaScelta ? r.alternative?.find(x => x.mpn === r.alternativaScelta) : undefined;
+    if (alt) { r.offerte = alt.offerte; r.nonControllati = []; }
+    else if (perPnDist && pn) {
+      const trovati = perPnDist.get(pnKey(pn)!) ?? {};
+      r.offerte = Object.values(trovati).flatMap(x => x?.offerte ?? []);
+      r.nonControllati = attivi.filter(f => !trovati[f]);
+    }
     r.acquisti = []; r.reperibilita = undefined;
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.qtaScheda > 0)) continue;
     for (const schede of quantita) {
       const netta = Math.ceil(r.qtaScheda * schede);
-      const migliore0 = sceltaMigliore(r.offerte, netta);
-      const p0 = migliore0 ? prezzoUnitario(migliore0.offerta, netta) : null;
+      const manuale = r.prezzoManuale != null && r.prezzoManuale >= 0 ? r.prezzoManuale : null;
+      const migliore0 = manuale == null ? sceltaMigliore(r.offerte, netta) : null;
+      const p0 = manuale ?? (migliore0 ? prezzoUnitario(migliore0.offerta, netta) : null);
       const sc = pezziScarto(r.famiglia, p0, netta, regole);
       const lorda = netta + sc.pezzi;
+      if (manuale != null) { // prezzo scritto dall'operatore: vale quello, qualunque cosa propongano i distributori
+        r.acquisti.push({ schede, netta, scarto: sc.pezzi, regolaScarto: sc.regola, lorda,
+          scelta: { fornitore: PREZZO_A_MANO, codice: '', mpn: r.alternativaScelta ?? pn ?? '', qta: lorda, prezzo: manuale, totale: lorda * manuale,
+            nota: 'prezzo scritto a mano', disponibile: true } });
+        continue;
+      }
       const s = sceltaMigliore(r.offerte, lorda);
       r.acquisti.push({ schede, netta, scarto: sc.pezzi, regolaScarto: sc.regola, lorda,
         scelta: s ? { fornitore: s.offerta.fornitore, codice: s.offerta.codiceFornitore, mpn: s.offerta.mpn, qta: s.acquisto.qta, prezzo: s.acquisto.prezzo,
@@ -425,7 +668,9 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
     }
     const max = Math.max(0, ...r.acquisti.map(x => x.lorda));
     if (!Object.values(fornitoriConfigurati()).some(Boolean)) continue; // nessun distributore collegato: niente giudizio
-    r.reperibilita = r.pn || r.mpnAcquisto ? reperibilita(r.offerte, max) : { livello: 'attenzione', motivi: ['senza P/N: nessun equivalente trovato, prezzo non disponibile'] };
+    r.reperibilita = r.pn || r.mpnAcquisto || alt ? reperibilita(r.offerte, max, r.nonControllati ?? []) : { livello: 'attenzione', motivi: ['senza P/N: nessun equivalente trovato, prezzo non disponibile'] };
+    if (alt) r.reperibilita.motivi.unshift(`si compra l'alternativa ${alt.mpn} al posto di ${pn ?? 'quello della BOM'}`);
+    if (r.prezzoManuale != null) r.reperibilita = { livello: 'ok', motivi: [`prezzo scritto a mano: ${r.prezzoManuale} €/pz`, ...r.reperibilita.motivi.filter(m => !m.startsWith('senza P/N'))] };
   }
 }
 
@@ -592,8 +837,9 @@ export async function excelAnalisi(id: number): Promise<{ nome: string; dati: Bu
       { titolo: 'fornitore', larghezza: 10 }, { titolo: 'codice fornitore', larghezza: 20 }, { titolo: '€/pz', larghezza: 9 }, { titolo: 'totale €', larghezza: 10 }])]);
   for (const r of righe) {
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce) continue;
-    const row = wa.addRow([r.n, r.pn ?? (r.mpnAcquisto ? `(${r.mpnAcquisto})` : null), r.codiceGestionale, r.qtaScheda, r.reperibilita?.livello ?? '', r.reperibilita?.motivi.join('; ') ?? '',
-      ...r.acquisti.flatMap(x => [x.netta, x.scarto, x.scelta?.qta ?? x.lorda, x.scelta ? NOMI_FORNITORI[x.scelta.fornitore] : '', x.scelta?.codice ?? '', x.scelta?.prezzo ?? null, x.scelta?.totale ?? null])]);
+    const pnExcel = r.alternativaScelta ? `${r.pn ?? r.mpnAcquisto ?? ''} → alternativa ${r.alternativaScelta}` : r.pn ?? (r.mpnAcquisto ? `(${r.mpnAcquisto})` : null);
+    const row = wa.addRow([r.n, pnExcel, r.codiceGestionale, r.qtaScheda, r.reperibilita?.livello ?? '', r.reperibilita?.motivi.join('; ') ?? '',
+      ...r.acquisti.flatMap(x => [x.netta, x.scarto, x.scelta?.qta ?? x.lorda, x.scelta ? nomeFornitore(x.scelta.fornitore) : '', x.scelta?.codice ?? '', x.scelta?.prezzo ?? null, x.scelta?.totale ?? null])]);
     riempi(row.getCell(5), COLORI_LIVELLO[r.reperibilita?.livello ?? '']);
     for (let i = 0; i < quantita.length; i++) { row.getCell(7 + i * 7 + 5).numFmt = '0.0000'; row.getCell(7 + i * 7 + 6).numFmt = '#,##0.00'; }
   }
