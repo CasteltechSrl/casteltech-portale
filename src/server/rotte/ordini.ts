@@ -68,7 +68,9 @@ export function rotteOrdini() {
         ${righe.length ? html`<tfoot><tr><td colspan="10">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
       </table></div>
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
-        Le righe di servizio (attrezzaggio, lamine, programmazioni) sono evase quando sono fatturate o quando tutte le schede dell'ordine sono evase.
+        I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.
+        Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum, trasporto) non sono da evadere da sole:
+        sono evase quando sono fatturate o quando l'ordine non ha più schede da spedire.
         Consegna prevista = arrivo materiale + ${3} gg + ${5} gg + ritardi di produzione, come nel foglio.</p>`,
       { avviso: req.query.msg ? String(req.query.msg) : undefined }));
   });
@@ -175,12 +177,16 @@ export function rotteOrdini() {
     const fatture = await q(`SELECT f.*, r.chiave FROM fatture_righe f JOIN ordini_righe r ON r.id = f.riga_id WHERE r.ordine_id = $1 ORDER BY f.data, f.numero`, [o.id]);
     const commesse = await q(`SELECT id, numero FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
     const stato = statoOrdine(righe.map(x => x.stato));
+    const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
       <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
         <form method="post" action="/ordini/${o.id}/elimina" class="inline"
           data-conferma="${confermaEliminaOrdine({ numero: o.numero, anno: o.anno, origine: o.origine, righe: righe.length, conDocumenti: ddt.length + fatture.length > 0 })}">
-          <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form></div>
+          <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form>
+        ${['da_evadere', 'parziale'].includes(stato) ? html`<form method="post" action="/ordini/${o.id}/evaso" class="inline"
+          data-conferma="${`Segnare come evase tutte le righe ancora aperte dell'ordine ${o.numero}/${o.anno}? Usalo quando la merce è stata consegnata ma il DDT ha un codice diverso o manca. Si torna indietro scegliendo "automatico" nello stato delle righe.`}">
+          <button title="Merce consegnata: tutte le righe aperte diventano evase">Segna tutto evaso</button></form>` : ''}</div>
       <dl class="dati-ordine">
         <dt>Cliente</dt><dd>${o.cliente_nome}${o.cliente_id ? '' : html` <span class="esito verifica">non in anagrafica</span>`}</dd>
         <dt>Data ordine</dt><dd>${data(o.data_ordine)}</dd>
@@ -216,7 +222,11 @@ export function rotteOrdini() {
       ${righe.map(x => html`<form method="post" action="/ordini/${o.id}/righe/${x.id}/elimina" id="elimina-riga-${x.id}" hidden></form>`)}
       <div class="due-colonne">
         <section><h2>DDT</h2>${ddt.length ? html`<table><thead><tr><th>DDT</th><th>Data</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
-          <tbody>${ddt.map(d => html`<tr><td>${d.numero}</td><td>${data(d.data)}</td><td>${d.codice || d.descrizione}</td><td class="n">${num(d.quantita, 0)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessun DDT.</p>`}</section>
+          <tbody>${ddt.map(d => html`<tr><td>${d.numero}</td><td>${data(d.data)}</td><td>${d.codice || d.descrizione}</td><td class="n">${num(d.quantita, 0)}</td></tr>`)}</tbody></table>` : spedizioni.length ? '' : html`<p class="nota">Nessun DDT.</p>`}
+          ${spedizioni.length ? html`<h3>Abbinati in automatico</h3><p class="nota">DDT del portale con lo stesso cliente e lo stesso codice (o descrizione).
+            Se un abbinamento è sbagliato, scegli lo stato della riga a mano.</p>
+            <table><thead><tr><th>Documento</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
+            <tbody>${spedizioni.map(a => html`<tr><td>${a.documento}</td><td>${a.codice}</td><td class="n">${num(a.quantita, 0)}</td></tr>`)}</tbody></table>` : ''}</section>
         <section><h2>Fatture</h2>${fatture.length ? html`<table><thead><tr><th>Fattura</th><th>Data</th><th>Codice</th><th class="n">Imponibile</th></tr></thead>
           <tbody>${fatture.map(f => html`<tr><td>${f.numero}${f.ddt_numero ? html` <small class="nota">(DDT ${f.ddt_numero})</small>` : ''}</td><td>${data(f.data)}</td><td>${f.codice || f.descrizione}</td><td class="n">${euro(f.imponibile)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessuna fattura.</p>`}</section>
       </div>`, { avviso: req.query.salvato ? 'Salvato' : req.query.msg ? String(req.query.msg) : undefined }));
@@ -237,6 +247,17 @@ export function rotteOrdini() {
     }
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
     res.redirect(`/ordini/${id}?salvato=1`);
+  });
+
+  // ── Ordine consegnato ma non riconosciuto dai DDT (codici diversi, consegna senza DDT): l'ufficio lo chiude ──
+  r.post('/:id/evaso', async (req, res) => {
+    const id = Number(req.params.id);
+    const aperte = (await righeOrdini(id)).filter(x => ['da_evadere', 'parziale'].includes(x.stato)).map(x => x.id);
+    if (aperte.length) {
+      await q(`UPDATE ordini_righe SET stato_manuale = 'evaso' WHERE ordine_id = $1 AND id = ANY($2)`, [id, aperte]);
+      await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
+    }
+    res.redirect(`/ordini/${id}?msg=${encodeURIComponent(aperte.length ? `${aperte.length} righe segnate come evase.` : 'Nessuna riga aperta.')}`);
   });
 
   // ── Elimina (righe inserite per errore) ──
