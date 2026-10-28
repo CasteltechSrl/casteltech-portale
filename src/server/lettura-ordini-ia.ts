@@ -115,7 +115,8 @@ della fattura, la valuta, tutte le righe e i totali.
 Regole:
 - fornitore: ragione sociale, partita IVA come scritta (con il prefisso del paese, es. "FR27512466913", "DE239975861"; se non c'è una
   P.IVA europea scrivi il codice fiscale/tax ID/registration number del fornitore), indirizzo, CAP, città, provincia o stato, paese (in inglese o italiano).
-  Se nella fattura ci sono più sedi, usa quella che emette la fattura (VAT number del venditore).
+  Se nella fattura ci sono più sedi, usa la società che vende (quella del VAT number o del FED ID), non l'ufficio commerciale o il servizio
+  clienti locale: es. Mouser riporta in alto l'ufficio di Assago (Italia) ma il venditore è Mouser Electronics Inc. (USA, P.IVA francese).
 - righe: TUTTE le righe della fattura, una per articolo: codice (part number del produttore o del fornitore), descrizione,
   quantità, prezzo unitario SENZA IVA nella valuta della fattura. Spese di trasporto, imballo, dazi addebitati: righe anche loro.
   Sconti sulla riga: prezzo unitario già scontato. Uno sconto sul totale: riga con prezzo negativo.

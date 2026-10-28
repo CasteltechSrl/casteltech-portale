@@ -85,6 +85,7 @@ export function rotteAutofatture() {
     const controlli = f ? controllaFatturaEstera(f) : { errori: [] as string[], avvisi: [] as string[] };
     const doppione = modificabile && f ? await autofatturaGiaFatta(f.numero) : null;
     if (doppione) controlli.errori.unshift(`${doppione} Se è un doppione, scarta questo file.`);
+    if (modificabile && f?.partitaIvaDa) controlli.avvisi.unshift(f.partitaIvaDa);
     const autofattura = f?.autofatturaId ? await q1(`SELECT id, numero, sezionale, stato FROM documenti WHERE id = $1`, [f.autofatturaId]) : null;
     const somma = f ? sommaRighe(f.righe) : 0;
     let inEuro: number | null = null;

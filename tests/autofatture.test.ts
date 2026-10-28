@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cambioDaCsv, causaleAutofattura, controllaFatturaEstera, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe, tipoAutofattura,
+  cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
+  stessoNomeFornitore, tipoAutofattura,
 } from '../src/engine/autofatture.js';
 import { generaAutofatturaXml } from '../src/engine/fatturapa.js';
 import { ALIQUOTE, AUTOFATTURA_CINA, AUTOFATTURA_UE, AZIENDA, FORNITORE_CINA, FORNITORE_UE } from '../tools/fatturapa/esempi.js';
@@ -76,4 +77,28 @@ test('Autofatture: XML con il fornitore estero come cedente e Casteltech come ce
   assert.match(generaAutofatturaXml({ ...AUTOFATTURA_CINA, tipo_sdi: 'TD18' }, FORNITORE_CINA, AZIENDA, ALIQUOTE).errori.join(), /Unione europea/);
   assert.match(generaAutofatturaXml({ ...AUTOFATTURA_UE, fattura: null }, FORNITORE_UE, AZIENDA, ALIQUOTE).errori.join(), /fattura del fornitore/);
   assert.match(generaAutofatturaXml(AUTOFATTURA_UE, { ...FORNITORE_UE, nazione: 'IT', partita_iva: '01777320332' }, AZIENDA, ALIQUOTE).errori.join(), /italiano/);
+});
+
+test('Autofatture: stesso fornitore anche con forma societaria e trattini diversi (prova con le fatture vere del 2026)', () => {
+  assert.equal(nomeConfrontabile('MOUSER ELECTRONICS, INC.'), 'MOUSER ELECTRONICS');
+  assert.equal(nomeConfrontabile('Digi-Key Electronics'), 'DIGIKEY ELECTRONICS');
+  assert.ok(stessoNomeFornitore('MOUSER ELECTRONICS, INC.', 'MOUSER ELECTRONICS'));
+  assert.ok(stessoNomeFornitore('Anthropic Ireland, Limited', 'Anthropic, PBC'));
+  assert.ok(!stessoNomeFornitore('AMAZON EU', 'AMAZON BUSINESS EU'));
+  assert.ok(!stessoNomeFornitore('CO LTD', 'ABC'));
+});
+
+test('Autofatture: date scritte all\'inglese sulle fatture estere', () => {
+  const data = (d: string) => normalizzaFatturaEstera({ data: d }).data;
+  assert.equal(data('21-OCT-26'), '2026-10-21');                 // Mouser
+  assert.equal(data('13­Oct­26'), '2026-10-13');        // Mouser Italia (trattino "morbido" del PDF)
+  assert.equal(data('October 24, 2026'), '2026-10-24');          // Anthropic
+  assert.equal(data('03-Oct-2026'), '2026-10-03');               // DigiKey
+  assert.equal(data('21/10/2026'), '2026-10-21');
+  assert.equal(data('Smarch 3, 2026'), null);
+});
+
+test('Autofatture: righe arrotondate una per una come sulla fattura (DigiKey 123868019 = 277,58)', () => {
+  assert.equal(sommaRighe([{ codice: '', descrizione: 'a', quantita: 800, prezzo: 0.15068 }, { codice: '', descrizione: 'b', quantita: 500, prezzo: 0.12288 },
+    { codice: '', descrizione: 'c', quantita: 550, prezzo: 0.17382 }]), 277.58);
 });

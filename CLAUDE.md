@@ -215,7 +215,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    acquisizione tipo 'fattura_estera'); l'IA legge fornitore, numero, data, valuta, tutte le righe. Pagina di controllo `/amministrazione/fatture-estere/:id`:
    fornitore cercato in anagrafica per P.IVA o nome (se nuovo si aggiunge con le regole dell'anagrafica fornitori), tipo proposto dal paese della P.IVA
    (servizi TD17, beni UE TD18, beni extra UE TD19 con avviso dogana), cambio BCE alla data della fattura per le valute estere, blocco se esiste già
-   un'autofattura che cita lo stesso numero (anche dallo storico FIC). Conferma → fattura tra le fatture fornitori (origine 'acquisito') + bozza
+   un'autofattura che cita lo stesso numero (anche dallo storico FIC). Fornitore cercato anche per nome senza forme societarie ("MOUSER ELECTRONICS, INC." = "MOUSER
+ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: solo FED ID) si riprende quella delle autofatture precedenti, con avviso.
+   Provato il 28/10/2026 con le fatture vere 2026 (Mouser, DigiKey, Anthropic, FedEx, Cina): stessi tipo, righe, imponibile e IVA di FIC. Conferma → fattura tra le fatture fornitori (origine 'acquisito') + bozza
    dell'autofattura (sezionale AF, righe in euro con IVA 22 %) → Emetti: XML `generaAutofatturaXml` (cedente estero RF18, CAP 00000, DatiFattureCollegate).
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`

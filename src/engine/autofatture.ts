@@ -66,12 +66,38 @@ const numero = (v: unknown): number | null => {
   const n = Number(s);
   return Number.isFinite(n) && s !== '' ? n : null;
 };
+const MESI_INGLESE = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+/** Data in AAAA-MM-GG da 2026-10-21, 21/10/2026, 21-OCT-26 (Mouser), October 24, 2026 / Oct 21, 2026 (Anthropic, DigiKey). */
 const dataIso = (v: unknown): string | null => {
-  const s = testo(v, 20);
+  const s = testo(v, 30).toUpperCase().replace(/\u00AD/g, '-');   // trattino "morbido" dei PDF
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const m = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(s);
-  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+  const due = (n: string) => n.padStart(2, '0');
+  const anno = (a: string) => a.length === 2 ? `20${a}` : a;
+  let m = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${due(m[2])}-${due(m[1])}`;
+  m = /^(\d{1,2})[\s\-]([A-Z]{3})[A-Z]*[\s\-,]+(\d{2}|\d{4})$/.exec(s);
+  if (m && MESI_INGLESE.includes(m[2])) return `${anno(m[3])}-${due(String(MESI_INGLESE.indexOf(m[2]) + 1))}-${due(m[1])}`;
+  m = /^([A-Z]{3})[A-Z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(s);
+  if (m && MESI_INGLESE.includes(m[1])) return `${m[3]}-${due(String(MESI_INGLESE.indexOf(m[1]) + 1))}-${due(m[2])}`;
+  return null;
 };
+
+/** Forme societarie che non contano nel confronto dei nomi ("MOUSER ELECTRONICS, INC." = "MOUSER ELECTRONICS"). */
+const FORME_SOCIETARIE = new Set(['INC', 'LTD', 'LIMITED', 'PBC', 'LLC', 'CORP', 'CORPORATION', 'CO', 'GMBH', 'AG', 'SA', 'SARL', 'SAS', 'BV',
+  'NV', 'SRL', 'SRLS', 'SPA', 'KG', 'AB', 'OY', 'AS', 'PLC', 'SL', 'SP', 'ZOO', 'UAB', 'EK', 'RL']);
+/** Nome del fornitore da confrontare: maiuscolo, senza punteggiatura né trattini (DIGI-KEY = DIGIKEY), senza forme societarie. */
+export function nomeConfrontabile(nome: string | null | undefined): string {
+  return String(nome ?? '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/(\w)[\-'.](\w)/g, '$1$2').replace(/(\w)[\-'.](\w)/g, '$1$2').replace(/[^A-Z0-9]+/g, ' ').trim()
+    .split(' ').filter(p => p && !FORME_SOCIETARIE.has(p)).join(' ');
+}
+/** Stesso fornitore a giudicare dal nome: uguali, o uno è l'inizio dell'altro ("ANTHROPIC" e "ANTHROPIC IRELAND"), almeno 5 lettere. */
+export function stessoNomeFornitore(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = nomeConfrontabile(a), y = nomeConfrontabile(b);
+  if (!x || !y) return false;
+  const [corto, lungo] = x.length <= y.length ? [x, y] : [y, x];
+  return corto === lungo || (corto.replace(/ /g, '').length >= 5 && lungo.startsWith(`${corto} `));
+}
 
 /** Pulisce quello che restituisce l'IA (o il modulo della pagina): testi, numeri, date, paese, valuta. */
 export function normalizzaFatturaEstera(x: any): FatturaEstera {
@@ -100,8 +126,8 @@ export function normalizzaFatturaEstera(x: any): FatturaEstera {
 }
 
 const arrotonda = (n: number, cifre = 2) => Math.round(n * 10 ** cifre) / 10 ** cifre;
-/** Somma delle righe nella valuta della fattura. */
-export const sommaRighe = (righe: RigaEstera[]) => arrotonda(righe.reduce((s, r) => s + r.quantita * r.prezzo, 0));
+/** Somma delle righe nella valuta della fattura, ogni riga arrotondata al centesimo come sulla fattura e nell'XML (DigiKey: 50 × 22,86167 = 1143,08). */
+export const sommaRighe = (righe: RigaEstera[]) => arrotonda(righe.reduce((s, r) => s + arrotonda(r.quantita * r.prezzo), 0));
 
 /** Prezzi in euro: cambio BCE = unità di valuta per 1 euro (es. 1,1215 USD); i prezzi unitari tengono 5 decimali. */
 export function righeInEuro(righe: RigaEstera[], valuta: string, cambio: number | null): RigaEstera[] {

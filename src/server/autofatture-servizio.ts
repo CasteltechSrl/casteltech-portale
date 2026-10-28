@@ -10,14 +10,15 @@ import { q, q1, transazione } from './db.js';
 import { controllaPartitaIva, preparaFornitore } from '../engine/anagrafica-fornitori.js';
 import { nomeNazione, siglaNazione } from '../engine/amministrazione.js';
 import {
-  SEZIONALE_AUTOFATTURE, cambioDaCsv, causaleAutofattura, controllaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe, tipoAutofattura,
-  type FatturaEstera,
+  SEZIONALE_AUTOFATTURE, cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, paeseDaPartitaIva, paeseFiscale, righeInEuro,
+  sommaRighe, stessoNomeFornitore, tipoAutofattura, type FatturaEstera,
 } from '../engine/autofatture.js';
 
 /** Quello che si salva in acquisizioni.proposta per una fattura estera. */
 export interface FatturaEsteraDb extends FatturaEstera {
   tipoDocumento: 'fattura_estera'; fornitoreId: number | null; ricevutoId?: number; autofatturaId?: number;
   doppione?: string | null;   // autofattura già fatta per questa fattura (anche in Fatture in Cloud)
+  partitaIvaDa?: string | null;   // P.IVA presa da un'autofattura precedente dello stesso fornitore (non scritta sulla fattura)
 }
 
 /** Autofattura già emessa (anche nello storico di FIC) che cita lo stesso numero di fattura del fornitore. */
@@ -42,9 +43,34 @@ async function cercaFornitore(f: FatturaEstera): Promise<number | null> {
       [[...new Set([piva, uniforme, piva.replace(/^[A-Z]{2}/, '')])].filter(Boolean)]);
     if (r) return r.id;
   }
-  if (!f.fornitore.ragione_sociale) return null;
-  const r = await q(`SELECT id FROM fornitori_anagrafica WHERE upper(ragione_sociale) = $1 LIMIT 2`, [f.fornitore.ragione_sociale]);
-  return r.length === 1 ? r[0].id : null;
+  // stesso nome senza forme societarie e punteggiatura ("MOUSER ELECTRONICS, INC." = "MOUSER ELECTRONICS"), solo se è uno
+  const parola = nomeConfrontabile(f.fornitore.ragione_sociale).split(' ')[0];
+  if (!parola) return null;
+  const candidati = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM fornitori_anagrafica
+    WHERE upper(regexp_replace(ragione_sociale, '[^A-Za-z0-9]', '', 'g')) LIKE $1`, [`${parola}%`]);
+  const uguali = candidati.filter(c => stessoNomeFornitore(c.ragione_sociale, f.fornitore.ragione_sociale));
+  return uguali.length === 1 ? uguali[0].id : null;
+}
+
+/**
+ * Dati fiscali dalle autofatture già fatte (anche lo storico di Fatture in Cloud) per lo stesso fornitore, quando sulla fattura
+ * non c'è la P.IVA europea: es. le fatture Mouser dalla sede italiana riportano solo il FED ID americano, ma le autofatture
+ * si sono sempre fatte con la P.IVA francese FR27512466913 (TD18). Solo P.IVA con il prefisso di un paese europeo.
+ */
+async function datiDaAutofatturePrecedenti(nome: string): Promise<{ partitaIva: string; numero: string } | null> {
+  const parola = nomeConfrontabile(nome).split(' ')[0];
+  if (!parola) return null;
+  const righe = await q<{ nome: string; piva: string; numero: number | null; sezionale: string | null; anno: number }>(
+    `SELECT intestatario->>'ragione_sociale' AS nome, intestatario->>'partita_iva' AS piva, numero, sezionale, anno FROM documenti
+      WHERE tipo = 'autofattura' AND stato <> 'annullato' AND numero IS NOT NULL
+        AND upper(regexp_replace(intestatario->>'ragione_sociale', '[^A-Za-z0-9]', '', 'g')) LIKE $1
+      ORDER BY data DESC LIMIT 50`, [`${parola}%`]);
+  for (const r of righe) {
+    const piva = String(r.piva ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (stessoNomeFornitore(r.nome, nome) && paeseDaPartitaIva(piva))
+      return { partitaIva: piva, numero: `${r.numero}${r.sezionale ? `/${r.sezionale}` : ''} del ${r.anno}` };
+  }
+  return null;
 }
 
 /** Cambio BCE (unità di valuta per 1 euro) alla data, o l'ultimo dei 10 giorni prima (fine settimana, festivi). Null se la BCE non risponde. */
@@ -73,10 +99,20 @@ export async function collegaFatturaEstera(f: FatturaEstera, fornitoreScelto?: n
     for (const k of ['indirizzo', 'cap', 'comune', 'provincia'] as const) fornitore[k] = fornitore[k] || a[k] || '';
     fornitore.paese = fornitore.paese || siglaNazione(a.paese) || '';
   }
+  let partitaIvaDa: string | null = null;
+  if (!fornitoreId && !paeseDaPartitaIva(fornitore.partita_iva)) {
+    const prima = await datiDaAutofatturePrecedenti(fornitore.ragione_sociale);
+    if (prima) {
+      partitaIvaDa = `P.IVA ${prima.partitaIva} presa dall'autofattura n. ${prima.numero} dello stesso fornitore`
+        + `${fornitore.partita_iva ? ` (sulla fattura c'è ${fornitore.partita_iva})` : ''}: controlla.`;
+      fornitore.partita_iva = prima.partitaIva;
+    }
+  }
   const paese = paeseFiscale(fornitore.partita_iva, fornitore.paese);
   const tipo = f.tipo ?? (paese ? tipoAutofattura(paese, f.servizi) : null);
   const cambio = f.valuta !== 'EUR' && !f.cambio && f.data ? await cambioBce(f.valuta, f.data) : f.cambio;
-  return { ...f, tipoDocumento: 'fattura_estera', fornitore, fornitoreId, tipo, cambio, doppione: await autofatturaGiaFatta(f.numero) };
+  return { ...f, tipoDocumento: 'fattura_estera', fornitore, fornitoreId, tipo, cambio, partitaIvaDa,
+    doppione: await autofatturaGiaFatta(f.numero) };
 }
 
 /** Salva le correzioni dell'ufficio (senza registrare nulla). */
