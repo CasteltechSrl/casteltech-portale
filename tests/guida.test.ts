@@ -74,4 +74,5 @@ test('guida: AOI visivo e BOM quotata', () => {
   assert.ok(primi('quotare la bom del cliente', 3).includes('bom-preventivo'));
   assert.ok(primi('componente non trovato alternativa', 3).includes('alternative-componenti'));
   assert.ok(primi('perché è critico', 3).includes('alternative-componenti'));
+  assert.ok(primi('scrivere il prezzo a mano di un componente', 3).includes('alternative-componenti'));
 });

@@ -8,10 +8,10 @@ import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  creaAnalisi, creaCodificaSingola, excelAnalisi, leggiFileBom, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
+  creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
-import { NOMI_FORNITORI, prezzoUnitario, sceltaMigliore, type Offerta } from '../../engine/acquisti.js';
+import { NOMI_FORNITORI, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { fornitoriConfigurati } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
@@ -131,6 +131,15 @@ export function rotteComponenti() {
     if (!a || !riga) return res.status(404).send('Riga non trovata');
     res.send(pag(req, `Riga ${riga.n}`, a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga), req.query.msg ? String(req.query.msg) : undefined));
   });
+  // prezzo scritto a mano (Adriano 28/10/2026): vale al posto di quello proposto; vuoto = di nuovo quello dei distributori
+  r.post('/bom/:id/riga/:n/prezzo', async (req, res) => {
+    const testo = String(req.body.prezzo ?? '').trim();
+    const prezzo = req.body.togli || !testo ? null : leggiPrezzo(testo);
+    const msg = prezzo != null && !(prezzo >= 0) ? 'Prezzo non valido.'
+      : testo && prezzo == null && !req.body.togli ? 'Prezzo non valido: scrivi ad esempio 0,125.'
+      : await impostaPrezzoManuale(Number(req.params.id), Number(req.params.n), prezzo);
+    res.redirect(`/componenti/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#prezzo-manuale`);
+  });
   // alternative al P/N (Adriano 28/10/2026): usa una proposta, scrivine una a mano, torna al P/N della BOM
   r.post('/bom/:id/riga/:n/alternativa', async (req, res) => {
     const msg = await scegliAlternativa(Number(req.params.id), Number(req.params.n), {
@@ -249,7 +258,7 @@ function paginaAnalisi(a: any): Raw {
       <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r)}</td>
       <td class="codice">${r.codiceProduzione}</td><td class="codice">${r.codiceGestionale}</td><td class="taglia" title="${r.descrizione ?? ''}">${r.descrizione}</td>
       <td>${badgeLivello(r)}</td>
-      ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${NOMI_FORNITORI[x.scelta.fornitore]}
+      ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${nomeFornitore(x.scelta.fornitore)}
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
       <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
@@ -326,10 +335,14 @@ function paginaRiga(a: any, r: RigaBom): Raw {
     <section>
       <h2>Acquisto</h2>
       ${r.reperibilita ? html`<p>${badgeLivello(r)} ${r.reperibilita.motivi.join(' · ')}</p>` : ''}
+      ${r.esito === ESITI.NON_MONTATO || r.clienteFornisce ? '' : html`<form method="post" action="/componenti/bom/${a.id}/riga/${r.n}/prezzo" class="riga-campi" id="prezzo-manuale">
+        <label>Prezzo a mano <small class="unita">€/pz, vale al posto di quello proposto</small>
+          <input name="prezzo" inputmode="decimal" autocomplete="off" value="${r.prezzoManuale != null ? String(r.prezzoManuale).replace('.', ',') : ''}" placeholder="es. 0,125"></label>
+        <button class="primario">Salva prezzo</button>${r.prezzoManuale != null ? html`<button name="togli" value="1">Torna al prezzo proposto</button>` : ''}</form>`}
       ${bloccoAlternative(a, r, qta)}
       ${r.acquisti.length ? html`<table class="acquisti"><thead><tr><th class="n">Schede</th><th class="n">Netta</th><th>Scarto</th><th class="n">Da ordinare</th><th>Fornitore</th><th class="n">€/pz</th><th class="n">Totale</th></tr></thead><tbody>
         ${r.acquisti.map(x => html`<tr><td class="n">${num(x.schede, 0)}</td><td class="n">${num(x.netta, 0)}</td><td>${x.scarto ? `+${x.scarto} ` : ''}<small>${x.regolaScarto}</small></td>
-          <td class="n">${num(x.scelta?.qta ?? x.lorda, 0)}</td><td>${x.scelta ? html`${NOMI_FORNITORI[x.scelta.fornitore]} ${x.scelta.codice}${x.scelta.nota ? html`<br><small>${x.scelta.nota}</small>` : ''}` : '—'}</td>
+          <td class="n">${num(x.scelta?.qta ?? x.lorda, 0)}</td><td>${x.scelta ? html`${nomeFornitore(x.scelta.fornitore)} ${x.scelta.codice}${x.scelta.nota ? html`<br><small>${x.scelta.nota}</small>` : ''}` : '—'}</td>
           <td class="n">${euro4(x.scelta?.prezzo)}</td><td class="n">${euro2(x.scelta?.totale)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessun acquisto (componente escluso o senza quantità).</p>`}
       <h2>Offerte dei distributori</h2>
       ${tabellaOfferte(r.offerte, qta)}

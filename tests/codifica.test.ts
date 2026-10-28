@@ -121,6 +121,14 @@ test('alternative: stesse caratteristiche = stesso codice di produzione, scelta 
     assert.equal(r.reperibilita.livello, 'ok');
     assert.equal(r.acquisti[0].scelta.mpn, 'ERJ-3EKF2201V');
     assert.equal(r.acquisti[0].scelta.fornitore, 'tme');
+    // prezzo scritto a mano: vale al posto di quello proposto, anche per un componente non trovato
+    r.alternativaScelta = null; r.prezzoManuale = 0.5;
+    calcolaAcquistiCon([r], [100], REGOLE_SCARTO_DEFAULT, new Map([[pnKey('INTROVABILE-1')!, { mouser: { offerte: [] } }]]));
+    assert.equal(r.acquisti[0].scelta.fornitore, 'manuale');
+    assert.equal(r.acquisti[0].scelta.prezzo, 0.5);
+    assert.equal(r.acquisti[0].scelta.qta, 210);             // 200 + 5% di scarto (sotto 1 €)
+    assert.equal(r.acquisti[0].scelta.totale, 105);
+    assert.equal(r.reperibilita.livello, 'ok');
   } finally { if (prima === undefined) delete process.env.MOUSER_API_KEY; else process.env.MOUSER_API_KEY = prima; }
 });
 

@@ -30,7 +30,7 @@ export type Esito = typeof ESITI[keyof typeof ESITI];
 
 export interface AcquistoRiga {
   schede: number; netta: number; scarto: number; regolaScarto: string; lorda: number;
-  scelta?: { fornitore: Fornitore; codice: string; mpn: string; qta: number; prezzo: number; totale: number; nota?: string; disponibile: boolean; url?: string | null };
+  scelta?: { fornitore: Fornitore | typeof PREZZO_A_MANO; codice: string; mpn: string; qta: number; prezzo: number; totale: number; nota?: string; disponibile: boolean; url?: string | null };
 }
 export interface RigaBom {
   n: number; pn: string | null; produttore: string | null; designatori: string | null; valore: string | null; footprint: string | null; descrizioneBom: string | null;
@@ -42,7 +42,13 @@ export interface RigaBom {
   nonControllati?: Fornitore[];
   /** alternative al P/N della BOM e quella scelta dall'operatore (si compra quella al posto del P/N) */
   alternative?: Alternativa[]; alternativaScelta?: string | null;
+  /** prezzo €/pz scritto dall'operatore: vale al posto di quello dei distributori (Adriano 28/10/2026) */
+  prezzoManuale?: number | null;
 }
+
+export const PREZZO_A_MANO = 'manuale' as const;
+/** Nome da mostrare per chi vende: distributore o prezzo scritto a mano. */
+export const nomeFornitore = (f: Fornitore | typeof PREZZO_A_MANO) => f === PREZZO_A_MANO ? 'prezzo a mano' : NOMI_FORNITORI[f];
 
 export const FONTI_ALTERNATIVA = { STESSE: 'stesse caratteristiche', VARIANTE: 'variante dello stesso P/N', MANO: 'scritta a mano' } as const;
 export interface Alternativa {
@@ -208,6 +214,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     if (prima && pnKey(prima.pn) === pnKey(r.pn)) {
       r.alternative = (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
       r.alternativaScelta = prima.alternativaScelta ?? null;
+      r.prezzoManuale = prima.prezzoManuale ?? null;
     }
     (r as any)._fam = val(celle, 'famiglia');
     return r;
@@ -559,6 +566,18 @@ async function alternativeRighe(righe: RigaBom[], forza?: boolean) {
   }
 }
 
+/** Prezzo €/pz scritto a mano su una riga (null = torna al prezzo dei distributori). Ricalcola gli acquisti. */
+export async function impostaPrezzoManuale(id: number, n: number, prezzo: number | null): Promise<string> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  const righe: RigaBom[] = a?.righe ?? [];
+  const r = righe.find(x => x.n === n);
+  if (!r) return 'Riga non trovata.';
+  r.prezzoManuale = prezzo;
+  await calcolaAcquisti(righe, a.quantita ?? []);
+  await salvaRighe(id, righe);
+  return prezzo == null ? 'Prezzo a mano tolto: vale di nuovo quello dei distributori.' : `Prezzo a mano salvato: ${String(prezzo).replace('.', ',')} €/pz.`;
+}
+
 /**
  * Scelta dell'operatore sulla riga: usa un'alternativa proposta, ne scrive una a mano (cercata presso tutti i distributori)
  * o torna al P/N della BOM. Ricalcola gli acquisti.
@@ -631,10 +650,17 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.qtaScheda > 0)) continue;
     for (const schede of quantita) {
       const netta = Math.ceil(r.qtaScheda * schede);
-      const migliore0 = sceltaMigliore(r.offerte, netta);
-      const p0 = migliore0 ? prezzoUnitario(migliore0.offerta, netta) : null;
+      const manuale = r.prezzoManuale != null && r.prezzoManuale >= 0 ? r.prezzoManuale : null;
+      const migliore0 = manuale == null ? sceltaMigliore(r.offerte, netta) : null;
+      const p0 = manuale ?? (migliore0 ? prezzoUnitario(migliore0.offerta, netta) : null);
       const sc = pezziScarto(r.famiglia, p0, netta, regole);
       const lorda = netta + sc.pezzi;
+      if (manuale != null) { // prezzo scritto dall'operatore: vale quello, qualunque cosa propongano i distributori
+        r.acquisti.push({ schede, netta, scarto: sc.pezzi, regolaScarto: sc.regola, lorda,
+          scelta: { fornitore: PREZZO_A_MANO, codice: '', mpn: r.alternativaScelta ?? pn ?? '', qta: lorda, prezzo: manuale, totale: lorda * manuale,
+            nota: 'prezzo scritto a mano', disponibile: true } });
+        continue;
+      }
       const s = sceltaMigliore(r.offerte, lorda);
       r.acquisti.push({ schede, netta, scarto: sc.pezzi, regolaScarto: sc.regola, lorda,
         scelta: s ? { fornitore: s.offerta.fornitore, codice: s.offerta.codiceFornitore, mpn: s.offerta.mpn, qta: s.acquisto.qta, prezzo: s.acquisto.prezzo,
@@ -644,6 +670,7 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
     if (!Object.values(fornitoriConfigurati()).some(Boolean)) continue; // nessun distributore collegato: niente giudizio
     r.reperibilita = r.pn || r.mpnAcquisto || alt ? reperibilita(r.offerte, max, r.nonControllati ?? []) : { livello: 'attenzione', motivi: ['senza P/N: nessun equivalente trovato, prezzo non disponibile'] };
     if (alt) r.reperibilita.motivi.unshift(`si compra l'alternativa ${alt.mpn} al posto di ${pn ?? 'quello della BOM'}`);
+    if (r.prezzoManuale != null) r.reperibilita = { livello: 'ok', motivi: [`prezzo scritto a mano: ${r.prezzoManuale} €/pz`, ...r.reperibilita.motivi.filter(m => !m.startsWith('senza P/N'))] };
   }
 }
 
@@ -812,7 +839,7 @@ export async function excelAnalisi(id: number): Promise<{ nome: string; dati: Bu
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce) continue;
     const pnExcel = r.alternativaScelta ? `${r.pn ?? r.mpnAcquisto ?? ''} → alternativa ${r.alternativaScelta}` : r.pn ?? (r.mpnAcquisto ? `(${r.mpnAcquisto})` : null);
     const row = wa.addRow([r.n, pnExcel, r.codiceGestionale, r.qtaScheda, r.reperibilita?.livello ?? '', r.reperibilita?.motivi.join('; ') ?? '',
-      ...r.acquisti.flatMap(x => [x.netta, x.scarto, x.scelta?.qta ?? x.lorda, x.scelta ? NOMI_FORNITORI[x.scelta.fornitore] : '', x.scelta?.codice ?? '', x.scelta?.prezzo ?? null, x.scelta?.totale ?? null])]);
+      ...r.acquisti.flatMap(x => [x.netta, x.scarto, x.scelta?.qta ?? x.lorda, x.scelta ? nomeFornitore(x.scelta.fornitore) : '', x.scelta?.codice ?? '', x.scelta?.prezzo ?? null, x.scelta?.totale ?? null])]);
     riempi(row.getCell(5), COLORI_LIVELLO[r.reperibilita?.livello ?? '']);
     for (let i = 0; i < quantita.length; i++) { row.getCell(7 + i * 7 + 5).numFmt = '0.0000'; row.getCell(7 + i * 7 + 6).numFmt = '#,##0.00'; }
   }
