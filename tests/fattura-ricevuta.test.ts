@@ -6,7 +6,7 @@ import { generaAutofatturaXml, generaFatturaXml } from '../src/engine/fatturapa.
 import { ALIQUOTE, AUTOFATTURA_UE, AZIENDA, CLIENTE_IT, FATTURA_RATE, FORNITORE_UE } from '../tools/fatturapa/esempi.js';
 
 // fattura finta di un fornitore (COMPONENTI ITALIA S.R.L.) a Casteltech, firmata .p7m con un certificato di prova
-const P7M = readFileSync(new URL('./dati/fattura_fornitore_prova.xml.p7m', import.meta.url));
+const P7M = readFileSync(new URL('./campioni/fattura_fornitore_prova.xml.p7m', import.meta.url));
 
 test('Fatture ricevute: piccolo lettore XML (prefissi, entità, CDATA)', () => {
   const n = leggiXml('<?xml version="1.0"?><p:A xmlns:p="x"><B>uno &amp; due</B><C><![CDATA[<tre>]]></C><D/></p:A>');
