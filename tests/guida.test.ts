@@ -53,3 +53,8 @@ test('guida: risposta dell\'IA separata dagli argomenti (solo id esistenti, al m
   assert.deepEqual(leggiRispostaGuida('Non lo so.').argomenti, []);
   assert.equal(leggiRispostaGuida('**ARGOMENTI:** backup').argomenti[0], 'backup');
 });
+
+test('guida: preventivo da validare e stampe di montaggio si trovano', () => {
+  assert.ok(primi('preventivo da validare', 2).includes('preventivo-da-validare'));
+  assert.ok(primi('proteggere fori onda', 2).includes('documentazione-produzione'));
+});

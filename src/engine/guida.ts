@@ -163,7 +163,29 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate. PDF, 3D e immagini restano sul Drive.',
       '"Codifica la BOM" porta i componenti nella sezione Componenti per i codici e i prezzi.',
     ],
-    passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Usa i numeri "Per il preventivo" nel nuovo preventivo.'],
+    passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Crea il preventivo da validare (vedi sotto).'],
+    pagine: [['/preventivi/documenti', 'Da documenti del cliente']],
+  },
+  {
+    id: 'preventivo-da-validare', area: 'preventivi', titolo: 'Preventivo "da validare" compilato dai documenti',
+    parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc',
+    testo: [
+      'Nella pagina dei documenti della scheda, "Crea il preventivo da validare" (scrivi quante schede) prepara il preventivo con le tariffe di oggi e i numeri letti: SMD e feeder per lato, lamine, THT a onda o a mano, stagno, pasta, item.',
+      'Il preventivo resta "da validare": in alto c\'è l\'elenco delle cose da controllare (segnalazioni, lamine del cliente, THT da preparare). Quando l\'hai controllato, il primo Salva lo porta a bozza.',
+      'Il portale controlla anche le piazzole dei componenti chip sul Gerber con la norma IPC-7351: se la BOM dice 0603 ma le piazzole sono da 0805 (o il contrario) lo segnala come errore, prima di andare in macchina.',
+    ],
+    passi: ['Apri i documenti della scheda.', 'Scrivi il numero di schede e premi "Crea il preventivo da validare".', 'Controlla l\'elenco giallo, correggi, Salva.'],
+    pagine: [['/preventivi/documenti', 'Da documenti del cliente'], ['/preventivi', 'Elenco preventivi']],
+  },
+  {
+    id: 'documentazione-produzione', area: 'preventivi', titolo: 'Stampare la documentazione di montaggio (TOP, BOT, THT, protezioni onda)',
+    parole: 'stampa documentazione montaggio produzione disegno layout riferimenti verso polarità piedino top bot tht colori protezioni onda fori zone proteggere critici note',
+    testo: [
+      'Dalla pagina dei documenti della scheda, "Documentazione per la produzione" stampa un foglio per lato: SMD TOP, SMD BOT (disegno con i riferimenti e la BOM del lato) e THT (solo i THT, stesso colore per i componenti uguali).',
+      'Il punto blu è il piedino 1 (dal file CAD): con la serigrafia dice il verso di montaggio. In rosso i componenti con note del cliente o segnalazioni.',
+      'Per l\'onda: "Segna le protezioni" sul disegno, clic su un foro per segnarlo da proteggere, trascina per una zona, poi Salva le protezioni; il foglio "Protezioni per l\'onda" le stampa numerate.',
+    ],
+    passi: ['Apri i documenti della scheda.', 'Per l\'onda: Segna le protezioni, clic sui fori o trascina le zone, Salva.', 'Premi il foglio che serve e poi "Stampa / salva PDF".'],
     pagine: [['/preventivi/documenti', 'Da documenti del cliente']],
   },
   {
