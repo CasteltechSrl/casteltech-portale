@@ -24,13 +24,13 @@ export interface ArgomentoGuida {
 
 export const AREE_GUIDA: AreaGuida[] = [
   { id: 'inizio', nome: 'Come funziona il portale', descrizione: 'Il percorso di un lavoro dal cliente alla fattura, dove vanno i file, cosa si può eliminare.' },
+  { id: 'crm', nome: 'CRM', descrizione: 'Aziende, referenti, telefonate, visite e prossime azioni commerciali.' },
   { id: 'anagrafiche', nome: 'Anagrafiche', descrizione: 'Clienti, fornitori, prodotti e archivio componenti: l\'elenco ufficiale da cui si sceglie tutto il resto.' },
+  { id: 'componenti', nome: 'Quotazioni (BOM e componenti)', descrizione: 'Quotazione delle BOM: codifica dei componenti, prezzi dei distributori, acquisti e scarto. Fino al 28/10/2026 si chiamava "Componenti".' },
   { id: 'preventivi', nome: 'Preventivi', descrizione: 'Calcolo del preventivo, documenti del cliente (BOM, pick and place, Gerber), stampa per il cliente.' },
   { id: 'ordini', nome: 'Ordini clienti', descrizione: 'Caricare un ordine, righe da evadere, DDT, cruscotto, Gantt della produzione.' },
   { id: 'commesse', nome: 'Commesse e schede di produzione', descrizione: 'Creare la commessa, stampare la scheda con il QR, rientro della scheda compilata.' },
   { id: 'reparto', nome: 'Tempi e reparto', descrizione: 'Tempi dal telefono con il QR, tempi scritti a mano, schede scansionate, promemoria.' },
-  { id: 'componenti', nome: 'Componenti e BOM', descrizione: 'Codifica dei componenti, prezzi dei distributori, acquisti e scarto.' },
-  { id: 'crm', nome: 'CRM', descrizione: 'Aziende, referenti, telefonate, visite e prossime azioni commerciali.' },
   { id: 'amministrazione', nome: 'Amministrazione', descrizione: 'Fatture, note di credito, DDT, incassi e pagamenti, fatture dei fornitori.' },
   { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza.' },
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
@@ -47,6 +47,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: [
       'Anagrafiche: il cliente e il codice del prodotto devono esserci (se mancano si aggiungono lì).',
+      'Quotazioni: la BOM del cliente si codifica e si prezza dai distributori; il costo dei componenti va nel preventivo.',
       'Preventivi: si calcola il prezzo; se il cliente manda BOM, pick and place e Gerber si parte da "Da documenti del cliente".',
       'Ordini: l\'ordine del cliente si carica in "Da acquisire" (PDF, foto o email) e l\'IA lo legge; lo confermi tu.',
       'Commesse: dal preventivo si crea la commessa e si stampa la scheda di produzione con il QR.',
@@ -54,7 +55,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Rientro: l\'ufficio controlla tempi, consumi e spedizioni della scheda e conferma.',
       'Amministrazione: DDT e fattura; il cruscotto mostra incassi e pagamenti in scadenza.',
     ],
-    pagine: [['/anagrafiche', 'Anagrafiche'], ['/preventivi', 'Preventivi'], ['/ordini', 'Ordini'], ['/commesse', 'Commesse'], ['/amministrazione', 'Amministrazione']],
+    pagine: [['/anagrafiche', 'Anagrafiche'], ['/quotazioni', 'Quotazioni'], ['/preventivi', 'Preventivi'], ['/ordini', 'Ordini'], ['/commesse', 'Commesse'], ['/amministrazione', 'Amministrazione']],
   },
   {
     id: 'dove-file', area: 'inizio', titolo: 'Dove metto i file? (ordini, schede, documenti, BOM)',
@@ -65,10 +66,10 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Schede di produzione compilate e scansionate: nella stessa cartella Google Drive degli ordini. L\'IA riconosce la scheda dal numero di commessa e porta i tempi nel rientro.',
       'DDT di Casteltech in PDF: anche loro in Da acquisire o nella cartella Drive; si abbinano da soli alle righe d\'ordine del cliente.',
       'Documenti del cliente per un preventivo (BOM, pick and place, Gerber, forature, GenCAD, anche in uno zip o un\'intera cartella): Preventivi → Da documenti del cliente. Un caricamento per ogni scheda. PDF, modelli 3D e immagini restano sul Drive: il portale li elenca ma non li conserva.',
-      'BOM da codificare o da prezzare: Componenti → Carica una BOM (Excel o CSV).',
+      'BOM da codificare o da prezzare: Quotazioni → Carica una BOM (Excel o CSV).',
       'File preparati da Claude (elenco clienti, fornitori, ordini, CRM, storico Fatture in Cloud): ognuno ha il suo pulsante "Carica" nella sezione indicata con il file; prima mostra un riepilogo e poi chiede conferma.',
     ],
-    pagine: [['/ordini/acquisire', 'Ordini → Da acquisire'], ['/preventivi/documenti', 'Preventivi → Da documenti del cliente'], ['/componenti', 'Componenti'], ['/commesse', 'Commesse (schede scansionate)']],
+    pagine: [['/ordini/acquisire', 'Ordini → Da acquisire'], ['/preventivi/documenti', 'Preventivi → Da documenti del cliente'], ['/quotazioni', 'Quotazioni'], ['/commesse', 'Commesse (schede scansionate)']],
   },
   {
     id: 'eliminare', area: 'inizio', titolo: 'Cosa si può eliminare e cosa no',
@@ -127,7 +128,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'fornitore fornitori partita iva p.iva acquisti nuovo',
     testo: [
       'Un fornitore si inserisce solo con una partita IVA valida (il portale controlla la cifra di controllo; quelle estere si scrivono con la sigla del paese). Una partita IVA = un fornitore: niente doppioni.',
-      'I distributori di componenti (DigiKey, Mouser, Farnell, TME) sono un\'altra cosa: servono a leggere i prezzi, vedi Componenti.',
+      'I distributori di componenti (DigiKey, Mouser, Farnell, TME) sono un\'altra cosa: servono a leggere i prezzi, vedi Quotazioni.',
     ],
     passi: ['Anagrafiche → Fornitori.', '+ Nuovo fornitore, compila e salva.'],
     pagine: [['/anagrafiche/fornitori', 'Anagrafiche → Fornitori']],
@@ -137,9 +138,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'archivio componenti codice gestionale moka armadio excel scaricare',
     testo: [
       'Tutti i componenti già codificati, con il codice di produzione (quello dell\'armadio, es. RS-0603-2K2-1-100MW) e il codice gestionale (es. SRS-0603-2K20F-001). Si può scaricare tutto in Excel.',
-      'I componenti nuovi entrano in archivio dalla codifica delle BOM (sezione Componenti).',
+      'I componenti nuovi entrano in archivio dalla codifica delle BOM (sezione Quotazioni).',
     ],
-    pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/componenti', 'Componenti (codifica)']],
+    pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/quotazioni', 'Quotazioni (codifica)']],
   },
 
   // ── Preventivi ──
@@ -177,7 +178,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Quando il cliente manda il pacchetto della scheda, caricalo tutto insieme: il portale legge BOM, pick and place, Gerber, forature e GenCAD e li incrocia.',
       'Il risultato: componenti SMD per lato, THT, feeder, refori, misure, disegno della scheda, consumi stimati (pasta, stagno, filo) e le segnalazioni da controllare (valori diversi tra BOM e pick and place, riferimenti mancanti, lati, sovrapposizioni, componenti da non montare).',
       'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate. PDF, 3D e immagini restano sul Drive.',
-      '"Codifica la BOM" porta i componenti nella sezione Componenti per i codici e i prezzi.',
+      '"Codifica la BOM" porta i componenti nella sezione Quotazioni per i codici e i prezzi.',
       'Se una segnalazione è stata controllata e va bene così (es. un simbolo scritto in modo diverso, componente giusto), premi "Va bene": non conta più tra gli errori, non va nel preventivo da validare e i componenti non sono più rossi nelle stampe. Resta anche dopo Rianalizza; "annulla" la riapre.',
     ],
     passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Crea il preventivo da validare (vedi sotto).'],
@@ -229,12 +230,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'bom-preventivo', area: 'preventivi', titolo: 'Costo dei componenti dal preventivo (BOM collegata)',
     parole: 'bom costo componenti acquisti materiali collegare prezzo componenti quotare quotata quotazione documenti cliente',
     testo: [
-      'Nel gruppo ACQUISTI del preventivo puoi scegliere una BOM già caricata in Componenti: il costo dei componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette dai distributori.',
+      'Nel gruppo ACQUISTI del preventivo puoi scegliere una BOM già caricata in Quotazioni: il costo dei componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette dai distributori.',
       'Se scrivi il costo a mano, il collegamento alla BOM si toglie. Se la BOM viene eliminata, il costo salvato resta.',
-      'Preventivo nato dai documenti del cliente: spuntando "Componenti" in Acquisti la BOM del cliente va da sola in Componenti e si quota (codici e prezzi dei distributori). Finita la quotazione il costo a scheda arriva nel preventivo; se ci sono righe da completare, codici da validare, righe senza prezzo o componenti non disponibili compare "Risolvi nella BOM quotata".',
+      'Preventivo nato dai documenti del cliente: spuntando "Componenti" in Acquisti la BOM del cliente va da sola in Quotazioni e si quota (codici e prezzi dei distributori). Finita la quotazione il costo a scheda arriva nel preventivo; se ci sono righe da completare, codici da validare, righe senza prezzo o componenti non disponibili compare "Risolvi nella BOM quotata".',
       'Nella BOM quotata il riquadro in alto dice cosa resta da sistemare; quando hai finito premi "Torna al preventivo per la quota": il costo si ricalcola, poi Salva.',
     ],
-    pagine: [['/componenti', 'Componenti → BOM caricate']],
+    pagine: [['/quotazioni', 'Quotazioni → BOM caricate']],
   },
 
   // ── Ordini ──
@@ -353,17 +354,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/impostazioni/promemoria', 'Impostazioni → Promemoria']],
   },
 
-  // ── Componenti ──
+  // ── Quotazioni (ex Componenti) ──
   {
     id: 'codifica-bom', area: 'componenti', titolo: 'Codificare una BOM e trovare i prezzi',
-    parole: 'bom distinta codifica codici componenti excel csv prezzi distributori digikey mouser farnell tme reperibilità acquisto scarto ia',
+    parole: 'quotazioni quotazione quotare componenti bom distinta codifica codici excel csv prezzi distributori digikey mouser farnell tme reperibilità acquisto scarto ia',
     testo: [
       'Carica la BOM (Excel o CSV): il portale trova da solo intestazione e colonne, riconosce i componenti dal P/N o dalla descrizione, calcola il codice di produzione e il codice gestionale, e cerca prezzi e disponibilità da DigiKey, Mouser, Farnell e TME.',
       'Le quantità da comprare includono lo scarto (passivi sotto 0,10 € +10%, sotto 1 € +5%, da 1 a 3 € un pezzo in più). Si scarica un Excel con codifica e acquisti.',
       'Le righe "Da completare" vanno sistemate a mano; poi "Salva i codici nell\'archivio".',
     ],
-    passi: ['Componenti → Carica una BOM.', 'Controlla colonne e quantità.', 'Sistema le righe da completare.', 'Salva i codici nell\'archivio, scarica l\'Excel.'],
-    pagine: [['/componenti', 'Componenti']],
+    passi: ['Quotazioni → Carica una BOM.', 'Controlla colonne e quantità.', 'Sistema le righe da completare.', 'Salva i codici nell\'archivio, scarica l\'Excel.'],
+    pagine: [['/quotazioni', 'Quotazioni']],
   },
   {
     id: 'alternative-componenti', area: 'componenti', titolo: 'Componente non trovato: alternative e reperibilità',
@@ -377,8 +378,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Le alternative scritte a mano e quella scelta restano anche dopo Rielabora o Aggiorna prezzi; nell\'Excel degli acquisti la riga mostra "P/N → alternativa".',
       'Prezzo a mano: nella riga della BOM, sotto Acquisto, scrivi il prezzo €/pz (es. 0,125) e "Salva prezzo": vale al posto di quello proposto dai distributori, anche per un componente non trovato, e lo scarto si calcola su quel prezzo. Nell\'elenco compare "prezzo a mano". "Torna al prezzo proposto" lo toglie. Resta anche dopo Rielabora.',
     ],
-    passi: ['Componenti → apri la BOM.', 'Filtro "Reperibilità" o link "N alternative: scegli" nella colonna P/N.', 'Nella riga: "Usa questa" oppure scrivi un P/N in "Alternativa scritta a mano".', 'Se la BOM è di un preventivo: "Torna al preventivo per la quota".'],
-    pagine: [['/componenti', 'Componenti → BOM caricate']],
+    passi: ['Quotazioni → apri la BOM.', 'Filtro "Reperibilità" o link "N alternative: scegli" nella colonna P/N.', 'Nella riga: "Usa questa" oppure scrivi un P/N in "Alternativa scritta a mano".', 'Se la BOM è di un preventivo: "Torna al preventivo per la quota".'],
+    pagine: [['/quotazioni', 'Quotazioni → BOM caricate']],
+  },
+  {
+    id: 'miglior-prezzo', area: 'componenti', titolo: 'Miglior prezzo di un P/N tra gli shop online',
+    parole: 'miglior prezzo conveniente economico confronto confrontare shop negozi online distributori digikey mouser farnell tme lcsc p/n singolo costa comprare',
+    testo: [
+      'Per sapere dove conviene comprare un componente: scrivi il P/N del produttore e quanti pezzi servono. Il portale chiede prezzo e disponibilità a tutti gli shop collegati (DigiKey, Mouser, Farnell, TME) e li mette uno sotto l\'altro.',
+      'In cima, in verde, c\'è il più conveniente sul totale da pagare: tiene conto del minimo d\'ordine, dei multipli e degli scaglioni (a volte comprare qualche pezzo in più costa meno). Per gli altri la colonna "In più" dice quanto si spenderebbe in più. Uno shop senza pezzi sufficienti va in fondo.',
+      'Le risposte restano in memoria 24 ore; "Aggiorna prezzi" le richiede di nuovo. LCSC non è ancora collegato: "Cerca su LCSC" apre il loro sito con lo stesso P/N.',
+    ],
+    passi: ['Quotazioni → Miglior prezzo di un P/N.', 'Scrivi P/N e pezzi, premi "Cerca il prezzo".', 'Il codice dello shop apre la pagina del prodotto per ordinarlo.'],
+    pagine: [['/quotazioni/prezzo', 'Quotazioni → Miglior prezzo di un P/N']],
   },
   {
     id: 'codifica-singola', area: 'componenti', titolo: 'Codificare un solo componente',
@@ -386,7 +398,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Per un componente solo: scrivi il P/N del produttore (o, se non c\'è, la descrizione tipo "RES 2K2 0603") e il portale dà i codici. Le resistenze sono sempre all\'1% (quelle al 5% non si comprano).',
     ],
-    pagine: [['/componenti/codifica', 'Componenti → Codifica']],
+    pagine: [['/quotazioni/codifica', 'Quotazioni → Codifica']],
   },
 
   // ── CRM ──

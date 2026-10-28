@@ -110,8 +110,8 @@ export function rotteSchedeCliente() {
         <div>
           <form method="post" action="/preventivi/documenti/${p.id}/analizza" class="inline"><button title="Rilegge i file conservati (dopo un aggiornamento del portale)">Rianalizza</button></form>
           ${p.fonti?.bom ? (p.bom_id
-            ? html`<a class="bottone" href="/componenti/bom/${p.bom_id}">Codifica della BOM ↗</a>`
-            : html`<form method="post" action="/preventivi/documenti/${p.id}/codifica" class="inline"><button title="Manda la BOM alla sezione Componenti: codici Casteltech, prezzi e reperibilità">Codifica la BOM</button></form>`) : ''}
+            ? html`<a class="bottone" href="/quotazioni/bom/${p.bom_id}">Codifica della BOM ↗</a>`
+            : html`<form method="post" action="/preventivi/documenti/${p.id}/codifica" class="inline"><button title="Manda la BOM alla sezione Quotazioni: codici Casteltech, prezzi e reperibilità">Codifica la BOM</button></form>`) : ''}
           <a href="/preventivi/documenti">← Documenti del cliente</a>
         </div>
       </div>
@@ -200,7 +200,7 @@ export function rotteSchedeCliente() {
           <td>${f.usato ? '✓' : ''}</td><td class="nota-file">${f.nota ?? ''}</td></tr>`)}
       </tbody></table></div>
       <p class="nota">Analizzato il ${data(p.analizzato_il)}. Il codice Casteltech dei componenti senza codice del cliente si ottiene con «Codifica la BOM»
-        (sezione Componenti). Il preventivo compilato in automatico e le rotazioni per le macchine arriveranno nei prossimi passi.</p>`));
+        (sezione Quotazioni). Il preventivo compilato in automatico e le rotazioni per le macchine arriveranno nei prossimi passi.</p>`));
   });
 
   // disegno: JSON compresso così com'è salvato (gli strati Gerber in SVG e i fori), più le posizioni dei componenti
@@ -267,11 +267,11 @@ export function rotteSchedeCliente() {
     res.json({ ok: true, fori: fori.length, zone: zone.length });
   });
 
-  // BOM → sezione Componenti (codifica Casteltech, prezzi, reperibilità)
+  // BOM → sezione Quotazioni (codifica Casteltech, prezzi, reperibilità)
   r.post('/:id/codifica', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     const bomId = await bomDelPacchetto(Number(req.params.id), 100, req.session.utente!.id);
-    res.redirect(bomId ? `/componenti/bom/${bomId}` : `/preventivi/documenti/${req.params.id}`);
+    res.redirect(bomId ? `/quotazioni/bom/${bomId}` : `/preventivi/documenti/${req.params.id}`);
   });
 
   r.post('/:id/elimina', async (req, res, next) => {

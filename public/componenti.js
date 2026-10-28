@@ -1,4 +1,4 @@
-// Sezione Componenti: caricamento BOM, avanzamento dell'elaborazione, filtri della tabella, import archivio.
+// Sezione Quotazioni (ex Componenti): caricamento BOM, avanzamento dell'elaborazione, filtri della tabella, import archivio.
 (() => {
   // caricamento della BOM (il file va al server così com'è)
   const invia = document.getElementById('invia-bom');
@@ -8,17 +8,17 @@
     if (!f) { esito.textContent = 'Scegli prima il file.'; return; }
     invia.disabled = true; esito.textContent = 'Caricamento…';
     const par = new URLSearchParams({ file: f.name, nome: document.getElementById('nome-bom').value, quantita: document.getElementById('quantita-bom').value });
-    const res = await fetch('/componenti/bom?' + par, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
+    const res = await fetch('/quotazioni/bom?' + par, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { esito.textContent = j.errore || 'Errore nel caricamento'; invia.disabled = false; return; }
-    location.href = '/componenti/bom/' + j.id;
+    location.href = '/quotazioni/bom/' + j.id;
   });
 
   // avanzamento: si ricarica la pagina a fine elaborazione
   const av = document.getElementById('avanzamento');
   if (av) {
     const segui = async () => {
-      const s = await (await fetch(`/componenti/bom/${av.dataset.id}/stato`)).json().catch(() => null);
+      const s = await (await fetch(`/quotazioni/bom/${av.dataset.id}/stato`)).json().catch(() => null);
       if (s && s.inCorso) {
         av.textContent = `Elaborazione in corso: ${s.fase}${s.totale ? ` (${s.fatti} di ${s.totale})` : ''}…`;
         setTimeout(segui, 1500);

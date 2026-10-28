@@ -363,7 +363,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       ${PROVENIENZE.map(([v, testo, spiega]) => html`<label class="spunta" title="${spiega}"><input type="radio" name="provenienza" data-param="provenienzaMateriale" value="${v}" ${provenienza === v ? raw('checked') : ''}> ${testo}</label>`)}
       <span class="info" title="Tempo = numero item × tempo per item, a ogni lotto">ⓘ</span>
     </div>`;
-  // costo componenti: si può prendere da una BOM caricata in Componenti (scelta qui sopra il campo)
+  // costo componenti: si può prendere da una BOM caricata in Quotazioni (scelta qui sopra il campo)
   const sceltaBom = () => html`
     <label class="largo scelta-bom"${dipende(DIPENDE.costoComponentiScheda)} title="Il costo componenti a scheda si calcola dal preventivo materiali della BOM, sulle schede di questo preventivo">BOM caricata
       <select data-id="bomId" id="sel-bom"${salvato?.pacchetto?.bom_file ? raw(` data-pacchetto="${Number(salvato.pacchetto.id)}"`) : ''}>
@@ -372,7 +372,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </select>
       <output id="esito-bom" class="nota">${d.bomId && !bom.some(b => b.id === d.bomId) ? 'La BOM collegata è stata eliminata: il costo resta quello salvato.' : ''}</output>
       ${salvato?.pacchetto?.bom_file && !d.bomId ? html`<small class="nota">BOM dei documenti del cliente: spuntando <b>Componenti</b> si quota da sola.</small>` : ''}
-      <small class="nota"><a href="/componenti/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/componenti/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
+      <small class="nota"><a href="/quotazioni/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/quotazioni/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}` : campoBase(p);
   const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'

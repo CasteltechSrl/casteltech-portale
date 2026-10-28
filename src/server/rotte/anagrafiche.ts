@@ -139,7 +139,7 @@ export function rotteAnagrafiche() {
     const righe = testo ? await cercaComponenti(testo) : [];
     res.send(await paginaAnagrafiche(req, 'componenti', html`
       <div class="intestazione-pagina"><p class="nota">${num(conti.totale, 0)} componenti in archivio, ${num(conti.gestionale, 0)} con codice gestionale.
-        I componenti nuovi entrano da soli quando si codifica una BOM (<a href="/componenti">Componenti</a>).
+        I componenti nuovi entrano da soli quando si codifica una BOM (<a href="/quotazioni">Quotazioni</a>).
         ${conti.totale ? '' : html` L'archivio iniziale si carica da <a href="/impostazioni/componenti">Impostazioni → Componenti</a>.`}</p>
         <a class="bottone" href="/anagrafiche/componenti.xlsx">Scarica tutto in Excel</a></div>
       <form class="ricerca-veloce" method="get"><input type="search" name="q" value="${testo}" placeholder="Cerca P/N, codice di produzione o gestionale, descrizione… e premi Invio" autofocus>
