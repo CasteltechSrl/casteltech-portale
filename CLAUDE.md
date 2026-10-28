@@ -61,9 +61,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
    Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa` (Adriano 28/10/2026;
    `views/stampa-preventivo.ts`, `engine/stampa-preventivo.ts`, `public/stampa-preventivo.css`): impaginata come i preventivi FIC, pannello
-   "Cosa stampare" a sinistra: `?vista=essenziale` (prezzo a scheda + cosa comprende senza prezzi; con una tantum il prezzo a scheda le comprende),
+   "Cosa stampare" a sinistra: `?vista=essenziale` (solo prezzo a scheda, niente sotto la descrizione: con una tantum le comprende e lo dice),
    `dettaglio` (predefinita: componenti, PCB, SMD, THT, consumo, spedizione; gestione materiale e imballaggio su SMD/THT 70/30 pesato sul valore,
-   `quotaSmd`), `macro`, `fasi`; condizioni generali (`CONDIZIONI_GENERALI`) e firma del cliente, tolte con `condizioni=0` / `firma=0`.
+   `quotaSmd`), `macro`, `fasi`; condizioni generali (`CONDIZIONI_GENERALI`) in seconda pagina con la firma del cliente, tolte con `condizioni=0` / `firma=0`.
 2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):
    Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
    Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,

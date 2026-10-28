@@ -29,10 +29,14 @@ body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 10pt; col
   .foglio { width: auto !important; }
 }
 
-/* foglio A4 */
+/* foglio A4: preventivo, poi le condizioni generali sulla seconda pagina */
+.fogli { display: flex; flex-direction: column; gap: 14px; }
 .foglio { width: 210mm; min-height: 297mm; background: #fff; padding: 12mm 14mm 8mm; box-shadow: 0 1px 4px rgba(0,0,0,.2); display: flex; flex-direction: column; }
 .testa { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
 .testa .logo { height: 16mm; }
+.testa .logo.piccolo { height: 11mm; }
+.seconda .titolo { margin-top: 0; }
+.seconda .titolo small { font-size: 9pt; }
 .azienda { text-align: right; font-size: 8pt; color: #444; line-height: 1.45; }
 .azienda b { font-size: 12pt; color: #111; }
 .titolo { text-align: right; margin-top: 3mm; font-size: 12pt; color: #555; }
@@ -42,7 +46,6 @@ body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 10pt; col
 .riquadro-prezzi > div { flex: 1; padding: 2.3mm 3mm; border-right: 1px solid #9cc5ba; }
 .riquadro-prezzi > div:last-child { border-right: 0; }
 .riquadro-prezzi strong { display: block; font-size: 15pt; }
-.scelte { font-size: 8pt; color: #555; margin: 1.5mm 0 0; }
 table.righe { width: 100%; border-collapse: collapse; margin-top: 5mm; font-size: 9pt; }
 table.righe th { font-size: 6.8pt; text-transform: uppercase; color: #555; font-weight: 600; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 2mm; text-align: left; }
 table.righe th.n { text-align: right; }
@@ -60,8 +63,9 @@ table.ut td { padding: .3mm 0; }
 .titoletto { margin: 4mm 0 1.2mm; }
 .note { white-space: pre-wrap; font-size: 9pt; margin: 0; }
 .spinta { flex: 1; min-height: 4mm; }
-.condizioni { font-size: 7pt; color: #444; line-height: 1.35; columns: 2; column-gap: 6mm; margin: 0; padding-left: 3.5mm; }
-.condizioni li { margin-bottom: .5mm; break-inside: avoid; }
+.condizioni { font-size: 9pt; color: #222; line-height: 1.45; margin: 8mm 0 0; padding-left: 5mm; border-top: 1px solid #ccc; padding-top: 5mm; }
+.condizioni li { margin-bottom: 2.5mm; padding-left: 1mm; }
+.accetto { font-size: 9pt; margin: 8mm 0 0; }
 .fondo { display: grid; grid-template-columns: 1fr 62mm; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; margin-top: 4mm; break-inside: avoid; }
 .fondo > div { padding: 2.5mm 3mm; font-size: 8.5pt; line-height: 1.4; }
 .fondo .totale { border-left: 1px solid #ccc; text-align: right; }
@@ -77,5 +81,7 @@ table.ut td { padding: .3mm 0; }
   .barra-stampa, .pannello-stampa { display: none; }
   .schermo { display: block; padding: 0; }
   .foglio { width: auto; min-height: 262mm; padding: 0; box-shadow: none; }
+  .fogli { display: block; }
+  .foglio.seconda { break-before: page; }
   thead { display: table-header-group; }
 }

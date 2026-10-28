@@ -10,7 +10,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, compresoEssenziale, righeDettaglio, righeUnaTantum, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, righeDettaglio, righeUnaTantum, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -31,7 +31,7 @@ const VUOTO = '';
 
 export function stampaPreventivo(o: {
   p: any; d: { nSchede: number; nSchedeInPCB: number; note?: string };
-  ris: Risultato; doppia: boolean; nLamine: number; scelte: string[]; nPannelli: number;
+  ris: Risultato; doppia: boolean; nLamine: number; nPannelli: number;
   azienda: Partial<DatiAzienda>; cliente: ClienteStampa | null; opz: OpzioniStampa;
 }): Raw {
   const { p, d, ris, opz } = o;
@@ -65,7 +65,6 @@ export function stampaPreventivo(o: {
   const rigaProdotto = (prezzo: number, importo: number, sotto: Raw | string = VUOTO) => html`
     <tr class="prodotto"><td><b>${i.codice}</b>${i.revisione ? html`<br><small>rev. ${i.revisione}</small>` : ''}</td>
       <td><b>${i.descrizione}</b>${sotto}</td><td class="n">${qta}</td><td class="n">${euro(prezzo)}</td><td class="n">${euro(importo)}</td></tr>`;
-  const elenco = (xs: string[]) => html`<ul>${xs.map(x => html`<li>${x}</li>`)}</ul>`;
   const gruppiDi = <T extends { gruppo: string; prezzo: number; nome: string }>(xs: T[]) =>
     [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) }));
   const somma = (xs: { prezzo: number }[]) => xs.reduce((s, x) => s + x.prezzo, 0);
@@ -75,7 +74,9 @@ export function stampaPreventivo(o: {
 
   let corpo: Raw;
   if (essenziale) {
-    corpo = rigaProdotto(prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, prezzoUnico ? totale : r.prezzoLotto, elenco(compresoEssenziale(ris)));
+    // sotto la descrizione solo la nota delle una tantum (Adriano, 28/10/2026: o il dettaglio con i prezzi o niente)
+    corpo = rigaProdotto(prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, prezzoUnico ? totale : r.prezzoLotto,
+      prezzoUnico ? html`<div class="sotto">Comprensivo dei costi una tantum (programmazione e attrezzaggio)</div>` : VUOTO);
   } else if (opz.versione === 'dettaglio') {
     corpo = html`${rigaProdotto(r.prezzoScheda, r.prezzoLotto)}
       ${righeDettaglio(ris).map(x => html`<tr><td></td><td>${x.nome}${x.sotto ? html`<div class="sotto">${x.sotto}</div>` : ''}</td><td></td>
@@ -92,10 +93,11 @@ export function stampaPreventivo(o: {
   }
   const rigaUnaTantum = !prezzoUnico && r.unaTantum > 0 ? html`
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
-      ${opz.versione === 'essenziale' ? elenco(ut.map(x => x.nome))
-        : html`<table class="ut">${ut.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</table>`}</td>
+      <table class="ut">${ut.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</table></td>
       <td class="n">1</td><td class="n">${euro(r.unaTantum)}</td><td class="n">${euro(r.unaTantum)}</td></tr>` : '';
 
+  const firme = html`<div class="firme"><div><b>${az.nome}</b></div><div><b>Per accettazione del cliente</b>Data, timbro e firma</div></div>`;
+  const piede = html`<footer class="piede"><span>Preventivo nr. ${numero}</span><span>${az.nome} · ${az.email} · ${az.tel}</span></footer>`;
   const indirizzoCliente = c && (c.indirizzo || c.comune) ? html`${c.indirizzo ?? ''}<br>${[c.cap, c.comune].filter(Boolean).join(' ')}${c.provincia ? ` (${c.provincia})` : ''}${c.nazione && c.nazione !== 'IT' ? ` · ${c.nazione}` : ''}` : '';
 
   return html`<!doctype html>
@@ -115,6 +117,7 @@ export function stampaPreventivo(o: {
   </div>
 </nav>
 
+<div class="fogli">
 <section class="foglio">
   <header class="testa">
     <img src="/static/logo-casteltech.png" alt="Casteltech" class="logo">
@@ -134,7 +137,6 @@ export function stampaPreventivo(o: {
     <div><div class="etic">Totale lotto (${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? `, ${num(o.nPannelli, 0)} pannelli` : ''})</div><strong>${euro(prezzoUnico ? totale : r.prezzoLotto)}</strong></div>
     ${!prezzoUnico && r.unaTantum > 0 ? html`<div><div class="etic">Una tantum (primo lotto)</div><strong>${euro(r.unaTantum)}</strong></div>` : ''}
   </div>
-  ${o.scelte.length ? html`<p class="scelte">${o.scelte.join(' · ')}</p>` : ''}
 
   <table class="righe">
     <thead><tr><th class="codice">Codice</th><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo unitario</th><th class="n">Importo</th></tr></thead>
@@ -143,17 +145,23 @@ export function stampaPreventivo(o: {
 
   ${d.note ? html`<div class="etic titoletto">Note</div><p class="note">${d.note}</p>` : ''}
   <div class="spinta"></div>
-  ${opz.condizioni ? html`<div class="etic titoletto">Condizioni generali di fornitura</div>
-  <ol class="condizioni">${CONDIZIONI_GENERALI.map(x => html`<li>${x}</li>`)}</ol>` : ''}
-
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>
     <div class="totale"><div class="etic">Totale preventivo${r.unaTantum > 0 ? ' (primo lotto)' : ''}</div><strong>${euro(totale)}</strong><small>IVA esclusa</small></div>
   </div>
-  ${opz.firma ? html`<div class="firme"><div><b>${az.nome}</b></div><div><b>Per accettazione del cliente</b>Data, timbro e firma</div></div>` : ''}
-  <footer class="piede"><span>Preventivo nr. ${numero}</span><span>${az.nome} · ${az.email} · ${az.tel}</span></footer>
+  ${opz.firma && !opz.condizioni ? firme : ''}
+  ${piede}
 </section>
+${opz.condizioni ? html`<section class="foglio seconda">
+  <header class="testa"><img src="/static/logo-casteltech.png" alt="Casteltech" class="logo piccolo">
+    <div class="titolo"><b>CONDIZIONI GENERALI DI FORNITURA</b><br><small>allegate al preventivo nr. ${numero}</small></div></header>
+  <ol class="condizioni">${CONDIZIONI_GENERALI.map(x => html`<li>${x}</li>`)}</ol>
+  ${opz.firma ? html`<p class="accetto">Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.</p>${firme}` : ''}
+  <div class="spinta"></div>
+  ${piede}
+</section>` : ''}
+</div>
 </div>
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
 </body></html>`;

@@ -1,8 +1,8 @@
 /**
  * Versioni della stampa del preventivo per il cliente (Adriano, 28/10/2026). Usa solo i risultati del calcolo
  * (src/engine/calcolo.ts): raggruppa i prezzi già calcolati, senza cambiare le formule economiche.
- *  - Essenziale: codice, quantità, prezzo a scheda; sotto solo l'elenco di cosa comprende, senza prezzi.
- *    Con una prima produzione (una tantum) il prezzo a scheda comprende programmazione e attrezzaggio.
+ *  - Essenziale: codice, quantità, prezzo a scheda e niente sotto la descrizione (o il dettaglio con i prezzi o niente);
+ *    con le una tantum il prezzo a scheda le comprende e sotto c'è solo "Comprensivo dei costi una tantum".
  *  - Essenziale con dettaglio: componenti, PCB, SMD, THT, materiale di consumo, spedizione, ognuno con il prezzo.
  *    Gestione materiale e imballaggio non si vedono: vanno su SMD e THT (vedi `quotaSmd`).
  *  - Macro aree e Dettaglio per fasi: come prima.
@@ -12,7 +12,7 @@ import { r2, type Risultato, type RigaFase, type RigaVoce } from './calcolo.js';
 export type VersioneStampa = 'essenziale' | 'dettaglio' | 'macro' | 'fasi';
 
 export const VERSIONI_STAMPA: { codice: VersioneStampa; nome: string; spiegazione: string }[] = [
-  { codice: 'essenziale', nome: 'Essenziale', spiegazione: 'Codice, quantità e prezzo a scheda. Sotto, cosa comprende, senza prezzi.' },
+  { codice: 'essenziale', nome: 'Essenziale', spiegazione: 'Codice, quantità e prezzo a scheda, senza dettaglio. Le una tantum sono comprese nel prezzo.' },
   { codice: 'dettaglio', nome: 'Essenziale con dettaglio', spiegazione: 'Componenti, PCB, SMD, THT, consumo e spedizione, ognuno con il suo prezzo.' },
   { codice: 'macro', nome: 'Macro aree', spiegazione: 'Un prezzo per ogni area di lavorazione.' },
   { codice: 'fasi', nome: 'Dettaglio per fasi', spiegazione: 'Tutte le fasi di lavorazione con il prezzo.' },
@@ -95,26 +95,6 @@ export function righeDettaglio(ris: Risultato): RigaStampa[] {
     grande.scheda = r2(grande.scheda + ris.totali.prezzoSchedaSecondoLotto - out.reduce((a, x) => a + x.scheda, 0));
   }
   return out;
-}
-
-/** Elenco di cosa comprende la versione Essenziale (senza prezzi). */
-export function compresoEssenziale(ris: Risultato): string[] {
-  const fasi = ris.fasi.filter(f => f.prezzo > 0), voci = ris.voci.filter(v => v.prezzo > 0);
-  const c = (cod: string) => fasi.some(f => f.codice === cod);
-  const v = (cod: string) => voci.some(x => x.codice === cod);
-  const g = (gr: string) => fasi.some(f => !f.unaTantum && f.gruppo === gr);
-  const controllo = c('ispezioneAOI') ? 'Controllo AOI' : c('controlloVisivo') ? 'Controllo visivo' : 'Controllo';
-  const completamento = fasi.filter(f => !f.unaTantum && f.gruppo === 'COMPLETAMENTO').map(f => f.nome.toLowerCase());
-  return [
-    ...(v('valoreAcquistoComponenti') ? ['Acquisto componenti'] : []),
-    ...(v('valoreAcquistoPCB') ? ['Acquisto PCB'] : []),
-    `Montaggio scheda${g('SMD') && g('THT') ? ' (SMD e THT)' : g('SMD') ? ' (SMD)' : g('THT') ? ' (THT)' : ''}`,
-    controllo,
-    ...(completamento.length ? [`Completamento: ${completamento.join(', ')}`] : []),
-    'Imballaggio',
-    ...(voci.some(x => !x.unaTantum && x.gruppo === 'SPEDIZIONE') ? ['Spedizione'] : []),
-    ...(ris.totali.costiUnaTantum > 0 ? ['Comprensivo dei costi di programmazione e attrezzaggio (prima produzione)'] : []),
-  ];
 }
 
 /**

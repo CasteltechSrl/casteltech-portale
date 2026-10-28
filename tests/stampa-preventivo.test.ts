@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calcolaPreventivo, type FaseDef, type Tariffe, type VoceDef } from '../src/engine/calcolo.js';
-import { compresoEssenziale, quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
+import { quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
 
 const t: Tariffe = { costoAziendaH: 0, costoOperatoreProduzioneH: 60, costoOperatoreUfficioH: 60, ricarico: 1 };
 // una fase da "euro" € a lotto (60 €/h × 1 persona, ricarico 1: secondi = euro × 60)
@@ -54,13 +54,4 @@ test('stampa con dettaglio: i centesimi degli arrotondamenti tornano con il prez
   const righe = righeDettaglio(ris);
   assert.equal(Math.round(righe.reduce((a, r) => a + r.scheda, 0) * 100) / 100, ris.totali.prezzoSchedaSecondoLotto);
   assert.equal(Math.round(righe.reduce((a, r) => a + r.lotto, 0) * 100) / 100, ris.totali.totaleSecondoLotto);
-});
-
-test('stampa essenziale: cosa comprende, senza prezzi; spedizione e programmazione solo se ci sono', () => {
-  const con = calcolaPreventivo([F('ispezioneAOI', 'SMD', 10), F('onda', 'THT', 10), F('prog', 'SMD', 50, true)],
-    [V('valoreAcquistoComponenti', 'MATERIALE PER PRODUZIONE', 100), V('spedizione', 'SPEDIZIONE', 15)], t, { nSchede: 1, parametri: {} });
-  assert.deepEqual(compresoEssenziale(con), ['Acquisto componenti', 'Montaggio scheda (SMD e THT)', 'Controllo AOI', 'Imballaggio', 'Spedizione',
-    'Comprensivo dei costi di programmazione e attrezzaggio (prima produzione)']);
-  const senza = calcolaPreventivo([F('pep', 'SMD', 10)], [], t, { nSchede: 1, parametri: {} });
-  assert.deepEqual(compresoEssenziale(senza), ['Montaggio scheda (SMD)', 'Controllo', 'Imballaggio']);
 });

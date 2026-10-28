@@ -156,7 +156,6 @@ export function rottePreventivi() {
     res.send(String(stampaPreventivo({
       p, d: dati, ris: calcola(cat, dati), doppia,
       nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
-      scelte: cat.parametri.filter(x => x.gruppo === 'INFORMAZIONI GENERALI' && v(x.codice)).map(x => x.etichetta),
       nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
       azienda: await caricaAzienda(), cliente: cliente ?? null,
       opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
