@@ -147,7 +147,7 @@
     const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
   }));
 
-  // ── Costo componenti dalla BOM caricata in Componenti ──
+  // ── Costo componenti dalla BOM caricata in Quotazioni ──
   // scegliendo la BOM (o cambiando le schede) il costo a scheda si ricalcola sulle schede del preventivo;
   // scrivendo il costo a mano il collegamento con la BOM si toglie
   const selBom = document.getElementById('sel-bom');
@@ -171,17 +171,17 @@
     // problemi da risolvere: si va alla BOM quotata, che riporta qui al preventivo
     if (avvisi.length && id && x.stato === 'pronta') {
       const a = document.createElement('a');
-      a.href = `/componenti/bom/${selBom.value}?preventivo=${encodeURIComponent(id)}`; a.className = 'bottone'; a.textContent = 'Risolvi nella BOM quotata';
+      a.href = `/quotazioni/bom/${selBom.value}?preventivo=${encodeURIComponent(id)}`; a.className = 'bottone'; a.textContent = 'Risolvi nella BOM quotata';
       esitoBom.append(' ', a);
     }
     modificato = true; statoEl.textContent = 'Modifiche non salvate';
     ricalcola();
   }
   // preventivo dai documenti del cliente (Adriano 28/10/2026): spuntando "Componenti" la BOM del cliente si quota da sola
-  // in Componenti; finita l'elaborazione il costo a scheda arriva qui (con i problemi da risolvere nella BOM)
+  // in Quotazioni; finita l'elaborazione il costo a scheda arriva qui (con i problemi da risolvere nella BOM)
   const attendiBom = async bomId => {
     for (let i = 0; i < 200; i++) {
-      const s = await (await fetch(`/componenti/bom/${bomId}/stato`)).json().catch(() => ({}));
+      const s = await (await fetch(`/quotazioni/bom/${bomId}/stato`)).json().catch(() => ({}));
       if (!s.inCorso && s.stato !== 'da_elaborare' && s.stato !== 'in_corso') return;
       esitoBom.textContent = `BOM in quotazione${s.fase ? ': ' + s.fase : ''}…`;
       await new Promise(r => setTimeout(r, 3000));
@@ -197,7 +197,7 @@
     if (![...selBom.options].some(o => o.value === String(x.bomId))) selBom.add(new Option(`${x.nome} (${new Date(x.creatoIl).toLocaleDateString('it-IT')})`, x.bomId));
     selBom.value = String(x.bomId);
     const apri = document.getElementById('apri-bom');
-    apri.hidden = false; apri.querySelector('a').href = '/componenti/bom/' + x.bomId;
+    apri.hidden = false; apri.querySelector('a').href = '/quotazioni/bom/' + x.bomId;
     modificato = true; statoEl.textContent = 'Modifiche non salvate';
     await attendiBom(x.bomId);
     costoDaBom();
@@ -207,7 +207,7 @@
     selBom.addEventListener('change', () => {
       const apri = document.getElementById('apri-bom');
       apri.hidden = !selBom.value;
-      apri.querySelector('a').href = '/componenti/bom/' + selBom.value;
+      apri.querySelector('a').href = '/quotazioni/bom/' + selBom.value;
       if (selBom.value) costoDaBom(); else { esitoBom.textContent = 'Costo componenti scritto a mano.'; esitoBom.classList.remove('negativo'); }
     });
     form.querySelector('[data-campo=nSchede]').addEventListener('input', () => { clearTimeout(timerBom); timerBom = setTimeout(costoDaBom, 500); });

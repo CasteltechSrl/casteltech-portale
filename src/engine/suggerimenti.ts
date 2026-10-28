@@ -7,7 +7,7 @@ import { iniziali } from './crm.js';
 
 export const AREE_SUGGERIMENTI = {
   preventivi: 'Preventivi', ordini: 'Ordini', commesse: 'Commesse e produzione', reparto: 'Reparto (telefono)',
-  componenti: 'Componenti e acquisti', crm: 'CRM', amministrazione: 'Amministrazione', avvisi: 'Avvisi e calendario', generale: 'Generale',
+  componenti: 'Quotazioni e acquisti', crm: 'CRM', amministrazione: 'Amministrazione', avvisi: 'Avvisi e calendario', generale: 'Generale',
 } as const;
 export type AreaSuggerimento = keyof typeof AREE_SUGGERIMENTI;
 

@@ -1,5 +1,5 @@
 /**
- * Sezione Componenti (solo ufficio): BOM con codifica e preventivo materiali, codifica di un P/N (l'archivio sta in Anagrafiche → Componenti).
+ * Sezione Quotazioni (fino al 28/10/2026 "Componenti"; solo ufficio): BOM con codifica e preventivo materiali, codifica di un P/N (l'archivio sta in Anagrafiche → Componenti).
  * Logica in src/server/codifica-servizio.ts; regole in src/engine/codifica/* e src/engine/acquisti.ts.
  */
 import express, { Router, type Request } from 'express';
@@ -25,12 +25,12 @@ const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+
 export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'componenti', largo: true, avviso, script: script ?? 'componenti.js', contenuto: html`
+    String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? 'componenti.js', contenuto: html`
       <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['codifica', 'Codifica un P/N']]
-        .map(([s, t]) => html`<a href="/componenti/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
+        .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
 
-  r.get('/', (_req, res) => res.redirect('/componenti/bom'));
+  r.get('/', (_req, res) => res.redirect('/quotazioni/bom'));
 
   // ── BOM: elenco e caricamento ──
   r.get('/bom', async (req, res) => {
@@ -54,11 +54,11 @@ export function rotteComponenti() {
       ${elenco.length ? html`<div class="tabella-scorre"><table><thead><tr><th>Nome</th><th>File</th><th>Caricata</th><th class="n">Righe</th>
         <th class="n">Schede</th><th class="n">Materiali a scheda</th><th>Reperibilità</th><th>Stato</th><th class="n" title="Preventivi che prendono da questa BOM il costo componenti">Preventivi</th><th></th></tr></thead><tbody>
         ${elenco.map(a => { const rp: Riepilogo = a.riepilogo ?? {}; const p = rp.perQuantita?.[0]; return html`<tr>
-          <td><a href="/componenti/bom/${a.id}">${a.nome}</a></td><td class="taglia">${a.file_nome}</td><td>${new Date(a.creato_il).toLocaleDateString('it-IT')}</td>
+          <td><a href="/quotazioni/bom/${a.id}">${a.nome}</a></td><td class="taglia">${a.file_nome}</td><td>${new Date(a.creato_il).toLocaleDateString('it-IT')}</td>
           <td class="n">${rp.righe ?? ''}</td><td class="n">${(a.quantita ?? []).join(', ')}</td><td class="n">${p ? euro2(p.aScheda) : ''}</td>
           <td>${rp.critici ? html`<span class="livello critico">${rp.critici} critici</span> ` : ''}${rp.attenzione ? html`<span class="livello attenzione">${rp.attenzione} attenzione</span>` : ''}</td>
           <td>${a.stato === 'pronta' ? '' : a.stato.replace('_', ' ')}</td><td class="n">${a.preventivi || ''}</td>
-          <td><form method="post" action="/componenti/bom/${a.id}/elimina" class="inline conferma-elimina" data-preventivi="${a.preventivi}"><button class="link negativo">Elimina</button></form></td></tr>`; })}
+          <td><form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina" data-preventivi="${a.preventivi}"><button class="link negativo">Elimina</button></form></td></tr>`; })}
         </tbody></table></div>` : html`<p class="vuoto">Nessuna BOM caricata.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
@@ -93,7 +93,7 @@ export function rotteComponenti() {
   });
   r.post('/bom/:id/rielabora', async (req, res) => {
     avviaElaborazione(Number(req.params.id), { forzaPrezzi: !!req.body.prezzi });
-    res.redirect(`/componenti/bom/${req.params.id}`);
+    res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/colonne', async (req, res) => {
     const a = await q1<any>(`SELECT colonne FROM bom_analisi WHERE id = $1`, [req.params.id]);
@@ -102,20 +102,20 @@ export function rotteComponenti() {
     for (const k of Object.keys(ETICHETTE_RUOLI) as Ruolo[]) { const v = String(req.body[k] ?? ''); if (v && a.colonne.includes(v)) mappa[k] = v; }
     await q(`UPDATE bom_analisi SET mappatura = $2 WHERE id = $1`, [req.params.id, JSON.stringify(mappa)]);
     avviaElaborazione(Number(req.params.id));
-    res.redirect(`/componenti/bom/${req.params.id}`);
+    res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/quantita', async (req, res) => {
     const quantita = leggiQuantita(req.body.quantita);
     if (quantita.length) { await q(`UPDATE bom_analisi SET quantita = $2 WHERE id = $1`, [req.params.id, quantita]); avviaElaborazione(Number(req.params.id)); }
-    res.redirect(`/componenti/bom/${req.params.id}`);
+    res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/salva', async (req, res) => {
     const x = await salvaInArchivio(Number(req.params.id), req.session.utente!.nome);
-    res.redirect(`/componenti/bom/${req.params.id}?msg=${encodeURIComponent(`Archivio aggiornato: ${x.nuovi} componenti nuovi, ${x.aggiornati} completati.`)}`);
+    res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent(`Archivio aggiornato: ${x.nuovi} componenti nuovi, ${x.aggiornati} completati.`)}`);
   });
   r.post('/bom/:id/elimina', async (req, res) => {
     await q(`DELETE FROM bom_analisi WHERE id = $1`, [req.params.id]);
-    res.redirect('/componenti/bom');
+    res.redirect('/quotazioni/bom');
   });
   r.get('/bom/:id/excel', async (req, res) => {
     const x = await excelAnalisi(Number(req.params.id));
@@ -138,21 +138,21 @@ export function rotteComponenti() {
     const msg = prezzo != null && !(prezzo >= 0) ? 'Prezzo non valido.'
       : testo && prezzo == null && !req.body.togli ? 'Prezzo non valido: scrivi ad esempio 0,125.'
       : await impostaPrezzoManuale(Number(req.params.id), Number(req.params.n), prezzo);
-    res.redirect(`/componenti/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#prezzo-manuale`);
+    res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#prezzo-manuale`);
   });
   // alternative al P/N (Adriano 28/10/2026): usa una proposta, scrivine una a mano, torna al P/N della BOM
   r.post('/bom/:id/riga/:n/alternativa', async (req, res) => {
     const msg = await scegliAlternativa(Number(req.params.id), Number(req.params.n), {
       usa: String(req.body.usa ?? '').trim() || undefined, nuova: String(req.body.nuova ?? '').trim() || undefined,
       togli: String(req.body.togli ?? '').trim() || undefined, originale: !!req.body.originale });
-    res.redirect(`/componenti/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#alternative`);
+    res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#alternative`);
   });
   r.post('/bom/:id/riga/:n', async (req, res) => {
     const attributi: Record<string, string | null> = {};
     for (const k of [...ATTR, 'tecnologia']) attributi[k] = String(req.body[k] ?? '').trim() || null;
     const fam = String(req.body.famiglia ?? '').toUpperCase();
     await correggiRiga(Number(req.params.id), Number(req.params.n), { famiglia: fam in FAMIGLIE ? fam : null, attributi, clienteFornisce: !!req.body.cliente });
-    res.redirect(`/componenti/bom/${req.params.id}#riga-${req.params.n}`);
+    res.redirect(`/quotazioni/bom/${req.params.id}#riga-${req.params.n}`);
   });
 
   // ── Codifica di un singolo P/N ──
@@ -170,11 +170,11 @@ export function rotteComponenti() {
     </form>`)));
   r.post('/codifica', async (req, res) => {
     const pn = String(req.body.pn ?? '').trim(), descrizione = String(req.body.descrizione ?? '').trim();
-    if (!pn && !descrizione) return res.redirect('/componenti/codifica');
+    if (!pn && !descrizione) return res.redirect('/quotazioni/codifica');
     const fam = String(req.body.famiglia ?? '').toUpperCase();
     const id = await creaCodificaSingola({ pn, descrizione, famiglia: fam in FAMIGLIE ? fam : '', schede: leggiQuantita(req.body.quantita).length ? leggiQuantita(req.body.quantita) : [100], utenteId: req.session.utente!.id });
     avviaElaborazione(id);
-    res.redirect(`/componenti/bom/${id}`);
+    res.redirect(`/quotazioni/bom/${id}`);
   });
 
   // ── Archivio componenti: ora sta in Anagrafiche → Componenti (27/10/2026) ──
@@ -222,10 +222,10 @@ function paginaAnalisi(a: any): Raw {
   return html`
   <div class="intestazione-pagina"><h1>${a.nome}</h1>
     <div class="azioni">
-      ${!inCorso && daSalvare ? html`<form method="post" action="/componenti/bom/${a.id}/salva" class="inline"><button class="primario" title="Mette nell'archivio i codici nuovi completi">Salva ${daSalvare} codici nell'archivio</button></form>` : ''}
-      ${!inCorso && righe.length ? html`<a class="bottone" href="/componenti/bom/${a.id}/excel">Scarica Excel</a>` : ''}
-      ${!inCorso ? html`<form method="post" action="/componenti/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>` : ''}
-      <form method="post" action="/componenti/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
+      ${!inCorso && daSalvare ? html`<form method="post" action="/quotazioni/bom/${a.id}/salva" class="inline"><button class="primario" title="Mette nell'archivio i codici nuovi completi">Salva ${daSalvare} codici nell'archivio</button></form>` : ''}
+      ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel">Scarica Excel</a>` : ''}
+      ${!inCorso ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>` : ''}
+      <form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>
   ${inCorso ? html`<div class="avviso info" id="avanzamento" data-id="${a.id}">Elaborazione in corso…</div>` : ''}
   ${a.stato === 'errore' ? html`<div class="avviso">${a.messaggio}</div>` : a.messaggio ? html`<div class="avviso info">${a.messaggio}</div>` : ''}
@@ -237,11 +237,11 @@ function paginaAnalisi(a: any): Raw {
     <div class="totale"><span>Reperibilità</span><strong>${rp.critici ? html`<span class="negativo">${rp.critici} critici</span>` : 'nessun critico'}</strong><small>${rp.attenzione} da tenere d'occhio</small></div>
   </div>` : ''}
   ${!singola ? html`<details class="blocco"><summary>Colonne della BOM e quantità</summary>
-    <form method="post" action="/componenti/bom/${a.id}/colonne" class="riga-campi">
+    <form method="post" action="/quotazioni/bom/${a.id}/colonne" class="riga-campi">
       ${(Object.entries(ETICHETTE_RUOLI) as [Ruolo, string][]).map(([k, t]) => html`<label>${t}<select name="${k}"><option value="">—</option>
         ${(a.colonne as string[]).map(c => html`<option ${mappa[k] === c ? raw('selected') : ''}>${c}</option>`)}</select></label>`)}
       <button>Applica e rielabora</button></form>
-    <form method="post" action="/componenti/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>
+    <form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>
   </details>` : ''}
   ${righe.length ? html`
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
@@ -253,7 +253,7 @@ function paginaAnalisi(a: any): Raw {
     ${righe.map(r => html`<tr id="riga-${r.n}" data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}">
       <td>${r.n}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
         ${r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
-          : r.alternative?.length ? html`<br><a class="alternative-pronte" href="/componenti/bom/${a.id}/riga/${r.n}#alternative">${r.alternative.length === 1 ? '1 alternativa' : `${r.alternative.length} alternative`}: scegli</a>` : ''}
+          : r.alternative?.length ? html`<br><a class="alternative-pronte" href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative.length === 1 ? '1 alternativa' : `${r.alternative.length} alternative`}: scegli</a>` : ''}
         ${!r.pn && (r.valore || r.descrizioneBom) ? html`<br><small class="nota">${[r.valore, r.footprint].filter(Boolean).join(' · ') || r.descrizioneBom}</small>` : ''}</td>
       <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r)}</td>
       <td class="codice">${r.codiceProduzione}</td><td class="codice">${r.codiceGestionale}</td><td class="taglia" title="${r.descrizione ?? ''}">${r.descrizione}</td>
@@ -262,7 +262,7 @@ function paginaAnalisi(a: any): Raw {
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
       <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
-      <td><a href="/componenti/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a></td></tr>`)}
+      <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a></td></tr>`)}
   </tbody></table></div>
   <p class="nota">Esiti: <span class="esito archivio">in archivio</span> codici esistenti · <span class="esito nuovo">nuovo</span> codici calcolati, da salvare ·
     <span class="esito verifica">da verificare</span> ipotesi da controllare (vedi note) · <span class="esito manca">da completare</span> mancano dati: apri "modifica".
@@ -284,7 +284,7 @@ function tabellaOfferte(offerte: Offerta[], qta: number) {
 function bloccoAlternative(a: any, r: RigaBom, qta: number): Raw {
   if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce) return html``;
   const alternative = r.alternative ?? [];
-  const azione = `/componenti/bom/${a.id}/riga/${r.n}/alternativa`;
+  const azione = `/quotazioni/bom/${a.id}/riga/${r.n}/alternativa`;
   const critico = r.reperibilita?.livello === 'critico';
   return html`<section class="blocco" id="alternative"><h2>Alternative</h2>
     ${r.alternativaScelta ? html`<div class="riga-campi">Si compra <b>${r.alternativaScelta}</b> al posto di ${r.pn ?? r.mpnAcquisto ?? 'quello della BOM'}.
@@ -314,7 +314,7 @@ function paginaRiga(a: any, r: RigaBom): Raw {
   const qta = r.acquisti[r.acquisti.length - 1]?.lorda ?? 0;
   return html`
   <div class="intestazione-pagina"><h1>Riga ${r.n}: ${r.pn ?? r.mpnAcquisto ?? r.valore ?? ''} ${badgeEsito(r)}</h1>
-    <a class="bottone" href="/componenti/bom/${a.id}#riga-${r.n}">← Torna alla BOM</a></div>
+    <a class="bottone" href="/quotazioni/bom/${a.id}#riga-${r.n}">← Torna alla BOM</a></div>
   <div class="griglia-preventivo">
     <form method="post" class="blocco">
       <p class="riepilogo">${r.designatori ? html`<b>Designatori:</b> ${r.designatori}<br>` : ''}
@@ -335,7 +335,7 @@ function paginaRiga(a: any, r: RigaBom): Raw {
     <section>
       <h2>Acquisto</h2>
       ${r.reperibilita ? html`<p>${badgeLivello(r)} ${r.reperibilita.motivi.join(' · ')}</p>` : ''}
-      ${r.esito === ESITI.NON_MONTATO || r.clienteFornisce ? '' : html`<form method="post" action="/componenti/bom/${a.id}/riga/${r.n}/prezzo" class="riga-campi" id="prezzo-manuale">
+      ${r.esito === ESITI.NON_MONTATO || r.clienteFornisce ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/prezzo" class="riga-campi" id="prezzo-manuale">
         <label>Prezzo a mano <small class="unita">€/pz, vale al posto di quello proposto</small>
           <input name="prezzo" inputmode="decimal" autocomplete="off" value="${r.prezzoManuale != null ? String(r.prezzoManuale).replace('.', ',') : ''}" placeholder="es. 0,125"></label>
         <button class="primario">Salva prezzo</button>${r.prezzoManuale != null ? html`<button name="togli" value="1">Torna al prezzo proposto</button>` : ''}</form>`}

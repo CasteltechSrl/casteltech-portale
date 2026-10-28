@@ -21,17 +21,17 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
-  <nav>
+  <nav><!-- ordine del menu deciso da Adriano (28/10/2026) -->
     ${opz.utente.ruolo === 'ufficio' ? html`
-      ${voce('/anagrafiche', 'Anagrafiche', 'anagrafiche')}
       ${voce('/crm', 'CRM', 'crm')}
+      ${voce('/anagrafiche', 'Anagrafiche', 'anagrafiche')}
+      ${voce('/quotazioni', 'Quotazioni', 'quotazioni')}
       ${voce('/preventivi', 'Preventivi', 'preventivi')}
       ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
       ${voce('/commesse', 'Commesse', 'commesse')}
-      ${voce('/componenti', 'Componenti', 'componenti')}
       ${voce('/amministrazione', 'Amministrazione', 'amministrazione')}
-      ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}
-      ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
+      ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}
+      ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
     ${voce('/guida', 'Guida', 'guida')}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>

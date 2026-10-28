@@ -18,6 +18,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   (menu Anagrafiche), mai testo libero; tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi
   preventivi sono collegati con `alias_clienti` / `alias_prodotti`. Clienti/prodotti non in elenco non vanno in anagrafica.
 
+- Menu in alto (Adriano 28/10/2026, `views/layout.ts`, test in `tests/menu.test.ts`): CRM, Anagrafiche, Quotazioni, Preventivi, Ordini, Commesse,
+  Amministrazione, Impostazioni, Suggerimenti, Guida. "Quotazioni" è la ex sezione Componenti (BOM, codifica, prezzi): indirizzo `/quotazioni`,
+  i vecchi `/componenti/...` portano lì (`index.ts`); "Componenti" resta il nome dell'archivio in Anagrafiche, di Impostazioni → Componenti e della spunta del preventivo.
 - Sezione Anagrafiche (menu in alto, `rotte/anagrafiche.ts`; Adriano 27/10/2026): TUTTE le anagrafiche stanno lì, non in Impostazioni.
   Tasti in alto Clienti / Fornitori / Prodotti / Componenti (archivio della codifica), sotto l'elenco con la ricerca veloce
   (`engine/ricerca.ts` = `public/ricerca.js`: filtra mentre si scrive, più parole, accenti e trattini dei codici non contano).
@@ -118,7 +121,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    previsto, righe una dopo l'altra, parti uguali se una fase non ha previsto; `ripartisciFasiInsieme`, Adriano 27/10/2026: anche le righe già salvate, poi Salva), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).
    Le righe si aggiungono in fondo al Rientro (`/commesse/:id/rientro?acquisizione=N`, evidenziate, quelle già presenti non si ripetono):
    l'ufficio controlla e salva. ⬜ Provata solo con lettura simulata: manca la prova con scansioni vere.
-4b. ✅ Componenti (`rotte/componenti.ts`, `codifica-servizio.ts`, migrazione 021): codifica come il programma Python
+4b. ✅ Quotazioni, ex Componenti (`/quotazioni`, `rotte/componenti.ts`, `codifica-servizio.ts`, migrazione 021): codifica come il programma Python
    "Codifica componenti" (regole e decodifica P/N portate in `src/engine/codifica/*`, identiche: `tools/verifica-codifica.ts`
    con i casi generati dal Python, dati reali fuori dal repository). Codice di produzione (armadio, es. RS-0603-2K2-1-100MW) e
    gestionale (Moka, es. SRS-0603-2K20F-001, progressivo dall'archivio `componenti`). Resistenze solo all'1% (5% non si comprano),
