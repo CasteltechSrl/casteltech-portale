@@ -54,16 +54,27 @@ export function dateRiga(r: Pick<RigaOrdine, 'arrivoMateriale' | 'dataLavorazion
 
 // ───────────────────────────── stato ─────────────────────────────
 /**
+ * Righe che sono servizi e non schede da produrre (Adriano, 28/10/2026: "programmazione attrezzature" è un servizio
+ * necessario per produrre, non un prodotto): lamine, programmazione attrezzature, attrezzaggio, costi una tantum / avvio
+ * produzione, trasporto e spedizione, sconti, acconti, prototipazione, progettazione, scansioni, caricamento firmware.
+ * "Coating + ispezione + test" resta una scheda: è una lavorazione sulla scheda.
+ */
+const PAROLE_SERVIZIO = /\b(LAMIN[AE]|PROGRAMMAZION[EI] (ATTREZZATUR|MACCHIN)|ATTREZZAGGIO|ATTREZZATURE|UNA TANTUM|AVVIO (DI )?PRODUZIONE|INITIAL PRODUCTION|SET ?UP|TRASPORTO|SPEDIZION[EI]|SPESE DI|SCONTO|ACCONTO|ANTICIPO|ADVANCE PAYMENT|PROTOTIPAZIONE|PROGETTAZIONE|SCANSIONE|UPLOAD FIRMWARE)\b/;
+export function eServizio(codice: string | null | undefined, descrizione: string | null | undefined): boolean {
+  return PAROLE_SERVIZIO.test(`${codice ?? ''} ${descrizione ?? ''}`.toUpperCase().replace(/[-_]/g, ' '));
+}
+
+/**
  * Stato di una riga. Schede: evasa quando la quantità spedita arriva a quella ordinata, parziale se in parte.
- * Servizi (attrezzaggio, lamine, programmazioni…): evasi se fatturati o se tutte le schede dell'ordine sono evase.
- * Lo stato scritto a mano dall'ufficio vince.
+ * Servizi (attrezzaggio, lamine, programmazioni…) non sono da evadere da soli: evasi se fatturati, o se l'ordine non ha
+ * più schede da spedire (anche un ordine di soli servizi). Lo stato scritto a mano dall'ufficio vince.
  */
 export function statoRiga(r: RigaOrdine, righeOrdine: RigaOrdine[]): StatoRiga {
   if (r.statoManuale) return r.statoManuale;
   if (r.tipo === 'servizio') {
     if (r.importoFatturato > 0) return 'evaso';
     const schede = righeOrdine.filter(x => x.ordineId === r.ordineId && x.tipo === 'scheda');
-    return schede.length && schede.every(x => statoRiga(x, righeOrdine) === 'evaso') ? 'evaso' : 'da_evadere';
+    return schede.every(x => ['evaso', 'annullato'].includes(statoRiga(x, righeOrdine))) ? 'evaso' : 'da_evadere';
   }
   if (r.quantita <= 0) return r.importoFatturato > 0 ? 'evaso' : 'da_evadere';
   if (r.quantitaSpedita >= r.quantita - 0.01) return 'evaso';
@@ -108,6 +119,67 @@ export function consegneDaFare(r: RigaOrdine, stato: StatoRiga): { data: string 
     return out;
   }
   return [{ data: dateRiga(r).consegna, ...res }];
+}
+
+// ───────────────────────────── evasione dai documenti ─────────────────────────────
+/** Riga d'ordine ancora aperta a cui si possono abbinare DDT e fatture. */
+export interface RigaAperta {
+  id: number;
+  clienteId: number | null;
+  dataOrdine: string | null;
+  codici: (string | null | undefined)[];   // codice nostro, codice del cliente
+  descrizione: string | null;
+  daSpedire: number;                        // quantità ordinata − già spedita
+}
+/** Riga di un DDT (o di una fattura senza DDT) del portale. rigaOrdineId: abbinata a mano, vale quella. */
+export interface RigaSpedita {
+  chiave: string;
+  documento: string;                        // es. "DDT 215 del 26/10/2026"
+  clienteId: number | null;
+  data: string;
+  codice: string | null;
+  descrizione: string | null;
+  quantita: number;
+  rigaOrdineId?: number | null;
+}
+export interface Abbinamento { rigaId: number; chiave: string; documento: string; data: string; codice: string | null; quantita: number }
+
+const normale = (s: string | null | undefined) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+/** Codici troppo corti o solo numeri brevi (001, 007: servizi di Fatture in Cloud) non bastano per abbinare. */
+const codiceBuono = (s: string) => s.length >= 4 && !/^\d{1,4}$/.test(s);
+
+/**
+ * Evasione dai documenti del portale (DDT e fatture senza DDT, dallo storico di Fatture in Cloud e poi emessi dal portale):
+ * ogni riga spedita va alla riga d'ordine aperta dello stesso cliente con lo stesso codice (o la stessa descrizione),
+ * ordinata prima della spedizione; prima gli ordini più vecchi, senza superare la quantità ordinata.
+ * Quello che non trova posto resta fuori (spedizioni senza ordine o già contate).
+ */
+export function abbinaSpedizioni(aperte: RigaAperta[], spedite: RigaSpedita[]): Abbinamento[] {
+  const resto = new Map(aperte.map(r => [r.id, r.daSpedire]));
+  const ordinate = [...aperte].sort((a, b) => (a.dataOrdine ?? '').localeCompare(b.dataOrdine ?? '') || a.id - b.id);
+  const out: Abbinamento[] = [];
+  for (const s of [...spedite].sort((a, b) => a.data.localeCompare(b.data) || a.chiave.localeCompare(b.chiave))) {
+    if (!(s.quantita > 0)) continue;
+    const c = normale(s.codice), d = normale(s.descrizione);
+    const candidate = s.rigaOrdineId
+      ? ordinate.filter(r => r.id === s.rigaOrdineId)
+      : ordinate.filter(r => r.clienteId != null && r.clienteId === s.clienteId && (!r.dataOrdine || r.dataOrdine <= s.data) && (() => {
+        const codici = r.codici.map(normale).filter(codiceBuono);
+        const descr = normale(r.descrizione);
+        return (codiceBuono(c) && (codici.includes(c) || c === descr))
+          || (codiceBuono(d) && (codici.includes(d) || (d.length >= 6 && d === descr)));
+      })());
+    let q = s.quantita;
+    for (const r of candidate) {
+      const libero = s.rigaOrdineId ? q : Math.min(q, resto.get(r.id) ?? 0);
+      if (libero <= 0) continue;
+      out.push({ rigaId: r.id, chiave: s.chiave, documento: s.documento, data: s.data, codice: s.codice || s.descrizione, quantita: libero });
+      resto.set(r.id, (resto.get(r.id) ?? 0) - libero);
+      q -= libero;
+      if (q <= 0) break;
+    }
+  }
+  return out;
 }
 
 // ───────────────────────────── cruscotto ─────────────────────────────

@@ -5,7 +5,7 @@
 import { gunzipSync } from 'node:zlib';
 import { q, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
-import { dateRiga, residuo, statoRiga, type RigaOrdine, type StatoRiga } from '../engine/ordini.js';
+import { abbinaSpedizioni, dateRiga, eServizio, residuo, statoRiga, type Abbinamento, type RigaOrdine, type RigaSpedita, type StatoRiga } from '../engine/ordini.js';
 
 /**
  * File di import: un anno di ordini con le loro righe, più DDT e fatture dello stesso anno.
@@ -70,7 +70,7 @@ export async function importaOrdini(f: FileOrdini) {
         dataValida(o.data_ordine_cliente), ORIGINI.includes(String(o.origine)) ? o.origine : 'fic', o.file || null, o.note || null])).rows[0];
       const chiavi: string[] = [];
       for (const [i, r] of (o.righe ?? []).entries()) {
-        const pr = r.tipo === 'servizio' || !r.codice ? null : await collega(o.cliente, r.codice);
+        const pr = r.tipo === 'servizio' || eServizio(r.codice, r.descrizione) || !r.codice ? null : await collega(o.cliente, r.codice);
         if (pr && !pr.prodottoId) prodottiFuori.add(`${maiuscolo(o.cliente)} · ${maiuscolo(r.codice)}`);
         const { id } = (await c.query(`
           INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, codice_cliente, descrizione_cliente, tipo,
@@ -82,7 +82,7 @@ export async function importaOrdini(f: FileOrdini) {
             quantita_spedita = EXCLUDED.quantita_spedita, importo_fatturato = EXCLUDED.importo_fatturato, note = coalesce(ordini_righe.note, EXCLUDED.note)
           RETURNING id`, [ordineId, r.chiave, i, pr?.prodottoId ?? null, pr?.prodottoId ? pr.codice : maiuscolo(r.codice) || null,
           (pr?.prodottoId && pr.descrizione) || r.descrizione || null, r.codice_cliente || null, r.descrizione_cliente || null,
-          r.tipo === 'servizio' ? 'servizio' : 'scheda', numero(r.quantita), numero(r.prezzo), dataValida(r.consegna_richiesta),
+          r.tipo === 'servizio' || eServizio(r.codice, r.descrizione) ? 'servizio' : 'scheda', numero(r.quantita), numero(r.prezzo), dataValida(r.consegna_richiesta),
           numero(r.quantita_spedita), numero(r.importo_fatturato), r.note || null,
           ['evaso', 'da_evadere', 'annullato'].includes(String(r.stato)) ? r.stato : null])).rows[0];
         idRiga.set(r.chiave, id);
@@ -128,41 +128,87 @@ export async function importaOrdini(f: FileOrdini) {
 
 // ───────────────────────────── lettura ─────────────────────────────
 export interface RigaElenco extends RigaOrdine {
+  spedizioni: Abbinamento[];   // DDT e fatture del portale abbinati in automatico (oltre a quelli dell'import)
   numero: number; anno: number; dataOrdine: string | null; cliente: string; clienteId: number | null; rifCliente: string | null;
   codice: string | null; descrizione: string | null; codiceCliente: string | null; prodottoId: number | null; commessaId: number | null; note: string | null;
   stato: StatoRiga; lavorazione: string | null; prevista: string | null; ritardo: number | null; consegna: string | null;
   residuoQuantita: number; residuoValore: number;
 }
 
+/**
+ * Righe di DDT e fatture che possono evadere gli ordini oltre a quelle già contate nell'import degli ordini:
+ * - DDT del portale (storico di Fatture in Cloud ricaricato, poi quelli emessi dal portale) non presenti nell'import;
+ * - fatture del portale senza DDT (vendita diretta) non presenti nell'import;
+ * - righe di DDT e fatture senza DDT dell'import rimaste senza riga d'ordine.
+ * Così l'evasione si aggiorna da sola anche dopo il 10/11/2026, quando Fatture in Cloud non c'è più.
+ */
+async function righeSpedite(): Promise<RigaSpedita[]> {
+  const righe = await q(`
+    SELECT 'P' || r.id AS chiave, d.tipo, d.numero, d.data, d.cliente_id, r.codice, r.descrizione, r.quantita, r.riga_ordine_id
+    FROM documenti d JOIN documenti_righe r ON r.documento_id = d.id
+    WHERE d.cliente_id IS NOT NULL AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato') AND NOT r.solo_descrizione AND r.quantita > 0
+      AND (
+        (d.tipo = 'ddt' AND NOT EXISTS (SELECT 1 FROM ddt_righe x WHERE x.anno = d.anno AND x.numero = d.numero))
+        OR (d.tipo = 'fattura' AND r.ddt_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM documenti z WHERE z.tipo = 'ddt' AND z.fattura_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM documenti_righe z WHERE z.documento_id = d.id AND z.solo_descrizione AND ltrim(z.descrizione) ILIKE 'DDT%')
+          AND NOT EXISTS (SELECT 1 FROM fatture_righe x WHERE x.anno = d.anno AND x.numero = d.numero)))
+    UNION ALL
+    SELECT 'D' || id, 'ddt', numero, data, cliente_id, codice, descrizione, quantita, NULL FROM ddt_righe
+    WHERE riga_id IS NULL AND cliente_id IS NOT NULL AND quantita > 0
+    UNION ALL
+    SELECT 'F' || id, 'fattura', numero, data, cliente_id, codice, descrizione, quantita, NULL FROM fatture_righe
+    WHERE riga_id IS NULL AND cliente_id IS NOT NULL AND quantita > 0 AND NOT intestazione AND ddt_numero IS NULL`);
+  const gma = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+  return righe.map(r => {
+    const d = typeof r.data === 'string' ? r.data.slice(0, 10) : new Date(r.data).toISOString().slice(0, 10);
+    return { chiave: r.chiave, documento: `${r.tipo === 'ddt' ? 'DDT' : 'Fattura'} ${r.numero} del ${gma(d)}`, clienteId: r.cliente_id, data: d,
+      codice: r.codice, descrizione: r.descrizione, quantita: Number(r.quantita), rigaOrdineId: r.riga_ordine_id };
+  });
+}
+
 /** Tutte le righe (o quelle di un ordine) con stato, date e residuo calcolati. */
 export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
+  // tutte le righe: l'abbinamento dei DDT va fatto su tutti gli ordini del cliente (prima i più vecchi)
   const righe = await q(`
     SELECT r.*, o.numero, o.anno, o.data_ordine, o.cliente_nome, o.cliente_id, o.rif_cliente,
       coalesce((SELECT json_agg(json_build_object('data', k.data, 'quantita', k.quantita) ORDER BY k.data) FROM ordini_consegne k WHERE k.riga_id = r.id), '[]') AS consegne,
       coalesce((SELECT sum(d.quantita) FROM ddt_righe d WHERE d.riga_id = r.id AND d.origine = 'acquisito'), 0) AS spedita_acquisita
     FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id
-    WHERE $1::int IS NULL OR o.id = $1
-    ORDER BY o.anno, o.numero, r.posizione, r.id`, [ordineId ?? null]);
+    ORDER BY o.anno, o.numero, r.posizione, r.id`);
   const base: RigaOrdine[] = righe.map(r => ({
-    id: r.id, ordineId: r.ordine_id, tipo: r.tipo, quantita: r.quantita, prezzo: r.prezzo, quantitaSpedita: Number(r.quantita_spedita) + Number(r.spedita_acquisita),   // + DDT in PDF confermati dopo l'import
+    id: r.id, ordineId: r.ordine_id, tipo: r.tipo === 'servizio' || eServizio(r.codice, r.descrizione) ? 'servizio' : 'scheda',
+    quantita: r.quantita, prezzo: r.prezzo, quantitaSpedita: Number(r.quantita_spedita) + Number(r.spedita_acquisita),   // + DDT in PDF confermati dopo l'import
     importoFatturato: r.importo_fatturato, statoManuale: r.stato_manuale, consegnaRichiesta: r.consegna_richiesta, arrivoMateriale: r.arrivo_materiale,
     dataLavorazione: r.data_lavorazione, ritardiProduzione: r.ritardi_produzione, consegnaPrevista: r.consegna_prevista, consegne: r.consegne,
   }));
-  return base.map((b, i) => {
+  // DDT e fatture del portale non ancora contati: si abbinano alle schede ancora da spedire
+  const aperte = base.flatMap((b, i) => b.tipo === 'scheda' && !b.statoManuale && b.quantita > b.quantitaSpedita + 0.01
+    ? [{ id: b.id, clienteId: righe[i].cliente_id, dataOrdine: isoData(righe[i].data_ordine), codici: [righe[i].codice, righe[i].codice_cliente],
+      descrizione: righe[i].descrizione, daSpedire: b.quantita - b.quantitaSpedita }] : []);
+  const spedizioni = new Map<number, Abbinamento[]>();
+  for (const a of abbinaSpedizioni(aperte, await righeSpedite())) {
+    (spedizioni.get(a.rigaId) ?? spedizioni.set(a.rigaId, []).get(a.rigaId)!).push(a);
+  }
+  for (const b of base) b.quantitaSpedita += (spedizioni.get(b.id) ?? []).reduce((t, a) => t + a.quantita, 0);
+  return base.flatMap((b, i) => {
     const r = righe[i];
+    if (ordineId != null && r.ordine_id !== ordineId) return [];
     const stato = statoRiga(b, base);
     const d = dateRiga(b);
     const res = residuo(b, stato);
     // con un programma di consegne vale la prossima consegna ancora da fare
     const prossima = b.consegne?.length && b.tipo === 'scheda' ? prossimaConsegna(b) : null;
-    return {
+    return [{
       ...b, numero: r.numero, anno: r.anno, dataOrdine: r.data_ordine, cliente: r.cliente_nome, clienteId: r.cliente_id, rifCliente: r.rif_cliente,
       codice: r.codice, descrizione: r.descrizione, codiceCliente: r.codice_cliente, prodottoId: r.prodotto_id, commessaId: r.commessa_id, note: r.note,
       stato, lavorazione: d.lavorazione, prevista: d.prevista, ritardo: d.ritardo, consegna: prossima ?? d.consegna,
-      residuoQuantita: res.quantita, residuoValore: res.valore,
-    };
+      residuoQuantita: res.quantita, residuoValore: res.valore, spedizioni: spedizioni.get(b.id) ?? [],
+    }];
   });
 }
+
+const isoData = (d: unknown) => (d == null ? null : typeof d === 'string' ? d.slice(0, 10) : (d as Date).toISOString().slice(0, 10));
 
 function prossimaConsegna(r: RigaOrdine): string | null {
   let spedite = r.quantitaSpedita;

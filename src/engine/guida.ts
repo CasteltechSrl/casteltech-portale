@@ -256,9 +256,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'righe-evadere', area: 'ordini', titolo: 'Ordini da evadere, date e ritardi',
-    parole: 'evadere evaso parziale consegna data lavorazione prevista ritardo arrivo materiale stato note',
+    parole: 'evadere evaso evasi parziale consegna consegnato data lavorazione prevista ritardo arrivo materiale stato note servizio servizi programmazione attrezzature lamina una tantum ddt fattura abbinati automatico aggiornare',
     testo: [
-      'Una riga è evasa quando le schede spedite con DDT arrivano alla quantità ordinata, parziale se ne è partita una parte. Le righe di servizio (attrezzaggio, lamine, programmazioni) sono evase quando sono fatturate o quando tutte le schede dell\'ordine sono evase. Lo stato scritto dall\'ufficio vince sempre.',
+      'Una riga è evasa quando le schede spedite con DDT arrivano alla quantità ordinata, parziale se ne è partita una parte. Lo stato scritto dall\'ufficio vince sempre.',
+      'I DDT e le fatture senza DDT che stanno nel portale (storico di Fatture in Cloud e, dopo il 10/11, quelli fatti nel portale) si abbinano da soli: ogni riga va alla riga d\'ordine aperta dello stesso cliente con lo stesso codice (o la stessa descrizione), prima agli ordini più vecchi. Nella pagina dell\'ordine sono sotto "Abbinati in automatico".',
+      'Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum o di avvio produzione, trasporto, sconti, acconti, prototipazione) non sono prodotti da evadere: sono evase quando sono fatturate o quando l\'ordine non ha più schede da spedire. Il portale le riconosce dalla descrizione, anche se nell\'ordine erano scritte come schede.',
+      'Se una riga risulta ancora da evadere ma è stata consegnata (codice diverso nel DDT, consegna senza DDT), apri l\'ordine e scegli "evaso" nello Stato della riga, poi Salva; se è consegnato tutto l\'ordine, premi "Segna tutto evaso" in alto.',
       'Date: lavorazione = arrivo del materiale + 3 giorni; consegna prevista = lavorazione + 5 giorni + ritardi. Le date si possono scrivere a mano nell\'ordine.',
     ],
     pagine: [['/ordini', 'Ordini da evadere'], ['/ordini?vista=evasi', 'Ordini evasi']],

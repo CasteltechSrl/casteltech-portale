@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { caricoGiornaliero, consegneDaFare, cruscotto, dateRiga, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
+import { abbinaSpedizioni, caricoGiornaliero, consegneDaFare, cruscotto, dateRiga, eServizio, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
 
 const riga = (x: Partial<RigaOrdine>): RigaOrdine => ({ id: 1, ordineId: 1, tipo: 'scheda', quantita: 100, prezzo: 10, quantitaSpedita: 0, importoFatturato: 0, ...x });
 
@@ -91,4 +91,44 @@ test('ordini: Gantt all\'indietro dalla consegna con le ore del preventivo, cari
   assert.equal(l.inizio, '2026-11-09');
   assert.equal(l.fine, '2026-11-10');
   assert.equal(pianifica([{ id: 4, etichetta: 'W', quantita: 10, consegna: null }], '2026-10-25').length, 0);
+});
+
+test('ordini: i servizi non sono da evadere da soli (Adriano, 28/10/2026)', () => {
+  assert.ok(eServizio('007', 'PROGRAMMAZIONE ATTREZZATURE'));
+  assert.ok(eServizio(null, 'Costi una tantum avvio produzione'));
+  assert.ok(eServizio('MC', 'LAMINA CAMJIO500R2 SMD TOP'));
+  assert.ok(eServizio(null, 'Attrezzaggio'));
+  assert.ok(eServizio('010', 'Upload firmware and Testing'));
+  assert.ok(eServizio(null, 'Initial production costs'));
+  assert.ok(eServizio(null, 'PROTOTIPAZIONE PCB + 5 PCB'));
+  assert.ok(!eServizio('TB170TSS', 'LARMAN5 Rev C02 - coating +ispezione + test'));   // lavorazione sulla scheda
+  assert.ok(!eServizio('WPACAMJR3', 'SCHEDA ASSEMBLATA CAMJR3'));
+  assert.ok(!eServizio(null, 'MODULE PESEE PROGRAMMATE'));
+  // ordine di soli servizi: evaso; servizio con schede ancora da spedire: segue l'ordine
+  const s1 = riga({ id: 1, ordineId: 9, tipo: 'servizio', quantita: 1 });
+  assert.equal(statoRiga(s1, [s1]), 'evaso');
+  const a = riga({ id: 2, quantitaSpedita: 100 }), b = riga({ id: 3, statoManuale: 'annullato' }), s = riga({ id: 4, tipo: 'servizio', quantita: 1 });
+  assert.equal(statoRiga(s, [a, b, s]), 'evaso');
+});
+
+test('ordini: DDT e fatture del portale evadono le righe aperte dello stesso cliente e codice', () => {
+  const aperte = [
+    { id: 1, clienteId: 7, dataOrdine: '2026-03-01', codici: ['WPAJZERO6'], descrizione: 'JZERO6', daSpedire: 100 },
+    { id: 2, clienteId: 7, dataOrdine: '2026-09-01', codici: ['WPAJZERO6'], descrizione: 'JZERO6', daSpedire: 500 },
+    { id: 3, clienteId: 8, dataOrdine: '2026-02-24', codici: ['DE0102-012', null], descrizione: 'PCB ALIMENTATORE 80W', daSpedire: 120 },
+    { id: 4, clienteId: 9, dataOrdine: '2026-10-23', codici: ['4CL000495'], descrizione: 'TAPPO', daSpedire: 3 },
+  ];
+  const a = abbinaSpedizioni(aperte, [
+    { chiave: 'P1', documento: 'DDT 187', clienteId: 7, data: '2026-09-29', codice: 'WPAJZERO6', descrizione: 'JZERO6 Rif. Ordine 112/2', quantita: 150 },
+    { chiave: 'P2', documento: 'DDT 55', clienteId: 8, data: '2026-03-12', codice: 'DE0904-18', descrizione: 'PCB ALIMENTATORE 80W', quantita: 119 },   // stessa descrizione
+    { chiave: 'P3', documento: 'DDT 215', clienteId: 9, data: '2026-10-26', codice: '4cl000495', descrizione: '', quantita: 3 },
+    { chiave: 'P4', documento: 'DDT 1', clienteId: 9, data: '2026-01-10', codice: '4CL000495', descrizione: '', quantita: 3 },     // prima dell'ordine
+    { chiave: 'P5', documento: 'DDT 2', clienteId: 7, data: '2026-10-01', codice: '007', descrizione: 'PROGRAMMAZIONE', quantita: 1 },  // codice troppo generico
+    { chiave: 'P6', documento: 'DDT 3', clienteId: 99, data: '2026-10-01', codice: 'WPAJZERO6', descrizione: '', quantita: 5 },     // altro cliente
+  ]);
+  // prima l'ordine più vecchio, il resto al successivo
+  assert.deepEqual(a.map(x => [x.rigaId, x.chiave, x.quantita]), [[3, 'P2', 119], [1, 'P1', 100], [2, 'P1', 50], [4, 'P3', 3]]);
+  // abbinata a mano: vale la riga scelta
+  const m = abbinaSpedizioni(aperte, [{ chiave: 'X', documento: 'DDT 9', clienteId: 1, data: '2026-10-01', codice: 'ALTRO', descrizione: '', quantita: 2, rigaOrdineId: 4 }]);
+  assert.deepEqual(m.map(x => [x.rigaId, x.quantita]), [[4, 2]]);
 });
