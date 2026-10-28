@@ -74,7 +74,9 @@
     const area = document.getElementById('visore-area');
     const elencoStrati = document.getElementById('strati');
     const NOMI = { rame: 'rame', maschera: 'maschera', pasta: 'pasta', serigrafia: 'serigrafia', contorno: 'contorno', interno: 'interno', foratura: 'dis. forature', altro: 'altro' };
-    let vista = 'TOP', vb = null, tutto = null, svg, mondo, gruppoComp, gruppoFori, strati = [], componenti = [];
+    let vista = 'TOP', vb = null, tutto = null, svg, mondo, gruppoComp, gruppoFori, gruppoProt, strati = [], componenti = [], forature = [];
+    // protezioni per la saldatura a onda: fori e zone segnate dall'ufficio
+    let modoProt = false, prot = { fori: [], zone: [] }, modificate = false;
     // visibili all'inizio: contorno, rame e serigrafia del lato guardato (il primo file per tipo: es. Altium ha anche l'Assembly)
     const visibiliPredefiniti = (s, lato) => {
       const primo = strati.find(x => x.ruolo === s.ruolo && x.lato === s.lato) === s;
@@ -105,8 +107,9 @@
         // ordine di disegno: sotto il rame, sopra maschera, pasta, serigrafia e per ultimo il contorno
         [...strati].sort((a, b) => DISEGNO.indexOf(a.ruolo) - DISEGNO.indexOf(b.ruolo))
           .map(s => `<g class="strato ruolo-${s.ruolo} lato-${s.lato || 'nessuno'}" data-i="${s.i}" fill="currentColor">${s.corpo}</g>`).join('')
-      }<g class="fori"></g><g class="segni"></g></g>`;
-      mondo = svg.querySelector('.mondo'); gruppoFori = svg.querySelector('.fori'); gruppoComp = svg.querySelector('.segni');
+      }<g class="fori"></g><g class="protezioni"></g><g class="segni"></g></g>`;
+      mondo = svg.querySelector('.mondo'); gruppoFori = svg.querySelector('.fori'); gruppoComp = svg.querySelector('.segni'); gruppoProt = svg.querySelector('.protezioni');
+      forature = d.forature || [];
       for (const f of d.forature || []) {
         const c = document.createElementNS(NS, 'circle');
         c.setAttribute('cx', f.x); c.setAttribute('cy', f.y); c.setAttribute('r', Math.max(f.d / 2, 0.05));
@@ -135,23 +138,100 @@
       // zoom con la rotellina, spostamento trascinando
       svg.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 0.8 : 1.25, e); }, { passive: false });
       let presa = null;
-      svg.addEventListener('pointerdown', e => { presa = { x: e.clientX, y: e.clientY, vb: { ...vb }, mosso: false }; svg.setPointerCapture(e.pointerId); });
+      svg.addEventListener('pointerdown', e => {
+        presa = { x: e.clientX, y: e.clientY, vb: { ...vb }, mosso: false, inizio: modoProt ? nelDisegno(e) : null };
+        svg.setPointerCapture(e.pointerId);
+      });
       svg.addEventListener('pointermove', e => {
         if (!presa) return;
+        if (modoProt) { // si disegna la zona invece di spostare il disegno
+          if (Math.abs(e.clientX - presa.x) + Math.abs(e.clientY - presa.y) > 4) presa.mosso = true;
+          if (presa.mosso) { presa.fine = nelDisegno(e); disegnaProtezioni(zonaDa(presa.inizio, presa.fine)); }
+          return;
+        }
         const s = vb.w / svg.clientWidth, dx = (e.clientX - presa.x) * s, dy = (e.clientY - presa.y) * s;
         if (Math.abs(dx) + Math.abs(dy) > s * 3) presa.mosso = true;
         vb = { ...presa.vb, x: presa.vb.x - dx, y: presa.vb.y - dy }; applicaVb();
       });
       svg.addEventListener('pointerup', e => {
         const era = presa; presa = null;
+        if (era && modoProt) { cliccaProtezioni(era, e); return; }
         if (era && !era.mosso) { const el = document.elementFromPoint(e.clientX, e.clientY); if (el?.dataset?.ref) suClic(el.dataset.ref); }
       });
+      const bottoneProt = document.getElementById('modo-protezioni'), salvaProt = document.getElementById('salva-protezioni');
+      if (bottoneProt) {
+        fetch(`/preventivi/documenti/${box.dataset.id}/protezioni`).then(r => r.json()).then(p => { prot = { fori: p.fori || [], zone: p.zone || [] }; disegnaProtezioni(); }).catch(() => {});
+        bottoneProt.addEventListener('click', () => {
+          modoProt = !modoProt;
+          bottoneProt.classList.toggle('attivo', modoProt);
+          salvaProt.hidden = !modoProt && !modificate;
+          svg.classList.toggle('modo-protezioni', modoProt);
+          if (modoProt) {
+            impostaVista(box.dataset.latoSaldature || 'BOT');
+            info(`Lato saldature (${vista}). Clic su un foro per proteggerlo o toglierlo; trascina per segnare una zona; clic dentro una zona per toglierla. Poi «Salva protezioni».`);
+          } else info('Rotellina per ingrandire, trascina per spostare. Clic su un componente per vederlo nella tabella.');
+        });
+        salvaProt.addEventListener('click', async () => {
+          salvaProt.disabled = true;
+          const r = await fetch(`/preventivi/documenti/${box.dataset.id}/protezioni`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prot) });
+          const j = await r.json().catch(() => ({}));
+          salvaProt.disabled = false;
+          if (r.ok) { modificate = false; info(`Salvate: ${j.fori} fori e ${j.zone} zone. Si stampano con «Protezioni per la saldatura a onda».`); }
+          else info(j.errore || 'Salvataggio non riuscito');
+        });
+      }
       document.getElementById('mostra-componenti').addEventListener('change', e => gruppoComp.classList.toggle('nascosto', !e.target.checked));
       document.getElementById('mostra-fori').addEventListener('change', e => gruppoFori.classList.toggle('nascosto', !e.target.checked));
       document.getElementById('zoom-piu').addEventListener('click', () => zoom(0.7));
       document.getElementById('zoom-meno').addEventListener('click', () => zoom(1.4));
       document.getElementById('zoom-tutto').addEventListener('click', adatta);
       box.querySelectorAll('[data-vista]').forEach(b => b.addEventListener('click', () => impostaVista(b.dataset.vista)));
+    }
+
+    function info(t) { document.getElementById('visore-info').textContent = t; }
+    // punto del mouse nelle coordinate della scheda (mm, come il Gerber)
+    function nelDisegno(e) {
+      const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+      const q = p.matrixTransform(mondo.getScreenCTM().inverse());
+      return { x: q.x, y: q.y };
+    }
+    const zonaDa = (a, b) => ({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
+    const arrotonda = n => Math.round(n * 1000) / 1000;
+    function cliccaProtezioni(era, e) {
+      if (era.mosso && era.inizio && era.fine) {
+        const z = zonaDa(era.inizio, era.fine);
+        if (z.x1 - z.x0 > 0.3 && z.y1 - z.y0 > 0.3) prot.zone.push({ x0: arrotonda(z.x0), y0: arrotonda(z.y0), x1: arrotonda(z.x1), y1: arrotonda(z.y1) });
+      } else {
+        const p = nelDisegno(e);
+        const i = prot.fori.findIndex(f => Math.hypot(f.x - p.x, f.y - p.y) < Math.max(f.d / 2, 0.6));
+        if (i >= 0) prot.fori.splice(i, 1);
+        else {
+          const foro = forature.filter(f => f.metallizzato !== false && Math.hypot(f.x - p.x, f.y - p.y) < Math.max(f.d / 2, 0.6))
+            .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+          const z = prot.zone.findIndex(z => p.x >= z.x0 && p.x <= z.x1 && p.y >= z.y0 && p.y <= z.y1);
+          if (foro) prot.fori.push({ x: arrotonda(foro.x), y: arrotonda(foro.y), d: arrotonda(foro.d) });
+          else if (z >= 0) prot.zone.splice(z, 1);
+          else return;
+        }
+      }
+      modificate = true; document.getElementById('salva-protezioni').hidden = false;
+      disegnaProtezioni();
+      info(`${prot.fori.length} fori e ${prot.zone.length} zone da proteggere (non ancora salvate).`);
+    }
+    function disegnaProtezioni(provvisoria) {
+      if (!gruppoProt) return;
+      gruppoProt.innerHTML = '';
+      const r = Math.max(0.25, (tutto.x1 - tutto.x0) * 0.003);
+      for (const f of prot.fori) {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', f.x); c.setAttribute('cy', f.y); c.setAttribute('r', Math.max(f.d / 2, 0.3) + r);
+        c.setAttribute('class', 'prot-foro'); gruppoProt.appendChild(c);
+      }
+      for (const z of [...prot.zone, ...(provvisoria ? [provvisoria] : [])]) {
+        const q = document.createElementNS(NS, 'rect');
+        q.setAttribute('x', z.x0); q.setAttribute('y', z.y0); q.setAttribute('width', z.x1 - z.x0); q.setAttribute('height', z.y1 - z.y0);
+        q.setAttribute('class', 'prot-zona'); gruppoProt.appendChild(q);
+      }
     }
 
     // TOP: si guarda da sopra (y del Gerber verso l'alto); BOT: da sotto, quindi specchiato a destra/sinistra

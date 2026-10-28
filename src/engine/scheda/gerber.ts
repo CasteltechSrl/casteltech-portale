@@ -15,9 +15,12 @@ export interface DisegnoGerber {
   riquadro: Riquadro | null;
   oggetti: number;         // flash + tratti + regioni
   avvisi: string[];
+  piazzole: Piazzola[];    // flash e piccole regioni in positivo: servono al controllo piazzole/case dei componenti
 }
+/** Piazzola: centro e misure (mm). "stimata" = forma di una macro, misurata con il cerchio che la contiene. */
+export interface Piazzola { x: number; y: number; w: number; h: number; stimata?: boolean; tonda?: boolean }
 
-interface Apertura { forma: string; raggio: number; tratto: number; quadrato: boolean } // forma = contenuto SVG centrato in 0,0
+interface Apertura { forma: string; raggio: number; tratto: number; quadrato: boolean; w: number; h: number; stimata?: boolean; tonda?: boolean } // forma = contenuto SVG centrato in 0,0
 
 const f = (n: number) => String(Math.round(n * 1000) / 1000);
 const pt = (x: number, y: number) => `${f(x)} ${f(y)}`;
@@ -36,12 +39,15 @@ export function sembraGerber(testo: string): boolean {
 }
 
 /** Forma di una macro (%AM) con i parametri dell'apertura. */
-function formaMacro(corpo: string[], parametri: number[], avvisi: Set<string>): { svg: string; raggio: number } {
+function formaMacro(corpo: string[], parametri: number[], avvisi: Set<string>): { svg: string; raggio: number; w: number; h: number } {
   const v: Record<number, number> = {};
   parametri.forEach((p, k) => { v[k + 1] = p; });
   const parti: string[] = [];
   let raggio = 0;
   const misura = (x: number, y: number) => { raggio = Math.max(raggio, Math.hypot(x, y)); };
+  // ingombro vero (solo le parti in positivo): serve a misurare le piazzole disegnate con le macro (es. PADS, rettangoli ruotati)
+  let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+  const ingombro = (x: number, y: number, r = 0) => { bx0 = Math.min(bx0, x - r); by0 = Math.min(by0, y - r); bx1 = Math.max(bx1, x + r); by1 = Math.max(by1, y + r); };
   for (const istr of corpo) {
     const t = istr.trim();
     if (!t || /^0(\s|$)/.test(t)) continue; // commento della macro
@@ -55,32 +61,33 @@ function formaMacro(corpo: string[], parametri: number[], avvisi: Set<string>): 
       if (codice === 1) { // cerchio: esposizione, diametro, x, y [, rotazione]
         const clear = n(1) === 0, d = n(2), [cx, cy] = ruota(n(3), n(4), a.length > 5 ? n(5) : 0);
         parti.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(d / 2)}"${clear ? ' class="cancella"' : ''}/>`); misura(Math.abs(cx) + d / 2, Math.abs(cy) + d / 2);
+        if (!clear) ingombro(cx, cy, d / 2);
       } else if (codice === 20 || codice === 2) { // linea: esposizione, larghezza, x1, y1, x2, y2, rotazione
         const clear = n(1) === 0, w = n(2), x1 = n(3), y1 = n(4), x2 = n(5), y2 = n(6), rot = n(7);
         const lung = Math.hypot(x2 - x1, y2 - y1) || 1e-9, nx = -(y2 - y1) / lung * w / 2, ny = (x2 - x1) / lung * w / 2;
         const pp = ([[x1 + nx, y1 + ny], [x2 + nx, y2 + ny], [x2 - nx, y2 - ny], [x1 - nx, y1 - ny]] as [number, number][]).map(([x, y]) => ruota(x, y, rot));
-        pp.forEach(([x, y]) => misura(x, y)); parti.push(poligono(pp, clear));
+        pp.forEach(([x, y]) => { misura(x, y); if (!clear) ingombro(x, y); }); parti.push(poligono(pp, clear));
       } else if (codice === 21 || codice === 22) { // rettangolo dal centro (21) o dall'angolo in basso a sinistra (22)
         const clear = n(1) === 0, w = n(2), h = n(3), x = n(4), y = n(5), rot = n(6);
         const [cx, cy] = codice === 21 ? [x, y] : [x + w / 2, y + h / 2];
         const pp = ([[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]] as [number, number][]).map(([px, py]) => ruota(px, py, rot));
-        pp.forEach(([px, py]) => misura(px, py)); parti.push(poligono(pp, clear));
+        pp.forEach(([px, py]) => { misura(px, py); if (!clear) ingombro(px, py); }); parti.push(poligono(pp, clear));
       } else if (codice === 4) { // contorno: esposizione, n vertici, x0, y0, … , rotazione
         const clear = n(1) === 0, k = Math.round(n(2)), pp: [number, number][] = [];
         const rot = n(3 + 2 * (k + 1));
         for (let j = 0; j <= k; j++) pp.push(ruota(n(3 + 2 * j), n(4 + 2 * j), rot));
-        pp.forEach(([x, y]) => misura(x, y)); parti.push(poligono(pp, clear));
+        pp.forEach(([x, y]) => { misura(x, y); if (!clear) ingombro(x, y); }); parti.push(poligono(pp, clear));
       } else if (codice === 5) { // poligono regolare: esposizione, vertici, x, y, diametro, rotazione
         const clear = n(1) === 0, k = Math.max(3, Math.round(n(2))), cx = n(3), cy = n(4), d = n(5), rot = n(6), pp: [number, number][] = [];
         for (let j = 0; j < k; j++) { const ang = 2 * Math.PI * j / k; pp.push(ruota(cx + Math.cos(ang) * d / 2, cy + Math.sin(ang) * d / 2, rot)); }
-        pp.forEach(([x, y]) => misura(x, y)); parti.push(poligono(pp, clear));
+        pp.forEach(([x, y]) => { misura(x, y); if (!clear) ingombro(x, y); }); parti.push(poligono(pp, clear));
       } else if (codice === 6 || codice === 7) { // moiré e termico: disegnati come anello pieno (basta per vedere la piazzola)
         const [cx, cy] = ruota(n(1), n(2), 0), d = n(3);
         parti.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(d / 2)}"/>`); misura(Math.abs(cx) + d / 2, Math.abs(cy) + d / 2);
       } else if (codice !== 0) avvisi.add(`Primitiva di macro ${codice} non disegnata.`);
     } catch { avvisi.add('Una macro ha un\'espressione non leggibile: forma saltata.'); }
   }
-  return { svg: parti.join(''), raggio };
+  return { svg: parti.join(''), raggio, w: Number.isFinite(bx0) ? bx1 - bx0 : 0, h: Number.isFinite(by0) ? by1 - by0 : 0 };
 }
 
 export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
@@ -98,6 +105,9 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
   };
   let x = 0, y = 0, ap: Apertura | null = null, apId = '', interp = 1, quadranteSingolo = true, op = 2, clear = false, regione = false;
   let contorni: string[] = [], contorno = '';
+  const piazzole: Piazzola[] = [];
+  let rr: Riquadro | null = null; // riquadro della regione in corso (le regioni piccole sono piazzole, es. Altium)
+  const allargaRegione = (px: number, py: number) => { rr = rr ? { x0: Math.min(rr.x0, px), y0: Math.min(rr.y0, py), x1: Math.max(rr.x1, px), y1: Math.max(rr.y1, py) } : { x0: px, y0: py, x1: px, y1: py }; };
   let tratto = { id: '', clear: false, d: '' }; // tratti consecutivi con la stessa apertura in un unico <path>
   let oggetti = 0;
 
@@ -161,22 +171,24 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
       const [, id, tipo, resto] = m;
       const p = (resto ?? '').split('X').map(s => Number(s)).filter(Number.isFinite).map(n => n * fattore);
       const nomeDef = `${prefisso}-a${id}`;
-      let forma = '', raggio = 0, trattoW = 0.1, quadrato = false;
-      if (tipo === 'C') { forma = `<circle r="${f((p[0] ?? 0) / 2)}"/>`; raggio = (p[0] ?? 0) / 2; trattoW = p[0] ?? 0; }
-      else if (tipo === 'R') { const [w = 0, h = 0] = p; forma = `<rect x="${f(-w / 2)}" y="${f(-h / 2)}" width="${f(w)}" height="${f(h)}"/>`; raggio = Math.hypot(w, h) / 2; trattoW = Math.min(w, h); quadrato = true; }
-      else if (tipo === 'O') { const [w = 0, h = 0] = p; forma = `<rect x="${f(-w / 2)}" y="${f(-h / 2)}" width="${f(w)}" height="${f(h)}" rx="${f(Math.min(w, h) / 2)}"/>`; raggio = Math.max(w, h) / 2; trattoW = Math.min(w, h); }
+      let forma = '', raggio = 0, trattoW = 0.1, quadrato = false, w = 0, h = 0, stimata = false;
+      if (tipo === 'C') { forma = `<circle r="${f((p[0] ?? 0) / 2)}"/>`; raggio = (p[0] ?? 0) / 2; trattoW = p[0] ?? 0; w = h = p[0] ?? 0; }
+      else if (tipo === 'R') { [w = 0, h = 0] = p; forma = `<rect x="${f(-w / 2)}" y="${f(-h / 2)}" width="${f(w)}" height="${f(h)}"/>`; raggio = Math.hypot(w, h) / 2; trattoW = Math.min(w, h); quadrato = true; }
+      else if (tipo === 'O') { [w = 0, h = 0] = p; forma = `<rect x="${f(-w / 2)}" y="${f(-h / 2)}" width="${f(w)}" height="${f(h)}" rx="${f(Math.min(w, h) / 2)}"/>`; raggio = Math.max(w, h) / 2; trattoW = Math.min(w, h); }
       else if (tipo === 'P') {
         const d = p[0] ?? 0, k = Math.max(3, Math.round((p[1] ?? 3 * fattore) / fattore)), rot = (p[2] ?? 0) / fattore, pp: [number, number][] = [];
         for (let j = 0; j < k; j++) { const a = 2 * Math.PI * j / k + rot * Math.PI / 180; pp.push([Math.cos(a) * d / 2, Math.sin(a) * d / 2]); }
-        forma = poligono(pp, false); raggio = d / 2; trattoW = d;
+        forma = poligono(pp, false); raggio = d / 2; trattoW = d; w = h = d;
       } else if (macro.has(tipo)) {
         // i parametri delle macro sono nelle unità del file: si scala la forma intera
         const grezzi = (resto ?? '').split('X').map(s => Number(s)).filter(Number.isFinite);
         const r = formaMacro(macro.get(tipo)!, grezzi, avvisi);
-        forma = fattore === 1 ? r.svg : `<g transform="scale(${fattore})">${r.svg}</g>`; raggio = r.raggio * fattore; trattoW = raggio;
+        forma = fattore === 1 ? r.svg : `<g transform="scale(${fattore})">${r.svg}</g>`; raggio = r.raggio * fattore; trattoW = raggio; w = r.w * fattore; h = r.h * fattore;
+        // con moiré/termici o forme non centrate la misura è solo indicativa
+        stimata = !r.w || macro.get(tipo)!.some(x => /^[67],/.test(x.trim()));
       } else avvisi.add(`Apertura ${tipo} sconosciuta: disegnata come punto.`);
       defs.push(`<g id="${nomeDef}">${forma}</g>`);
-      aperture.set(id, { forma: nomeDef, raggio, tratto: trattoW, quadrato });
+      aperture.set(id, { forma: nomeDef, raggio, tratto: trattoW, quadrato, w, h, ...(stimata ? { stimata } : {}), ...(tipo === 'C' || tipo === 'P' ? { tonda: true } : {}) });
     } else if (c.startsWith('SR') && c !== 'SR' && !/^SRX1Y1/.test(c)) avvisi.add('Il file ha una ripetizione (step & repeat): disegnata una volta sola.');
   };
 
@@ -196,10 +208,13 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
       if (g === 1 || g === 2 || g === 3) interp = g;
       else if (g === 74) quadranteSingolo = true;
       else if (g === 75) quadranteSingolo = false;
-      else if (g === 36) { chiudiTratto(); regione = true; contorni = []; contorno = ''; }
+      else if (g === 36) { chiudiTratto(); regione = true; contorni = []; contorno = ''; rr = null; }
       else if (g === 37) {
         if (contorno) contorni.push(contorno);
         if (contorni.length) { corpo.push(`<path d="${contorni.join('')}" fill="currentColor"${clear ? ' class="cancella"' : ''}/>`); oggetti++; }
+        const q = rr as Riquadro | null;
+        if (q && !clear && contorni.length === 1 && q.x1 - q.x0 < 8 && q.y1 - q.y0 < 8)
+          piazzole.push({ x: (q.x0 + q.x1) / 2, y: (q.y0 + q.y1) / 2, w: q.x1 - q.x0, h: q.y1 - q.y0 });
         regione = false; contorni = []; contorno = '';
       }
       c = c.slice(m[0].length);
@@ -214,9 +229,10 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
     const ny = cy ? (incrementale ? y + valore(cy[1]) : valore(cy[1])) : y;
     const i = ci ? valore(ci[1]) : 0, j = cj ? valore(cj[1]) : 0;
     if (regione) {
-      if (op === 2) { if (contorno) contorni.push(contorno); contorno = `M${pt(nx, ny)}`; }
+      if (op === 2) { if (contorno) contorni.push(contorno); contorno = `M${pt(nx, ny)}`; allargaRegione(nx, ny); }
       else if (op === 1) {
-        if (!contorno) contorno = `M${pt(x, y)}`;
+        if (!contorno) { contorno = `M${pt(x, y)}`; allargaRegione(x, y); }
+        allargaRegione(nx, ny);
         contorno += interp === 1 ? `L${pt(nx, ny)}` : arco(x, y, nx, ny, i, j, interp === 2);
         allarga(nx, ny);
       }
@@ -232,6 +248,7 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
       chiudiTratto();
       corpo.push(`<use href="#${ap.forma}" x="${f(nx)}" y="${f(ny)}"${clear ? ' class="cancella"' : ''}/>`);
       allarga(nx, ny, ap.raggio); oggetti++;
+      if (!clear && ap.w > 0) piazzole.push({ x: nx, y: ny, w: ap.w, h: ap.h, ...(ap.stimata ? { stimata: true } : {}), ...(ap.tonda ? { tonda: true } : {}) });
     }
     x = nx; y = ny;
   };
@@ -260,5 +277,5 @@ export function leggiGerber(testo: string, prefisso = 'g'): DisegnoGerber {
   }
   chiudiTratto();
   if (regione && contorno) corpo.push(`<path d="${[...contorni, contorno].join('')}" fill="currentColor"/>`);
-  return { defs: defs.join(''), corpo: corpo.join(''), riquadro: riq, oggetti, avvisi: [...avvisi] };
+  return { defs: defs.join(''), corpo: corpo.join(''), riquadro: riq, oggetti, avvisi: [...avvisi], piazzole };
 }

@@ -63,7 +63,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Segnalazioni: valori diversi BOM/pick and place, riferimenti mancanti, montaggio SMD/THT dichiarato sbagliato, lati, sovrapposizioni, DNP.
    Nel database solo i file utili compressi (PDF/3D/immagini restano sul Drive, solo nell'elenco). "Codifica la BOM" → sezione Componenti.
    Macchine: linea con Essemtec Fox (42 feeder 8 mm, 2×12, 1×16/24, vassoi; altezza max 25 mm), iPulse M1 e M4s (feeder 8–44 mm, max 11 mm).
-   ⬜ Preventivo compilato in automatico "da validare", rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
+   Preventivo "da validare" (Adriano 28/10/2026; `engine/scheda/preventivo.ts`, migrazione 036): dalla pagina dei documenti, catalogo e tariffe
+   attuali + valori letti (SMD per lato, feeder, lamine, THT onda/mano, stagno, item); stato `da_validare` con l'elenco "Da controllare",
+   il primo Salva dell'ufficio lo porta a bozza. Controllo piazzole/case (`engine/scheda/piazzole.ts`): piazzole del Gerber contro le
+   piazzole IPC-7351 nominali dei chip 0201–2512; segnala solo se somigliano chiaramente a un altro case (es. BOM 0603, piazzole 0805).
+   Stampe per la produzione (`views/stampa-scheda-cliente.ts`, `engine/scheda/documentazione.ts`, `/preventivi/documenti/:id/stampa?foglio=`):
+   SMD TOP, SMD BOT (BOM del lato + disegno con riferimenti, piedino 1 dal GenCAD, critici in rosso), THT (stesso colore = stesso codice),
+   protezioni per l'onda (fori e zone segnati sul disegno con "Segna le protezioni", salvati in `pacchetti_scheda.protezioni`).
+   ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
    fogli tempi, QR → `/c/<codice>`. Stampa: max 2 pagine di scheda (fasi in un'unica tabella compatta) + 2 fogli tempi

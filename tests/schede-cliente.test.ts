@@ -8,6 +8,10 @@ import { contaRefori, leggiForatura, sembraForatura } from '../src/engine/scheda
 import { leggiGenCad } from '../src/engine/scheda/gencad.js';
 import { analizzaScheda, CONSUMI, leggiBomScheda, numeroPassivo, stessoComponente } from '../src/engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile } from '../src/engine/scheda/classifica.js';
+import { parametriDaAnalisi } from '../src/engine/scheda/preventivo.js';
+import { controllaPiazzole, misuraPiazzole, PIAZZOLE_IPC } from '../src/engine/scheda/piazzole.js';
+import { latoFoglio, righeFoglio } from '../src/engine/scheda/documentazione.js';
+import type { Piazzola } from '../src/engine/scheda/gerber.js';
 
 // ───────────── pick and place ─────────────
 
@@ -227,4 +231,119 @@ test('fiducial uguali su lati diversi restano due', () => {
   const l = { ...lettura([pos('R1', 'TOP', '10k', 'R0603', 5)]), fiducial: [{ x: 1, y: 1, lato: 'TOP' as const }, { x: 1, y: 1, lato: 'BOT' as const }] };
   const a = analizzaScheda({ pickPlace: [{ nome: 'pp.txt', lettura: l }] });
   assert.equal(a.conteggi.fiducialTop, 1); assert.equal(a.conteggi.fiducialBot, 1);
+});
+
+// ───────────── preventivo da validare, piazzole IPC, documentazione (Adriano 28/10/2026) ─────────────
+
+test('preventivo dai documenti: lato unico, onda, item con il PCB', () => {
+  const a = analizzaScheda({
+    bom: bomDa([['Designator', 'Quantity', 'Value', 'Manufacturer P/N', 'Footprint'],
+      ['C1, C2', '2', '100n', 'GCM188R71H104', 'C0603'], ['R1', '1', '10k', 'RC0603FR-0710K', 'R0603'], ['J1', '1', 'MORSETTO', 'PHX-123', 'TERMINAL_2P']]),
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('C1', 'BOT', '100n', 'C0603', 1), pos('C2', 'BOT', '100n', 'C0603', 5), pos('R1', 'BOT', '10k', 'R0603', 9)]) }],
+    forature: [{ nome: 'f.drl', foratura: leggiForatura('f-PTH.drl', `M48\nMETRIC,TZ\nT1C1.000\n%\nT1\nX1.0Y1.0\nX3.0Y1.0\nM30\n`) }],
+  });
+  const { parametri, daControllare } = parametriDaAnalisi(a);
+  assert.equal(parametri.doppiaFaccia, 0);
+  assert.equal(parametri.qtSmd, 3, 'SMD tutti sul BOTTOM del cliente: per noi lato unico');
+  assert.equal(parametri.qtFeeder, 2);
+  assert.equal(parametri.qtSmdLatoB, 0);
+  assert.equal(parametri.nLamine, 1);
+  assert.equal(parametri.usaOnda, 1); assert.equal(parametri.presenteTht, 0);
+  assert.equal(parametri.qntCompMontaggio, 1);
+  assert.equal(parametri.stagnoPerSaldature, 2 * CONSUMI.ondaGrammiForo);
+  assert.equal(parametri.nItemMateriale, a.conteggi.item);
+  assert.ok(daControllare.some(d => /lamine/.test(d)));
+});
+
+test('preventivo dai documenti: due lati SMD, THT a mano', () => {
+  const { componenti } = leggiGenCad(GENCAD);
+  const a = analizzaScheda({
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('R1', 'BOT', '10k', 'R0603', 12, 20), pos('R2', 'TOP', '10k', 'R0603', 30, 20)]) }],
+    cad: { nome: 'x.cad', componenti },
+  });
+  const { parametri } = parametriDaAnalisi(a);
+  assert.equal(parametri.doppiaFaccia, 1);
+  assert.equal(parametri.qtSmd, 1); assert.equal(parametri.qtSmdLatoB, 1);
+  assert.equal(parametri.nLamine, 2);
+  assert.equal(parametri.presenteTht, 1); assert.equal(parametri.usaOnda, 0);
+  assert.equal(parametri.qntPuntiSaldaturaMano, 3);
+  assert.equal(parametri.stagnoInFilo, 3 * CONSUMI.filoGrammiPiedino);
+});
+
+/** Coppia di piazzole rettangolari IPC del case, orizzontale, centrata in (x, y). */
+const coppia = (k: string, x: number, y: number): Piazzola[] => {
+  const n = PIAZZOLE_IPC[k];
+  return [-1, 1].map(s => ({ x: x + s * n.passo / 2, y, w: n.lunghezza, h: n.larghezza }));
+};
+
+test('piazzole: 0805 sul Gerber e 0603 in BOM si segnala, quelle giuste no', () => {
+  const piazzole = { TOP: [...coppia('0805', 10, 10), ...coppia('0603', 20, 10), ...coppia('0402', 30, 10)] };
+  const esiti = controllaPiazzole([
+    { ref: 'C1', lato: 'TOP', x: 10, y: 10, caseAtteso: '0603' },
+    { ref: 'C2', lato: 'TOP', x: 20, y: 10, caseAtteso: '0603' },
+    { ref: 'C3', lato: 'TOP', x: 30, y: 10, caseAtteso: '0402' },
+    { ref: 'C4', lato: 'TOP', x: 50, y: 50, caseAtteso: '0603' },
+  ], piazzole);
+  const di = (r: string) => esiti.find(e => e.ref === r)!;
+  assert.equal(di('C1').ok, false); assert.equal(di('C1').caseSimile, '0805');
+  assert.equal(di('C2').ok, true);
+  assert.equal(di('C3').ok, true);
+  assert.equal(di('C4').ok, null, 'piazzole non trovate: niente giudizio');
+});
+
+test('piazzole: vias tonde e componenti a 3 terminali non si misurano', () => {
+  const tonde = coppia('0603', 10, 10).map(p => ({ ...p, tonda: true }));
+  assert.equal(misuraPiazzole(10, 10, tonde, '0603'), null);
+  const treTerminali = [...coppia('1206', 10, 10), { x: 10, y: 10, w: 0.8, h: 1.6 }];
+  assert.equal(misuraPiazzole(10, 10, treTerminali, '1206'), null);
+});
+
+test('piazzole nell\'analisi: segnalazione d\'errore sul componente', () => {
+  const a = analizzaScheda({
+    bom: bomDa([['Designator', 'Quantity', 'Value', 'Manufacturer P/N', 'Footprint'], ['C1', '1', '100n', 'GCM188R71H104', 'C0603']]),
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('C1', 'TOP', '100n', 'C0603', 10, 10)]) }],
+    piazzole: { TOP: coppia('0805', 10, 10) },
+  });
+  assert.deepEqual(a.piazzole, { controllati: 1, misurati: 1, diversi: 1 });
+  assert.ok(a.componenti.find(c => c.ref === 'C1')!.segnalazioni.some(s => /piazzole da 0805/.test(s)));
+  assert.ok(a.segnalazioni.some(s => s.livello === 'errore' && s.refs?.includes('C1')));
+});
+
+test('Gerber: piazzole dai flash (rettangoli e macro), le tonde segnate', () => {
+  const t = `%FSLAX34Y34*%\n%MOMM*%\n%AMPAD*21,1,1.0,0.6,0,0,0*%\n%ADD10R,1.03X1.40*%\n%ADD11C,0.6*%\n%ADD12PAD*%\nD10*\nX100000Y100000D03*\nD11*\nX200000Y100000D03*\nD12*\nX300000Y100000D03*\nM02*\n`;
+  const g = leggiGerber(t);
+  assert.equal(g.piazzole.length, 3);
+  const [r, c, m] = g.piazzole;
+  assert.deepEqual([r.x, r.y, r.w, r.h], [10, 10, 1.03, 1.4]);
+  assert.equal(c.tonda, true);
+  assert.ok(Math.abs(m.w - 1) < 1e-6 && Math.abs(m.h - 0.6) < 1e-6 && !m.stimata, 'macro: misure dal suo ingombro');
+});
+
+test('GenCAD: piedino 1 ruotato e specchiato sul lato BOTTOM', () => {
+  const t = `$HEADER\nUNITS MM\n$ENDHEADER\n$PADSTACKS\nPADSTACK "SMD" 0\n$ENDPADSTACKS\n$SHAPES\nSHAPE "D_SOD"\nINSERT SMD\nPIN 1 "SMD" -0.8 0 TOP 0 0\nPIN 2 "SMD" 0.8 0 TOP 0 0\n$ENDSHAPES\n$COMPONENTS
+COMPONENT D1\nPLACE 10 10\nLAYER TOP\nROTATION 90\nSHAPE "D_SOD" 0 0
+COMPONENT D2\nPLACE 20 10\nLAYER BOTTOM\nROTATION 0\nSHAPE "D_SOD" MIRRORX 0
+COMPONENT D3\nPLACE 30 10\nLAYER BOTTOM\nROTATION 90\nSHAPE "D_SOD" MIRRORX 0\n$ENDCOMPONENTS\n`;
+  const { componenti } = leggiGenCad(t);
+  const p = (r: string) => { const q = componenti.find(c => c.ref === r)!.pin1!; return [+q.x.toFixed(3), +q.y.toFixed(3)]; };
+  assert.deepEqual(p('D1'), [10, 9.2]);
+  assert.deepEqual(p('D2'), [20.8, 10]);
+  assert.deepEqual(p('D3'), [30, 9.2]);
+});
+
+test('documentazione: righe per codice, THT colorati, critici con note e segnalazioni', () => {
+  const a = analizzaScheda({
+    bom: bomDa([['Designator', 'Quantity', 'Value', 'Manufacturer P/N', 'Footprint', 'Note'],
+      ['C1, C2', '2', '100n', 'GCM188R71H104', 'C0603', ''], ['D1', '1', 'LED', 'LTST-C191', 'LED0603', 'attenzione al verso'],
+      ['J1, J2', '2', 'MORSETTO', 'PHX-123', 'TERMINAL_2P', ''], ['K1', '1', 'RELE', 'G5Q-1A', 'RELE_THT', '']]),
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('C1', 'TOP', '100n', 'C0603', 1), pos('C2', 'TOP', '100n', 'C0603', 5), pos('D1', 'TOP', 'LED', 'LED0603', 9)]) }],
+  });
+  const top = righeFoglio(a, 'TOP');
+  assert.deepEqual(top.map(r => [r.item, r.refs.join(','), r.critico]), [[1, 'C1,C2', false], [2, 'D1', true]]);
+  assert.ok(top.every(r => !r.colore));
+  assert.equal(righeFoglio(a, 'BOT').length, 0);
+  const tht = righeFoglio(a, 'THT');
+  assert.deepEqual(tht.map(r => r.refs.join(',')), ['J1,J2', 'K1']);
+  assert.notEqual(tht[0].colore, tht[1].colore);
+  assert.equal(latoFoglio(a, 'protezioni'), 'BOT', 'le protezioni si guardano dal lato saldature');
 });
