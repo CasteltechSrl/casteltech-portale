@@ -145,12 +145,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Preventivi ──
   {
     id: 'nuovo-preventivo', area: 'preventivi', titolo: 'Fare un nuovo preventivo',
-    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina',
+    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina aoi visivo controllo ispezione pre-produzione minuti',
     testo: [
       'Il prezzo si calcola mentre compili. In alto scegli cliente e prodotto dall\'anagrafica, schede, schede per pannello e pannelli.',
       'Le spunte delle INFORMAZIONI GENERALI (1ª produzione, TOP, TOP+BOT, THT a onda o a mano, componenti, PCB, lamina, etichette, pulizia, lavaggio) mostrano solo le sezioni che servono e attivano fasi e costi. Le programmazioni ci sono solo con la 1ª produzione.',
       'Il riquadro dei totali mostra prezzo a scheda, costi una tantum (solo nel primo lotto), margini e ore ciclo/uomo.',
       'Un preventivo salvato conserva le tariffe e le fasi del giorno in cui è stato fatto: se poi cambi le tariffe in Impostazioni, i preventivi vecchi non cambiano.',
+      'Montaggio → AOI: TOP è spuntato con il TOP, BOT solo se c\'è anche quel lato. "Visivo" toglie l\'AOI (né ispezione né programmazione) e mette il controllo visivo, 60 secondi a scheda: si usa per campionature di pochi pezzi o schede con pochissimi componenti.',
+      'Pre-produzione: ogni voce ha 5 minuti di standard, tranne "Disegno e stampa 3D" (0). Acquisto componenti e acquisto PCB contano solo se sono spuntati in Acquisti.',
     ],
     passi: ['Preventivi → + Nuovo preventivo.', 'Cliente, prodotto e revisione (se non è indicata scrivi 0), quantità.', 'Spunte delle informazioni generali.', 'Controlla fasi, materiali e altri costi.', 'Salva.'],
     pagine: [['/preventivi/nuovo', 'Nuovo preventivo'], ['/preventivi', 'Elenco preventivi']],
@@ -225,10 +227,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'bom-preventivo', area: 'preventivi', titolo: 'Costo dei componenti dal preventivo (BOM collegata)',
-    parole: 'bom costo componenti acquisti materiali collegare prezzo componenti',
+    parole: 'bom costo componenti acquisti materiali collegare prezzo componenti quotare quotata quotazione documenti cliente',
     testo: [
       'Nel gruppo ACQUISTI del preventivo puoi scegliere una BOM già caricata in Componenti: il costo dei componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette dai distributori.',
       'Se scrivi il costo a mano, il collegamento alla BOM si toglie. Se la BOM viene eliminata, il costo salvato resta.',
+      'Preventivo nato dai documenti del cliente: spuntando "Componenti" in Acquisti la BOM del cliente va da sola in Componenti e si quota (codici e prezzi dei distributori). Finita la quotazione il costo a scheda arriva nel preventivo; se ci sono righe da completare, codici da validare, righe senza prezzo o componenti non disponibili compare "Risolvi nella BOM quotata".',
+      'Nella BOM quotata il riquadro in alto dice cosa resta da sistemare; quando hai finito premi "Torna al preventivo per la quota": il costo si ricalcola, poi Salva.',
     ],
     pagine: [['/componenti', 'Componenti → BOM caricate']],
   },

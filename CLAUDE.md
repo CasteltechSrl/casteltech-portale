@@ -53,6 +53,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    lamina std 110 €, lamina con trattamenti 165 €, etichette, pulizia saldature, lavaggio) che mostrano/nascondono
    sezioni e campi (`data-dipende`) e attivano fasi e costi (migrazioni 011, 014). Programmazioni solo con 1ª produzione.
    Le voci possono avere un prezzo di vendita fisso (`formula_prezzo`, niente ricarico): es. lamine.
+   Montaggio → AOI: TOP · BOT · Visivo (migrazione 038; Adriano 28/10/2026): AOI segue i lati SMD, Visivo toglie ispezione e programmazione AOI
+   e conta il controllo visivo (fase 18V, 60 s a scheda). Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
    Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa`
    (solo prezzi; `?vista=fasi` dettaglio per fasi, `?vista=macro` solo macro aree).
@@ -80,6 +82,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    stesso codice già presente = si sceglie quello. La revisione è obbligatoria per salvare ogni preventivo. Dai documenti del cliente codice,
    descrizione e revisione sono proposti (`analisi.prodotto`: intestazione BOM > Gerber X2 TF.ProjectId > GenCAD DRAWING/REVISION > nome
    caricamento/cartella tipo "EA1002-0") e precompilati nel preventivo da validare: entrano in anagrafica solo con "Aggiungi in anagrafica".
+   Spunta Componenti su un preventivo nato dai documenti (Adriano 28/10/2026): `POST /preventivi/:id/quota-bom` → `quotaBomPacchetto` (BOM del
+   pacchetto in Componenti, una sola volta, collegata a `preventivi.bom_id` senza toccare lo stato), poi il costo arriva dal preventivo con
+   `problemiBom` (da completare, da validare, senza prezzo, non disponibili, critici) → "Risolvi nella BOM quotata" → riquadro in testa
+   alla BOM → "Torna al preventivo per la quota" (`?quota-bom=1` ricalcola il costo).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

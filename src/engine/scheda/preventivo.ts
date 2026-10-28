@@ -33,6 +33,10 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
     metti('qtSmdLatoB', 0, 'lato unico');
     metti('qtFeederLatoB', 0, 'lato unico');
   }
+  // AOI sui lati con SMD (il lato unico è il nostro TOP); il controllo visivo lo sceglie l'ufficio
+  metti('aoiTop', smd > 0 ? 1 : 0, smd > 0 ? 'ispezione AOI del lato con SMD' : 'nessun SMD');
+  metti('aoiBot', l.latiSmd === 2 ? 1 : 0, l.latiSmd === 2 ? 'ispezione AOI anche del BOT' : 'lato unico');
+  metti('controlloVisivo', 0, 'con SMD si usa l\'AOI');
   if (smd > 0) {
     metti('acquistoLamina', 1, 'una lamina per ogni lato con SMD');
     metti('nLamine', l.latiSmd, l.latiSmd === 2 ? 'TOP e BOT' : 'un lato');

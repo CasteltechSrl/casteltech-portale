@@ -387,3 +387,21 @@ test('segnalazione "Va bene": non conta più e i componenti non sono più critic
   assert.ok(!parametriDaAnalisi(b).daControllare.some(d => /segnalazioni da chiarire/.test(d)));
   assert.equal(a.componenti.find(c => c.ref === 'R1')!.segnalazioni.length, 1, 'l\'analisi salvata non cambia');
 });
+
+test('preventivo dai documenti: AOI sui lati con SMD, niente controllo visivo', () => {
+  const { componenti } = leggiGenCad(GENCAD);
+  const due = analizzaScheda({ pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('R1', 'BOT', '10k', 'R0603', 12, 20), pos('R2', 'TOP', '10k', 'R0603', 30, 20)]) }], cad: { nome: 'x.cad', componenti } });
+  assert.deepEqual([parametriDaAnalisi(due).parametri.aoiTop, parametriDaAnalisi(due).parametri.aoiBot, parametriDaAnalisi(due).parametri.controlloVisivo], [1, 1, 0]);
+  const uno = analizzaScheda({ pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('R1', 'BOT', '10k', 'R0603', 12, 20)]) }] });
+  assert.deepEqual([parametriDaAnalisi(uno).parametri.aoiTop, parametriDaAnalisi(uno).parametri.aoiBot], [1, 0], 'lato unico (anche se è il BOTTOM del cliente) = AOI TOP');
+});
+
+test('BOM quotata per il preventivo: problemi da risolvere prima della quota', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { problemiBom, ESITI } = await import('../src/server/codifica-servizio.js');
+  const riga = (esito: string, extra: object = {}) => ({ esito, note: [], ...extra }) as any;
+  assert.deepEqual(problemiBom([riga(ESITI.DB), riga(ESITI.NON_MONTATO)], { senzaPrezzo: 0, nonDisponibili: 0 }), []);
+  const p = problemiBom([riga(ESITI.INC), riga(ESITI.NUOVO_VER), riga(ESITI.DB, { reperibilita: { livello: 'critico' } }), riga(ESITI.INC, { clienteFornisce: true })],
+    { senzaPrezzo: 2, nonDisponibili: 1 });
+  assert.deepEqual(p, ['1 riga da completare', '1 codice da validare', '2 righe senza prezzo', '1 componente non disponibile', '1 componente con reperibilità critica']);
+});

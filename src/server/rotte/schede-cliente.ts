@@ -7,7 +7,7 @@ import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiungiFile, analizzaPacchetto, creaPacchetto, creaPreventivoDaPacchetto, fileBom, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, type FileElenco } from '../schede-cliente-servizio.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
 import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
@@ -270,17 +270,8 @@ export function rotteSchedeCliente() {
   // BOM → sezione Componenti (codifica Casteltech, prezzi, reperibilità)
   r.post('/:id/codifica', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
-    const p = await q1<{ nome: string; bom_id: number | null }>(`SELECT nome, bom_id FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
-    if (!p) return next();
-    if (p.bom_id) return res.redirect(`/componenti/bom/${p.bom_id}`);
-    const f = await fileBom(Number(req.params.id));
-    if (!f) return res.redirect(`/preventivi/documenti/${req.params.id}`);
-    const nomeFile = f.nome.split('/').pop()!;
-    const righe = await leggiFileBom(nomeFile, f.dati);
-    const bomId = await creaAnalisi({ nome: p.nome, fileNome: nomeFile, righe, quantita: [100], utenteId: req.session.utente!.id });
-    await q(`UPDATE pacchetti_scheda SET bom_id = $2 WHERE id = $1`, [req.params.id, bomId]);
-    avviaElaborazione(bomId);
-    res.redirect(`/componenti/bom/${bomId}`);
+    const bomId = await bomDelPacchetto(Number(req.params.id), 100, req.session.utente!.id);
+    res.redirect(bomId ? `/componenti/bom/${bomId}` : `/preventivi/documenti/${req.params.id}`);
   });
 
   r.post('/:id/elimina', async (req, res, next) => {

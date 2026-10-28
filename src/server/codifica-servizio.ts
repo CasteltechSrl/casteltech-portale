@@ -459,12 +459,31 @@ export function costoMaterialiPer(righe: RigaBom[], schede: number, regole: Rego
   return riepilogo(copia, [schede]).perQuantita[0];
 }
 
-/** BOM collegata a un preventivo: costo dei componenti a scheda per le schede del preventivo. */
+/**
+ * Problemi della BOM quotata da risolvere prima di dare il costo al preventivo (Adriano 28/10/2026): righe da completare
+ * o con codice da validare, righe senza prezzo, componenti non disponibili o con reperibilità critica.
+ */
+export function problemiBom(righe: RigaBom[], costo: { senzaPrezzo: number; nonDisponibili: number }): string[] {
+  const attive = righe.filter(r => r.esito !== ESITI.NON_MONTATO && !r.clienteFornisce);
+  const daCompletare = attive.filter(r => r.esito === ESITI.INC || r.esito === ESITI.DB_INC).length;
+  const daValidare = attive.filter(r => r.esito === ESITI.NUOVO_VER || r.note?.some(n => n.startsWith(NOTA_DA_VALIDARE))).length;
+  const critici = attive.filter(r => r.reperibilita?.livello === 'critico').length;
+  const n = (x: number, uno: string, piu: string) => x ? `${x} ${x === 1 ? uno : piu}` : '';
+  return [
+    n(daCompletare, 'riga da completare', 'righe da completare'),
+    n(daValidare, 'codice da validare', 'codici da validare'),
+    n(costo.senzaPrezzo, 'riga senza prezzo', 'righe senza prezzo'),
+    n(costo.nonDisponibili, 'componente non disponibile', 'componenti non disponibili'),
+    n(critici, 'componente con reperibilità critica', 'componenti con reperibilità critica'),
+  ].filter(Boolean);
+}
+
+/** BOM collegata a un preventivo: costo dei componenti a scheda per le schede del preventivo, con i problemi da risolvere. */
 export async function costoBomPerPreventivo(id: number, schede: number) {
   const a = await q1<any>(`SELECT id, nome, righe, stato, aggiornato_il FROM bom_analisi WHERE id = $1 AND file_nome IS DISTINCT FROM $2`, [id, FILE_SINGOLA]);
   if (!a) return null;
   const x = costoMaterialiPer(a.righe ?? [], Math.max(1, schede), await caricaRegoleScarto());
-  return { id: a.id, nome: a.nome, stato: a.stato, prezziDel: a.aggiornato_il, ...x };
+  return { id: a.id, nome: a.nome, stato: a.stato, prezziDel: a.aggiornato_il, ...x, problemi: problemiBom(a.righe ?? [], x) };
 }
 
 export async function salvaRighe(id: number, righe: RigaBom[]) {
