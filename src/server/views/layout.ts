@@ -32,6 +32,7 @@ ${opz.utente ? html`
       ${voce('/amministrazione', 'Amministrazione', 'amministrazione')}
       ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}
       ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}` : ''}
+    ${voce('/guida', 'Guida', 'guida')}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}

@@ -25,6 +25,8 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 
 ## Come lavorare
 - Struttura database: mai modificare un file già esistente in `db/migrazioni/`; aggiungerne uno nuovo (`002_...sql`).
+- Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
+  nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.
 - Pagine HTML: usare `html\`...\`` di `src/server/views/html.ts` (protegge i testi); niente JavaScript inline
   (lo blocca la Content-Security-Policy): gli script stanno in `public/`.
@@ -51,9 +53,40 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    lamina std 110 €, lamina con trattamenti 165 €, etichette, pulizia saldature, lavaggio) che mostrano/nascondono
    sezioni e campi (`data-dipende`) e attivano fasi e costi (migrazioni 011, 014). Programmazioni solo con 1ª produzione.
    Le voci possono avere un prezzo di vendita fisso (`formula_prezzo`, niente ricarico): es. lamine.
+   Montaggio → AOI: TOP · BOT · Visivo (migrazione 038; Adriano 28/10/2026): AOI segue i lati SMD, Visivo toglie ispezione e programmazione AOI
+   e conta il controllo visivo (fase 18V, 60 s a scheda). Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
    Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa`
    (solo prezzi; `?vista=fasi` dettaglio per fasi, `?vista=macro` solo macro aree).
+2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):
+   Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
+   Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,
+   macro) in SVG, forature Excellon (anche Allegro con "Holesize"), GenCAD. Incrocio: SMD TOP/BOT, THT (CAD > pick and place > BOM > impronta),
+   feeder, item, refori (≥ 0,7 mm metallizzati, o piedini THT del CAD), fiducial, misure; saldatura THT: SMD su due lati → a mano, altrimenti
+   onda (casi particolari li decide l'ufficio); consumi in `CONSUMI` (pasta 1,5 g / 450 componenti, onda 0,016 g/foro + 20%, filo 0,125 g/piedino).
+   Segnalazioni: valori diversi BOM/pick and place, riferimenti mancanti, montaggio SMD/THT dichiarato sbagliato, lati, sovrapposizioni, DNP.
+   Nel database solo i file utili compressi (PDF/3D/immagini restano sul Drive, solo nell'elenco). "Codifica la BOM" → sezione Componenti.
+   Macchine: linea con Essemtec Fox (42 feeder 8 mm, 2×12, 1×16/24, vassoi; altezza max 25 mm), iPulse M1 e M4s (feeder 8–44 mm, max 11 mm).
+   Preventivo "da validare" (Adriano 28/10/2026; `engine/scheda/preventivo.ts`, migrazione 036): dalla pagina dei documenti, catalogo e tariffe
+   attuali + valori letti (SMD per lato, feeder, lamine, THT onda/mano, stagno, item); stato `da_validare` con l'elenco "Da controllare",
+   il primo Salva dell'ufficio lo porta a bozza. Controllo piazzole/case (`engine/scheda/piazzole.ts`): piazzole del Gerber contro le
+   piazzole IPC-7351 nominali dei chip 0201–2512; segnala solo se somigliano chiaramente a un altro case (es. BOM 0603, piazzole 0805).
+   Stampe per la produzione (`views/stampa-scheda-cliente.ts`, `engine/scheda/documentazione.ts`, `/preventivi/documenti/:id/stampa?foglio=`):
+   SMD TOP, SMD BOT (BOM del lato + disegno con riferimenti, piedino 1 dal GenCAD, critici in rosso), THT (stesso colore = stesso codice),
+   protezioni per l'onda (fori e zone segnati sul disegno con "Segna le protezioni", salvati in `pacchetti_scheda.protezioni`).
+   Segnalazioni "Va bene" (migrazione 037, `pacchetti_scheda.accettate`, `engine/scheda/accettate.ts`): chiave livello|testo, applicate in
+   lettura (`conAccettate`): non contano tra gli errori né nel preventivo, componenti non più critici nelle stampe; restano dopo Rianalizza.
+   File di testo in UTF-8 se validi (Ω di KiCad), altrimenti Latin-1; ponticelli SolderJumper/NetTie non sono componenti.
+   Prodotto nuovo dal preventivo (Adriano 28/10/2026; `engine/scheda/prodotto.ts`, POST `/preventivi/prodotti`): "+ Nuovo prodotto" accanto al codice
+   lo aggiunge all'anagrafica del cliente senza uscire; codice, descrizione e revisione obbligatori (revisione non indicata = "0"), tutto MAIUSCOLO,
+   stesso codice già presente = si sceglie quello. La revisione è obbligatoria per salvare ogni preventivo. Dai documenti del cliente codice,
+   descrizione e revisione sono proposti (`analisi.prodotto`: intestazione BOM > Gerber X2 TF.ProjectId > GenCAD DRAWING/REVISION > nome
+   caricamento/cartella tipo "EA1002-0") e precompilati nel preventivo da validare: entrano in anagrafica solo con "Aggiungi in anagrafica".
+   Spunta Componenti su un preventivo nato dai documenti (Adriano 28/10/2026): `POST /preventivi/:id/quota-bom` → `quotaBomPacchetto` (BOM del
+   pacchetto in Componenti, una sola volta, collegata a `preventivi.bom_id` senza toccare lo stato), poi il costo arriva dal preventivo con
+   `problemiBom` (da completare, da validare, senza prezzo, non disponibili, critici) → "Risolvi nella BOM quotata" → riquadro in testa
+   alla BOM → "Torna al preventivo per la quota" (`?quota-bom=1` ricalcola il costo).
+   ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
    fogli tempi, QR → `/c/<codice>`. Stampa: max 2 pagine di scheda (fasi in un'unica tabella compatta) + 2 fogli tempi
@@ -113,7 +146,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    DDT di Casteltech in PDF (migrazione 029): l'IA li riconosce (Casteltech mittente), ogni riga si abbina alla riga d'ordine aperta del cliente
    con lo stesso codice (`abbinaDdt`: prima quelle ancora da spedire, poi l'ordine citato, poi la consegna più vicina); l'ufficio conferma →
    `ddt_righe` origine 'acquisito' (lo spedito della riga = import + DDT acquisiti). Ricaricando il file ordini restano, salvo che il file contenga lo stesso DDT.
-   ⬜ Incrocio con gli export FIC dentro il portale, script che salva le email d'ordine di info@ nella cartella.
+   Evasione automatica (Adriano 28/10/2026, `abbinaSpedizioni` in `engine/ordini.ts`): i DDT del portale (storico FIC, poi quelli emessi dal portale;
+   le fatture no: possono essere anticipi) non già contati nell'import si abbinano alle righe aperte stesso cliente + stesso codice (o descrizione), prima gli ordini
+   più vecchi; calcolato in lettura, niente tabelle nuove. Servizi (`eServizio`: lamine, programmazione attrezzature, una tantum, trasporto…) non sono
+   da evadere: evasi se fatturati o se l'ordine non ha più schede aperte. "Segna tutto evaso" nella pagina dell'ordine per le consegne non riconosciute.
+   ⬜ Script che salva le email d'ordine di info@ nella cartella.
 4d. ✅ CRM (`rotte/crm.ts`, `crm-servizio.ts`, `engine/crm.ts`, migrazione 025): ricerca aziende (nome, città, referenti, telefoni, email, P.IVA),
    scheda con recapiti e referenti, registro attività (telefonata, email, visita, offerta, fiera, nota) con prossima azione e data
    (scadute in rosso in prima pagina). Le aziende del CRM NON sono l'anagrafica: si collegano a un cliente in anagrafica (`cliente_id`,
@@ -138,6 +175,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Elenco: aperti in cima per stato e priorità, fatti e scartati nascosti ("mostra tutti"). Elimina sempre possibile (non collegati ad altro).
    Primi due (Federico): avviso Telegram al responsabile della fase successiva seguendo il Gantt (responsabili di fase ancora da definire);
    promemoria nel calendario di info@ per le commesse in ritardo su preventivo, capacità produttiva e scadenza.
+4g. ✅ Guida (`rotte/guida.ts`, `engine/guida.ts`, `server/guida-ia.ts`, `public/guida.js`; Adriano 28/10/2026): voce Guida nel menu (anche produzione),
+   macro aree con argomenti (cosa si fa, come, cosa non si può fare, pulsanti alle pagine), ricerca intelligente mentre si scrive
+   (radici italiane, sinonimi, "ordine+documenti" = "ordine documenti"), "Chiedi alla guida" con l'IA che risponde solo dalla guida
+   (senza chiave: rimanda agli argomenti trovati). Nessuna query al database.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

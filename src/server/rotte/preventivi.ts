@@ -4,7 +4,8 @@
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
-import { maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { chiaveCodice, maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { controllaProdottoNuovo } from '../../engine/scheda/prodotto.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
 import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
@@ -14,11 +15,12 @@ import { riepilogo } from '../../engine/riepilogo.js';
 import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
+import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
   [2, 'Nostro magazzino', 'Gestito a nostro magazzino: acquistato da noi, del cliente o misto']];
-const STATI = ['bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
+const STATI = ['da_validare', 'bozza', 'inviato', 'accettato', 'rifiutato', 'archiviato'];
 
 export function rottePreventivi() {
   const r = Router();
@@ -42,7 +44,8 @@ export function rottePreventivi() {
       contenuto: html`
       <div class="intestazione-pagina">
         <h1>Preventivi</h1>
-        <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a>
+        <div><a class="bottone" href="/preventivi/documenti" title="Carica BOM, pick and place e Gerber del cliente: il portale li controlla e conta i componenti">Da documenti del cliente</a>
+        <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
       <form method="post" action="/preventivi/azioni" id="azioni-elenco">
@@ -59,7 +62,7 @@ export function rottePreventivi() {
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
             <td class="selezione"><input type="checkbox" name="ids" value="${p.id}" aria-label="Seleziona ${p.numero}"></td>
-            <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}</td>
+            <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}${p.stato === 'da_validare' ? html` <span class="stato da_validare" title="Compilato dai documenti del cliente: da controllare e salvare">da validare</span>` : ''}</td>
             <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
             <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
@@ -87,6 +90,24 @@ export function rottePreventivi() {
     res.json(await prodottiPerCliente(Number(req.query.cliente) || 0));
   });
 
+  // prodotto nuovo scritto nel preventivo (Adriano 28/10/2026): va subito in anagrafica, senza uscire dal preventivo.
+  // Tutto maiuscolo; servono codice, descrizione e revisione (la revisione si salva con il preventivo).
+  r.post('/prodotti', async (req, res) => {
+    const clienteId = Number(req.body?.clienteId) || 0;
+    const cliente = clienteId ? await q1(`SELECT id FROM clienti WHERE id = $1`, [clienteId]) : undefined;
+    if (!cliente) return res.status(400).json({ errore: 'Scegli prima il cliente dall\'elenco.' });
+    const { valori, errore } = controllaProdottoNuovo(req.body ?? {});
+    if (errore) return res.status(400).json({ errore });
+    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente): si usa quello
+    const esistente = await q1<{ id: number; codice: string; descrizione: string | null }>(
+      `SELECT id, codice, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND (cliente_id = $2 OR cliente_id IS NULL)
+       ORDER BY cliente_id NULLS LAST, id LIMIT 1`, [chiaveCodice(valori.codice), clienteId]);
+    if (esistente) return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    const nuovo = await q1<{ id: number; codice: string; descrizione: string }>(
+      `INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1, $2, $3) RETURNING id, codice, descrizione`, [valori.codice, valori.descrizione, clienteId]);
+    res.json({ ...nuovo, revisione: valori.revisione, esisteva: false });
+  });
+
   // costo componenti a scheda dalla BOM scelta, ricalcolato sulle schede del preventivo
   r.get('/costo-bom', async (req, res) => {
     const x = await costoBomPerPreventivo(Number(req.query.bom) || 0, Number(req.query.schede) || 0);
@@ -94,11 +115,23 @@ export function rottePreventivi() {
     res.json(x);
   });
 
+  // spunta "Componenti" su un preventivo nato dai documenti del cliente (Adriano 28/10/2026): la BOM del pacchetto va
+  // in Componenti e si quota da sola (codici, prezzi dei distributori); il preventivo resta collegato a quella BOM.
+  // Non tocca stato e valori del preventivo: il collegamento si salva con il preventivo.
+  r.post('/:id/quota-bom', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const schede = Math.max(1, Math.round(Number(req.body?.schede) || 0)) || 100;
+    try { res.json(await quotaBomPacchetto(Number(req.params.id), schede, req.session.utente!.id)); }
+    catch (e: any) { res.status(400).json({ errore: e.message }); }
+  });
+
   // ── Apri esistente (calcolato col catalogo salvato nel preventivo) ──
   r.get('/:id', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     const p = await leggiPreventivo(Number(req.params.id));
     if (!p) return res.status(404).send('Preventivo non trovato');
+    // documenti del cliente da cui è nato il preventivo: banner "da validare" e BOM da quotare con la spunta Componenti
+    p.pacchetto = await q1(`SELECT id, nome, bom_id, fonti->>'bom' AS bom_file FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
@@ -133,11 +166,14 @@ export function rottePreventivi() {
     if (!cliente) return res.status(400).json({ errore: 'Scegli il cliente dall\'elenco' });
     const prodotto = dati.prodottoId ? await q1<{ codice: string; descrizione: string }>(
       `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [dati.prodottoId, dati.clienteId]) : undefined;
-    if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente' });
+    if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente (o aggiungilo con «Nuovo prodotto»)' });
+    if (!dati.revisione) return res.status(400).json({ errore: 'Scrivi la revisione del prodotto (se il cliente non la indica metti 0)' });
     Object.assign(dati, { cliente: maiuscolo(cliente.ragione_sociale), codice: maiuscolo(prodotto.codice), descrizione: maiuscolo(prodotto.descrizione) });
     if (!dati.nSchede) return res.status(400).json({ errore: 'Indica la quantità di schede' });
     if (!(dati.tariffe.ricarico > 0)) return res.status(400).json({ errore: 'Il ricarico deve essere maggiore di zero' });
     const nuovoId = await salvaPreventivo({ id, dati, catalogo: cat, utenteId: req.session.utente!.id });
+    // preventivo compilato dai documenti del cliente: salvarlo dopo il controllo lo convalida
+    await q(`UPDATE preventivi SET stato = 'bozza' WHERE id = $1 AND stato = 'da_validare'`, [nuovoId]);
     res.json({ id: nuovoId });
   });
 
@@ -192,13 +228,14 @@ export function rottePreventivi() {
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
   { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
-    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] }] },
+    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
+    { nome: 'AOI', codici: ['aoiTop', 'aoiBot', 'controlloVisivo'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
   { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
-  doppiaFaccia: 'BOT', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+  doppiaFaccia: 'BOT', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
 };
 
 function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
@@ -257,6 +294,29 @@ async function catalogoPer(id: unknown, attuale: unknown): Promise<Catalogo> {
 
 // ───────────────────────────── pagina del preventivo ─────────────────────────────
 
+/**
+ * Prodotto nuovo scritto nel preventivo (Adriano 28/10/2026): codice, descrizione e revisione obbligatori, tutto maiuscolo.
+ * Nel preventivo compilato dai documenti del cliente si apre già con i valori letti dai file, da convalidare.
+ */
+function riquadroNuovoProdotto(d: DatiPreventivo, salvato?: any): Raw {
+  const proposto = salvato?.stato === 'da_validare' && !d.prodottoId && !!d.codice;
+  return html`<div id="nuovo-prodotto" class="nuovo-prodotto" ${proposto ? '' : raw('hidden')}>
+    <p class="nota">${proposto
+      ? html`<b>Proposto dai documenti del cliente: da convalidare.</b> Controlla codice, descrizione e revisione, poi premi <b>Aggiungi in anagrafica</b>.`
+      : html`Prodotto non ancora in anagrafica: scrivi codice, descrizione e revisione (se il cliente non la indica scrivi <b>0</b>). Si salva tutto in maiuscolo.`}</p>
+    <div class="riga-campi">
+      <label>Codice <input id="np-codice" class="maiuscolo" maxlength="60" value="${proposto ? d.codice : ''}"></label>
+      <label class="largo">Descrizione <input id="np-descrizione" class="maiuscolo" maxlength="200" value="${proposto ? d.descrizione : ''}"></label>
+      <label class="stretto">Rev. <input id="np-revisione" class="maiuscolo" maxlength="20" placeholder="0" value="${proposto ? d.revisione : ''}"></label>
+    </div>
+    <div class="azioni-riga">
+      <button type="button" id="np-aggiungi" class="primario">Aggiungi in anagrafica</button>
+      <button type="button" id="np-annulla" class="link">Annulla</button>
+      <span id="np-esito" class="nota"></span>
+    </div>
+  </div>`;
+}
+
 function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, salvato?: any, clienti: { id: number; ragione_sociale: string }[] = [], prodotti: any[] = [], bom: VoceBom[] = [], avviso?: string): string {
   const gruppi = [...new Set(cat.parametri.map(p => p.gruppo))].filter(g => g !== 'GENERALE' && g !== 'LATI' && g !== 'INFORMAZIONI GENERALI');
   const generali = cat.parametri.filter(p => p.gruppo === 'INFORMAZIONI GENERALI');
@@ -269,7 +329,8 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     costoLaminaTrattata: LAMINA, prezzoVenditaLaminaTrattata: LAMINA,
     oreAcquistoPcb: 'acquistoPcb', costoPcbScheda: 'acquistoPcb',
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
-    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: SMD,
+    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: `${SMD} aoiTop|aoiBot`,
+    tempoRevisioneAoi: 'aoiTop', tempoRevisioneAoiLatoB: 'aoiBot', tempoControlloVisivo: 'controlloVisivo',
     preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
     oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
     potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,
@@ -278,7 +339,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     tempoLavaggio: 'lavaggioSchede', costoLiquidoLavaggio: 'lavaggioSchede', costoAvvioLavaggio: 'lavaggioSchede',
   };
   const GRUPPO_DIPENDE: Record<string, string> = {
-    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: SMD,
+    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
   };
   const esiste = (flag: string) => generali.some(p => p.codice === flag);
   // tiene solo le spunte presenti nel catalogo del preventivo (i preventivi vecchi non le hanno)
@@ -305,11 +366,12 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   // costo componenti: si può prendere da una BOM caricata in Componenti (scelta qui sopra il campo)
   const sceltaBom = () => html`
     <label class="largo scelta-bom"${dipende(DIPENDE.costoComponentiScheda)} title="Il costo componenti a scheda si calcola dal preventivo materiali della BOM, sulle schede di questo preventivo">BOM caricata
-      <select data-id="bomId" id="sel-bom">
+      <select data-id="bomId" id="sel-bom"${salvato?.pacchetto?.bom_file ? raw(` data-pacchetto="${Number(salvato.pacchetto.id)}"`) : ''}>
         <option value="">— nessuna: costo scritto a mano —</option>
         ${bom.map(b => html`<option value="${b.id}" ${b.id === d.bomId ? raw('selected') : ''}>${b.nome} (${data(b.creato_il)})</option>`)}
       </select>
       <output id="esito-bom" class="nota">${d.bomId && !bom.some(b => b.id === d.bomId) ? 'La BOM collegata è stata eliminata: il costo resta quello salvato.' : ''}</output>
+      ${salvato?.pacchetto?.bom_file && !d.bomId ? html`<small class="nota">BOM dei documenti del cliente: spuntando <b>Componenti</b> si quota da sola.</small>` : ''}
       <small class="nota"><a href="/componenti/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/componenti/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}` : campoBase(p);
   const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
@@ -333,13 +395,18 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     contenuto: html`
     <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''} ${provenienza === 1 ? 'materiale-da-restituire' : ''}">
     <div class="intestazione-pagina">
-      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato}</span>` : 'Nuovo preventivo'}</h1>
+      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
         ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>
     </div>
+    ${salvato?.stato === 'da_validare' ? html`
+      <div class="avviso da-validare"><strong>Preventivo da validare.</strong> L'ha compilato il portale dai documenti del cliente${salvato.pacchetto
+        ? html` (<a href="/preventivi/documenti/${salvato.pacchetto.id}">${salvato.pacchetto.nome}</a>)` : ''}: controlla i valori, completa quello che manca
+        e premi <b>Salva</b>, così diventa una bozza normale.
+        <ul>${String(salvato.note ?? '').split('\n').filter(r => r.startsWith('Da controllare:')).flatMap(r => r.replace(/^Da controllare: /, '').replace(/\.$/, '').split('; ')).map(x => html`<li>${x}</li>`)}</ul></div>` : ''}
     ${salvato?.origine === 'vecchio_portale' && salvato.dati_vecchio_portale ? html`
       <p class="avviso info">Importato dal vecchio portale. Lì il totale 1° lotto era ${euro(salvato.dati_vecchio_portale.totalePrimoLotto)};
       qui è ricalcolato con le fasi e le regole nuove.</p>` : ''}
@@ -359,9 +426,13 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
               <option value="">${d.clienteId ? '— scegli il codice —' : '— prima scegli il cliente —'}</option>
               ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}${x.da_assegnare ? ' (non assegnato)' : ''}</option>`)}
             </select></label>
-          <label class="stretto">Rev. <input data-campo="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20"></label>
+          <label class="stretto">Rev. <input data-campo="revisione" id="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20" required
+            placeholder="0" title="Revisione del prodotto: se il cliente non la indica scrivi 0"></label>
+          <button type="button" id="apri-nuovo-prodotto" class="link" ${d.clienteId ? '' : raw('disabled')}
+            title="Il codice non è in elenco? Scrivilo qui e si aggiunge all'anagrafica del cliente">+ Nuovo prodotto</button>
         </div>
         <label>Descrizione <input id="descrizione" value="${d.descrizione}" readonly tabindex="-1" class="sola-lettura"></label>
+        ${riquadroNuovoProdotto(d, salvato)}
         ${!d.clienteId && d.cliente ? html`<p class="nota">Nel preventivo originale: <strong>${d.cliente}</strong> ${d.codice} — non presente nelle anagrafiche. Per salvarlo scegli cliente e codice dall'elenco.</p>` : ''}
         <div class="riga-campi">
           <label>Schede <input inputmode="numeric" data-campo="nSchede" value="${d.nSchede || ''}" required></label>

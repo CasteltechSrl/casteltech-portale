@@ -87,6 +87,7 @@
   const selProdotto = document.getElementById('sel-prodotto');
   const descrizione = document.getElementById('descrizione');
   selCliente.addEventListener('change', async () => {
+    document.getElementById('apri-nuovo-prodotto').disabled = !selCliente.value;
     selProdotto.innerHTML = '<option value="">Caricamento…</option>';
     descrizione.value = '';
     if (!selCliente.value) { selProdotto.innerHTML = '<option value="">— prima scegli il cliente —</option>'; return; }
@@ -103,6 +104,44 @@
   selProdotto.addEventListener('change', () => {
     descrizione.value = selProdotto.selectedOptions[0]?.dataset.descrizione || '';
   });
+
+  // ── Prodotto nuovo: codice non ancora in anagrafica, si aggiunge senza uscire dal preventivo ──
+  // servono codice, descrizione e revisione (se il cliente non la indica: 0); tutto maiuscolo
+  const nuovo = document.getElementById('nuovo-prodotto');
+  const np = k => document.getElementById('np-' + k);
+  const revisione = document.getElementById('revisione');
+  document.getElementById('apri-nuovo-prodotto').addEventListener('click', () => {
+    nuovo.hidden = false;
+    if (!np('revisione').value && revisione.value) np('revisione').value = revisione.value;
+    np('codice').focus();
+  });
+  np('annulla').addEventListener('click', () => { nuovo.hidden = true; np('esito').textContent = ''; });
+  np('aggiungi').addEventListener('click', async () => {
+    const esito = np('esito');
+    esito.classList.add('negativo');
+    const valori = { codice: np('codice').value.trim(), descrizione: np('descrizione').value.trim(), revisione: np('revisione').value.trim() };
+    const mancano = [!valori.codice && 'il codice', !valori.descrizione && 'la descrizione', !valori.revisione && 'la revisione (se non è indicata scrivi 0)'].filter(Boolean);
+    if (!selCliente.value) { esito.textContent = 'Scegli prima il cliente.'; return; }
+    if (mancano.length) { esito.textContent = 'Manca ' + mancano.join(', ') + '.'; return; }
+    esito.textContent = 'Salvataggio in anagrafica…';
+    const res = await fetch('/preventivi/prodotti', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clienteId: selCliente.value, ...valori }) });
+    const p = await res.json().catch(() => ({}));
+    if (!res.ok) { esito.textContent = p.errore || 'Errore nel salvataggio'; return; }
+    // il prodotto entra nell'elenco del cliente e viene scelto; la revisione va nel preventivo
+    let o = [...selProdotto.options].find(x => x.value === String(p.id));
+    if (!o) { o = new Option(p.codice, p.id); selProdotto.add(o); }
+    o.dataset.descrizione = p.descrizione || '';
+    selProdotto.value = String(p.id);
+    descrizione.value = p.descrizione || '';
+    revisione.value = p.revisione;
+    nuovo.hidden = true;
+    esito.textContent = '';
+    modificato = true;
+    statoEl.classList.remove('negativo');
+    statoEl.textContent = p.esisteva ? `${p.codice} era già in anagrafica: scelto dall'elenco. Premi Salva.` : `${p.codice} aggiunto in anagrafica. Premi Salva.`;
+  });
+
   // tutto in maiuscolo mentre si scrive
   form.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
     const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
@@ -125,14 +164,45 @@
     costoComp.value = (Math.round(x.aScheda * 10000) / 10000).toString().replace('.', ',');
     const spuntaComp = casella('acquistoComponenti');
     if (spuntaComp && !spuntaComp.checked) { spuntaComp.checked = true; aggiornaDipendenze(); }
-    const avvisi = [x.senzaPrezzo ? `${x.senzaPrezzo} righe senza prezzo (non contate)` : '', x.nonDisponibili ? `${x.nonDisponibili} non disponibili` : '',
-      x.stato !== 'pronta' ? 'BOM non ancora elaborata del tutto' : ''].filter(Boolean);
+    const avvisi = [...(x.problemi || []), x.stato !== 'pronta' ? 'BOM non ancora elaborata del tutto' : ''].filter(Boolean);
     esitoBom.textContent = `Per ${x.schede} schede: ${euro(x.totale)}, cioè ${euro(x.aScheda)} a scheda` +
       ` (prezzi del ${new Date(x.prezziDel).toLocaleDateString('it-IT')})` + (avvisi.length ? ' · ' + avvisi.join(' · ') : '');
     esitoBom.classList.toggle('negativo', avvisi.length > 0);
+    // problemi da risolvere: si va alla BOM quotata, che riporta qui al preventivo
+    if (avvisi.length && id && x.stato === 'pronta') {
+      const a = document.createElement('a');
+      a.href = `/componenti/bom/${selBom.value}?preventivo=${encodeURIComponent(id)}`; a.className = 'bottone'; a.textContent = 'Risolvi nella BOM quotata';
+      esitoBom.append(' ', a);
+    }
     modificato = true; statoEl.textContent = 'Modifiche non salvate';
     ricalcola();
   }
+  // preventivo dai documenti del cliente (Adriano 28/10/2026): spuntando "Componenti" la BOM del cliente si quota da sola
+  // in Componenti; finita l'elaborazione il costo a scheda arriva qui (con i problemi da risolvere nella BOM)
+  const attendiBom = async bomId => {
+    for (let i = 0; i < 200; i++) {
+      const s = await (await fetch(`/componenti/bom/${bomId}/stato`)).json().catch(() => ({}));
+      if (!s.inCorso && s.stato !== 'da_elaborare' && s.stato !== 'in_corso') return;
+      esitoBom.textContent = `BOM in quotazione${s.fase ? ': ' + s.fase : ''}…`;
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  };
+  async function quotaBom() {
+    if (!selBom || !selBom.dataset.pacchetto || selBom.value || !id) return;
+    esitoBom.textContent = 'Quotazione della BOM del cliente…'; esitoBom.classList.remove('negativo');
+    const res = await fetch(`/preventivi/${encodeURIComponent(id)}/quota-bom`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schede: form.querySelector('[data-campo=nSchede]').value }) });
+    const x = await res.json().catch(() => ({}));
+    if (!res.ok) { esitoBom.textContent = x.errore || 'Errore nella quotazione della BOM'; esitoBom.classList.add('negativo'); return; }
+    if (![...selBom.options].some(o => o.value === String(x.bomId))) selBom.add(new Option(`${x.nome} (${new Date(x.creatoIl).toLocaleDateString('it-IT')})`, x.bomId));
+    selBom.value = String(x.bomId);
+    const apri = document.getElementById('apri-bom');
+    apri.hidden = false; apri.querySelector('a').href = '/componenti/bom/' + x.bomId;
+    modificato = true; statoEl.textContent = 'Modifiche non salvate';
+    await attendiBom(x.bomId);
+    costoDaBom();
+  }
+  if (selBom && new URLSearchParams(location.search).has('quota-bom') && selBom.value) costoDaBom();
   if (selBom) {
     selBom.addEventListener('change', () => {
       const apri = document.getElementById('apri-bom');
@@ -174,6 +244,16 @@
     // il lato BOT si monta insieme al TOP: BOT spunta anche TOP, togliere TOP toglie anche BOT
     if (el.dataset.param === 'doppiaFaccia' && el.checked && casella('presenteSmd')) casella('presenteSmd').checked = true;
     if (el.dataset.param === 'presenteSmd' && !el.checked && casella('doppiaFaccia')) casella('doppiaFaccia').checked = false;
+    // AOI (Adriano 28/10/2026): segue i lati SMD (TOP con il TOP, BOT solo con il BOT); il controllo visivo sostituisce l'AOI
+    const aoi = (cod, v) => { const c = casella(cod); if (c) c.checked = v; };
+    const visivo = casella('controlloVisivo');
+    if (el.dataset.param === 'presenteSmd' && !(visivo && visivo.checked)) { aoi('aoiTop', el.checked); if (!el.checked) aoi('aoiBot', false); }
+    if (el.dataset.param === 'doppiaFaccia' && !(visivo && visivo.checked)) { aoi('aoiBot', el.checked); if (el.checked) aoi('aoiTop', true); }
+    if (el.dataset.param === 'controlloVisivo') {
+      if (el.checked) { aoi('aoiTop', false); aoi('aoiBot', false); }
+      else { aoi('aoiTop', !!(casella('presenteSmd') && casella('presenteSmd').checked)); aoi('aoiBot', !!(casella('doppiaFaccia') && casella('doppiaFaccia').checked)); }
+    }
+    if ((el.dataset.param === 'aoiTop' || el.dataset.param === 'aoiBot') && el.checked) aoi('controlloVisivo', false);
     // 1ª produzione e variazione quantità si escludono
     if (el.dataset.param === 'primaProduzione' && el.checked && casella('variazioneQuantita')) casella('variazioneQuantita').checked = false;
     if (el.dataset.param === 'variazioneQuantita' && el.checked && casella('primaProduzione')) casella('primaProduzione').checked = false;
@@ -189,6 +269,7 @@
     const doppia = casella('doppiaFaccia');
     if (doppia) form.classList.toggle('solo-top', !doppia.checked);
     aggiornaDipendenze();
+    if (el.dataset.param === 'acquistoComponenti' && el.checked) quotaBom();
   }));
   // ── Durate: si scrivono come 1:30, 30', 1h, 1h30 e vengono mostrate come h:mm ──
   const leggiDurata = t => {
@@ -207,6 +288,7 @@
 
   form.addEventListener('input', e => {
     if (e.target.form && e.target.form !== form) return;   // stato del preventivo: ha il suo modulo
+    if (e.target.closest('#nuovo-prodotto')) return;        // prodotto nuovo: si salva con il suo pulsante
     modificato = true;
     statoEl.textContent = 'Modifiche non salvate';
     if (e.target.dataset.campo === 'prezzoTargetScheda') return aggiornaTarget();

@@ -12,6 +12,7 @@ import { primoAvvio } from './catalogo-db.js';
 import { layout, type Utente } from './views/layout.js';
 import { html } from './views/html.js';
 import { rottePreventivi } from './rotte/preventivi.js';
+import { rotteSchedeCliente } from './rotte/schede-cliente.js';
 import { rotteImpostazioni } from './rotte/impostazioni.js';
 import { rotteCommesse } from './rotte/commesse.js';
 import { avviaBackupNotturno } from './backup.js';
@@ -25,6 +26,7 @@ import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
+import { rotteGuida } from './rotte/guida.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -107,6 +109,7 @@ app.get('/produzione', (_req, res) => res.redirect('/r'));
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
 app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());
+app.use('/preventivi/documenti', soloUfficio, rotteSchedeCliente());
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());
@@ -116,6 +119,8 @@ app.use('/componenti', soloUfficio, rotteComponenti());
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
 app.use('/amministrazione', soloUfficio, rotteAmministrazione());
+// la guida la può leggere chiunque sia entrato (ufficio e produzione)
+app.use('/guida', (req, res, next) => req.session.utente ? next() : res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl)), rotteGuida());
 app.use('/r', rotteReparto());
 // QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
 // all'ufficio apre la commessa; chi non è entrato va all'accesso del reparto
