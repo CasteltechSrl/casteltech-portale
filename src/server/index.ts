@@ -12,6 +12,7 @@ import { primoAvvio } from './catalogo-db.js';
 import { layout, type Utente } from './views/layout.js';
 import { html } from './views/html.js';
 import { rottePreventivi } from './rotte/preventivi.js';
+import { rotteSchedeCliente } from './rotte/schede-cliente.js';
 import { rotteImpostazioni } from './rotte/impostazioni.js';
 import { rotteCommesse } from './rotte/commesse.js';
 import { avviaBackupNotturno } from './backup.js';
@@ -107,6 +108,7 @@ app.get('/produzione', (_req, res) => res.redirect('/r'));
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
 app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());
+app.use('/preventivi/documenti', soloUfficio, rotteSchedeCliente());
 app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());

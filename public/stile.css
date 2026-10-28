@@ -465,3 +465,57 @@ table.elenco tr.scaduta td:first-child { box-shadow: inset 4px 0 0 var(--negativ
 ul.scadenze { list-style: none; padding: 0; }
 ul.scadenze li { padding: .35rem 0; border-bottom: 1px solid var(--bordo); }
 ul.scadenze input[type=date] { width: 9.5rem; }
+
+/* Preventivi → Da documenti del cliente: dati per il preventivo, segnalazioni, disegno del Gerber */
+.griglia-scheda-cliente { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 900px) { .griglia-scheda-cliente { grid-template-columns: minmax(0, 1fr); } }
+.griglia-scheda-cliente h2 { margin-top: 0; }
+table.dati-scheda th { text-transform: none; letter-spacing: 0; font-size: .85rem; background: none; width: 40%; white-space: normal; }
+ul.segnalazioni { list-style: none; padding: 0; margin: 0; }
+ul.segnalazioni li { padding: .45rem .6rem; border-left: 4px solid var(--bordo); margin-bottom: .4rem; background: #fafbfa; border-radius: 0 6px 6px 0; }
+ul.segnalazioni li.errore { border-color: var(--negativo); background: #fdf1f0; }
+ul.segnalazioni li.avviso { border-color: #e0b100; background: #fffaea; }
+ul.segnalazioni .livello-segn { font-size: .72rem; font-weight: 700; text-transform: uppercase; color: var(--tenue); margin-right: .3rem; }
+ul.segnalazioni li.errore .livello-segn { color: var(--negativo); }
+ul.segnalazioni .refs { display: block; margin-top: .2rem; }
+ul.segnalazioni button.rif { font-family: var(--mono); font-size: .8rem; margin-right: .35rem; }
+ul.note-cliente { padding-left: 1.1rem; margin: .3rem 0; }
+.filtri-componenti { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .6rem; align-items: center; }
+.filtri-componenti button.attivo, .visore-comandi button.attivo { background: var(--accento-chiaro); border-color: var(--accento); color: var(--accento); }
+.filtri-componenti input[type=search] { max-width: 18rem; margin-left: auto; }
+table.componenti-scheda td { vertical-align: top; }
+table.componenti-scheda td.segn { color: var(--negativo); font-size: .82rem; max-width: 24rem; }
+table.componenti-scheda tr.non-montato td { color: #9aa39f; }
+table.componenti-scheda tr.evidenziata td { background: #fff4c2; }
+table.componenti-scheda tbody tr { cursor: pointer; }
+tr.non-usato td { color: var(--tenue); }
+td.nota-file { font-size: .8rem; color: var(--tenue); }
+.visore { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .6rem; margin-bottom: 1rem; }
+.visore-comandi { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; margin-bottom: .5rem; }
+.visore-comandi .gruppo { display: flex; gap: .3rem; align-items: center; }
+.visore-comandi button { padding: .3rem .7rem; }
+.visore-comandi .strati { display: flex; flex-wrap: wrap; gap: .3rem .8rem; }
+.visore-area { max-height: 75vh; overflow: hidden; display: flex; justify-content: center; background: #0d2a1e; border-radius: 6px; }
+.visore-area > p { color: #cfe; }
+svg.pcb { width: 100%; max-height: 75vh; display: block; cursor: grab; touch-action: none; color: #b88a3a; }
+svg.pcb:active { cursor: grabbing; }
+svg.pcb .fondo { fill: #0d2a1e; }
+svg.pcb .nascosto { display: none; }
+svg.pcb .strato { opacity: .85; }
+svg.pcb .cancella { color: #0d2a1e; }
+svg.pcb .ruolo-rame { color: #c8963e; }
+svg.pcb .ruolo-interno { color: #8c6a33; opacity: .5; }
+svg.pcb .ruolo-maschera { color: #2f8f5b; opacity: .35; }
+svg.pcb .ruolo-pasta { color: #c9cdd2; }
+svg.pcb .ruolo-serigrafia { color: #ffffff; }
+svg.pcb .ruolo-contorno { color: #f0d000; }
+svg.pcb .ruolo-foratura, svg.pcb .ruolo-altro { color: #7fb2ff; opacity: .6; }
+svg.pcb .fori circle { fill: #0d2a1e; stroke: #8a8a8a; stroke-width: .05; }
+svg.pcb .fori circle.npth { fill: #000; stroke: none; }
+svg.pcb .segno { fill: rgba(80, 200, 255, .55); stroke: #50c8ff; stroke-width: .12; cursor: pointer; }
+svg.pcb .segno.THT { fill: rgba(255, 140, 60, .55); stroke: #ff8c3c; }
+svg.pcb .segno.segnalato { fill: rgba(255, 60, 60, .75); stroke: #ff3c3c; }
+svg.pcb .segno.scelto { fill: #ffe600; stroke: #000; stroke-width: .2; }
+svg.pcb:not(.vista-bot) .segno.lato-BOT:not(.THT), svg.pcb.vista-bot .segno.lato-TOP:not(.THT) { display: none; }
+.strati label.spunta { white-space: nowrap; }
+table.componenti-scheda td:nth-child(4) { min-width: 15rem; } table.componenti-scheda td:nth-child(6) { min-width: 12rem; }

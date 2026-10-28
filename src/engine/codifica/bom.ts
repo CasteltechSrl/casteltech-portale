@@ -9,7 +9,7 @@ export type Ruolo = 'pn' | 'produttore' | 'valore' | 'footprint' | 'descrizione'
 
 export const RUOLI: Record<Ruolo, string[]> = {
   pn: ['MPN', 'P/N', 'PN', 'MANUFACTURER PART NUMBER', 'MANUFACTURER PART', 'MFR PART', 'MFG PART', 'PART NUMBER',
-    'PARTNUMBER', 'PART NO', 'CODICE PRODUTTORE', 'CODICE COSTRUTTORE', 'MFR. #', 'MFR #', 'ARTICOLO', 'COMPONENTE'],
+    'PARTNUMBER', 'PART NO', 'MANUFACTURER P/N', 'MANUFACTURER PN', 'MFR P/N', 'MFG P/N', 'CODICE PRODUTTORE', 'CODICE COSTRUTTORE', 'MFR. #', 'MFR #', 'ARTICOLO', 'COMPONENTE'],
   produttore: ['MANUFACTURER', 'PRODUTTORE', 'MFR', 'MFG', 'COSTRUTTORE', 'BRAND', 'MARCA'],
   valore: ['VALUE', 'VALORE', 'VAL', 'COMMENT'],
   footprint: ['FOOTPRINT', 'PACKAGE', 'CASE', 'PCB DECAL', 'FORMATO', 'CONTENITORE', 'PATTERN'],
