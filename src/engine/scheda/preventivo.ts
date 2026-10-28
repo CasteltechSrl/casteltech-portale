@@ -52,14 +52,14 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
       metti('qntCompMontaggio', c.tht, 'THT montati in giostra prima dell\'onda');
       metti('stagnoPerSaldature', arrot(refori * CONSUMI.ondaGrammiForo), `${refori} refori × ${CONSUMI.ondaGrammiForo} g (le scorie le aggiunge il calcolo)`);
       metti('stagno', 0, 'stagno scritto in grammi');
-      if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info')) daControllare.push('segnalazioni sulla saldatura a onda');
+      if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info' && !s.accettata)) daControllare.push('segnalazioni sulla saldatura a onda');
     } else if (l.saldaturaTht === 'mano') {
       metti('qntPuntiSaldaturaMano', refori, `${refori} refori`);
       metti('stagnoInFilo', arrot(refori * CONSUMI.filoGrammiPiedino), `${refori} piedini × ${CONSUMI.filoGrammiPiedino} g`);
     }
   }
   metti('nItemMateriale', c.item, `${c.item - 1} codici montati + PCB`);
-  const errori = a.segnalazioni.filter(s => s.livello === 'errore').length;
+  const errori = a.segnalazioni.filter(s => s.livello === 'errore' && !s.accettata).length;
   if (errori) daControllare.unshift(`${errori} segnalazioni da chiarire con il cliente (vedi i documenti)`);
   return { parametri: Object.fromEntries(voci.map(v => [v.codice, v.valore])), voci, daControllare };
 }

@@ -554,3 +554,6 @@ svg.pcb .prot-zona { fill: rgba(240, 0, 190, .25); stroke: #ff3cd2; stroke-width
 .msg-guida { padding: .6rem .8rem; border-radius: var(--raggio); white-space: pre-line; }
 .msg-guida.domanda { justify-self: end; background: var(--accento-chiaro); max-width: 80%; }
 .msg-guida.risposta { background: #f3f4f2; border: 1px solid var(--bordo); }
+ul.segnalazioni li.accettata { opacity: .7; border-color: #2d6a2d; background: #f3f8f3; }
+ul.segnalazioni li.accettata .livello-segn { background: #e3efe3; color: #2d6a2d; }
+ul.segnalazioni button.va-bene { font-size: .85rem; margin-left: .3rem; }

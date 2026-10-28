@@ -22,7 +22,7 @@ export const CONSUMI = {
 } as const;
 
 export type Livello = 'errore' | 'avviso' | 'info';
-export interface Segnalazione { livello: Livello; testo: string; refs?: string[] }
+export interface Segnalazione { livello: Livello; testo: string; refs?: string[]; accettata?: { da: string; il: string } } // accettata: "Va bene" dell'ufficio (accettate.ts)
 
 export interface RigaBomScheda {
   riga: number;              // numero di riga nel file (da 1)
@@ -45,6 +45,7 @@ export interface Componente {
   pp?: { valore: string; footprint: string; x: number; y: number; rot: number; codice?: string };
   codiceCliente: string;     // P/N della BOM, o codice scritto dal cliente nel pick and place
   segnalazioni: string[];
+  segnalazioniAccettate?: string[]; // controllate dall'ufficio ("Va bene"): non più critiche
   pin1?: { x: number; y: number }; // piedino 1 dal file CAD (verso di montaggio)
 }
 
