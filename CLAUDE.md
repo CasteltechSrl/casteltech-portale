@@ -149,6 +149,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    date del foglio "Schedulazione produzione" (lavorazione = arrivo materiale + 3 gg, prevista = lavorazione + 5 gg + ritardi),
    consegne a programma (es. Univac 15 mesi), cruscotto (fatturato, media mesi chiusi, da evadere per mese, previsione anno),
    Gantt all'indietro dalla consegna con ore ciclo dell'ultimo preventivo del prodotto ÷ ore al giorno, fatture senza ordine.
+   Gantt a giorni su tutta la larghezza (Adriano 28/10/2026, `periodoGantt`): 1 mese (5 settimane dal lunedì) standard, Settimana o 3 mesi, nient'altro; ‹ Oggi ›.
    Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
    con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).
    🟡 Acquisizione (`rotte/acquisizioni.ts`, `acquisizioni-servizio.ts`, `lettura-ordini-ia.ts`, `engine/acquisizioni.ts`, migrazione 023):
