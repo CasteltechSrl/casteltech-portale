@@ -270,6 +270,10 @@ td.codice, b.codice { font-family: var(--mono); font-size: .82rem; white-space: 
 .livello.ok { background: #ddf3e5; color: var(--positivo); }
 .livello.attenzione { background: #fff2cc; color: #8a6100; }
 .livello.critico { background: #fbe2e0; color: var(--negativo); }
+/* alternative al P/N (Componenti → riga della BOM) */
+.alternativa-scelta { color: var(--positivo); font-weight: 600; }
+a.alternative-pronte { font-size: .85em; font-weight: 600; }
+#alternative tr.scelta td { background: #ddf3e5; }
 .totali.materiali { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 1rem; }
 .totali.materiali .totale.principale { grid-column: span 1; }
 table.bom td { vertical-align: top; }

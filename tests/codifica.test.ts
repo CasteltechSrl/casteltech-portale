@@ -70,13 +70,58 @@ test('acquisti: minimo d\'ordine, multipli e scaglione superiore più convenient
   assert.equal(leggiPrezzo('0,38 €'), 0.38); assert.equal(leggiPrezzo('€1.234,50'), 1234.5); assert.equal(leggiPrezzo('0.1'), 0.1);
 });
 
-test('acquisti: reperibilità', () => {
+test('acquisti: reperibilità, critico solo se non si trova da nessuna parte (Adriano 28/10/2026)', () => {
   assert.equal(reperibilita([], 10).livello, 'critico');
   assert.equal(reperibilita([offerta({ stock: 5 })], 10).livello, 'critico');
-  assert.equal(reperibilita([offerta({ ciclo: 'Obsolete', obsoleto: true })], 10).livello, 'critico');
-  assert.equal(reperibilita([offerta({ ciclo: 'Last Time Buy' })], 10).livello, 'attenzione');
-  assert.equal(reperibilita([offerta({ stock: 20 })], 10).livello, 'attenzione');           // scorte basse
+  assert.equal(reperibilita([offerta({ stock: 0, ciclo: 'Obsolete', obsoleto: true })], 10).livello, 'critico');
+  // trovato da un altro distributore: nessuna segnalazione, le informazioni restano tra i motivi
+  assert.equal(reperibilita([offerta({ fornitore: 'mouser', stock: 0 }), offerta({ fornitore: 'tme', stock: 500 })], 10).livello, 'ok');
+  assert.equal(reperibilita([offerta({ ciclo: 'Last Time Buy' })], 10).livello, 'ok');
+  assert.equal(reperibilita([offerta({ ciclo: 'Obsolete', obsoleto: true })], 10).livello, 'ok');   // obsoleto ma in magazzino: si compra
+  const basse = reperibilita([offerta({ stock: 20 })], 10);
+  assert.equal(basse.livello, 'ok'); assert.ok(basse.motivi.some(m => m.includes('scorte basse')));
   assert.equal(reperibilita([offerta({}), offerta({ fornitore: 'mouser' })], 10).livello, 'ok');
+  // la quantità c'è solo sommando più distributori
+  assert.equal(reperibilita([offerta({ stock: 6 }), offerta({ fornitore: 'mouser', stock: 6 })], 10).livello, 'attenzione');
+  // non trovato, ma un distributore non ha risposto: non è critico, va riprovato
+  const nr = reperibilita([], 10, ['mouser']);
+  assert.equal(nr.livello, 'attenzione'); assert.match(nr.motivi[0], /Mouser non ha risposto/);
+  // obsoleto e attivo con la quantità: si sceglie l'attivo anche se costa un po' di più
+  const s = sceltaMigliore([offerta({ fornitore: 'mouser', obsoleto: true, scaglioni: [{ qta: 1, prezzo: 0.01 }] }), offerta({ fornitore: 'tme', scaglioni: [{ qta: 1, prezzo: 0.02 }] })], 10);
+  assert.equal(s!.offerta.fornitore, 'tme');
+});
+
+test('alternative: stesse caratteristiche = stesso codice di produzione, scelta dell\'operatore negli acquisti', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
+  const { stesseCaratteristiche, ordinaAlternative, calcolaAcquistiCon, ESITI, FONTI_ALTERNATIVA } = await import('../src/server/codifica-servizio.js');
+  const { REGOLE_SCARTO_DEFAULT } = await import('../src/engine/acquisti.js');
+  const riga = { famiglia: 'RS', codiceProduzione: 'RS-0603-2K2-1-100MW', codiceGestionale: 'SRS-0603-2K20F-001' };
+  const [f1, a1] = decodificaMpn('ERJ-3EKF2201V');      // Panasonic 2,2k 1% 0603
+  assert.equal(stesseCaratteristiche(riga, f1, a1, 'ERJ-3EKF2201V'), true);
+  const [f2, a2] = decodificaMpn('RC0603FR-072K7L');    // 2,7k: diversa
+  assert.equal(stesseCaratteristiche(riga, f2, a2, 'RC0603FR-072K7L'), false);
+  assert.equal(stesseCaratteristiche(riga, 'CC', {}, 'X'), false);
+  assert.equal(stesseCaratteristiche(riga, null, {}, 'X'), null);
+  // prima le disponibili con le stesse caratteristiche, poi le più economiche
+  const alt = (mpn: string, identica: boolean | null, x: Partial<Offerta>) => ({ mpn, produttore: '', descrizione: '', fonte: FONTI_ALTERNATIVA.STESSE, identica, offerte: [offerta({ mpn, ...x })] });
+  const ordinate = ordinaAlternative([alt('A', true, { stock: 5 }), alt('B', null, { scaglioni: [{ qta: 1, prezzo: 0.001 }] }), alt('C', true, {})], 100);
+  assert.deepEqual(ordinate.map(a => a.mpn), ['C', 'B', 'A']);
+  // riga non trovata: con l'alternativa scelta si compra quella e non è più critica
+  const r: any = { n: 1, pn: 'INTROVABILE-1', esito: ESITI.NUOVO, famiglia: 'RS', attributi: {}, qtaScheda: 2, note: [], fonti: [], offerte: [], acquisti: [],
+    alternative: [alt('ERJ-3EKF2201V', true, { fornitore: 'tme' })], alternativaScelta: null };
+  const prima = process.env.MOUSER_API_KEY;
+  process.env.MOUSER_API_KEY = 'x';                    // un distributore collegato, altrimenti niente giudizio di reperibilità
+  try {
+    calcolaAcquistiCon([r], [100], REGOLE_SCARTO_DEFAULT, new Map([[pnKey('INTROVABILE-1')!, { mouser: { offerte: [] } }]]));
+    assert.equal(r.reperibilita.livello, 'critico');
+    calcolaAcquistiCon([r], [100], REGOLE_SCARTO_DEFAULT, new Map());   // Mouser non ha risposto: da riprovare, non critico
+    assert.equal(r.reperibilita.livello, 'attenzione');
+    r.alternativaScelta = 'ERJ-3EKF2201V';
+    calcolaAcquistiCon([r], [100], REGOLE_SCARTO_DEFAULT, new Map());
+    assert.equal(r.reperibilita.livello, 'ok');
+    assert.equal(r.acquisti[0].scelta.mpn, 'ERJ-3EKF2201V');
+    assert.equal(r.acquisti[0].scelta.fornitore, 'tme');
+  } finally { if (prima === undefined) delete process.env.MOUSER_API_KEY; else process.env.MOUSER_API_KEY = prima; }
 });
 
 test('IA: risposta JSON anche con testo intorno', () => {

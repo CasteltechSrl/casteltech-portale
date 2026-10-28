@@ -72,4 +72,6 @@ test('guida: prodotto nuovo dal preventivo si trova', () => {
 test('guida: AOI visivo e BOM quotata', () => {
   assert.ok(primi('controllo visivo aoi', 2).includes('nuovo-preventivo'));
   assert.ok(primi('quotare la bom del cliente', 3).includes('bom-preventivo'));
+  assert.ok(primi('componente non trovato alternativa', 3).includes('alternative-componenti'));
+  assert.ok(primi('perché è critico', 3).includes('alternative-componenti'));
 });
