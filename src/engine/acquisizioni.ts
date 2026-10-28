@@ -34,14 +34,20 @@ export function mimeDaNome(nome: string): string {
 
 // ───────────────────────────── email (.eml) ─────────────────────────────
 export interface Allegato { nome: string; mime: string; dati: Buffer }
-export interface Email { oggetto: string; mittente: string; data: string; testo: string; allegati: Allegato[] }
+export interface Email {
+  oggetto: string; mittente: string; data: string; testo: string; allegati: Allegato[];
+  /** Message-ID, References e Reply-To: servono per rispondere nella stessa conversazione (conferma d'ordine) */
+  messaggioId?: string; riferimenti?: string; rispondiA?: string;
+}
 
 /** Lettura essenziale di un'email salvata (.eml): intestazioni, testo e allegati (PDF, immagini). */
 export function leggiEmail(sorgente: Buffer | string): Email {
   const grezzo = typeof sorgente === 'string' ? sorgente : sorgente.toString('latin1');
   const { intestazioni, corpo } = separa(grezzo);
   const out: Email = { oggetto: decodificaParole(intestazioni['subject'] ?? ''), mittente: decodificaParole(intestazioni['from'] ?? ''),
-    data: intestazioni['date'] ?? '', testo: '', allegati: [] };
+    data: intestazioni['date'] ?? '', testo: '', allegati: [],
+    messaggioId: /<[^<>\s]+>/.exec(intestazioni['message-id'] ?? '')?.[0], riferimenti: intestazioni['references'] || undefined,
+    rispondiA: decodificaParole(intestazioni['reply-to'] ?? '') || undefined };
   const testi: string[] = [], html: string[] = [];
   const visita = (int: Record<string, string>, c: string) => {
     const tipo = (int['content-type'] ?? 'text/plain').toLowerCase();

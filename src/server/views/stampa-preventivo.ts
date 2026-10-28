@@ -22,7 +22,7 @@ export interface ClienteStampa {
 export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean }
 
 /** Dati di Casteltech da usare se in Impostazioni → Amministrazione mancano (Adriano, 27/10/2026). */
-const AZIENDA_PREDEFINITA = {
+export const AZIENDA_PREDEFINITA = {
   ragione_sociale: 'CASTELTECH S.R.L.', indirizzo: 'STRADA FIORENZUOLA, 8', cap: '29014', comune: "CASTELL'ARQUATO", provincia: 'PC',
   partita_iva: '01777320332', rea: 'PC-190591', telefono: '0523 190 24 64', email: 'info@casteltech.net', pec: 'casteltech@pec.it',
 };

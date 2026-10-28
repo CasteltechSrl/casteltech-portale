@@ -23,6 +23,8 @@ function chiave(): Chiave | null {
   } catch { return null; }
 }
 export const driveConfigurato = () => !!chiave();
+/** La stessa chiave serve anche a Gmail (invio delle conferme d'ordine con la delega del dominio). */
+export const chiaveAccountServizio = chiave;
 export const emailAccountDrive = () => chiave()?.client_email ?? null;
 
 // ── accesso (token di un'ora, firmato con la chiave dell'account di servizio) ──

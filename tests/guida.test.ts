@@ -37,6 +37,8 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);
   assert.deepEqual(primi('BOLLA spedita'), ['ddt-acquisiti']);
+  assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
+  assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));
   assert.deepEqual(primi('backup'), ['backup']);
   assert.deepEqual(primi('PIN operatori', 1), ['operatori']);
   assert.ok(primi('cancellare un cliente', 3).includes('eliminare'));

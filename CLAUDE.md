@@ -165,6 +165,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    le fatture no: possono essere anticipi) non già contati nell'import si abbinano alle righe aperte stesso cliente + stesso codice (o descrizione), prima gli ordini
    più vecchi; calcolato in lettura, niente tabelle nuove. Servizi (`eServizio`: lamine, programmazione attrezzature, una tantum, trasporto…) non sono
    da evadere: evasi se fatturati o se l'ordine non ha più schede aperte. "Segna tutto evaso" nella pagina dell'ordine per le consegne non riconosciute.
+   ✅ Conferma d'ordine (Adriano 28/10/2026; `rotte/conferme-ordine.ts`, `conferme-ordine-servizio.ts`, `engine/conferme-ordine.ts`, migrazione 041):
+   pulsante nella pagina dell'ordine → documento 'conferma_ordine' (bozza) con righe e date di consegna copiate dall'ordine (una riga per consegna
+   a programma, annullate escluse), modificabili senza toccare l'ordine; Emetti = numero della serie conferma_ordine + PDF salvato in `documenti.pdf`
+   (`pdf-conferma-ordine.ts`, pdf-lib, impaginato come la stampa preventivi), serve una data di consegna per riga; dopo l'emissione si corregge
+   ancora (PDF rifatto, stesso numero), bozza si elimina, emessa si annulla. Invio con Gmail (`server/gmail.ts`): account di servizio
+   GOOGLE_SERVICE_ACCOUNT + delega di dominio Google Workspace, casella GMAIL_MITTENTE (info@casteltech.net), ambiti gmail.send (+ gmail.readonly per
+   trovare la conversazione); risposta all'email dell'ordine (.eml in acquisizioni: Message-ID → In-Reply-To/References). ⬜ Delega da attivare.
    ⬜ Script che salva le email d'ordine di info@ nella cartella.
 4d. ✅ CRM (`rotte/crm.ts`, `crm-servizio.ts`, `engine/crm.ts`, migrazione 025): ricerca aziende (nome, città, referenti, telefoni, email, P.IVA),
    scheda con recapiti e referenti, registro attività (telefonata, email, visita, offerta, fiera, nota) con prossima azione e data
@@ -226,5 +233,5 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
-   ⬜ PDF della fattura, Invoicetronic, DDT, conferme d'ordine,
+   ⬜ PDF della fattura, Invoicetronic, DDT (conferme d'ordine: vedi 4c),
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

@@ -256,6 +256,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
   {
+    id: 'conferma-ordine', area: 'ordini', titolo: 'Conferma d\'ordine al cliente (PDF e email)',
+    parole: 'conferma confermare conferme ordine pdf email gmail rispondere risposta inviare mandare cliente date consegna righe accettazione',
+    testo: [
+      'Dall\'ordine caricato nel portale si prepara la conferma per il cliente: il pulsante "Conferma d\'ordine" in alto nella pagina dell\'ordine copia tutte le righe con quantità, prezzi e date di consegna.',
+      'Righe e date si cambiano liberamente nella conferma (non toccano l\'ordine): si aggiungono righe con "+ Riga", si tolgono con la spunta "Togli". Le consegne a programma diventano una riga per ogni consegna.',
+      'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (numerazione propria delle conferme) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
+      'Invio: se l\'ordine è arrivato per email, "Invia con Gmail" risponde a quell\'email (stessa conversazione) da info@casteltech.net con il PDF allegato; destinatario, oggetto e testo si possono cambiare. Finché la delega di Gmail non è attiva il pulsante è spento: scarica il PDF con "Apri il PDF" e mandalo dalla posta.',
+      'Non si può preparare la conferma se il cliente dell\'ordine non è in anagrafica. Una bozza si elimina; una conferma emessa si annulla (resta nell\'elenco e il numero non si riusa).',
+    ],
+    passi: ['Apri l\'ordine (Ordini → Da evadere, clic sulla riga).', 'Premi "Conferma d\'ordine".', 'Controlla righe, prezzi e date di consegna, correggi e Salva.',
+      'Premi Emetti.', 'Controlla destinatario e testo, poi "Invia con Gmail" (oppure "Apri il PDF" e mandalo a mano).'],
+    pagine: [['/ordini', 'Ordini da evadere']],
+  },
+  {
     id: 'ddt-acquisiti', area: 'ordini', titolo: 'DDT spediti: segnare la merce consegnata',
     parole: 'ddt spedizione spedito consegnato evaso parziale bolla documento trasporto',
     testo: [

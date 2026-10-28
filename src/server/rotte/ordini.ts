@@ -11,6 +11,8 @@ import {
   type Barra, type DaPianificare, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
+import { confermeDellOrdine } from '../conferme-ordine-servizio.js';
+import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import type { Utente } from '../views/layout.js';
@@ -181,11 +183,15 @@ export function rotteOrdini() {
     const ddt = await q(`SELECT d.*, r.chiave FROM ddt_righe d JOIN ordini_righe r ON r.id = d.riga_id WHERE r.ordine_id = $1 ORDER BY d.data, d.numero`, [o.id]);
     const fatture = await q(`SELECT f.*, r.chiave FROM fatture_righe f JOIN ordini_righe r ON r.id = f.riga_id WHERE r.ordine_id = $1 ORDER BY f.data, f.numero`, [o.id]);
     const commesse = await q(`SELECT id, numero FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
+    const conferme = await confermeDellOrdine(o.id);
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
       <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
+        <form method="post" action="/ordini/${o.id}/conferme" class="inline">
+          <button class="primario" title="Conferma d'ordine per il cliente con le righe e le date di consegna dell'ordine (modificabili)">${conferme.some(k => k.stato === 'bozza')
+            ? "Riprendi la conferma d'ordine" : conferme.some(k => k.stato !== 'annullato') ? "Nuova conferma d'ordine" : "Conferma d'ordine"}</button></form>
         <form method="post" action="/ordini/${o.id}/elimina" class="inline"
           data-conferma="${confermaEliminaOrdine({ numero: o.numero, anno: o.anno, origine: o.origine, righe: righe.length, conDocumenti: ddt.length + fatture.length > 0 })}">
           <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form>
@@ -198,6 +204,8 @@ export function rotteOrdini() {
         <dt>Ordine del cliente</dt><dd>${o.rif_cliente}${o.data_ordine_cliente ? html` del ${data(o.data_ordine_cliente)}` : ''}${o.file ? html` <small class="nota">(${o.file})</small>` : ''}</dd>
         <dt>Origine</dt><dd>${({ fic: 'Fatture in Cloud', ordine_cliente: 'ordine del cliente (non in Fatture in Cloud)', foglio: 'foglio Schedulazione', manuale: 'inserito a mano', email: 'email' } as Record<string, string>)[o.origine] ?? o.origine}</dd>
         ${o.note ? html`<dt>Note</dt><dd>${o.note}</dd>` : ''}
+        ${conferme.length ? html`<dt>Conferme d'ordine</dt><dd>${conferme.map((k, i) => html`${i ? ' · ' : ''}<a href="/ordini/${o.id}/conferme/${k.id}">${k.numero ? `n. ${k.numero}/${k.anno}` : 'bozza'}</a>
+          del ${data(k.data)} ${statoConferma(k.stato)}${k.email_inviata_il ? html` <small class="nota">a ${k.email_a}</small>` : ''}`)}</dd>` : ''}
       </dl>
       <form method="post" action="/ordini/${o.id}">
       <div class="tabella-scorre"><table class="elenco righe-ordine">
@@ -286,6 +294,7 @@ export function rotteOrdini() {
     res.redirect(`/ordini/${id}?msg=${encodeURIComponent(x ? `Riga ${x.nome} eliminata.` : 'Riga non trovata.')}`);
   });
 
+  r.use(rotteConferme());
   return r;
 }
 
