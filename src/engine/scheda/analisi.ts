@@ -102,7 +102,7 @@ export function leggiBomScheda(righe: string[][]): { righe: RigaBomScheda[]; col
   const out: RigaBomScheda[] = [];
   dati.forEach((r) => {
     const cella = (i: number) => i >= 0 ? String(r[i] ?? '').trim() : '';
-    const designatori = elencoDesignatori(cella(idx(mappa.designatori))).filter(d => /^[A-Z]{1,8}_?\d+[A-Z]?$/.test(d));
+    const designatori = elencoDesignatori(cella(idx(mappa.designatori))).filter(d => RE_RIFERIMENTO.test(d));
     if (!designatori.length && !cella(idx(mappa.pn))) return;
     const montaggioTesto = cella(iMont);
     const montatoTesto = cella(iMontato);
@@ -125,6 +125,9 @@ export function leggiBomScheda(righe: string[][]): { righe: RigaBomScheda[]; col
 const RE_IMPRONTA_THT = /(^|[_\-\s])(THT|PTH|TH|DIP\d*|SIP\d*|RADIAL|AXIAL|TO-?220|TO-?92|TO-?247|HC-?49|FASTON|PINHEADER|HEADER|JACK|RJ45|PHOENIX|MORSETT|TERMINAL|SUPERCAP)([_\-\s]|$)|_P\d+(\.\d+)?MM|SIP\d{3}|CONN_USB_DUAL/i;
 const RE_CASE = /(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?:[^0-9]|$)/;
 const caseDi = (s: string) => RE_CASE.exec(s.toUpperCase().replace(/EIA/g, ' '))?.[1] ?? null;
+/** Riferimento di un componente: R1, LED5, C_IN_1, R_FBB1, J_ETH3V3 (lettera in testa, almeno una cifra). */
+export const RE_RIFERIMENTO = /^(?=.*\d)[A-Z][A-Z0-9_]{0,15}$/;
+
 const pulisci = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 const pezzi = (s: string) => s.toUpperCase().split(/[\s_\-/,;()]+/).filter(Boolean);
 

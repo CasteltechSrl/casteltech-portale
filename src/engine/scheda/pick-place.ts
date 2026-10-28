@@ -228,6 +228,10 @@ export function leggiPickPlace(nomeFile: string, testoGrezzo: string): LetturaPi
 
 /** I fiducial scritti come componenti (FID1, FD2…) vanno nell'elenco dei fiducial, non tra i componenti. */
 function separaFiducial(l: LetturaPickPlace): LetturaPickPlace {
+  // ponticelli a stagno e net tie (KiCad "SolderJumper", "NetTie"): solo rame, non si montano; si avvisa perché a volte vanno chiusi
+  const ponticelli = l.posizioni.filter(p => /SOLDER_?JUMPER|NET_?TIE/i.test(p.footprint));
+  if (ponticelli.length) l = { ...l, posizioni: l.posizioni.filter(p => !ponticelli.includes(p)),
+    avvisi: [...l.avvisi, `Ponticelli a stagno (solo rame, non sono componenti): ${ponticelli.map(p => `${p.ref}${p.valore ? ` ${p.valore}` : ''}`).join(', ')}. Controllare se vanno chiusi.`] };
   const fid = l.posizioni.filter(p => RE_FIDUCIAL.test(p.ref) || /^FIDUCIAL/i.test(p.valore) || /^FIDUCIAL/i.test(p.footprint));
   if (!fid.length) return l;
   return { ...l, posizioni: l.posizioni.filter(p => !fid.includes(p)), fiducial: [...l.fiducial, ...fid.map(p => ({ x: p.x, y: p.y, lato: p.lato }))] };
