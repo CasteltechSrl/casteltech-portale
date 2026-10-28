@@ -209,10 +209,15 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'stampa-preventivo', area: 'preventivi', titolo: 'Stampare o mandare il preventivo al cliente',
-    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf macro aree dettaglio fasi',
+    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali',
     testo: [
-      'Dal preventivo salvato, "Stampa / salva PDF" apre la pagina per il cliente con i soli prezzi. Si può scegliere il dettaglio per fasi o solo le macro aree. Dalla finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
+      'Dal preventivo salvato, "Stampa" apre la pagina per il cliente con i soli prezzi, impaginata come i preventivi di Fatture in Cloud: dati di Casteltech, destinatario con i dati fiscali, riquadro verde con i prezzi, tabella, pagamento e totale.',
+      'A sinistra, nel riquadro "Cosa stampare", scegli la versione: Essenziale (codice, quantità e prezzo a scheda, senza dettaglio; se ci sono costi una tantum sono compresi nel prezzo a scheda e sotto la descrizione c\'è solo "Comprensivo dei costi una tantum"), Essenziale con dettaglio (componenti, PCB, SMD, THT, materiale di consumo e spedizione, ognuno con il prezzo), Macro aree o Dettaglio per fasi.',
+      'Nella versione con dettaglio gestione materiale e imballaggio non si vedono: sono già dentro SMD e THT, 70% su SMD e 30% su THT, pesati sul valore delle due aree (con SMD 10 € e THT 90 € all\'SMD va circa il 21%).',
+      'Le condizioni generali di fornitura sono sulla seconda pagina, con lo spazio per la firma del cliente per accettazione (senza condizioni la firma va in fondo alla prima pagina): si tolgono con le spunte del riquadro. Il modo di pagamento è quello del cliente in anagrafica.',
+      'Premi "Stampa / salva PDF" e nella finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
     ],
+    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Stampa / salva PDF.'],
     pagine: [['/preventivi', 'Elenco preventivi']],
   },
   {
