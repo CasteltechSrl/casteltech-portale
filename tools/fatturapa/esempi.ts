@@ -3,7 +3,7 @@
  * gli XML generati con lo schema ufficiale dell'Agenzia delle Entrate (FatturaPA 1.2.2).
  */
 import type { Aliquota, DatiAzienda } from '../../src/engine/amministrazione.js';
-import type { ClienteXml, DocumentoXml } from '../../src/engine/fatturapa.js';
+import type { AutofatturaXml, ClienteXml, DocumentoXml, FornitoreXml } from '../../src/engine/fatturapa.js';
 
 export const AZIENDA: DatiAzienda = {
   ragione_sociale: 'CASTELTECH S.R.L.', partita_iva: '01777320332', codice_fiscale: '01777320332', regime_fiscale: 'RF01',
@@ -56,4 +56,31 @@ export const ESEMPI: { nome: string; documento: DocumentoXml; cliente: ClienteXm
   { nome: 'fattura-intento-ddt', documento: FATTURA, cliente: CLIENTE_IT },
   { nome: 'nota-credito-ue', documento: NOTA_UE, cliente: CLIENTE_UE },
   { nome: 'fattura-riba-pec', documento: FATTURA_RATE, cliente: CLIENTE_PEC },
+];
+
+// autofatture: fornitori esteri inventati
+export const FORNITORE_UE: FornitoreXml = { ragione_sociale: 'COMPONENTI ESEMPIO INC.', partita_iva: 'FR 12345678901', indirizzo: '100 MAIN STREET',
+  comune: 'DALLAS', nazione: 'US' };
+export const FORNITORE_CINA: FornitoreXml = { ragione_sociale: 'SHENZHEN ESEMPIO CO. LTD', partita_iva: 'MA91440300X', indirizzo: 'NANSHAN ROAD 1',
+  comune: 'SHENZHEN', nazione: 'CN' };
+export const AUTOFATTURA_UE: AutofatturaXml = {
+  id: 2001, tipo_sdi: 'TD18', numero: 93, sezionale: 'AF', data: '2026-10-28', causale: 'Relativo a fattura n. 93174181 del 21/10/2026',
+  fattura: { numero: '93174181', data: '2026-10-21' },
+  righe: [
+    { codice: 'HFBR-14E4Z', descrizione: 'HFBR-14E4Z', quantita: 50, prezzo: 22.86167, aliquota_iva: 'IVA22' },
+    { codice: '', descrizione: 'Spese di trasporto', quantita: 1, prezzo: 20, aliquota_iva: 'IVA22' },
+  ],
+};
+export const AUTOFATTURA_SERVIZI: AutofatturaXml = {
+  id: 2002, tipo_sdi: 'TD17', numero: 94, sezionale: 'AF', data: '2026-10-28', causale: 'Relativo a fattura n. Y4JSRS7A-0002 del 30/09/2026',
+  fattura: { numero: 'Y4JSRS7A-0002', data: '2026-09-30' }, righe: [{ descrizione: 'Abbonamento software', quantita: 1, prezzo: 18 }],
+};
+export const AUTOFATTURA_CINA: AutofatturaXml = {
+  id: 2003, tipo_sdi: 'TD19', numero: 95, sezionale: 'AF', data: '2026-10-28', causale: 'Relativo a fattura n. 778 del 25/10/2026',
+  fattura: { numero: '778', data: '2026-10-25' }, righe: [{ descrizione: 'Cavi di prova', quantita: 10, prezzo: 2.4581 }],
+};
+export const ESEMPI_AUTOFATTURE: { nome: string; documento: AutofatturaXml; fornitore: FornitoreXml }[] = [
+  { nome: 'autofattura-td18', documento: AUTOFATTURA_UE, fornitore: FORNITORE_UE },
+  { nome: 'autofattura-td17', documento: AUTOFATTURA_SERVIZI, fornitore: { ...FORNITORE_UE, partita_iva: 'IE4276970QH' } },
+  { nome: 'autofattura-td19', documento: AUTOFATTURA_CINA, fornitore: FORNITORE_CINA },
 ];

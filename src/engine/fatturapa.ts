@@ -213,3 +213,91 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
     + `</FatturaElettronicaBody></p:FatturaElettronica>\n`;
   return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali, errori };
 }
+
+// ───────────────────────────── autofatture TD17 / TD18 / TD19 ─────────────────────────────
+// Integrazione dell'IVA sulla fattura di un fornitore estero: cedente = fornitore estero, cessionario = Casteltech.
+// Regole: regime fiscale del cedente RF18 (altro), CAP 00000 per la sede estera, fattura del fornitore in DatiFattureCollegate,
+// righe con l'IVA italiana (di solito 22 %), niente pagamenti né bollo. Lo SdI la recapita a Casteltech stessa (codice 0000000:
+// arriva all'indirizzo registrato all'Agenzia).
+
+export interface AutofatturaXml {
+  id: number; tipo_sdi: string; numero: number | null; sezionale?: string; data: string; causale?: string | null;
+  righe: RigaXml[]; fattura: { numero: string; data: string } | null;
+}
+export interface FornitoreXml {
+  ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null; indirizzo?: string | null; cap?: string | null;
+  comune?: string | null; provincia?: string | null; nazione: string;   // sigla ISO dell'indirizzo
+}
+const UE_XML = new Set(['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'LT', 'LU', 'LV', 'MT', 'NL',
+  'PL', 'PT', 'RO', 'SE', 'SI', 'SK']);
+
+export function generaAutofatturaXml(doc: AutofatturaXml, fornitore: FornitoreXml, aziendaInput: DatiAzienda, aliquote: Aliquota[]): EsitoXml {
+  const errori: string[] = [];
+  const { azienda, errori: erroriAzienda } = preparaAzienda(aziendaInput);
+  erroriAzienda.forEach(e => errori.push(`Dati dell'azienda: ${e}`));
+  if (!['TD17', 'TD18', 'TD19'].includes(doc.tipo_sdi)) errori.push('Tipo di autofattura non valido (TD17, TD18 o TD19).');
+  if (doc.numero == null) errori.push('Il documento non ha ancora un numero.');
+  if (!doc.fattura?.numero || !doc.fattura?.data) errori.push('Manca la fattura del fornitore (numero e data) a cui si riferisce l\'autofattura.');
+  const perCodice = new Map(aliquote.map(a => [a.codice, a]));
+  const righe = doc.righe.filter(r => !r.solo_descrizione);
+  if (!righe.length) errori.push('Il documento non ha righe con un importo.');
+  const totali = calcolaTotali(righe, aliquote, 'IVA22');
+  errori.push(...totali.errori);
+
+  // fornitore estero
+  const nazione = (fornitore.nazione || '').toUpperCase();
+  const piva = (fornitore.partita_iva ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!fornitore.ragione_sociale) errori.push('Fornitore senza ragione sociale.');
+  if (!/^[A-Z]{2}$/.test(nazione)) errori.push(`Fornitore ${fornitore.ragione_sociale}: manca il paese.`);
+  if (nazione === 'IT') errori.push(`Fornitore ${fornitore.ragione_sociale}: è italiano, l'autofattura TD17/18/19 è per i fornitori esteri.`);
+  if (!piva) errori.push(`Fornitore ${fornitore.ragione_sociale}: manca la partita IVA (o il codice fiscale estero).`);
+  if (!fornitore.indirizzo || !fornitore.comune) errori.push(`Fornitore ${fornitore.ragione_sociale}: mancano indirizzo o città.`);
+  // il prefisso vale solo se è di un paese con P.IVA europea (un codice cinese può iniziare con due lettere)
+  const prefisso = /^([A-Z]{2})/.exec(piva)?.[1].replace('EL', 'GR') ?? '';
+  const id = UE_XML.has(prefisso) || ['GB', 'CH', 'NO'].includes(prefisso) ? idFiscale(piva, nazione) : { paese: nazione, codice: piva };
+  if (doc.tipo_sdi === 'TD18' && !UE_XML.has(id.paese)) errori.push('TD18 è solo per fornitori con P.IVA dell\'Unione europea.');
+
+  const numero = doc.numero == null ? '' : numeroCompleto(doc.numero, doc.sezionale);
+  const linee = righe.map((r, i) => {
+    const a = perCodice.get(r.aliquota_iva || 'IVA22');
+    const quantita = Number(r.quantita) || 0, prezzo = Number(r.prezzo) || 0, sconto = Number(r.sconto) || 0;
+    return `<DettaglioLinee><NumeroLinea>${i + 1}</NumeroLinea>`
+      + (r.codice ? `<CodiceArticolo><CodiceTipo>FORNITORE</CodiceTipo><CodiceValore>${testoXml(r.codice, 35)}</CodiceValore></CodiceArticolo>` : '')
+      + `<Descrizione>${testoXml(r.descrizione || r.codice || '-', 1000)}</Descrizione><Quantita>${decimaleXml(quantita)}</Quantita>`
+      + `${el('UnitaMisura', testoXml(r.um, 10))}<PrezzoUnitario>${decimaleXml(prezzo)}</PrezzoUnitario>`
+      + (sconto ? `<ScontoMaggiorazione><Tipo>SC</Tipo><Percentuale>${importoXml(sconto)}</Percentuale></ScontoMaggiorazione>` : '')
+      + `<PrezzoTotale>${importoXml(quantita * prezzo * (1 - sconto / 100))}</PrezzoTotale>`
+      + `<AliquotaIVA>${importoXml(a?.percentuale ?? 0)}</AliquotaIVA>${a?.natura ? el('Natura', a.natura) : ''}</DettaglioLinee>`;
+  }).join('');
+  const riepilogo = totali.riepilogo.map(g =>
+    `<DatiRiepilogo><AliquotaIVA>${importoXml(g.percentuale)}</AliquotaIVA>${el('Natura', g.natura)}`
+    + `<ImponibileImporto>${importoXml(g.imponibile)}</ImponibileImporto><Imposta>${importoXml(g.imposta)}</Imposta>`
+    + (g.natura ? el('RiferimentoNormativo', testoXml(g.riferimento_normativo, 100)) : '<EsigibilitaIVA>I</EsigibilitaIVA>') + `</DatiRiepilogo>`).join('');
+  const causali = (pulisci(doc.causale).slice(0, 2000).match(/[\s\S]{1,200}/g) ?? []).map(c => `<Causale>${proteggi(c)}</Causale>`).join('');
+  // per l'autofattura non c'è bollo: si usa il totale senza
+  const totale = arrotonda2(totali.imponibile + totali.imposta);
+
+  const progressivo = progressivoInvio(doc.id);
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n`
+    + `<p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" `
+    + `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2 `
+    + `http://www.fatturapa.gov.it/export/fatturazione/sdi/fatturapa/v1.2/Schema_del_file_xml_FatturaPA_versione_1.2.xsd">`
+    + `<FatturaElettronicaHeader>`
+    + `<DatiTrasmissione><IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>${azienda.codice_fiscale || azienda.partita_iva}</IdCodice></IdTrasmittente>`
+    + `<ProgressivoInvio>${progressivo}</ProgressivoInvio><FormatoTrasmissione>FPR12</FormatoTrasmissione>`
+    + `<CodiceDestinatario>0000000</CodiceDestinatario></DatiTrasmissione>`
+    + `<CedentePrestatore><DatiAnagrafici><IdFiscaleIVA><IdPaese>${id.paese}</IdPaese><IdCodice>${testoXml(id.codice, 28)}</IdCodice></IdFiscaleIVA>`
+    + `<Anagrafica><Denominazione>${testoXml(fornitore.ragione_sociale, 80)}</Denominazione></Anagrafica><RegimeFiscale>RF18</RegimeFiscale></DatiAnagrafici>`
+    + `<Sede>${el('Indirizzo', testoXml(fornitore.indirizzo, 60))}<CAP>00000</CAP>${el('Comune', testoXml(fornitore.comune, 60))}${el('Nazione', nazione)}</Sede>`
+    + `</CedentePrestatore>`
+    + `<CessionarioCommittente><DatiAnagrafici><IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>${azienda.partita_iva}</IdCodice></IdFiscaleIVA>`
+    + `${el('CodiceFiscale', azienda.codice_fiscale)}<Anagrafica><Denominazione>${testoXml(azienda.ragione_sociale, 80)}</Denominazione></Anagrafica></DatiAnagrafici>`
+    + `<Sede>${el('Indirizzo', testoXml(azienda.indirizzo, 60))}${el('CAP', azienda.cap)}${el('Comune', testoXml(azienda.comune, 60))}`
+    + `${el('Provincia', azienda.provincia)}<Nazione>IT</Nazione></Sede></CessionarioCommittente>`
+    + `</FatturaElettronicaHeader>`
+    + `<FatturaElettronicaBody><DatiGenerali><DatiGeneraliDocumento><TipoDocumento>${doc.tipo_sdi}</TipoDocumento><Divisa>EUR</Divisa>`
+    + `<Data>${doc.data}</Data><Numero>${testoXml(numero, 20)}</Numero><ImportoTotaleDocumento>${importoXml(totale)}</ImportoTotaleDocumento>${causali}</DatiGeneraliDocumento>`
+    + (doc.fattura ? `<DatiFattureCollegate><IdDocumento>${testoXml(doc.fattura.numero, 20)}</IdDocumento><Data>${doc.fattura.data}</Data></DatiFattureCollegate>` : '')
+    + `</DatiGenerali><DatiBeniServizi>${linee}${riepilogo}</DatiBeniServizi></FatturaElettronicaBody></p:FatturaElettronica>\n`;
+  return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali: { ...totali, bollo: 0, totale }, errori };
+}

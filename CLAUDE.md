@@ -210,7 +210,15 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    ✅ Cruscotto (`/amministrazione`, `rotte/cruscotto-amministrazione.ts`, conti in `engine/cruscotto-amministrazione.ts`; Adriano 27/10/2026): fatturato e acquisti
    dell'anno con lo stesso periodo dell'anno prima, grafico per mese, incassi e pagamenti aperti per urgenza (scadute, 7 gg, 30 gg, oltre), DDT da fatturare, bozze.
    Fatture fornitori (`/amministrazione/ricevuti`): elenco, "solo da pagare", dettaglio; ogni rata (anche delle fatture emesse) si segna incassata/pagata con data e conto.
+   ✅ Autofatture TD17/18/19 (Adriano 28/10/2026; `engine/autofatture.ts`, `autofatture-servizio.ts`, `rotte/autofatture.ts`, migrazione 039):
+   la fattura del fornitore estero (PDF) si carica in Documenti emessi → Autofatture o si mette nella cartella Drive degli ordini (l'IA la riconosce,
+   acquisizione tipo 'fattura_estera'); l'IA legge fornitore, numero, data, valuta, tutte le righe. Pagina di controllo `/amministrazione/fatture-estere/:id`:
+   fornitore cercato in anagrafica per P.IVA o nome (se nuovo si aggiunge con le regole dell'anagrafica fornitori), tipo proposto dal paese della P.IVA
+   (servizi TD17, beni UE TD18, beni extra UE TD19 con avviso dogana), cambio BCE alla data della fattura per le valute estere, blocco se esiste già
+   un'autofattura che cita lo stesso numero (anche dallo storico FIC). Conferma → fattura tra le fatture fornitori (origine 'acquisito') + bozza
+   dell'autofattura (sezionale AF, righe in euro con IVA 22 %) → Emetti: XML `generaAutofatturaXml` (cedente estero RF18, CAP 00000, DatiFattureCollegate).
+   ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
-   ⬜ PDF della fattura, Invoicetronic, autofatture TD17/18/19, DDT, conferme d'ordine,
+   ⬜ PDF della fattura, Invoicetronic, DDT, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

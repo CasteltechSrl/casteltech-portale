@@ -6,8 +6,8 @@
 import type pg from 'pg';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-servizio.js';
-import { calcolaScadenza, calcolaTotali, numeroCompleto, type Aliquota } from '../engine/amministrazione.js';
-import { generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
+import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
+import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
 
 export const TIPI_EMISSIBILI = ['fattura', 'nota_credito'] as const;
@@ -128,11 +128,38 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   return { d, cliente, documento, clienteXml, azienda, aliquote, intento, totali };
 }
 
+/** XML del documento (fattura / nota di credito al cliente, autofattura sul fornitore estero) con quello che si salva all'emissione. */
+async function preparaXml(c: pg.PoolClient | null, id: number, numero: number) {
+  const query = (sql: string, p: unknown[]) => (c ? c.query(sql, p).then(r => r.rows) : q(sql, p));
+  const [t] = await query(`SELECT tipo FROM documenti WHERE id = $1`, [id]);
+  if (t?.tipo === 'autofattura') {
+    const [d] = await query(`SELECT * FROM documenti WHERE id = $1`, [id]);
+    const [f] = await query(`SELECT * FROM fornitori_anagrafica WHERE id = $1`, [d.fornitore_id]);
+    const [ricevuto] = d.ricevuto_id ? await query(`SELECT numero, data FROM documenti_ricevuti WHERE id = $1`, [d.ricevuto_id]) : [];
+    const righe = await query(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
+    const [aliquote, azienda] = [await caricaAliquote(), await caricaAzienda()];
+    const fornitore = f ? { ...f, nazione: siglaNazione(f.paese) ?? '' } : { ragione_sociale: '', nazione: '' };
+    const esito = generaAutofatturaXml({ id, tipo_sdi: d.tipo_sdi, numero, sezionale: d.sezionale, data: d.data, causale: d.causale,
+      righe: righe.map((r: any) => ({ codice: r.codice, descrizione: r.descrizione, quantita: r.quantita, um: r.um, prezzo: r.prezzo, sconto: r.sconto,
+        aliquota_iva: r.aliquota_iva, solo_descrizione: r.solo_descrizione })),
+      fattura: ricevuto ? { numero: ricevuto.numero, data: ricevuto.data } : null }, fornitore, azienda, aliquote);
+    if (!f) esito.errori.push('Manca il fornitore.');
+    const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione']
+      .map(k => [k, (fornitore as any)[k] ?? null]).filter(([, v]) => v));
+    return { esito, erroriExtra: [] as string[], intestatario, scadenze: [] as DocumentoXml['scadenze'], intentoId: null };
+  }
+  const x = await datiXml(c, id, numero);
+  const esito = generaFatturaXml(x.documento, x.clienteXml, x.azienda, x.aliquote);
+  const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione', 'codice_sdi', 'pec']
+    .map(k => [k, x.cliente?.[k] ?? null]).filter(([, v]) => v));
+  return { esito, erroriExtra: x.totali.errori.filter(e => /condizione di pagamento/.test(e)), intestatario, scadenze: x.documento.scadenze,
+    intentoId: esito.totali.riepilogo.some(g => g.natura === 'N3.5') ? x.intento?.id ?? null : null };
+}
+
 /** Anteprima: totali ed errori dell'XML (senza numero, che si prende all'emissione). */
 export async function anteprimaDocumento(id: number): Promise<{ esito: EsitoXml; erroriExtra: string[] }> {
-  const x = await datiXml(null, id, 0);
-  const esito = generaFatturaXml(x.documento, x.clienteXml, x.azienda, x.aliquote);
-  return { esito: { ...esito, errori: esito.errori.filter(e => !/numero/.test(e)) }, erroriExtra: x.totali.errori.filter(e => /condizione di pagamento/.test(e)) };
+  const { esito, erroriExtra } = await preparaXml(null, id, 0);
+  return { esito: { ...esito, errori: esito.errori.filter(e => !/numero/.test(e)) }, erroriExtra };
 }
 
 /**
@@ -146,17 +173,16 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
       if (!d) throw new ErroreEmissione(['Documento non trovato.']);
       if (d.stato !== 'bozza') throw new ErroreEmissione(['Il documento è già emesso.']);
       const numero = await assegnaNumero(c, d.tipo, d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
-      const x = await datiXml(c, id, numero);
-      const esito = generaFatturaXml(x.documento, x.clienteXml, x.azienda, x.aliquote);
-      const errori = [...esito.errori, ...x.totali.errori.filter(e => /condizione di pagamento/.test(e))];
+      const x = await preparaXml(c, id, numero);
+      const esito = x.esito;
+      const errori = [...esito.errori, ...x.erroriExtra];
       if (errori.length) throw new ErroreEmissione(errori);
-      const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione', 'codice_sdi', 'pec']
-        .map(k => [k, x.cliente[k] ?? null]).filter(([, v]) => v));
+      const intestatario = x.intestatario;
       await c.query(`UPDATE documenti SET numero = $2, stato = 'emesso', intestatario = $3, imponibile = $4, imposta = $5, bollo = $6, totale = $7,
         xml = $8, dichiarazione_intento_id = $9, aggiornato_il = now() WHERE id = $1`,
         [id, numero, JSON.stringify(intestatario), esito.totali.imponibile, esito.totali.imposta, esito.totali.bollo, esito.totali.totale, esito.xml,
-         esito.totali.riepilogo.some(g => g.natura === 'N3.5') ? x.intento?.id ?? null : null]);
-      for (const s of x.documento.scadenze)
+         x.intentoId]);
+      for (const s of x.scadenze)
         await c.query(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4)`, [id, s.data, s.importo, s.modalita]);
       await c.query(`UPDATE documenti SET fattura_id = $1 WHERE id IN (SELECT ddt_id FROM documenti_righe WHERE documento_id = $1 AND ddt_id IS NOT NULL)
         AND tipo = 'ddt' AND $2 = 'fattura'`, [id, d.tipo]);

@@ -118,7 +118,7 @@ export function rotteAcquisizioni() {
   // ── Elenco dei file arrivati e caricamento ──
   r.get('/', async (req, res) => {
     const elenco = await q(`SELECT a.id, a.origine, a.nome_file, a.tipo, a.stato, a.errore, a.creato_il, a.ordine_id,
-        coalesce(a.proposta->>'cliente', (SELECT 'COMMESSA ' || string_agg(x->>'numero', ', ') FROM jsonb_array_elements(a.proposta->'commesse') x)) AS cliente,
+        coalesce(a.proposta->>'cliente', a.proposta->'fornitore'->>'ragione_sociale', (SELECT 'COMMESSA ' || string_agg(x->>'numero', ', ') FROM jsonb_array_elements(a.proposta->'commesse') x)) AS cliente,
         coalesce(jsonb_array_length(a.proposta->'righe'), (SELECT sum(jsonb_array_length(x->'righe'))::int FROM jsonb_array_elements(a.proposta->'commesse') x), 0) AS righe,
         (a.proposta->>'eOrdine')::boolean AS e_ordine, o.numero, o.anno
       FROM acquisizioni a LEFT JOIN ordini o ON o.id = a.ordine_id
@@ -136,7 +136,8 @@ export function rotteAcquisizioni() {
       <section class="blocco">
         <h2>Carica ordini</h2>
         <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt),
-          oppure la scansione delle schede di produzione compilate (i fogli tempi vanno nel rientro della commessa).
+          oppure la scansione delle schede di produzione compilate (i fogli tempi vanno nel rientro della commessa)
+          o le fatture dei fornitori esteri (si controllano in Amministrazione → Autofatture).
           L'IA legge cliente, riferimento, righe, prezzi e consegne e prepara una proposta: l'ordine nasce solo quando lo confermi.
           ${iaConfigurata() ? '' : html`<b>La chiave dell'IA (ANTHROPIC_API_KEY) non è configurata: i file si registrano ma non si leggono.</b>`}
           Gli export di Fatture in Cloud si registrano qui; la lettura automatica dell'incrocio arriverà con il prossimo passo.</p>
@@ -146,7 +147,7 @@ export function rotteAcquisizioni() {
       </section>
       ${daFare ? html`<p><b>${daFare} ${daFare === 1 ? 'ordine da confermare' : 'ordini da confermare'}.</b></p>` : ''}
       ${elenco.length ? html`<div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Arrivato</th><th>File</th><th>Tipo</th><th>Da</th><th>Cliente letto</th><th class="n">Righe</th><th>Stato</th></tr></thead>
+        <thead><tr><th>Arrivato</th><th>File</th><th>Tipo</th><th>Da</th><th>Cliente / fornitore letto</th><th class="n">Righe</th><th>Stato</th></tr></thead>
         <tbody>${elenco.map(a => html`<tr class="cliccabile" data-href="/ordini/acquisire/${a.id}">
           <td class="nowrap">${oraRoma(a.creato_il)}</td><td class="taglia"><a href="/ordini/acquisire/${a.id}">${a.nome_file}</a></td>
           <td>${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</td><td>${a.origine === 'drive' ? 'Drive' : 'caricato'}</td>
@@ -186,6 +187,7 @@ export function rotteAcquisizioni() {
     if (!a) return res.status(404).send('Non trovato');
     if (a.tipo === 'scheda_produzione') return res.send(paginaScheda(req, a));
     if (a.tipo === 'ddt') return res.send(await paginaDdt(req, a));
+    if (a.tipo === 'fattura_estera') return res.redirect(`/amministrazione/fatture-estere/${a.id}`);
     const p: PropostaDb | null = a.proposta;
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!p;
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -245,7 +247,7 @@ export function rotteAcquisizioni() {
     const a = await q1(`SELECT nome_file, tipo, mime, contenuto FROM acquisizioni WHERE id = $1`, [Number(req.params.id)]);
     if (!a?.contenuto) return res.status(404).send('File non disponibile');
     // PDF e immagini si aprono nel browser; email e altri file si scaricano (mai mostrati come pagina)
-    const inLinea = /^(application\/pdf|image\/(png|jpeg|webp))$/.test(a.mime ?? '') && a.tipo === 'ordine';
+    const inLinea = /^(application\/pdf|image\/(png|jpeg|webp))$/.test(a.mime ?? '') && ['ordine', 'fattura_estera'].includes(a.tipo);
     res.setHeader('Content-Type', inLinea ? a.mime : a.mime === 'text/plain' ? 'text/plain; charset=utf-8' : 'application/octet-stream');
     res.setHeader('Content-Disposition', `${inLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.nome_file)}`);
     res.send(a.contenuto);

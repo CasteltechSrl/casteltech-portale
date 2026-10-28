@@ -4,10 +4,11 @@
  */
 import { Buffer } from 'node:buffer';
 
-export type TipoAcquisizione = 'ordine' | 'email' | 'export_ordini' | 'export_ddt' | 'export_fatture' | 'scheda_produzione' | 'ddt' | 'altro';
+export type TipoAcquisizione = 'ordine' | 'email' | 'export_ordini' | 'export_ddt' | 'export_fatture' | 'scheda_produzione' | 'ddt' | 'fattura_estera' | 'altro';
 export const TIPI_ACQUISIZIONE: Record<TipoAcquisizione, string> = {
   ordine: 'ordine del cliente', email: 'email', export_ordini: 'export ordini FIC', export_ddt: 'export DDT FIC',
-  export_fatture: 'export fatture FIC', scheda_produzione: 'scheda di produzione', ddt: 'DDT di Casteltech', altro: 'altro',
+  export_fatture: 'export fatture FIC', scheda_produzione: 'scheda di produzione', ddt: 'DDT di Casteltech',
+  fattura_estera: 'fattura fornitore estero', altro: 'altro',
 };
 
 /** Tipo del file dal nome (gli export di Fatture in Cloud si chiamano export_ordini…, export_ddt…, export_fatture…). */
