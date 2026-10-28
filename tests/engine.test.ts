@@ -109,9 +109,9 @@ test('preventivo vuoto: senza componenti SMD nessuna fase SMD, programmazione o 
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const r = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100 } });
   const conTempo = r.fasi.filter(f => f.secondiCiclo > 0).map(f => f.codice);
-  // pre-produzione e gestione materiale senza tempi standard (li scrive l'operatore): restano l'imballaggio
-  // e, con materiale del cliente da restituire (provenienza standard), i 10' di reso al cliente
-  assert.deepEqual(conTempo, ['imballaggio', 'resoMaterialeCliente']);
+  // pre-produzione: 5 minuti standard (Adriano 28/10/2026; acquisti solo con la spunta, 3D a 0); gestione materiale senza
+  // tempi standard: restano l'imballaggio e, con materiale del cliente da restituire (provenienza standard), i 10' di reso
+  assert.deepEqual(conTempo, ['foglioTempi', 'analisiBom', 'preventivo', 'prepDocumentazione', 'checkPreProduzione', 'imballaggio', 'resoMaterialeCliente']);
   // solo TOP: niente fasi BOT
   const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 100, qtSmd: 50, qtFeeder: 10 } });
   assert.ok(top.fasi.filter(f => /Bot$/.test(f.codice)).every(f => f.secondiCiclo === 0));
@@ -122,7 +122,7 @@ test('Solo TOP / TOP + BOT: raddoppio dei tempi "per lato" e fasi BOT solo con T
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
   const pre = { oreFoglioTempi: 1 / 6, oreAnalisiBom: 1, orePreventivo: 0.5, orePrepDoc: 0.5, oreProgArmadi: 0.5, oreFilePeP: 0.5, oreProgPeP: 1, oreEtichettaturaMateriale: 1 };
-  const base = { ...def, ...pre, nPCB: 50, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5, primaProduzione: 1, provenienzaMateriale: 2 };
+  const base = { ...def, ...pre, nPCB: 50, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5, primaProduzione: 1, provenienzaMateriale: 2, aoiBot: 1 };
   const top = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 0 } });
   const bot = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...base, doppiaFaccia: 1 } });
   const sec = (r: typeof top, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
@@ -133,15 +133,19 @@ test('Solo TOP / TOP + BOT: raddoppio dei tempi "per lato" e fasi BOT solo con T
   assert.ok(sec(bot, 'avvioBot') > 0);
   assert.equal(sec(top, 'foglioTempi'), 600);
   assert.equal(sec(top, 'progPeP'), 3600);
-  // pre-produzione vuota = nessun costo
-  const vuota = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50 } });
-  assert.ok(vuota.fasi.filter(f => f.gruppo === 'PRE-PRODUZIONE').every(f => f.costo === 0));
+  // pre-produzione standard: 5 minuti a voce, disegno e stampa 3D a 0, acquisti solo con la spunta
+  const std = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50 } });
+  for (const c of ['foglioTempi', 'analisiBom', 'preventivo', 'prepDocumentazione', 'checkPreProduzione']) assert.equal(sec(std, c), 300, c);
+  for (const c of ['attrezzature3D', 'acquistoPcb', 'acquistoComponenti', 'acquistoLamine']) assert.equal(sec(std, c), 0, c);
+  const conAcquisti = calcolaPreventivo(FASI, VOCI, t, { nSchede: 100, parametri: { ...def, nPCB: 50, acquistoPcb: 1, acquistoComponenti: 1 } });
+  assert.equal(sec(conAcquisti, 'acquistoPcb'), 300); assert.equal(sec(conAcquisti, 'acquistoComponenti'), 300);
 });
 
 test('gestione materiale: numero item × tempo per item, a ogni lotto; da restituire niente magazzino e 10\' di reso', () => {
   const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
   const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
-  const calc = (provenienzaMateriale: number) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...def, nPCB: 10, nItemMateriale: 40, provenienzaMateriale } });
+  const senzaPre = Object.fromEntries(PARAMETRI.filter(p => p.gruppo === 'PRE-PRODUZIONE').map(p => [p.codice, 0]));
+  const calc = (provenienzaMateriale: number) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...def, ...senzaPre, nPCB: 10, nItemMateriale: 40, provenienzaMateriale } });
   const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
   const restituire = calc(1), magazzino = calc(2), vecchio3 = calc(3);
   // da restituire: niente etichettatura, stoccaggio ed estrazione, 10' di reso al cliente
@@ -321,4 +325,23 @@ test('splicing: tape extender 0,30 € per feeder TOP e BOT; imballaggio: 1 min 
 test('niente programmazione profilo forno', () => {
   assert.ok(!FASI.some(f => f.codice === 'progForno'));
   assert.ok(!PARAMETRI.some(p => p.codice === 'oreProgForno'));
+});
+
+test('AOI TOP / BOT / visivo (Adriano 28/10/2026): visivo 60 s a scheda, senza AOI niente ispezione né programmazione', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const base = { ...def, nPCB: 10, qtSmd: 100, qtFeeder: 20, qtSmdLatoB: 10, qtFeederLatoB: 5, primaProduzione: 1, doppiaFaccia: 1 };
+  const calc = (x: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 10, parametri: { ...base, ...x } });
+  const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)!.secondiCiclo;
+  const soloTop = calc({}), dueLati = calc({ aoiBot: 1 }), visivo = calc({ aoiTop: 0, aoiBot: 0, controlloVisivo: 1 });
+  assert.equal(sec(soloTop, 'ispezioneAOI'), 60 * 10);                 // AOI BOT non spuntato: solo il TOP
+  assert.equal(sec(soloTop, 'progAOI'), 2 * 3600);
+  assert.equal(sec(dueLati, 'ispezioneAOI'), (60 + 30) * 10);
+  assert.equal(sec(dueLati, 'progAOI'), 2 * 2 * 3600);
+  assert.equal(sec(visivo, 'ispezioneAOI'), 0);
+  assert.equal(sec(visivo, 'progAOI'), 0);
+  assert.equal(sec(visivo, 'controlloVisivo'), 60 * 10);
+  assert.equal(sec(soloTop, 'controlloVisivo'), 0);
+  // AOI BOT senza il lato BOT non conta
+  assert.equal(sec(calc({ doppiaFaccia: 0, aoiBot: 1 }), 'ispezioneAOI'), 60 * 10);
 });

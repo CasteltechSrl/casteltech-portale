@@ -38,6 +38,9 @@ export interface MaterialeDef { codice: string; descrizione: string; costo: numb
 const P = (codice: string, etichetta: string, unita: string, gruppo: string, def?: number, suggerimento?: string, tipo?: 'si_no' | 'durata'): ParametroDef =>
   ({ codice, etichetta, unita, gruppo, default: def, suggerimento, tipo });
 
+/** Pre-produzione: 5 minuti standard a voce (Adriano 28/10/2026), tranne disegno e stampa 3D. */
+const CINQUE_MINUTI = 5 / 60;
+
 export const PARAMETRI: ParametroDef[] = [
   P('nPCB', 'Quantità pannelli (PCB)', 'pz', 'GENERALE', undefined, 'Calcolato: schede ÷ schede per pannello'),
   // Informazioni generali (Adriano, 24/10/2026): spunte che decidono quali sezioni, fasi e costi contano
@@ -49,6 +52,10 @@ export const PARAMETRI: ParametroDef[] = [
   P('doppiaFaccia', 'BOT', '', 'INFORMAZIONI GENERALI', 0, 'SMD anche sul lato BOT: raddoppiano programmazioni a lato e lamine, si attivano le fasi BOT', 'si_no'),
   P('usaOnda', 'THT saldatura ad onda', '', 'INFORMAZIONI GENERALI', 0, 'THT con saldatrice ad onda: tempi, energia, carrelli e programmazione', 'si_no'),
   P('presenteTht', 'THT saldatura a mano', '', 'INFORMAZIONI GENERALI', 0, 'THT senza saldatrice: nessun costo legato alla saldatrice ad onda', 'si_no'),
+  // AOI (Adriano 28/10/2026): TOP, BOT (solo con quel lato) oppure controllo visivo senza AOI (rari: campionature, pochi componenti)
+  P('aoiTop', 'AOI TOP', '', 'INFORMAZIONI GENERALI', 1, 'Ispezione AOI del lato TOP (con la sua programmazione alla 1ª produzione)', 'si_no'),
+  P('aoiBot', 'AOI BOT', '', 'INFORMAZIONI GENERALI', 0, 'Ispezione AOI del lato BOT (solo con SMD anche sul BOT)', 'si_no'),
+  P('controlloVisivo', 'Controllo visivo', '', 'INFORMAZIONI GENERALI', 0, 'Senza AOI (campionature di pochi pezzi, schede con pochissimi componenti): controllo visivo a scheda', 'si_no'),
   P('acquistoComponenti', 'Componenti', '', 'INFORMAZIONI GENERALI', 0, 'Acquisto componenti: tempo di acquisto e costo componenti', 'si_no'),
   P('acquistoPcb', 'PCB', '', 'INFORMAZIONI GENERALI', 0, 'Acquisto PCB: tempo di acquisto e costo PCB', 'si_no'),
   P('acquistoLamina', 'Lamina std', '', 'INFORMAZIONI GENERALI', 0, 'Lamina standard: 110 € di vendita fissi (senza ricarico), due con TOP+BOT', 'si_no'),
@@ -58,15 +65,15 @@ export const PARAMETRI: ParametroDef[] = [
   P('usaSplicing', 'Splicing', '', 'INFORMAZIONI GENERALI', 0, 'Splicing: un tape extender per ogni feeder SMD (TOP e BOT)', 'si_no'),
   P('lavaggioSchede', 'Lavaggio schede', '', 'INFORMAZIONI GENERALI', 0, 'Lavaggio: 45 s a scheda + liquido 0,10 € a scheda + 5 € a lotto di energia e avvio', 'si_no'),
   // Pre-produzione (ore)
-  P('oreFoglioTempi', 'Preparazione foglio tempi', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreAnalisiBom', 'Analisi BOM e ricerca prezzi', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('orePreventivo', 'Preparazione preventivo', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreAcquistoPcb', 'Acquisto PCB', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreAcquistoComponenti', 'Acquisto componenti', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreAcquistoLamine', 'Acquisto lamine', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('orePrepDoc', 'Preparazione documentazione (per lato)', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
+  P('oreFoglioTempi', 'Preparazione foglio tempi', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('oreAnalisiBom', 'Analisi BOM e ricerca prezzi', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('orePreventivo', 'Preparazione preventivo', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('oreAcquistoPcb', 'Acquisto PCB', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('oreAcquistoComponenti', 'Acquisto componenti', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('oreAcquistoLamine', 'Acquisto lamine', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
+  P('orePrepDoc', 'Preparazione documentazione (per lato)', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
   P('oreAttrezzature3D', 'Disegno e stampa 3D attrezzature', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
-  P('oreCheckPreProduzione', 'Check pre-produzione', 'h', 'PRE-PRODUZIONE', undefined, undefined, 'durata'),
+  P('oreCheckPreProduzione', 'Check pre-produzione', 'h', 'PRE-PRODUZIONE', CINQUE_MINUTI, undefined, 'durata'),
   // Programmazioni: contano solo con "Prima produzione" (armadi solo se il materiale va a nostro magazzino)
   P('oreProgArmadi', 'Programmazione armadi (per lato)', 'h', 'PROGRAMMAZIONI', 0.25, undefined, 'durata'),
   P('oreFilePeP', 'Preparazione file P&P (per lato)', 'h', 'PROGRAMMAZIONI', 0.5, undefined, 'durata'),
@@ -110,6 +117,7 @@ export const PARAMETRI: ParametroDef[] = [
   // AOI / riparazione
   P('tempoRevisioneAoi', 'Ispezione AOI TOP per scheda', 's', 'AOI', 60),
   P('tempoRevisioneAoiLatoB', 'Ispezione AOI BOT per scheda', 's', 'AOI', 30),
+  P('tempoControlloVisivo', 'Controllo visivo per scheda', 's', 'AOI', 60, 'Solo senza AOI (spunta Visivo)'),
   P('tempoRiparazioneSmd', 'Riparazione SMD per scheda', 's', 'AOI', 0),
   // THT
   P('qtTht', 'Componenti THT per scheda', 'pz', 'THT'),
@@ -259,8 +267,9 @@ export const FASI: FaseCatalogo[] = [
   F('6B.2', 'pepBot', 'Pick&Place BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, qtSmdLatoB / (pepChipHLatoB / 3600) * nSchede, 0)', { persone: 2, scala: 'scheda', legacy: ['montaggioSmdLatoB'] }),
   F('7B', 'fornoBot', 'Forno BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoTransitoForno + max(nPCB - 1, 0) * cadenzaForno, 0)', { persone: 2, scala: 'pannello' }),
   F('8B', 'smontaggioBot', 'Smontaggio macchina BOT', 'SMD', 'se(doppiaFaccia * qtSmdLatoB > 0, tempoSmontaggioLatoB * 60 * qtFeederLatoB, 0)', { scala: 'fisso', legacy: ['smontaggioPePLatoB'] }),
-  F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'se(primaProduzione * (qtSmd + doppiaFaccia * qtSmdLatoB) > 0, oreProgAOI * 3600 * se(doppiaFaccia, 2, 1), 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
-  F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(se(qtSmd > 0, tempoRevisioneAoi, 0) + se(doppiaFaccia * qtSmdLatoB > 0, tempoRevisioneAoiLatoB, 0)) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
+  F('9', 'progAOI', 'Programmazione AOI TOP e BOT', 'SMD', 'se(primaProduzione * (aoiTop * qtSmd + aoiBot * doppiaFaccia * qtSmdLatoB) > 0, oreProgAOI * 3600 * (se(aoiTop * qtSmd > 0, 1, 0) + se(aoiBot * doppiaFaccia * qtSmdLatoB > 0, 1, 0)), 0)', { unaTantum: true, scala: 'fisso', legacy: ['utProgAOI'] }),
+  F('10', 'ispezioneAOI', 'Ispezione ottica / test AOI', 'SMD', '(se(aoiTop * qtSmd > 0, tempoRevisioneAoi, 0) + se(aoiBot * doppiaFaccia * qtSmdLatoB > 0, tempoRevisioneAoiLatoB, 0)) * nSchede', { scala: 'scheda', legacy: ['revisioneAoi', 'revisioneAoiLatoB'] }),
+  F('10V', 'controlloVisivo', 'Controllo visivo (senza AOI)', 'SMD', 'se(controlloVisivo, tempoControlloVisivo * nSchede, 0)', { scala: 'scheda' }),
   F('11', 'riparazioneSmd', 'Riparazione SMD', 'SMD', 'tempoRiparazioneSmd * nSchede', { scala: 'scheda' }),
 
   F('14', 'preparazioneManuale', 'Preparazione manuale componenti', 'THT', 'tempoDiPrepTht * qtPthdaPreparare * nSchede', { scala: 'scheda', legacy: ['preparazioneComponenti'] }),

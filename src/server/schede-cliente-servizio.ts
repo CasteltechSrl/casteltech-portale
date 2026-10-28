@@ -7,7 +7,7 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import { q, q1 } from './db.js';
-import { costoBomPerPreventivo, leggiFileBom } from './codifica-servizio.js';
+import { avviaElaborazione, costoBomPerPreventivo, creaAnalisi, leggiFileBom } from './codifica-servizio.js';
 import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
 import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
 import { parametriDaAnalisi } from '../engine/scheda/preventivo.js';
@@ -260,4 +260,33 @@ async function segnaDaValidare(preventivoId: number, pacchettoId: number) {
   await q(`UPDATE preventivi SET stato = 'da_validare' WHERE id = $1`, [preventivoId]);
   await q(`UPDATE pacchetti_scheda SET preventivo_id = $2 WHERE id = $1`, [pacchettoId, preventivoId]);
   return preventivoId;
+}
+
+/**
+ * BOM del pacchetto nella sezione Componenti (codifica, prezzi e reperibilità dai distributori): si crea una volta sola,
+ * poi si riusa. Ritorna l'id della BOM, o null se il pacchetto non ha una BOM.
+ */
+export async function bomDelPacchetto(id: number, schede: number, utenteId: number): Promise<number | null> {
+  const p = await q1<{ nome: string; bom_id: number | null }>(`SELECT nome, bom_id FROM pacchetti_scheda WHERE id = $1`, [id]);
+  if (!p) return null;
+  if (p.bom_id && await q1(`SELECT 1 FROM bom_analisi WHERE id = $1`, [p.bom_id])) return p.bom_id;
+  const f = await fileBom(id);
+  if (!f) return null;
+  const nomeFile = f.nome.split('/').pop()!;
+  const righe = await leggiFileBom(nomeFile, f.dati);
+  const bomId = await creaAnalisi({ nome: p.nome, fileNome: nomeFile, righe, quantita: [schede], utenteId });
+  await q(`UPDATE pacchetti_scheda SET bom_id = $2 WHERE id = $1`, [id, bomId]);
+  avviaElaborazione(bomId);
+  return bomId;
+}
+
+/** Spunta "Componenti" nel preventivo nato dai documenti: BOM quotata e collegata al preventivo (Adriano 28/10/2026). */
+export async function quotaBomPacchetto(preventivoId: number, schede: number, utenteId: number) {
+  const p = await q1<{ id: number }>(`SELECT id FROM pacchetti_scheda WHERE preventivo_id = $1`, [preventivoId]);
+  if (!p) throw new Error('Il preventivo non viene dai documenti del cliente.');
+  const bomId = await bomDelPacchetto(p.id, schede, utenteId);
+  if (!bomId) throw new Error('Nei documenti del cliente non c\'è una BOM da quotare.');
+  await q(`UPDATE preventivi SET bom_id = $2 WHERE id = $1`, [preventivoId, bomId]);
+  const b = await q1<{ nome: string; stato: string; creato_il: string }>(`SELECT nome, stato, creato_il FROM bom_analisi WHERE id = $1`, [bomId]);
+  return { bomId, nome: b!.nome, stato: b!.stato, creatoIl: b!.creato_il };
 }

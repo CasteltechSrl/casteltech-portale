@@ -15,6 +15,7 @@ import { riepilogo } from '../../engine/riepilogo.js';
 import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
+import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -114,12 +115,23 @@ export function rottePreventivi() {
     res.json(x);
   });
 
+  // spunta "Componenti" su un preventivo nato dai documenti del cliente (Adriano 28/10/2026): la BOM del pacchetto va
+  // in Componenti e si quota da sola (codici, prezzi dei distributori); il preventivo resta collegato a quella BOM.
+  // Non tocca stato e valori del preventivo: il collegamento si salva con il preventivo.
+  r.post('/:id/quota-bom', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const schede = Math.max(1, Math.round(Number(req.body?.schede) || 0)) || 100;
+    try { res.json(await quotaBomPacchetto(Number(req.params.id), schede, req.session.utente!.id)); }
+    catch (e: any) { res.status(400).json({ errore: e.message }); }
+  });
+
   // ── Apri esistente (calcolato col catalogo salvato nel preventivo) ──
   r.get('/:id', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     const p = await leggiPreventivo(Number(req.params.id));
     if (!p) return res.status(404).send('Preventivo non trovato');
-    if (p.stato === 'da_validare') p.pacchetto = await q1(`SELECT id, nome FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
+    // documenti del cliente da cui è nato il preventivo: banner "da validare" e BOM da quotare con la spunta Componenti
+    p.pacchetto = await q1(`SELECT id, nome, bom_id, fonti->>'bom' AS bom_file FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
@@ -216,13 +228,14 @@ export function rottePreventivi() {
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
   { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
-    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] }] },
+    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
+    { nome: 'AOI', codici: ['aoiTop', 'aoiBot', 'controlloVisivo'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
   { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
-  doppiaFaccia: 'BOT', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+  doppiaFaccia: 'BOT', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
 };
 
 function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
@@ -316,7 +329,8 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     costoLaminaTrattata: LAMINA, prezzoVenditaLaminaTrattata: LAMINA,
     oreAcquistoPcb: 'acquistoPcb', costoPcbScheda: 'acquistoPcb',
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
-    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: SMD,
+    oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: `${SMD} aoiTop|aoiBot`,
+    tempoRevisioneAoi: 'aoiTop', tempoRevisioneAoiLatoB: 'aoiBot', tempoControlloVisivo: 'controlloVisivo',
     preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
     oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
     potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,
@@ -325,7 +339,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     tempoLavaggio: 'lavaggioSchede', costoLiquidoLavaggio: 'lavaggioSchede', costoAvvioLavaggio: 'lavaggioSchede',
   };
   const GRUPPO_DIPENDE: Record<string, string> = {
-    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: SMD,
+    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
   };
   const esiste = (flag: string) => generali.some(p => p.codice === flag);
   // tiene solo le spunte presenti nel catalogo del preventivo (i preventivi vecchi non le hanno)
@@ -352,11 +366,12 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   // costo componenti: si può prendere da una BOM caricata in Componenti (scelta qui sopra il campo)
   const sceltaBom = () => html`
     <label class="largo scelta-bom"${dipende(DIPENDE.costoComponentiScheda)} title="Il costo componenti a scheda si calcola dal preventivo materiali della BOM, sulle schede di questo preventivo">BOM caricata
-      <select data-id="bomId" id="sel-bom">
+      <select data-id="bomId" id="sel-bom"${salvato?.pacchetto?.bom_file ? raw(` data-pacchetto="${Number(salvato.pacchetto.id)}"`) : ''}>
         <option value="">— nessuna: costo scritto a mano —</option>
         ${bom.map(b => html`<option value="${b.id}" ${b.id === d.bomId ? raw('selected') : ''}>${b.nome} (${data(b.creato_il)})</option>`)}
       </select>
       <output id="esito-bom" class="nota">${d.bomId && !bom.some(b => b.id === d.bomId) ? 'La BOM collegata è stata eliminata: il costo resta quello salvato.' : ''}</output>
+      ${salvato?.pacchetto?.bom_file && !d.bomId ? html`<small class="nota">BOM dei documenti del cliente: spuntando <b>Componenti</b> si quota da sola.</small>` : ''}
       <small class="nota"><a href="/componenti/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/componenti/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}` : campoBase(p);
   const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()

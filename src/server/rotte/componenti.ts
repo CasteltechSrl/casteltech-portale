@@ -8,7 +8,7 @@ import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  creaAnalisi, creaCodificaSingola, excelAnalisi, leggiFileBom, salvaInArchivio, type RigaBom, type Riepilogo,
+  creaAnalisi, creaCodificaSingola, excelAnalisi, leggiFileBom, problemiBom, salvaInArchivio, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { NOMI_FORNITORI, prezzoUnitario, type Offerta } from '../../engine/acquisti.js';
@@ -80,7 +80,10 @@ export function rotteComponenti() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [req.params.id]);
     if (!a) return res.status(404).send('BOM non trovata');
-    res.send(pag(req, a.nome, a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaAnalisi(a), req.query.msg ? String(req.query.msg) : undefined));
+    // BOM quotata per un preventivo (spunta Componenti dai documenti del cliente): da qui si torna al preventivo per la quota
+    const chiesto = Number(req.query.preventivo) || 0;
+    const prev = await q1<{ id: number; numero: string }>(`SELECT id, numero FROM preventivi WHERE bom_id = $1 ORDER BY (id = $2) DESC, id DESC LIMIT 1`, [a.id, chiesto]);
+    res.send(pag(req, a.nome, a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', html`${prev ? rimandoPreventivo(a, prev) : ''}${paginaAnalisi(a)}`, req.query.msg ? String(req.query.msg) : undefined));
   });
   r.get('/bom/:id/stato', async (req, res) => {
     const id = Number(req.params.id);
@@ -179,6 +182,19 @@ function badgeEsito(r: RigaBom) {
 }
 const badgeLivello = (r: RigaBom) => r.reperibilita ? html`<span class="livello ${r.reperibilita.livello}" title="${r.reperibilita.motivi.join('\n')}">${
   r.reperibilita.livello === 'ok' ? 'ok' : r.reperibilita.livello}</span>` : html``;
+
+/** Banner della BOM quotata per un preventivo: problemi ancora aperti e ritorno al preventivo (Adriano 28/10/2026). */
+function rimandoPreventivo(a: any, prev: { id: number; numero: string }): Raw {
+  const inCorso = a.stato === 'in_corso' || a.stato === 'da_elaborare' || avanzamenti.has(a.id);
+  const costo = a.riepilogo?.perQuantita?.[0] ?? { senzaPrezzo: 0, nonDisponibili: 0 };
+  const problemi = inCorso ? [] : problemiBom(a.righe ?? [], costo);
+  return html`<div class="avviso ${problemi.length || inCorso ? '' : 'info'} rimando-preventivo">
+    <span>BOM quotata per il preventivo <a href="/preventivi/${prev.id}">${prev.numero}</a>.
+      ${inCorso ? 'Quotazione in corso: quando finisce, controlla le righe segnalate.'
+        : problemi.length ? html`Da sistemare: ${problemi.join(' · ')}. Quando hai finito torna al preventivo per la quota.`
+        : 'Nessun problema aperto: torna al preventivo per la quota.'}</span>
+    <a class="bottone primario" href="/preventivi/${prev.id}?quota-bom=1">Torna al preventivo per la quota</a></div>`;
+}
 
 function paginaAnalisi(a: any): Raw {
   const righe: RigaBom[] = a.righe ?? []; const quantita: number[] = a.quantita ?? [];
