@@ -222,5 +222,13 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
-   ⬜ PDF della fattura, Invoicetronic, DDT, conferme d'ordine,
+   🟡 Invio allo SdI con Invoicetronic (Adriano 28/10/2026: passaggio dal portale lunedì 2/11; `server/invoicetronic.ts`, `engine/sdi.ts`, migrazione 040):
+   chiave `INVOICETRONIC_API_KEY` (ik_test_ = prova/sandbox, ik_live_ = reale; `INVOICETRONIC_URL` solo per le prove in locale). Documento emesso →
+   "Invia allo SdI" (POST /send?validate=true, nome file dato da Invoicetronic, Idempotency-Key); con la chiave di prova "Prova l'invio" anche dalle bozze
+   (numero 0, non tocca lo stato). Ogni invio in `sdi_invii`; esiti dal webhook `/sdi/webhook` (prima di sessione e json, firma HMAC, doppioni in
+   `sdi_eventi`, segreto in impostazioni 'invoicetronic' per ambiente; si collega da Impostazioni → Amministrazione → Invio allo SdI) o con "Aggiorna esito"
+   (/update, gratis); niente controlli periodici. Stati: Inviato → inviato, Consegnato → consegnato, ImpossibilitaDiRecapito → non_consegnato (valida, avvisare
+   il cliente), Scartato → scartato: "Correggi" la riporta a bozza con stesso numero e data (data bloccata, niente Elimina), si riemette e si rimanda.
+   ⬜ Fatture dei fornitori dallo SdI (evento receive.add solo registrato).
+   ⬜ PDF della fattura, DDT, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).
