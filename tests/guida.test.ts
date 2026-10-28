@@ -33,6 +33,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
   assert.deepEqual(primi('fattura scartata dallo SdI', 1), ['invio-sdi']);
   assert.deepEqual(primi('inviare allo sdi', 1), ['invio-sdi']);
+  assert.ok(primi('fatture fornitori arrivate dallo sdi', 3).includes('incassi-pagamenti'));
   assert.deepEqual(primi('stampare la scheda di produzione'), ['crea-commessa']);
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);

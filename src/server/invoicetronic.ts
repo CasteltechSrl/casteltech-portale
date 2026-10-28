@@ -6,10 +6,15 @@
  *   Il nome del file lo dà Invoicetronic (sempre nuovo, così un nuovo invio dopo uno scarto non è un doppione).
  * - Esiti: Invoicetronic chiama il webhook /sdi/webhook quando arriva un esito (niente controlli periodici: il database
  *   Neon si sveglia solo quando c'è qualcosa); il pulsante "Aggiorna esito" li rilegge a mano (gratis in Invoicetronic).
- * - Fatture dei fornitori (receive): l'evento si registra; la lettura arriva nel passo successivo.
+ * - Fatture dei fornitori (receive): dal webhook o con "Scarica dallo SdI" (/receive?unread=true) si leggono (XML o .p7m) e si
+ *   registrano tra le fatture fornitori, con il fornitore (aggiunto all'anagrafica se manca) e le scadenze. Con la chiave di prova
+ *   le fatture finte della sandbox NON entrano nelle fatture fornitori: si vedono solo in Impostazioni → Amministrazione.
  */
 import { q, q1, transazione } from './db.js';
 import { anteprimaDocumento } from './documenti-servizio.js';
+import { caricaAzienda } from './amministrazione-servizio.js';
+import { preparaFornitore } from '../engine/anagrafica-fornitori.js';
+import { datiFattureRicevute, eNostraAutofattura, xmlDaFile } from '../engine/fattura-ricevuta.js';
 import {
   STATI_SDI, ambienteDaChiave, firmaWebhookValida, messaggioErroreApi, statoPiuAvanti, testoErrori, type Ambiente, type StatoSdi,
 } from '../engine/sdi.js';
@@ -175,8 +180,75 @@ export async function riceviWebhook(corpo: string, firma: string | undefined): P
   try {
     if (ambiente !== ambienteAttuale()) esito = `evento ${ambiente} con chiave ${ambienteAttuale() ?? 'assente'}: non letto`;
     else if (tipo === 'update' && ev.ResourceId) esito = await applicaEsito(ambiente, await chiama('GET', `/update/${ev.ResourceId}`));
-    else if (tipo === 'receive') esito = 'fattura ricevuta: da leggere';
+    else if (tipo === 'receive' && ev.ResourceId) esito = await registraRicevuta(ambiente, await chiama('GET', `/receive/${ev.ResourceId}?include_payload=true`));
   } catch (e: any) { esito = `errore: ${e.message}`; }
   await q(`UPDATE sdi_eventi SET esito = $3 WHERE id = $1 AND ambiente = $2`, [ev.Id, ambiente, esito.slice(0, 500)]);
   return { valido: true, esito };
 }
+
+/**
+ * Registra una fattura ricevuta dallo SdI (Receive di Invoicetronic). Reale: tra le fatture fornitori (una per documento del file),
+ * fornitore dall'anagrafica per P.IVA o aggiunto, scadenze dal file; niente doppioni (stesso id, o stesso fornitore+numero+data, anche da FIC).
+ * Prova: solo una riga di riepilogo (restituita e scritta in sdi_eventi). Le copie delle nostre autofatture si saltano.
+ */
+export async function registraRicevuta(ambiente: Ambiente, r: any): Promise<string> {
+  if (!r?.payload) return 'fattura senza contenuto';
+  const dati = Buffer.from(r.payload, r.encoding === 'Xml' ? 'utf8' : 'base64');
+  const xml = xmlDaFile(dati);
+  const fatture = datiFattureRicevute(xml);
+  if (!fatture.length) return `file ${r.file_name ?? r.id}: nessuna fattura letta`;
+  const nostra = (await caricaAzienda()).partita_iva;
+  const esiti: string[] = [];
+  for (const f of fatture) {
+    const chi = `${f.tipo === 'nota_credito' ? 'nota di credito' : 'fattura'} n. ${f.numero} del ${f.data.split('-').reverse().join('/')} di ${f.fornitore.ragione_sociale}`;
+    if (eNostraAutofattura(f, nostra)) { esiti.push(`${chi}: copia della nostra autofattura, saltata`); continue; }
+    if (ambiente === 'prova') { esiti.push(`PROVA ${chi}, ${f.totale.toFixed(2)} €`); continue; }
+    esiti.push(await transazione(async c => {
+      const sdiId = `${r.id}${fatture.length > 1 ? `-${f.numero}` : ''}`;
+      if ((await c.query(`SELECT 1 FROM documenti_ricevuti WHERE sdi_id = $1`, [sdiId])).rowCount) return `${chi}: già registrata`;
+      let forn = (await c.query(`SELECT id FROM fornitori_anagrafica WHERE upper(regexp_replace(partita_iva, '[^A-Za-z0-9]', '', 'g')) = ANY($1) LIMIT 1`,
+        [[f.fornitore.partita_iva, f.fornitore.partita_iva.replace(/^IT/, ''), `IT${f.fornitore.partita_iva}`]])).rows[0]?.id ?? null;
+      const doppia = (await c.query(`SELECT id FROM documenti_ricevuti WHERE upper(numero) = upper($1) AND data = $2
+          AND (fornitore_id = $3 OR regexp_replace(intestatario->>'partita_iva', '[^0-9]', '', 'g') = regexp_replace($4, '[^0-9]', '', 'g'))`,
+        [f.numero, f.data, forn, f.fornitore.partita_iva])).rows[0];
+      if (doppia) {
+        await c.query(`UPDATE documenti_ricevuti SET sdi_id = coalesce(sdi_id, $2), xml = coalesce(xml, $3) WHERE id = $1`, [doppia.id, sdiId, xml]);
+        return `${chi}: già presente (da Fatture in Cloud)`;
+      }
+      if (!forn) {
+        const { fornitore, errore } = preparaFornitore({ ...f.fornitore, paese: f.fornitore.nazione === 'IT' || !f.fornitore.nazione ? 'ITALIA' : f.fornitore.nazione,
+          note: `Aggiunto dalla fattura SdI n. ${f.numero} del ${f.data.split('-').reverse().join('/')}` });
+        if (!errore) forn = (await c.query(`INSERT INTO fornitori_anagrafica (ragione_sociale, partita_iva, codice_fiscale, indirizzo, cap, comune, provincia, paese, note)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING RETURNING id`, [fornitore.ragione_sociale, fornitore.partita_iva, fornitore.codice_fiscale,
+          fornitore.indirizzo, fornitore.cap, fornitore.comune, fornitore.provincia, fornitore.paese, fornitore.note])).rows[0]?.id ?? null;
+      }
+      const id = (await c.query(`INSERT INTO documenti_ricevuti (tipo, tipo_sdi, numero, data, fornitore_id, intestatario, descrizione, imponibile, imposta, totale,
+          elettronica, origine, valuta, sdi_id, xml) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'sdi',$11,$12,$13) RETURNING id`,
+        [f.tipo, f.tipo_sdi, f.numero, f.data, forn, JSON.stringify({ nome: f.fornitore.ragione_sociale, ...f.fornitore }), f.descrizione,
+         f.imponibile, f.imposta, f.totale, f.valuta, sdiId, xml])).rows[0].id;
+      for (const sc of f.scadenze) await c.query(`INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo) VALUES ($1, $2, $3)`, [id, sc.data, sc.importo]);
+      return `${chi}: registrata${forn ? '' : ' (fornitore da aggiungere a mano in anagrafica)'}`;
+    }));
+  }
+  return esiti.join(' · ').slice(0, 1000);
+}
+
+/** "Scarica dallo SdI": legge le fatture ricevute non ancora lette (se un evento del webhook si fosse perso). */
+export async function scaricaRicevute(): Promise<string[]> {
+  const ambiente = ambienteAttuale();
+  if (!ambiente) throw new ErroreSdi('Manca la chiave di Invoicetronic (INVOICETRONIC_API_KEY su Render).');
+  const elenco = await chiama<any[]>('GET', '/receive?unread=true&include_payload=true&page_size=100');
+  const esiti: string[] = [];
+  for (const r of elenco ?? []) {
+    let esito: string;
+    try { esito = await registraRicevuta(ambiente, r); } catch (e: any) { esito = `file ${r.file_name ?? r.id}: ${e.message}`; }
+    await q(`INSERT INTO sdi_eventi (id, ambiente, tipo, risorsa_id, esito) VALUES ($1, $2, 'receive', $3, $4) ON CONFLICT DO NOTHING`,
+      [-Number(r.id), ambiente, r.id, esito.slice(0, 500)]);
+    esiti.push(esito);
+  }
+  return esiti;
+}
+
+/** Ultime fatture ricevute (anche finte della prova) con l'esito, per Impostazioni → Amministrazione. */
+export const ultimeRicevute = () => q<{ ambiente: string; ricevuto_il: string; esito: string }>(
+  `SELECT ambiente, ricevuto_il, esito FROM sdi_eventi WHERE tipo = 'receive' ORDER BY ricevuto_il DESC LIMIT 10`);

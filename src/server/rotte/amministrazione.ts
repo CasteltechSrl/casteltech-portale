@@ -13,7 +13,7 @@ import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministraz
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
-import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento } from '../invoicetronic.js';
+import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
   TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza,
@@ -296,6 +296,15 @@ export function rotteAmministrazione() {
     res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
   });
 
+  r.post('/ricevuti/scarica', async (req, res) => {
+    let testo: string;
+    try {
+      const esiti = await scaricaRicevute();
+      testo = esiti.length ? `${esiti.length} file dallo SdI: ${esiti.join(' · ')}` : 'Nessuna fattura nuova dallo SdI.';
+    } catch (e: any) { testo = e.message; }
+    res.redirect(`/amministrazione/ricevuti?msg=${encodeURIComponent(testo.slice(0, 1500))}`);
+  });
+
   r.post('/documenti/:id/correggi', async (req, res) => {
     const id = Number(req.params.id);
     const ok = await riapriScartato(id);
@@ -375,7 +384,9 @@ export function rotteAmministrazione() {
         <button>Cerca</button>
       </form>
       <p class="nota">${righe.length} documenti${daPagare ? html` · da pagare ${euro(totaleDaPagare)}` : html` · imponibile ${euro(totale)}`}.
-        Per ora dallo storico di Fatture in Cloud; poi arriveranno dallo SdI.</p>
+        Le fatture elettroniche arrivano da sole dallo SdI (Invoicetronic); lo storico viene da Fatture in Cloud.</p>
+      ${ambienteAttuale() ? html`<form method="post" action="/amministrazione/ricevuti/scarica" class="inline"><button>Scarica dallo SdI</button>
+        <span class="nota">se una fattura che aspetti non è ancora arrivata</span></form>` : ''}
       <div class="tabella-scorre limitata"><table class="elenco">
         <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th><th>Scadenza</th></tr></thead>
         <tbody>${righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">

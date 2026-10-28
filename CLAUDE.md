@@ -229,6 +229,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `sdi_eventi`, segreto in impostazioni 'invoicetronic' per ambiente; si collega da Impostazioni → Amministrazione → Invio allo SdI) o con "Aggiorna esito"
    (/update, gratis); niente controlli periodici. Stati: Inviato → inviato, Consegnato → consegnato, ImpossibilitaDiRecapito → non_consegnato (valida, avvisare
    il cliente), Scartato → scartato: "Correggi" la riporta a bozza con stesso numero e data (data bloccata, niente Elimina), si riemette e si rimanda.
-   ⬜ Fatture dei fornitori dallo SdI (evento receive.add solo registrato).
+   ✅ Fatture dei fornitori dallo SdI (`engine/fattura-ricevuta.ts`: XML o .p7m firmato, `registraRicevuta` in `server/invoicetronic.ts`): webhook receive.add
+   o "Scarica dallo SdI" in Fatture fornitori (GET /receive?unread=true, gratis) → `documenti_ricevuti` origine 'sdi' con scadenze; fornitore per P.IVA
+   (nuovo = aggiunto con nota DA VERIFICARE); doppioni con lo storico FIC (numero+data+fornitore) e copie delle nostre autofatture ignorati. Chiave di prova: solo riepilogo.
    ⬜ PDF della fattura, DDT, conferme d'ordine,
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

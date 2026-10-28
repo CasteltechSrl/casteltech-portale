@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, type CampoAzienda } from '../../engine/amministrazione.js';
-import { collegaWebhook, statoInvoicetronic } from '../invoicetronic.js';
+import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
@@ -39,6 +39,7 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   r.get('/', async (req, res) => {
     const [azienda, numerazioni, aliquote, condizioni, sdi] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
       caricaCondizioniPagamento(), statoInvoicetronic()]);
+    const ricevute = sdi.ambiente ? await ultimeRicevute() : [];
     const scelta = (nome: string, valori: Record<string, string> | string[], attuale: string | null, form?: string, vuota = false) => {
       const voci = Array.isArray(valori) ? valori.map(v => [v, v]) : Object.entries(valori);
       return html`<select name="${nome}" ${form ? raw(`form="${form}"`) : ''}>${vuota ? html`<option value="">—</option>` : ''}
@@ -65,6 +66,9 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
         <form method="post" action="/impostazioni/amministrazione/sdi-webhook" class="inline"
           data-conferma="Collegare Invoicetronic a questo indirizzo del portale per ricevere esiti e fatture? Si fa una volta per ogni chiave (prova e reale).">
           <button>${sdi.webhook ? 'Collega di nuovo' : 'Collega esiti e fatture ricevute'}</button></form>`}
+        ${ricevute.length ? html`<p><strong>Ultime fatture arrivate dallo SdI</strong> (con la chiave di prova sono finte e non entrano nelle fatture fornitori):</p>
+          <ul>${ricevute.map(x => html`<li>${new Date(x.ricevuto_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}
+            ${x.ambiente === 'prova' ? html`<span class="etichetta">prova</span>` : ''} ${x.esito ?? ''}</li>`)}</ul>` : ''}
         <p class="nota">Il codice destinatario di Casteltech in Invoicetronic è 7HD37X0: si registra sul sito dell'Agenzia delle Entrate solo il giorno del passaggio,
           perché da quel momento le fatture dei fornitori arrivano qui e non più in Fatture in Cloud.</p>
       </div>

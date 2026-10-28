@@ -447,10 +447,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'incassi-pagamenti', area: 'amministrazione', titolo: 'Incassi, pagamenti e fatture dei fornitori',
-    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare',
+    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare arrivate sdi scarica xml p7m',
     testo: [
       'Il cruscotto di Amministrazione mostra fatturato e acquisti dell\'anno rispetto all\'anno prima, incassi e pagamenti aperti per urgenza (scadute, entro 7 giorni, entro 30, oltre), DDT da fatturare e bozze da finire.',
       'Ogni rata, delle fatture emesse e di quelle dei fornitori, si segna incassata o pagata con data e conto. Le fatture dei fornitori sono in "Fatture fornitori", con il filtro "solo da pagare".',
+      "Le fatture dei fornitori arrivano da sole dallo SdI (Invoicetronic): con gli esiti collegati in Impostazioni → Amministrazione → Invio allo SdI entrano appena arrivano, oppure si prendono con \"Scarica dallo SdI\" in Fatture fornitori. Il fornitore si cerca per P.IVA (se è nuovo si aggiunge all'anagrafica con nota DA VERIFICARE), le scadenze arrivano dalla fattura; quelle già caricate da Fatture in Cloud e le copie delle nostre autofatture non si ripetono.",
     ],
     pagine: [['/amministrazione', 'Cruscotto amministrazione'], ['/amministrazione/ricevuti?da_pagare=1', 'Fatture fornitori da pagare']],
   },
