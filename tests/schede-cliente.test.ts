@@ -347,3 +347,26 @@ test('documentazione: righe per codice, THT colorati, critici con note e segnala
   assert.notEqual(tht[0].colore, tht[1].colore);
   assert.equal(latoFoglio(a, 'protezioni'), 'BOT', 'le protezioni si guardano dal lato saldature');
 });
+
+// ───────────── file KiCad di Trancerie Emiliane (Adriano 28/10/2026), esempio inventato ─────────────
+
+test('KiCad: simbolo Ω in UTF-8, riferimenti con il trattino basso, ponticelli a stagno', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { testoDi } = await import('../src/server/schede-cliente-servizio.js');
+  const pos = `### Footprint positions\n## Unit = mm, Angle = deg.\n# Ref     Val       Package                X        Y       Rot  Side
+R1        10.0kΩ,_0603_SMD   R_0603_1608Metric   10.0  -5.0  180.0  top
+C_IN_1    10u       C_0805_2012Metric   20.0  -5.0    0.0  top
+J_RS232   Opened    SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm   30.0  -5.0  0.0  top\n`;
+  const testo = testoDi(Buffer.from(pos, 'utf8'));
+  assert.ok(testo.includes('10.0kΩ'), 'letto come UTF-8');
+  assert.equal(testoDi(Buffer.from('R1 10kµ', 'latin1')), 'R1 10kµ', 'file non UTF-8: Latin-1');
+  const l = leggiPickPlace('scheda-all.pos', testo);
+  assert.deepEqual(l.posizioni.map(p => p.ref), ['R1', 'C_IN_1']);
+  assert.ok(l.avvisi.some(a => /J_RS232/.test(a)));
+  const a = analizzaScheda({
+    bom: bomDa([['Reference', 'Qty', 'Value', 'Manufacturer Part Number', 'Footprint'],
+      ['R1', '1', '10.0kΩ, 0603 SMD', 'RC0603FR-0710KL', 'R_0603'], ['C_IN_1', '1', '10u', 'GRM21BR61E106', 'C_0805']]),
+    pickPlace: [{ nome: 'scheda-all.pos', lettura: l }],
+  });
+  assert.deepEqual(a.segnalazioni.filter(s => s.livello === 'errore'), []);
+});

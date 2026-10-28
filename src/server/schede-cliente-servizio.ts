@@ -51,7 +51,8 @@ export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
   return out;
 }
 
-const testoDi = (b: Buffer) => b.toString('latin1');
+/** UTF-8 se il file lo è (KiCad scrive "10.0kΩ"), altrimenti Latin-1 (vecchi CAD Windows). */
+export const testoDi = (b: Buffer) => { try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^\uFEFF/, ''); } catch { return b.toString('latin1'); } };
 const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani = 0; for (const c of p) if (c === 0 || (c < 9)) strani++; return strani < 5; };
 
 /** Legge tutti i file del pacchetto e fa l'incrocio. */
