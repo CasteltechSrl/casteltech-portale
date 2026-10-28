@@ -334,19 +334,37 @@ svg .base { stroke: #b9c0bc; stroke-width: 1; }
 .grafico-mesi .mese:hover .sfondo { fill: #f1f3f1; }
 .grafico-mesi .fatturato { fill: var(--serie-fatturato); }
 .grafico-mesi .da-evadere { fill: var(--serie-da-evadere); }
+.gantt { display: flex; align-items: flex-start; min-width: 100%; }
+.gantt .nomi { flex: 0 0 17rem; width: 17rem; border-right: 1px solid var(--bordo); }
+.gantt .nomi .testa { height: 46px; }
+.gantt .nomi .nome { display: block; height: 22px; line-height: 22px; padding: 0 .5rem 0 .2rem; font-size: 12px; color: var(--testo);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid #f0f2f0; text-decoration: none; }
+.gantt .nomi a.nome:hover { background: var(--accento-chiaro); }
+.gantt .nomi .tenue { color: var(--tenue); font-size: 11px; }
+.gantt .tempo { flex: 1 1 auto; display: block; }
+.gantt.vista-mese .tempo { min-width: 36rem; }
+.gantt.vista-trimestre .tempo { min-width: 50rem; }
 .gantt .festivo { fill: #f4f5f3; }
+.gantt .oggi-sfondo { fill: #fdecea; opacity: .6; }
+.gantt .griglia.mese { stroke: #cfd5d1; }
 .gantt .riga { stroke: #f0f2f0; }
-.gantt .etichetta { font-size: 11.5px; fill: var(--testo); }
+.gantt .fondo-riga { fill: transparent; }
+.gantt a:hover .fondo-riga { fill: var(--accento-chiaro); opacity: .5; }
+.gantt .asse.mese { font-weight: 600; fill: var(--testo); }
 .gantt .barra { fill: var(--accento); }
 .gantt .barra.stimata { fill: #9cc9bf; stroke: var(--accento); stroke-dasharray: 3 2; }
 .gantt .barra.ritardo { fill: var(--negativo); }
 .gantt .barra.ritardo.stimata { fill: #e9a7a2; stroke: var(--negativo); }
-.gantt g:hover .barra { opacity: .8; }
+.gantt a:hover .barra { opacity: .8; }
 .gantt .consegna { fill: #1d2421; }
 .gantt .carico { fill: #9cc9bf; }
 .gantt .carico.oltre { fill: var(--negativo); }
 .gantt .oggi { stroke: var(--negativo); stroke-width: 1.5; }
-.gantt text.oggi { fill: var(--negativo); stroke: none; font-weight: 600; }
+.comandi-gantt { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.comandi-gantt nav { display: inline-flex; border: 1px solid var(--bordo); border-radius: var(--raggio); overflow: hidden; background: var(--carta); }
+.comandi-gantt nav a { padding: .35rem .8rem; text-decoration: none; color: var(--testo); border-right: 1px solid var(--bordo); }
+.comandi-gantt nav a:last-child { border-right: 0; }
+.comandi-gantt nav a.attiva { background: var(--accento); color: #fff; }
 
 /* Ordini → Da acquisire */
 .stato.acq-nuovo { background: #eef0ee; color: var(--tenue); }

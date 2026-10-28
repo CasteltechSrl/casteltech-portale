@@ -279,5 +279,24 @@ export function caricoGiornaliero(barre: Barra[]): Record<string, number> {
   return carico;
 }
 
+// Periodo del Gantt (Adriano 28/10/2026): scala a giorni, 1 mese è lo standard, in alternativa una settimana o 3 mesi, nient'altro.
+// Il periodo parte sempre dal lunedì: "1 mese" = 5 settimane, "3 mesi" = 13 settimane; avanti/indietro di un periodo intero.
+export const VISTE_GANTT = { settimana: { nome: 'Settimana', giorni: 7 }, mese: { nome: '1 mese', giorni: 35 }, trimestre: { nome: '3 mesi', giorni: 91 } } as const;
+export type VistaGantt = keyof typeof VISTE_GANTT;
+export const lunediDi = (d: string) => piuGiorni(d, -((giorno(d).getUTCDay() + 6) % 7));
+
+export function periodoGantt(vista: unknown, oggi: string, da?: unknown) {
+  const v: VistaGantt = typeof vista === 'string' && vista in VISTE_GANTT ? vista as VistaGantt : 'mese';
+  const giorni = VISTE_GANTT[v].giorni;
+  const inizio = lunediDi(typeof da === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(da) && !isNaN(giorno(da).getTime()) ? da : oggi);
+  return { vista: v, da: inizio, a: piuGiorni(inizio, giorni - 1), giorni, precedente: piuGiorni(inizio, -giorni), successivo: piuGiorni(inizio, giorni),
+    contieneOggi: oggi >= inizio && oggi <= piuGiorni(inizio, giorni - 1) };
+}
+
+/** Barre da mostrare nel periodo: quelle che lo toccano, più quelle in ritardo già finite prima (si vedono attaccate al bordo sinistro). */
+export function barreNelPeriodo(barre: Barra[], p: { da: string; a: string; contieneOggi: boolean }): Barra[] {
+  return barre.filter(b => b.inizio <= p.a && (b.fine >= p.da || (p.contieneOggi && b.inRitardo)));
+}
+
 const somma = (v: number[]) => v.reduce((a, x) => a + x, 0);
 const arrotonda = (n: number) => Math.round(n * 100) / 100;

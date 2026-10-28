@@ -7,8 +7,8 @@ import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
 import { caricaOreGiorno, righeOrdini, secondiPerSchedaProdotti, type RigaElenco } from '../ordini-servizio.js';
 import {
-  STATI_ORDINE, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, pianifica, piuGiorni, statoOrdine,
-  type Barra, type DaPianificare,
+  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, periodoGantt, pianifica, piuGiorni, statoOrdine,
+  type Barra, type DaPianificare, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
 import { layout } from '../views/layout.js';
@@ -125,21 +125,26 @@ export function rotteOrdini() {
           lavorazione: k.data === x.consegna ? x.lavorazione : null, secondiPerScheda: x.prodottoId ? tempi.get(x.prodottoId) : null });
       }
     }
-    const mesi = Math.min(18, Math.max(1, Number(req.query.mesi) || 3));
-    const fineVista = piuGiorni(oggi, mesi * 31);
-    const barre = pianifica(daFare, oggi, oreGiorno).filter(b => b.inizio <= fineVista);
+    const p = periodoGantt(req.query.vista, oggi, req.query.da);
+    const tutte = pianifica(daFare, oggi, oreGiorno);
+    const barre = barreNelPeriodo(tutte, p);
     const senzaData = righe.filter(x => !x.consegna).length;
-    const carico = caricoGiornaliero(barre);
-    const sovraccarichi = Object.entries(carico).filter(([d, o]) => d >= oggi && o > oreGiorno).length;
+    const carico = caricoGiornaliero(tutte);
+    const sovraccarichi = Object.entries(carico).filter(([d, o]) => d >= oggi && d >= p.da && d <= p.a && o > oreGiorno).length;
+    const link = (vista: string, da?: string) => `/ordini/gantt?vista=${vista}${da ? `&da=${da}` : ''}`;
     res.send(pagina(req.session.utente, 'Gantt produzione', 'gantt', html`
-      <form class="cerca" method="get"><label>Mostra <select name="mesi">${[1, 3, 6, 12, 18].map(m => html`<option value="${m}" ${m === mesi ? raw('selected') : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`)}</select></label><button>Aggiorna</button></form>
+      <div class="comandi-gantt">
+        <nav class="scelta-vista">${Object.entries(VISTE_GANTT).map(([k, v]) => html`<a href="${link(k, p.contieneOggi ? undefined : p.da)}" class="${k === p.vista ? 'attiva' : ''}">${v.nome}</a>`)}</nav>
+        <nav class="sposta"><a href="${link(p.vista, p.precedente)}" title="Periodo precedente">‹</a><a href="${link(p.vista)}" class="${p.contieneOggi ? 'attiva' : ''}">Oggi</a><a href="${link(p.vista, p.successivo)}" title="Periodo successivo">›</a></nav>
+        <b>${data(p.da)} – ${data(p.a)}</b>
+      </div>
       <p class="nota">Ogni barra è una consegna ancora da fare: finisce il giorno lavorativo prima della consegna (o parte dalla data di lavorazione = arrivo materiale + 3 gg)
         e dura le ore ciclo del preventivo × quantità ÷ ${num(oreGiorno)} ore al giorno (<a href="/impostazioni/ordini">Impostazioni → Ordini</a>).
         Barre tratteggiate: prodotto senza preventivo, durata di un giorno. ${senzaData ? html`<b>${senzaData} righe senza data di consegna</b> non sono nel Gantt.` : ''}
         ${sovraccarichi ? html`<b class="ritardo">${sovraccarichi} giorni con più ore di lavoro che ore disponibili.</b>` : ''}</p>
       <div class="legenda"><span class="campione barra"></span> lavorazione <span class="campione barra-ritardo"></span> in ritardo (doveva già iniziare) <span class="campione barra-stimata"></span> durata stimata
         <span class="campione consegna"></span> consegna</div>
-      <div class="tabella-scorre grafico">${barre.length ? graficoGantt(barre, oggi, fineVista, carico, oreGiorno) : html`<p class="vuoto">Nessuna lavorazione da pianificare.</p>`}</div>
+      <div class="tabella-scorre grafico">${barre.length ? graficoGantt(barre, p, oggi, carico, oreGiorno, id => perId.get(id)!.ordineId) : html`<p class="vuoto">Nessuna lavorazione in questo periodo.</p>`}</div>
       <h2>Elenco</h2>
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Ordine</th><th>Cliente · codice</th><th class="n">Q.tà</th><th class="n">Ore ciclo</th><th>Inizio</th><th>Fine</th><th>Consegna</th><th></th></tr></thead>
@@ -317,34 +322,61 @@ function gradini(max: number) {
   return [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= max) ?? max;
 }
 
-function graficoGantt(barre: Barra[], oggi: string, fineVista: string, carico: Record<string, number>, oreGiorno: number): Raw {
-  // si parte dalla prima barra (al massimo un mese indietro: le lavorazioni in ritardo si vedono comunque)
-  const prima = [oggi, ...barre.map(b => b.inizio)].sort()[0];
-  const da = piuGiorni(prima < piuGiorni(oggi, -30) ? piuGiorni(oggi, -30) : prima, -2);
-  const giorni = differenzaGiorni(fineVista, da) + 1;
-  const G = 10, ET = 300, RIGA = 20, TESTA = 44;
-  const W = ET + giorni * G + 10, H = TESTA + (barre.length + 1) * RIGA + 10;
-  const x = (d: string) => ET + Math.max(0, Math.min(giorni, differenzaGiorni(d, da))) * G;
-  const elencoGiorni = Array.from({ length: giorni }, (_, i) => piuGiorni(da, i));
-  const taglia = (s: string) => (s.length > 44 ? s.slice(0, 43) + '…' : s);
-  return html`<svg class="gantt" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Gantt della produzione">
-    ${elencoGiorni.map(d => html`
-      ${lavorativo(d) ? '' : html`<rect class="festivo" x="${x(d)}" y="${TESTA - 14}" width="${G}" height="${H - TESTA + 14}"/>`}
-      ${d.endsWith('-01') ? html`<text class="asse mese" x="${x(d) + 2}" y="12">${nomeMese(d.slice(0, 7))}</text><line class="griglia" x1="${x(d)}" x2="${x(d)}" y1="0" y2="${H}"/>` : ''}
-      ${new Date(d + 'T12:00:00Z').getUTCDay() === 1 ? html`<text class="asse" x="${x(d) + 1}" y="26">${Number(d.slice(8))}</text>` : ''}`)}
-    <text class="asse" x="4" y="${TESTA + RIGA - 6}">Carico (ore/giorno, max ${num(oreGiorno)})</text>
-    ${elencoGiorni.filter(d => carico[d]).map(d => html`<rect class="carico ${carico[d] > oreGiorno ? 'oltre' : ''}" x="${x(d) + 1}" y="${TESTA + RIGA - 2 - Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 4)}"
-      width="${G - 2}" height="${Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 4)}"><title>${data(d)}: ${num(carico[d], 1)} ore</title></rect>`)}
-    ${barre.map((b, i) => {
-      const yy = TESTA + (i + 1) * RIGA;
-      const x1 = x(b.inizio), x2 = x(piuGiorni(b.fine, 1));
-      return html`<g><title>${b.etichetta}: ${data(b.inizio)} → ${data(b.fine)}${b.ore == null ? ' (senza preventivo)' : `, ${num(b.ore, 1)} ore`}, consegna ${data(b.consegna)}</title>
-        <line class="riga" x1="0" x2="${W}" y1="${yy + RIGA}" y2="${yy + RIGA}"/>
-        <text class="etichetta" x="4" y="${yy + 14}">${taglia(b.etichetta)}</text>
-        <rect class="barra ${b.inRitardo ? 'ritardo' : ''} ${b.stimata ? 'stimata' : ''}" x="${x1}" y="${yy + 4}" width="${Math.max(3, x2 - x1 - 1)}" height="${RIGA - 8}" rx="3"/>
-        ${b.consegna && b.consegna <= fineVista ? html`<path class="consegna" d="M${x(b.consegna) + G / 2} ${yy + 3} l4 7 l-4 7 l-4 -7 z"/>` : ''}</g>`;
-    })}
-    <line class="oggi" x1="${x(oggi) + G / 2}" x2="${x(oggi) + G / 2}" y1="${TESTA - 14}" y2="${H}"/>
-    <text class="asse oggi" x="${x(oggi) + G / 2 + 3}" y="${TESTA - 4}">oggi</text>
-  </svg>`;
+const GIORNI_SETTIMANA = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+
+/**
+ * Gantt a giorni su tutta la larghezza dello schermo: nomi a sinistra (HTML), giorni a destra in un SVG largo 100%
+ * con posizioni in percentuale (niente stili in linea: li blocca la Content-Security-Policy).
+ */
+function graficoGantt(barre: Barra[], p: { vista: VistaGantt; da: string; a: string; giorni: number }, oggi: string,
+  carico: Record<string, number>, oreGiorno: number, ordineDi: (id: number) => number): Raw {
+  const RIGA = 22, TESTA = 46;
+  const H = TESTA + (barre.length + 1) * RIGA + 4;
+  const pc = (n: number) => `${Math.round(n * 10000) / 10000}%`;
+  const col = 100 / p.giorni;
+  const indice = (d: string) => Math.max(0, Math.min(p.giorni, differenzaGiorni(d, p.da)));
+  const x = (d: string) => pc(indice(d) * col);
+  const elencoGiorni = Array.from({ length: p.giorni }, (_, i) => piuGiorni(p.da, i));
+  const etichettaGiorno = (d: string, i: number) => {
+    const g = new Date(d + 'T12:00:00Z').getUTCDay(), n = Number(d.slice(8));
+    if (p.vista === 'settimana') return html`<text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 8}" text-anchor="middle">${GIORNI_SETTIMANA[g]} ${n}/${Number(d.slice(5, 7))}</text>`;
+    if (p.vista === 'mese') return html`<text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 20}" text-anchor="middle">${GIORNI_SETTIMANA[g].slice(0, 1).toUpperCase()}</text>
+      <text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 6}" text-anchor="middle">${n}</text>`;
+    return g === 1 ? html`<text class="asse giorno" x="${pc(i * col)}" dx="2" y="${TESTA - 6}">${n}</text>` : '';
+  };
+  const mostraMese = (d: string, i: number) => p.vista !== 'settimana' && (d.endsWith('-01') || i === 0);
+  return html`<div class="gantt vista-${p.vista}">
+    <div class="nomi">
+      <div class="testa"></div>
+      <div class="nome tenue">Carico (max ${num(oreGiorno)} ore)</div>
+      ${barre.map(b => html`<a class="nome" href="/ordini/${ordineDi(b.id)}" title="${b.etichetta}">${b.etichetta}</a>`)}
+    </div>
+    <svg class="tempo" width="100%" height="${H}" role="img" aria-label="Gantt della produzione">
+      ${elencoGiorni.map(d => html`
+        ${lavorativo(d) ? '' : html`<rect class="festivo" x="${x(d)}" y="0" width="${pc(col)}" height="${H}"/>`}
+        ${d === oggi ? html`<rect class="oggi-sfondo" x="${x(d)}" y="0" width="${pc(col)}" height="${H}"/>` : ''}`)}
+      ${elencoGiorni.map((d, i) => html`
+        ${i > 0 && (p.vista !== 'trimestre' || new Date(d + 'T12:00:00Z').getUTCDay() === 1) ? html`<line class="griglia" x1="${x(d)}" x2="${x(d)}" y1="${TESTA - 4}" y2="${H}"/>` : ''}
+        ${mostraMese(d, i) ? html`<text class="asse mese" x="${x(d)}" dx="2" y="11">${nomeMese(d.slice(0, 7))}</text><line class="griglia mese" x1="${x(d)}" x2="${x(d)}" y1="0" y2="${H}"/>` : ''}
+        ${etichettaGiorno(d, i)}`)}
+      ${elencoGiorni.filter(d => carico[d]).map(d => {
+        const h = Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 6);
+        return html`<rect class="carico ${carico[d] > oreGiorno ? 'oltre' : ''}" x="${pc(indice(d) * col + col * .1)}" y="${TESTA + RIGA - 3 - h}" width="${pc(col * .8)}" height="${h}"><title>${data(d)}: ${num(carico[d], 1)} ore</title></rect>`;
+      })}
+      <line class="riga" x1="0" x2="100%" y1="${TESTA + RIGA}" y2="${TESTA + RIGA}"/>
+      ${barre.map((b, i) => {
+        const yy = TESTA + (i + 1) * RIGA;
+        const prima = b.fine < p.da, tagliataSx = b.inizio < p.da, tagliataDx = b.fine > p.a;
+        const i1 = indice(b.inizio), i2 = prima ? 0 : indice(piuGiorni(b.fine, 1));
+        const larghezza = prima ? col * .35 : Math.max(col * .35, (i2 - i1) * col - col * .08);
+        const cons = b.consegna && b.consegna >= p.da && b.consegna <= p.a ? indice(b.consegna) : null;
+        return html`<a href="/ordini/${ordineDi(b.id)}"><g><title>${b.etichetta}: ${data(b.inizio)} → ${data(b.fine)}${b.ore == null ? ' (senza preventivo)' : `, ${num(b.ore, 1)} ore`}, consegna ${data(b.consegna)}</title>
+          <rect class="fondo-riga" x="0" y="${yy}" width="100%" height="${RIGA}"/>
+          <line class="riga" x1="0" x2="100%" y1="${yy + RIGA}" y2="${yy + RIGA}"/>
+          <rect class="barra ${b.inRitardo ? 'ritardo' : ''} ${b.stimata ? 'stimata' : ''}" x="${pc(i1 * col + (tagliataSx ? 0 : col * .04))}" y="${yy + 5}" width="${pc(larghezza)}" height="${RIGA - 10}" rx="${tagliataSx || tagliataDx ? 0 : 3}"/>
+          ${cons != null ? html`<svg x="${pc((cons + .5) * col)}" y="${yy + 3}" width="1" height="1" overflow="visible"><path class="consegna" d="M0 0 l5 8 l-5 8 l-5 -8 z"/></svg>` : ''}</g></a>`;
+      })}
+      ${oggi >= p.da && oggi <= p.a ? html`<line class="oggi" x1="${pc((indice(oggi) + .5) * col)}" x2="${pc((indice(oggi) + .5) * col)}" y1="${TESTA - 2}" y2="${H}"/>` : ''}
+    </svg>
+  </div>`;
 }
