@@ -1,7 +1,8 @@
 /**
  * Amministrazione (menu in alto): documenti emessi (fatture, note di credito, autofatture, DDT; anche lo storico di FIC)
  * e documenti ricevuti. Fatture e note di credito si scrivono qui: bozza → Emetti (numero, scadenze, XML FatturaPA).
- * L'invio allo SdI (Invoicetronic) arriva nel passo successivo: per ora l'XML si scarica.
+ * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
+ * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
@@ -12,8 +13,10 @@ import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministraz
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
+import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento } from '../invoicetronic.js';
+import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, salvaBozza,
+  TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza,
   type TipoEmissibile,
 } from '../documenti-servizio.js';
 
@@ -27,6 +30,40 @@ const RIGHE_VUOTE = 3;
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 // tabelle delle rate: documenti emessi (incassi) e fatture dei fornitori (pagamenti)
 const SCADENZE = { documenti: 'documenti_scadenze', ricevuti: 'documenti_ricevuti_scadenze' } as const;
+
+/**
+ * Riquadro SdI del documento: invii fatti (reali e di prova) con esito, e i pulsanti possibili con la chiave attuale.
+ * Chiave reale: "Invia allo SdI" solo sui documenti emessi (o scartati). Chiave di prova: "Prova l'invio" anche dalle bozze.
+ */
+async function riquadroSdi(d: any, senzaErrori = true): Promise<Raw> {
+  if (!TIPI_SDI.includes(d.tipo) || d.origine !== 'portale') return html``;
+  const ambiente = ambienteAttuale();
+  const invii = await q(`SELECT i.*, u.nome AS utente FROM sdi_invii i LEFT JOIN utenti u ON u.id = i.creato_da WHERE documento_id = $1 ORDER BY i.id DESC`, [d.id]);
+  const aperti = invii.some(i => i.ambiente === ambiente && i.invoicetronic_id
+    && !['Consegnato', 'Scartato', 'DecorrenzaTermini', 'AccettatoDalDestinatario', 'RifiutatoDalDestinatario'].includes(i.stato));
+  const inCorsoReale = invii.some(i => i.ambiente === 'reale' && !['Scartato', 'errore'].includes(i.stato));
+  const puoInviare = ambiente === 'reale' ? ['emesso', 'scartato'].includes(d.stato) && !inCorsoReale : ambiente === 'prova' && senzaErrori;
+  if (!invii.length && !puoInviare) return ambiente ? html`` : html`<p class="nota">Invio allo SdI: manca la chiave di Invoicetronic su Render.</p>`;
+  return html`<section class="blocco"><h2>SdI</h2>
+    ${ambiente === 'prova' ? html`<p class="nota">Chiave di <strong>prova</strong>: gli invii restano in Invoicetronic e non arrivano allo SdI (esiti simulati, ogni ora alla mezza).</p>` : ''}
+    ${invii.length ? html`<div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th>Inviato</th><th></th><th>File</th><th>Esito</th><th>Dettagli</th></tr></thead>
+      <tbody>${invii.map(i => html`<tr class="${i.stato === 'Scartato' || i.stato === 'errore' ? 'scaduta' : ''}">
+        <td>${new Date(i.inviato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}${i.utente ? html`<br><span class="nota">${i.utente}</span>` : ''}</td>
+        <td>${i.ambiente === 'prova' ? html`<span class="etichetta">prova</span>` : ''}</td>
+        <td>${i.nome_file ?? ''}${i.identificativo ? html`<br><span class="nota">SdI ${i.identificativo}</span>` : ''}</td>
+        <td>${NOMI_STATI_SDI[i.stato] ?? i.stato}</td><td>${i.messaggio ?? ''}</td></tr>`)}</tbody></table></div>` : ''}
+    <div class="azioni-secondarie">
+      ${puoInviare ? html`<form method="post" action="/amministrazione/documenti/${d.id}/invia" class="inline"
+        data-conferma="${ambiente === 'reale' ? "Inviare il documento allo SdI? Diventa definitivo per il cliente e per l'Agenzia delle Entrate."
+          : 'Mandare il documento a Invoicetronic in PROVA? Non arriva allo SdI.'}">
+        <button class="${ambiente === 'reale' ? 'primario' : ''}">${ambiente === 'reale' ? (d.stato === 'scartato' ? 'Rimanda allo SdI' : 'Invia allo SdI') : 'Prova l\'invio'}</button></form>` : ''}
+      ${aperti ? html`<form method="post" action="/amministrazione/documenti/${d.id}/aggiorna-sdi" class="inline"><button>Aggiorna esito</button></form>` : ''}
+      ${d.stato === 'scartato' ? html`<form method="post" action="/amministrazione/documenti/${d.id}/correggi" class="inline"
+        data-conferma="Riaprire il documento per correggerlo? Tiene lo stesso numero e la stessa data; poi Emetti e Rimanda allo SdI.">
+        <button>Correggi</button></form>` : ''}
+    </div></section>`;
+}
 
 /** Conti già usati per incassi e pagamenti (Bper, Carta di Credito…), da proporre quando si segna una rata. */
 async function contiUsati(): Promise<string[]> {
@@ -162,6 +199,8 @@ export function rotteAmministrazione() {
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
         </table></div>
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
+        ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
+        ${await riquadroSdi(d)}
         ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
@@ -191,7 +230,7 @@ export function rotteAmministrazione() {
     res.send(pagina(req, titolo, html`${testa}
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
         <div class="riga-campi">
-          <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
+          <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
           ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`
           : html`<label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(c =>
             html`<option value="${c.codice}" ${d.condizione_pagamento === c.codice ? raw('selected') : ''}>${c.descrizione}</option>`)}</select></label>
@@ -223,10 +262,11 @@ export function rotteAmministrazione() {
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
           ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
-          <form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
-            <button class="pericolo">Elimina bozza</button></form>
+          ${d.numero == null ? html`<form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
+            <button class="pericolo">Elimina bozza</button></form>` : ''}
         </div>
-      </div>`, msg(req), 'documenti.js'));
+      </div>
+      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), 'documenti.js'));
   });
 
   r.post('/documenti/:id', async (req, res) => {
@@ -246,7 +286,29 @@ export function rotteAmministrazione() {
     const id = Number(req.params.id);
     const esito = await emettiDocumento(id);
     res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('errori' in esito
-      ? `Non emesso: ${esito.errori.join(' ')}` : `Emesso con il n. ${esito.numero}. Scarica l'XML (l'invio allo SdI dal portale arriva a breve).`)}`);
+      ? `Non emesso: ${esito.errori.join(' ')}` : `Emesso con il n. ${esito.numero}. Ora mandalo allo SdI con "Invia allo SdI".`)}`);
+  });
+
+  r.post('/documenti/:id/invia', async (req, res) => {
+    const id = Number(req.params.id);
+    let testo: string;
+    try { testo = (await inviaDocumento(id, req.session.utente?.id ?? null)).messaggio; } catch (e: any) { testo = `Non inviato: ${e.message}`; }
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
+  });
+
+  r.post('/documenti/:id/correggi', async (req, res) => {
+    const id = Number(req.params.id);
+    const ok = await riapriScartato(id);
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(ok
+      ? 'Documento riaperto con lo stesso numero e la stessa data: correggi (anche i dati del cliente in anagrafica), poi Emetti e Rimanda allo SdI.'
+      : 'Si riaprono solo i documenti scartati dallo SdI.')}`);
+  });
+
+  r.post('/documenti/:id/aggiorna-sdi', async (req, res) => {
+    const id = Number(req.params.id);
+    let testo: string;
+    try { const n = await aggiornaEsitiDocumento(id); testo = n ? 'Esito aggiornato.' : 'Nessun esito nuovo dallo SdI.'; } catch (e: any) { testo = e.message; }
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
   });
 
   r.post('/documenti/:id/elimina', async (req, res) => {

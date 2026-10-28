@@ -52,7 +52,9 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
   await transazione(async c => {
     const d = (await c.query(`SELECT stato FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
-    await c.query(`UPDATE documenti SET data = $2, anno = $3, condizione_pagamento = $4, causale = $5, riferimento_esterno = $6, note = $7, aggiornato_il = now()
+    // un documento scartato dallo SdI e riaperto tiene numero e data (si rimanda con gli stessi)
+    await c.query(`UPDATE documenti SET data = CASE WHEN numero IS NULL THEN $2::date ELSE data END,
+      anno = CASE WHEN numero IS NULL THEN $3 ELSE anno END, condizione_pagamento = $4, causale = $5, riferimento_esterno = $6, note = $7, aggiornato_il = now()
       WHERE id = $1`, [id, data, Number(data.slice(0, 4)), String(b.condizione_pagamento ?? '') || null, String(b.causale ?? '').trim() || null,
       String(b.riferimento_esterno ?? '').trim() || null, String(b.note ?? '').trim() || null]);
     await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
@@ -169,10 +171,11 @@ export async function anteprimaDocumento(id: number): Promise<{ esito: EsitoXml;
 export async function emettiDocumento(id: number): Promise<{ numero: string } | { errori: string[] }> {
   try {
     return await transazione(async c => {
-      const d = (await c.query(`SELECT tipo, sezionale, data, stato FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      const d = (await c.query(`SELECT tipo, sezionale, data, stato, numero FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
       if (!d) throw new ErroreEmissione(['Documento non trovato.']);
       if (d.stato !== 'bozza') throw new ErroreEmissione(['Il documento è già emesso.']);
-      const numero = await assegnaNumero(c, d.tipo, d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
+      // scartato dallo SdI e corretto: stesso numero (non se ne prende uno nuovo)
+      const numero: number = d.numero ?? await assegnaNumero(c, d.tipo, d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
       const x = await preparaXml(c, id, numero);
       const esito = x.esito;
       const errori = [...esito.errori, ...x.erroriExtra];
@@ -182,6 +185,7 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
         xml = $8, dichiarazione_intento_id = $9, aggiornato_il = now() WHERE id = $1`,
         [id, numero, JSON.stringify(intestatario), esito.totali.imponibile, esito.totali.imposta, esito.totali.bollo, esito.totali.totale, esito.xml,
          x.intentoId]);
+      await c.query(`DELETE FROM documenti_scadenze WHERE documento_id = $1`, [id]);
       for (const s of x.scadenze)
         await c.query(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4)`, [id, s.data, s.importo, s.modalita]);
       await c.query(`UPDATE documenti SET fattura_id = $1 WHERE id IN (SELECT ddt_id FROM documenti_righe WHERE documento_id = $1 AND ddt_id IS NOT NULL)
@@ -195,8 +199,17 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
 }
 class ErroreEmissione extends Error { constructor(public errori: string[]) { super(errori.join(' ')); } }
 
-/** Elimina una bozza (i documenti emessi non si eliminano: si storna con una nota di credito). */
+/** Elimina una bozza (i documenti emessi non si eliminano: si storna con una nota di credito; uno scartato riaperto ha già il numero). */
 export async function eliminaBozza(id: number): Promise<boolean> {
-  const r = await q(`DELETE FROM documenti WHERE id = $1 AND stato = 'bozza' RETURNING id`, [id]);
+  const r = await q(`DELETE FROM documenti WHERE id = $1 AND stato = 'bozza' AND numero IS NULL RETURNING id`, [id]);
+  return r.length > 0;
+}
+
+/**
+ * Documento scartato dallo SdI: per lo SdI non è mai stato emesso. Torna modificabile (bozza) con lo stesso numero e la stessa data,
+ * si corregge (righe, o i dati del cliente in anagrafica) e si riemette: nuovo XML, poi "Rimanda allo SdI".
+ */
+export async function riapriScartato(id: number): Promise<boolean> {
+  const r = await q(`UPDATE documenti SET stato = 'bozza', aggiornato_il = now() WHERE id = $1 AND stato = 'scartato' RETURNING id`, [id]);
   return r.length > 0;
 }

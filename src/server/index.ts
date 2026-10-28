@@ -28,6 +28,7 @@ import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
+import { riceviWebhook } from './invoicetronic.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -35,6 +36,15 @@ const app = express();
 app.set('trust proxy', 1); // dietro il proxy https di Render
 app.use(helmet({ referrerPolicy: { policy: 'same-origin' }, contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'img-src': ["'self'", 'data:'] } } }));
 app.use('/static', express.static(join(process.cwd(), 'public'), { maxAge: '1h' }));
+// Webhook di Invoicetronic (esiti SdI, fatture ricevute): corpo grezzo per la firma, prima di sessione e login.
+// Risponde sempre 200 alle chiamate firmate (anche se l'elaborazione fallisce, resta in sdi_eventi), 401 alle altre.
+app.post('/sdi/webhook', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  try {
+    const { valido, esito } = await riceviWebhook(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '', req.get('invoicetronic-signature'));
+    if (!valido) return res.status(401).json({ errore: esito });
+    res.json({ ok: true, esito });
+  } catch (e) { console.error('webhook Invoicetronic', e); res.status(500).json({ errore: 'interno' }); }
+});
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 

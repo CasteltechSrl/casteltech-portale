@@ -8,6 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, type CampoAzienda } from '../../engine/amministrazione.js';
+import { collegaWebhook, statoInvoicetronic } from '../invoicetronic.js';
 import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
@@ -36,7 +37,8 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   const torna = (msg: string, ancora = '') => `/impostazioni/amministrazione?msg=${encodeURIComponent(msg)}${ancora}`;
 
   r.get('/', async (req, res) => {
-    const [azienda, numerazioni, aliquote, condizioni] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(), caricaCondizioniPagamento()]);
+    const [azienda, numerazioni, aliquote, condizioni, sdi] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
+      caricaCondizioniPagamento(), statoInvoicetronic()]);
     const scelta = (nome: string, valori: Record<string, string> | string[], attuale: string | null, form?: string, vuota = false) => {
       const voci = Array.isArray(valori) ? valori.map(v => [v, v]) : Object.entries(valori);
       return html`<select name="${nome}" ${form ? raw(`form="${form}"`) : ''}>${vuota ? html`<option value="">—</option>` : ''}
@@ -52,6 +54,20 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
             : html`<input name="${c}" value="${azienda[c]}" class="${c === 'email' || c === 'pec' ? '' : 'maiuscolo'}">`}</label>`)}
         <button class="primario">Salva i dati dell'azienda</button>
       </form>
+
+      <h2 id="sdi">Invio allo SdI (Invoicetronic)</h2>
+      <div class="blocco">
+        ${!sdi.ambiente ? html`<p>Manca la chiave di Invoicetronic: va messa su Render come <code>INVOICETRONIC_API_KEY</code>.</p>` : html`
+        <p>Chiave <strong>${sdi.ambiente === 'reale' ? 'REALE: le fatture vanno davvero allo SdI' : 'di PROVA: niente arriva allo SdI'}</strong>
+          ${sdi.operazioni != null ? html` · operazioni rimaste: ${sdi.operazioni}` : ''}${sdi.errore ? html` · <span class="errore">${sdi.errore}</span>` : ''}</p>
+        <p>Esiti e fatture ricevute: ${sdi.webhook ? html`collegati a <code>${sdi.webhook.url}</code> dal ${dataIt(sdi.webhook.collegato_il.slice(0, 10))}.`
+          : html`<strong>non ancora collegati</strong> (gli esiti si leggono solo con "Aggiorna esito").`}</p>
+        <form method="post" action="/impostazioni/amministrazione/sdi-webhook" class="inline"
+          data-conferma="Collegare Invoicetronic a questo indirizzo del portale per ricevere esiti e fatture? Si fa una volta per ogni chiave (prova e reale).">
+          <button>${sdi.webhook ? 'Collega di nuovo' : 'Collega esiti e fatture ricevute'}</button></form>`}
+        <p class="nota">Il codice destinatario di Casteltech in Invoicetronic è 7HD37X0: si registra sul sito dell'Agenzia delle Entrate solo il giorno del passaggio,
+          perché da quel momento le fatture dei fornitori arrivano qui e non più in Fatture in Cloud.</p>
+      </div>
 
       <h2 id="numerazioni">Numerazioni</h2>
       <p class="nota">Ultimo numero usato per ogni serie. Il portale dà il numero successivo solo quando il documento viene emesso, con data non precedente all'ultima.
@@ -177,6 +193,13 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
       if (!Array.isArray(dati.documenti) && !Array.isArray(dati.ricevuti)) throw new Error();
     } catch { return res.status(400).json({ errore: 'File non valido: serve storico_fic.json.gz' }); }
     res.json(await caricaStoricoFic(dati, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/sdi-webhook', async (req, res) => {
+    // indirizzo pubblico del portale: su Render è https (dietro al proxy), in locale quello della richiesta
+    const indirizzo = process.env.URL_PORTALE ?? `${req.get('x-forwarded-proto') ?? req.protocol}://${req.get('host')}`;
+    try { await collegaWebhook(indirizzo); res.redirect(torna('Invoicetronic collegato: esiti e fatture ricevute arriveranno da soli.', '#sdi')); }
+    catch (e: any) { res.redirect(torna(`Non collegato: ${e.message}`, '#sdi')); }
   });
 
   r.post('/azienda', async (req, res) => {

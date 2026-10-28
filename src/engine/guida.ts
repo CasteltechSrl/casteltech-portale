@@ -421,10 +421,23 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'La fattura nasce come bozza: cliente dall\'anagrafica, righe, e i DDT ancora da fatturare di quel cliente si aggiungono con un clic. L\'IVA predefinita è quella del cliente (lettera d\'intento, estero…) o il 22%.',
       'Con "Emetti" il portale assegna il numero, calcola la scadenza dalla condizione di pagamento, prepara l\'XML della fattura elettronica e segna i DDT come fatturati. Se ci sono errori non si emette e il numero non si consuma.',
-      'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. L\'invio automatico allo SdI (Invoicetronic) e il PDF della fattura sono in preparazione.',
+      'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. Il PDF della fattura è in preparazione.',
     ],
-    passi: ['Amministrazione → + Nuova fattura.', 'Cliente, righe, DDT da fatturare.', 'Salva e controlla gli avvisi.', 'Emetti.'],
+    passi: ['Amministrazione → + Nuova fattura.', 'Cliente, righe, DDT da fatturare.', 'Salva e controlla gli avvisi.', 'Emetti.', 'Invia allo SdI.'],
     pagine: [['/amministrazione/documenti/nuovo?tipo=fattura', 'Nuova fattura'], ['/amministrazione/documenti', 'Documenti emessi']],
+  },
+  {
+    id: 'invio-sdi', area: 'amministrazione', titolo: 'Mandare la fattura allo SdI ed esiti',
+    parole: 'sdi invio inviare mandare invoicetronic esito consegnata scartata scarto ricevuta notifica cassetto fiscale recapito agenzia entrate',
+    testo: [
+      'Dopo "Emetti", nella pagina della fattura (anche nota di credito o autofattura) premi "Invia allo SdI": il portale manda l\'XML a Invoicetronic, che lo passa allo SdI.',
+      'L\'esito arriva da solo, di solito in pochi minuti: "Consegnata" va bene; "Non recapitata" vuol dire che la fattura è valida ma è nell\'area riservata del cliente sul sito dell\'Agenzia: avvisa il cliente. Se tarda, premi "Aggiorna esito".',
+      '"Scartata" vuol dire che per lo SdI la fattura non esiste: premi "Correggi", sistema righe o dati del cliente in anagrafica, poi "Emetti" (stesso numero e stessa data) e "Rimanda allo SdI", entro 5 giorni.',
+      'Con la chiave di prova di Invoicetronic il pulsante è "Prova l\'invio", anche sulle bozze: niente arriva allo SdI e gli esiti sono simulati. Chiave, crediti e collegamento degli esiti sono in Impostazioni → Amministrazione.',
+    ],
+    nonSiPuo: ['Rimandare allo SdI un documento già consegnato o in attesa di esito.', 'Mandare allo SdI una bozza con la chiave reale.'],
+    passi: ['Emetti il documento.', 'Invia allo SdI.', 'Controlla l\'esito nel riquadro SdI.'],
+    pagine: [['/amministrazione/documenti', 'Documenti emessi'], ['/impostazioni/amministrazione#sdi', 'Impostazioni → Invio allo SdI']],
   },
   {
     id: 'nota-credito', area: 'amministrazione', titolo: 'Stornare una fattura (nota di credito)',
