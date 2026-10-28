@@ -114,7 +114,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    uscendo dalla casella il tempo si riscrive leggibile (1h 30').
    🟡 Lettura delle schede scansionate (`engine/fogli-tempi.ts`, migrazione 027): stessa cartella Drive / Da acquisire degli ordini;
    l'IA riconosce la SCHEDA DI PRODUZIONE (n. commessa stampato), legge i fogli tempi, la fase si trova dal numero stampato
-   ("1+2" = fasi insieme: tempo sulla prima, nota), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).
+   ("1+2" = fasi insieme: nota "FASI 1+2 INSIEME"; aprendo il Rientro il tempo si divide tra le fasi in proporzione al tempo ciclo
+   previsto, righe una dopo l'altra, parti uguali se una fase non ha previsto; `ripartisciFasiInsieme`, Adriano 27/10/2026: anche le righe già salvate, poi Salva), operatori "MH+NG", DATA gg/mm con l'anno della scansione (oltre 7 gg nel futuro = anno prima).
    Le righe si aggiungono in fondo al Rientro (`/commesse/:id/rientro?acquisizione=N`, evidenziate, quelle già presenti non si ripetono):
    l'ufficio controlla e salva. ⬜ Provata solo con lettura simulata: manca la prova con scansioni vere.
 4b. ✅ Componenti (`rotte/componenti.ts`, `codifica-servizio.ts`, migrazione 021): codifica come il programma Python
