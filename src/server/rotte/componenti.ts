@@ -11,9 +11,10 @@ import {
   creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
-import { NOMI_FORNITORI, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Offerta } from '../../engine/acquisti.js';
+import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
-import { fornitoriConfigurati } from '../fornitori.js';
+import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
+import { pnKey } from '../../engine/codifica/bom.js';
 import { iaConfigurata } from '../lettura-ia.js';
 
 const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(x);
@@ -26,7 +27,7 @@ export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
     String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? 'componenti.js', contenuto: html`
-      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['codifica', 'Codifica un P/N']]
+      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N']]
         .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
 
@@ -155,6 +156,33 @@ export function rotteComponenti() {
     res.redirect(`/quotazioni/bom/${req.params.id}#riga-${req.params.n}`);
   });
 
+  // ── Miglior prezzo di un P/N: tutti gli shop affiancati (Adriano 28/10/2026) ──
+  r.get('/prezzo', async (req, res) => {
+    const pn = String(req.query.pn ?? '').trim().slice(0, 80);
+    const qta = Math.min(Math.max(parseInt(String(req.query.qta ?? ''), 10) || 1, 1), 1e7);
+    const esito = pn && pnKey(pn) ? await cercaPn([pn], { forza: req.query.aggiorna === '1' }) : null;
+    const perFornitore = esito?.perPn.get(pnKey(pn)!) ?? {};
+    const offerte = Object.values(perFornitore).flatMap(x => x?.offerte ?? []);
+    const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f]);
+    const mancanti = esito ? attivi.filter(f => !esito.errori[f] && !perFornitore[f]?.offerte.length).map(f => NOMI_FORNITORI[f]) : [];
+    res.send(pag(req, 'Miglior prezzo', 'prezzo', html`
+      ${statoCollegamenti()}
+      <form method="get" class="blocco stretto-form">
+        <p class="nota">Scrivi il P/N del produttore e quanti pezzi servono: il portale chiede prezzo e disponibilità a tutti gli shop collegati
+          e mette in cima il più conveniente (minimi d'ordine, multipli e scaglioni compresi). Le risposte restano in memoria 24 ore.</p>
+        <label>P/N <input name="pn" value="${pn}" autofocus autocomplete="off" required></label>
+        <label>Pezzi da comprare <input name="qta" value="${String(qta)}" inputmode="numeric"></label>
+        <button class="primario">Cerca il prezzo</button>
+      </form>
+      ${esito ? html`<section class="blocco"><h2>${pn} <small class="nota">${num(qta, 0)} pz</small></h2>
+        ${attivi.map(f => esito.errori[f] ? html`<p class="avviso">${esito.errori[f]}</p>` : '')}
+        ${tabellaConfronto(offerte, qta)}
+        <p class="nota">${mancanti.length ? `Non lo hanno: ${mancanti.join(', ')}. ` : ''}
+          <a href="https://www.lcsc.com/search?q=${encodeURIComponent(pn)}" target="_blank" rel="noopener">Cerca su LCSC ↗</a> (non ancora collegato: si apre il sito) ·
+          <a href="/quotazioni/prezzo?pn=${encodeURIComponent(pn)}&amp;qta=${String(qta)}&amp;aggiorna=1">Aggiorna prezzi</a></p>
+      </section>` : ''}`));
+  });
+
   // ── Codifica di un singolo P/N ──
   r.get('/codifica', (req, res) => res.send(pag(req, 'Codifica P/N', 'codifica', html`
     ${statoCollegamenti()}
@@ -277,6 +305,23 @@ function tabellaOfferte(offerte: Offerta[], qta: number) {
       <td>${o.confezione ?? ''}</td><td class="n">${num(o.stock, 0)}</td><td class="n">${num(o.moq, 0)}${o.multiplo > 1 ? ` ×${o.multiplo}` : ''}</td>
       <td><small>${o.scaglioni.slice(0, 8).map(s => `${num(s.qta, 0)}: ${euro4(s.prezzo)}`).join(' · ')}${o.valuta !== 'EUR' ? ` (${o.valuta})` : ''}</small></td>
       <td class="n">${euro4(prezzoUnitario(o, qta))}</td><td>${o.ciclo ?? ''}${o.consegnaSettimane ? ` · ${o.consegnaSettimane} sett.` : ''}</td></tr>`)}
+  </tbody></table></div>`;
+}
+
+/** Confronto tra gli shop per il "Miglior prezzo di un P/N": migliore in verde, quanto costano in più gli altri. */
+export function tabellaConfronto(offerte: Offerta[], qta: number) {
+  if (!offerte.length) return html`<p class="vuoto">Nessuno shop collegato ha questo P/N.</p>`;
+  return html`<div class="tabella-scorre"><table class="confronto"><thead><tr><th>Shop</th><th>Codice</th><th>Produttore · P/N</th><th>Confezione</th>
+    <th class="n">Disponibili</th><th class="n">Minimo</th><th class="n">Da ordinare</th><th class="n">€/pz</th><th class="n">Totale</th><th class="n">In più</th><th>Note</th></tr></thead><tbody>
+    ${confrontaOfferte(offerte, qta).map(({ offerta: o, acquisto: a, disponibile, migliore, differenza }) => html`<tr class="${migliore ? 'migliore' : ''}">
+      <td>${NOMI_FORNITORI[o.fornitore]}${migliore ? html` <span class="esito nuovo">migliore</span>` : ''}</td>
+      <td>${o.url ? html`<a href="${o.url}" target="_blank" rel="noopener">${o.codiceFornitore}</a>` : o.codiceFornitore}</td>
+      <td>${o.produttore} · ${o.mpn}</td><td>${o.confezione ?? ''}</td>
+      <td class="n">${num(o.stock, 0)}</td><td class="n">${num(o.moq, 0)}${o.multiplo > 1 ? ` ×${o.multiplo}` : ''}</td>
+      <td class="n">${a ? num(a.qta, 0) : ''}</td><td class="n">${a ? euro4(a.prezzo) : ''}${o.valuta && o.valuta !== 'EUR' ? ` ${o.valuta}` : ''}</td>
+      <td class="n"><b>${a ? euro2(a.totale) : ''}</b></td><td class="n">${differenza != null ? (differenza > 0.005 ? '+' + euro2(differenza) : 'uguale') : ''}</td>
+      <td><small>${[a?.nota, !disponibile && a ? 'pezzi non sufficienti' : '', !a ? 'senza prezzo' : '', o.ciclo ?? '', o.consegnaSettimane ? `${o.consegnaSettimane} sett.` : '']
+        .filter(Boolean).join(' · ')}</small></td></tr>`)}
   </tbody></table></div>`;
 }
 

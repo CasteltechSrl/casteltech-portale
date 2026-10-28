@@ -382,6 +382,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/quotazioni', 'Quotazioni → BOM caricate']],
   },
   {
+    id: 'miglior-prezzo', area: 'componenti', titolo: 'Miglior prezzo di un P/N tra gli shop online',
+    parole: 'miglior prezzo conveniente economico confronto confrontare shop negozi online distributori digikey mouser farnell tme lcsc p/n singolo costa comprare',
+    testo: [
+      'Per sapere dove conviene comprare un componente: scrivi il P/N del produttore e quanti pezzi servono. Il portale chiede prezzo e disponibilità a tutti gli shop collegati (DigiKey, Mouser, Farnell, TME) e li mette uno sotto l\'altro.',
+      'In cima, in verde, c\'è il più conveniente sul totale da pagare: tiene conto del minimo d\'ordine, dei multipli e degli scaglioni (a volte comprare qualche pezzo in più costa meno). Per gli altri la colonna "In più" dice quanto si spenderebbe in più. Uno shop senza pezzi sufficienti va in fondo.',
+      'Le risposte restano in memoria 24 ore; "Aggiorna prezzi" le richiede di nuovo. LCSC non è ancora collegato: "Cerca su LCSC" apre il loro sito con lo stesso P/N.',
+    ],
+    passi: ['Quotazioni → Miglior prezzo di un P/N.', 'Scrivi P/N e pezzi, premi "Cerca il prezzo".', 'Il codice dello shop apre la pagina del prodotto per ordinarlo.'],
+    pagine: [['/quotazioni/prezzo', 'Quotazioni → Miglior prezzo di un P/N']],
+  },
+  {
     id: 'codifica-singola', area: 'componenti', titolo: 'Codificare un solo componente',
     parole: 'codifica singolo componente p/n codice resistenza condensatore',
     testo: [

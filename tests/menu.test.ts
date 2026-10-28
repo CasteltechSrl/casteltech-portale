@@ -25,3 +25,8 @@ test('guida: "quotazioni" porta alla quotazione delle BOM', () => {
   for (const q of ['quotazioni', 'quotare una BOM'])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === 'codifica-bom'), q);
 });
+
+test('guida: miglior prezzo di un P/N tra gli shop', () => {
+  for (const q of ['miglior prezzo di un componente', 'confrontare i prezzi degli shop'])
+    assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === 'miglior-prezzo'), q);
+});

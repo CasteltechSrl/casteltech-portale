@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calcola, progNum, progStr } from '../src/engine/codifica/regole.js';
 import { daColonneBom, decodificaMpn } from '../src/engine/codifica/decoder.js';
 import { elencoDesignatori, leggiCsv, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne } from '../src/engine/codifica/bom.js';
-import { acquisto, leggiPrezzo, pezziScarto, reperibilita, sceltaMigliore, type Offerta } from '../src/engine/acquisti.js';
+import { acquisto, confrontaOfferte, leggiPrezzo, pezziScarto, reperibilita, sceltaMigliore, type Offerta } from '../src/engine/acquisti.js';
 import { leggiJson } from '../src/server/lettura-ia.js';
 
 test('codifica: resistenza 2,2k 0603 senza P/N → 1% e potenza standard', () => {
@@ -68,6 +68,21 @@ test('acquisti: minimo d\'ordine, multipli e scaglione superiore più convenient
   const s = sceltaMigliore([offerta({ fornitore: 'mouser', stock: 10 }), offerta({ fornitore: 'farnell', scaglioni: [{ qta: 1, prezzo: 0.03 }] })], 50);
   assert.equal(s!.offerta.fornitore, 'farnell');             // mouser costa meno ma non ne ha abbastanza
   assert.equal(leggiPrezzo('0,38 €'), 0.38); assert.equal(leggiPrezzo('€1.234,50'), 1234.5); assert.equal(leggiPrezzo('0.1'), 0.1);
+});
+
+test('miglior prezzo di un P/N: la migliore in cima, poi per totale, chi non ne ha abbastanza in fondo (Adriano 28/10/2026)', () => {
+  const righe = confrontaOfferte([
+    offerta({ fornitore: 'mouser', stock: 10 }),                                      // costa meno ma non ne ha abbastanza
+    offerta({ fornitore: 'tme', scaglioni: [{ qta: 1, prezzo: 0.05 }] }),
+    offerta({ fornitore: 'farnell', scaglioni: [{ qta: 1, prezzo: 0.03 }] }),
+    offerta({ fornitore: 'digikey', scaglioni: [] }),                                 // senza prezzo
+  ], 50);
+  assert.deepEqual(righe.map(r => r.offerta.fornitore), ['farnell', 'tme', 'mouser', 'digikey']);
+  assert.equal(righe[0].migliore, true);
+  assert.equal(righe[1].differenza!.toFixed(2), '1.00');                             // 50 × 0,05 − 50 × 0,03
+  assert.equal(righe[2].disponibile, false);
+  assert.equal(righe[3].acquisto, null);
+  assert.deepEqual(confrontaOfferte([], 10), []);
 });
 
 test('acquisti: reperibilità, critico solo se non si trova da nessuna parte (Adriano 28/10/2026)', () => {

@@ -119,6 +119,27 @@ export function sceltaMigliore(offerte: Offerta[], qta: number): Scelta | null {
   return { ...valide[0], disponibile: false };
 }
 
+/** Una riga del confronto prezzi di un P/N tra gli shop (Quotazioni → Miglior prezzo, Adriano 28/10/2026). */
+export interface RigaConfronto { offerta: Offerta; acquisto: Acquisto | null; disponibile: boolean; migliore: boolean; differenza: number | null }
+
+/**
+ * Confronto delle offerte di un P/N per una quantità: in cima la migliore (la stessa scelta della BOM, `sceltaMigliore`),
+ * poi quelle con pezzi sufficienti dal totale più basso, poi le altre (più pezzi prima), in fondo quelle senza prezzo.
+ * `differenza` = quanto si spende in più rispetto alla migliore.
+ */
+export function confrontaOfferte(offerte: Offerta[], qta: number): RigaConfronto[] {
+  const best = sceltaMigliore(offerte, qta);
+  const righe = offerte.map(o => {
+    const a = acquisto(o, qta);
+    return { offerta: o, acquisto: a, disponibile: !!a && o.stock >= a.qta, migliore: !!best && o === best.offerta, differenza: null as number | null };
+  });
+  const gruppo = (r: RigaConfronto) => r.migliore ? 0 : !r.acquisto ? 3 : r.disponibile ? 1 : 2;
+  righe.sort((a, b) => gruppo(a) - gruppo(b)
+    || (gruppo(a) === 1 ? a.acquisto!.totale - b.acquisto!.totale : gruppo(a) === 2 ? b.offerta.stock - a.offerta.stock || a.acquisto!.totale - b.acquisto!.totale : 0));
+  if (best) for (const r of righe) if (r.acquisto && !r.migliore && (r.offerta.valuta === 'EUR' || !r.offerta.valuta)) r.differenza = r.acquisto.totale - best.acquisto.totale;
+  return righe;
+}
+
 export type Livello = 'ok' | 'attenzione' | 'critico';
 export interface Reperibilita { livello: Livello; motivi: string[] }
 

@@ -274,6 +274,7 @@ td.codice, b.codice { font-family: var(--mono); font-size: .82rem; white-space: 
 .alternativa-scelta { color: var(--positivo); font-weight: 600; }
 a.alternative-pronte { font-size: .85em; font-weight: 600; }
 #alternative tr.scelta td { background: #ddf3e5; }
+table.confronto tr.migliore td { background: #ddf3e5; }
 .totali.materiali { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 1rem; }
 .totali.materiali .totale.principale { grid-column: span 1; }
 table.bom td { vertical-align: top; }
