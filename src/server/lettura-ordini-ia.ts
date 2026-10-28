@@ -7,6 +7,7 @@
 import { iaConfigurata } from './lettura-ia.js';
 import { normalizzaDdt, normalizzaProposta, oggettoJson, type DdtLetto, type Proposta } from '../engine/acquisizioni.js';
 import type { FoglioLetto } from '../engine/fogli-tempi.js';
+import { normalizzaFatturaEstera, type FatturaEstera } from '../engine/autofatture.js';
 
 export { iaConfigurata };
 
@@ -31,6 +32,8 @@ rispondi solo {"scheda_produzione": true, "commesse": ["<numeri di commessa che 
 ECCEZIONE: se è un DOCUMENTO DI TRASPORTO (DDT) emesso da Casteltech (Casteltech è il mittente, il cliente è il destinatario)
 rispondi solo {"ddt": true, "numero": "<numero del DDT>", "data": "AAAA-MM-GG", "cliente": "<destinatario>", "rif_ordine": "<ordine del cliente citato, se c'è>",
 "righe": [{"codice": "", "descrizione": "", "quantita": 0}], "note": ""}.
+ECCEZIONE: se è una FATTURA (o invoice) emessa da un FORNITORE a Casteltech (Casteltech è il cliente/acquirente: "Bill to", "Sold to",
+"Fatturare a"), per esempio Mouser, DigiKey, Amazon, un abbonamento software, rispondi solo {"fattura_fornitore": true}.
 In note metti in italiano, in breve, quello che l'ufficio deve sapere (condizioni particolari, consegne parziali, dubbi di lettura).
 Rispondi SOLO con un oggetto JSON:
 {"e_ordine": true, "cliente": "", "rif_cliente": "<numero dell'ordine del cliente>", "data_ordine": "AAAA-MM-GG",
@@ -68,7 +71,8 @@ async function chiediIa(parti: Parte[], sistema: string): Promise<any> {
 }
 
 /** Esito della prima lettura: un ordine, oppure le schede di produzione di Casteltech (fogli tempi) con i numeri di commessa. */
-export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_produzione'; commesse: string[] } | { tipo: 'ddt'; ddt: DdtLetto };
+export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_produzione'; commesse: string[] } | { tipo: 'ddt'; ddt: DdtLetto }
+  | { tipo: 'fattura_estera' };
 
 /** Legge il documento: se è un ordine restituisce la proposta pulita, se è una scheda di produzione i numeri di commessa. */
 export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promise<Lettura> {
@@ -78,6 +82,7 @@ export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promi
     return { tipo: 'scheda_produzione', commesse: [...new Set<string>(commesse)] };
   }
   if (x?.ddt === true) return { tipo: 'ddt', ddt: normalizzaDdt(x) };
+  if (x?.fattura_fornitore === true) return { tipo: 'fattura_estera' };
   return { tipo: 'ordine', proposta: normalizzaProposta(x) };
 }
 
@@ -100,4 +105,32 @@ Rispondi SOLO con un oggetto JSON:
 export async function leggiFogliTempiConIa(parti: Parte[], fasi: string): Promise<FoglioLetto[]> {
   const x = await chiediIa(parti, istruzioniTempi(fasi));
   return Array.isArray(x?.fogli) ? x.fogli : [];
+}
+
+const istruzioniFattura = `Sei l'amministrazione di Casteltech S.r.l. (Italia, P.IVA IT01777320332).
+Ricevi la FATTURA di un FORNITORE (di solito estero: Mouser, DigiKey, Amazon, servizi software…) intestata a Casteltech.
+Serve per l'autofattura (integrazione dell'IVA italiana): leggi il fornitore (chi emette la fattura, MAI Casteltech), il numero e la data
+della fattura, la valuta, tutte le righe e i totali.
+
+Regole:
+- fornitore: ragione sociale, partita IVA come scritta (con il prefisso del paese, es. "FR27512466913", "DE239975861"; se non c'è una
+  P.IVA europea scrivi il codice fiscale/tax ID/registration number del fornitore), indirizzo, CAP, città, provincia o stato, paese (in inglese o italiano).
+  Se nella fattura ci sono più sedi, usa la società che vende (quella del VAT number o del FED ID), non l'ufficio commerciale o il servizio
+  clienti locale: es. Mouser riporta in alto l'ufficio di Assago (Italia) ma il venditore è Mouser Electronics Inc. (USA, P.IVA francese).
+- righe: TUTTE le righe della fattura, una per articolo: codice (part number del produttore o del fornitore), descrizione,
+  quantità, prezzo unitario SENZA IVA nella valuta della fattura. Spese di trasporto, imballo, dazi addebitati: righe anche loro.
+  Sconti sulla riga: prezzo unitario già scontato. Uno sconto sul totale: riga con prezzo negativo.
+- servizi: true se la fattura è per servizi (abbonamenti, software, licenze, consulenze, riparazioni), false per merce.
+- pagata: true se la fattura risulta già pagata (es. "Paid", "Amount due 0", pagata con carta).
+- imponibile, iva, totale: come scritti in fondo alla fattura (iva = IVA/VAT addebitata dal fornitore, 0 se "reverse charge" o assente).
+- date nel formato AAAA-MM-GG; numeri con il punto decimale; non inventare: se un dato non c'è lascialo vuoto.
+- note: in italiano, in breve, dubbi di lettura o cose da controllare (es. IVA addebitata, merce spedita dagli Stati Uniti con dogana).
+Rispondi SOLO con un oggetto JSON:
+{"fornitore": {"ragione_sociale": "", "partita_iva": "", "indirizzo": "", "cap": "", "comune": "", "provincia": "", "paese": ""},
+ "numero": "", "data": "AAAA-MM-GG", "valuta": "EUR", "servizi": false, "pagata": false,
+ "righe": [{"codice": "", "descrizione": "", "quantita": 0, "prezzo": 0}], "imponibile": 0, "iva": 0, "totale": 0, "note": ""}`;
+
+/** Legge la fattura di un fornitore estero (per l'autofattura). */
+export async function leggiFatturaEsteraConIa(parti: Parte[]): Promise<FatturaEstera> {
+  return normalizzaFatturaEstera(await chiediIa(parti, istruzioniFattura));
 }

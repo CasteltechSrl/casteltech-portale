@@ -6,7 +6,8 @@
 import { createHash } from 'node:crypto';
 import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
-import { leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
+import { leggiFatturaEsteraConIa, leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
+import { collegaFatturaEstera } from './autofatture-servizio.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
 import { abbinaDdt, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
@@ -17,7 +18,7 @@ export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
 export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
 
-const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt'];
+const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt', 'fattura_estera'];
 
 /**
  * Registra un file arrivato. Lo stesso file di Drive non entra due volte; lo stesso contenuto arrivato di nuovo
@@ -77,8 +78,16 @@ export async function elabora(id: number): Promise<void> {
   try {
     const { parti, mittente, oggetto } = partiDa(a.nome_file, a.tipo, a.mime ?? '', a.contenuto);
     if (!parti.length) throw new Error("nell'email non ci sono testo né allegati PDF o immagini");
+    // fattura di un fornitore estero: caricata da Amministrazione → Autofatture (già si sa cos'è) o riconosciuta alla prima lettura
+    const fattura = async () => {
+      const f = await collegaFatturaEstera(await leggiFatturaEsteraConIa(parti));
+      await q(`UPDATE acquisizioni SET tipo = 'fattura_estera', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
+        [id, JSON.stringify(f)]);
+    };
+    if (a.tipo === 'fattura_estera') return await fattura();
     const clienti = (await q<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti ORDER BY ragione_sociale`)).map(c => c.r);
     const lettura = await leggiOrdineConIa(parti, clienti);
+    if (lettura.tipo === 'fattura_estera') return await fattura();
     if (lettura.tipo === 'ddt') {
       const ddt = await collegaDdt({ tipoDocumento: 'ddt', ...lettura.ddt, clienteId: null, righe: lettura.ddt.righe });
       await q(`UPDATE acquisizioni SET tipo = 'ddt', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,

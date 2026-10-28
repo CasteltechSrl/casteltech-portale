@@ -125,12 +125,30 @@ const NAZIONI: Record<string, string> = {
   ITALIA: 'IT', 'STATI UNITI': 'US', SVIZZERA: 'CH', CINA: 'CN', SVEZIA: 'SE', IRLANDA: 'IE', 'PAESI BASSI': 'NL', FRANCIA: 'FR',
   NORVEGIA: 'NO', GERMANIA: 'DE', SPAGNA: 'ES', AUSTRIA: 'AT', BELGIO: 'BE', POLONIA: 'PL', 'REGNO UNITO': 'GB', 'SAN MARINO': 'SM',
   'REPUBBLICA CECA': 'CZ', SLOVENIA: 'SI', ROMANIA: 'RO', UNGHERIA: 'HU', PORTOGALLO: 'PT', DANIMARCA: 'DK', FINLANDIA: 'FI', LUSSEMBURGO: 'LU',
+  GRECIA: 'GR', BULGARIA: 'BG', SLOVACCHIA: 'SK', CROAZIA: 'HR', ESTONIA: 'EE', LETTONIA: 'LV', LITUANIA: 'LT', MALTA: 'MT', CIPRO: 'CY',
+  'HONG KONG': 'HK', TAIWAN: 'TW', GIAPPONE: 'JP', 'COREA DEL SUD': 'KR', INDIA: 'IN', CANADA: 'CA', ISRAELE: 'IL', SINGAPORE: 'SG',
+  TURCHIA: 'TR', AUSTRALIA: 'AU', THAILANDIA: 'TH', MALESIA: 'MY', VIETNAM: 'VN',
+};
+/** Nomi inglesi (come sulle fatture estere) → sigla ISO. */
+const NAZIONI_INGLESE: Record<string, string> = {
+  ITALY: 'IT', 'UNITED STATES': 'US', 'UNITED STATES OF AMERICA': 'US', USA: 'US', 'U.S.A.': 'US', SWITZERLAND: 'CH', CHINA: 'CN',
+  "PEOPLE'S REPUBLIC OF CHINA": 'CN', PRC: 'CN', SWEDEN: 'SE', IRELAND: 'IE', NETHERLANDS: 'NL', 'THE NETHERLANDS': 'NL', HOLLAND: 'NL', FRANCE: 'FR',
+  NORWAY: 'NO', GERMANY: 'DE', DEUTSCHLAND: 'DE', SPAIN: 'ES', BELGIUM: 'BE', POLAND: 'PL', 'UNITED KINGDOM': 'GB', UK: 'GB', 'GREAT BRITAIN': 'GB',
+  ENGLAND: 'GB', 'CZECH REPUBLIC': 'CZ', CZECHIA: 'CZ', HUNGARY: 'HU', DENMARK: 'DK', FINLAND: 'FI', LUXEMBOURG: 'LU', GREECE: 'GR',
+  SLOVAKIA: 'SK', CROATIA: 'HR', LATVIA: 'LV', LITHUANIA: 'LT', CYPRUS: 'CY', JAPAN: 'JP', 'SOUTH KOREA': 'KR', KOREA: 'KR', ISRAEL: 'IL',
+  TURKEY: 'TR', THAILAND: 'TH', MALAYSIA: 'MY',
 };
 export function siglaNazione(paese: unknown): string | null {
   const p = String(paese ?? '').trim().toUpperCase();
   if (!p) return 'IT';
-  if (/^[A-Z]{2}$/.test(p)) return p;
-  return NAZIONI[p] ?? null;
+  if (/^[A-Z]{2}$/.test(p)) return p === 'UK' ? 'GB' : p === 'EL' ? 'GR' : p;
+  return NAZIONI[p] ?? NAZIONI_INGLESE[p] ?? null;
+}
+/** Paesi in elenco (sigla e nome), per scegliere il paese di un fornitore. */
+export const ELENCO_NAZIONI = Object.entries(NAZIONI).map(([nome, sigla]) => ({ sigla, nome })).sort((x, y) => x.nome.localeCompare(y.nome));
+/** Sigla ISO → nome del paese in italiano (MAIUSCOLO, come nelle anagrafiche); la sigla stessa se il paese non è in elenco. */
+export function nomeNazione(sigla: string): string {
+  return Object.entries(NAZIONI).find(([, s]) => s === sigla)?.[0] ?? sigla;
 }
 
 export interface CondizioneDaFile { codice: string; descrizione: string; modalita: string; giorni: number; fine_mese: boolean }

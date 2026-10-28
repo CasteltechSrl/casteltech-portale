@@ -8,14 +8,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generaFatturaXml } from '../src/engine/fatturapa.js';
-import { ALIQUOTE, AZIENDA, ESEMPI } from './fatturapa/esempi.js';
+import { generaAutofatturaXml, generaFatturaXml } from '../src/engine/fatturapa.js';
+import { ALIQUOTE, AZIENDA, ESEMPI, ESEMPI_AUTOFATTURE } from './fatturapa/esempi.js';
 
 const cartella = mkdtempSync(join(tmpdir(), 'fatturapa-'));
 const schema = join(import.meta.dirname, 'fatturapa', 'Schema_FatturaPA_1.2.2.xsd');
 let sbagliati = 0;
-for (const e of ESEMPI) {
-  const r = generaFatturaXml(e.documento, e.cliente, AZIENDA, ALIQUOTE);
+const tutti = [...ESEMPI.map(e => ({ nome: e.nome, genera: () => generaFatturaXml(e.documento, e.cliente, AZIENDA, ALIQUOTE) })),
+  ...ESEMPI_AUTOFATTURE.map(e => ({ nome: e.nome, genera: () => generaAutofatturaXml(e.documento, e.fornitore, AZIENDA, ALIQUOTE) }))];
+for (const e of tutti) {
+  const r = e.genera();
   const file = join(cartella, `${e.nome}.xml`);
   writeFileSync(file, r.xml);
   try {

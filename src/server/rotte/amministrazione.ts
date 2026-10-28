@@ -9,6 +9,8 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
+import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
+import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import {
   TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, salvaBozza,
@@ -59,15 +61,17 @@ export function rotteAmministrazione() {
       ${menuAmministrazione('cruscotto')}${await contenutoCruscotto()}`, msg(req)));
   });
 
+  r.use('/fatture-estere', rotteAutofatture());
+
   r.get('/documenti', async (req, res) => {
     const tipo = String(req.query.tipo ?? 'fattura');
     const anno = Number(req.query.anno) || new Date().getFullYear();
     const cerca = String(req.query.q ?? '').trim();
     const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.imponibile, d.totale, d.fattura_id,
-        coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
-      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
+        coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
-        AND ($3 = '' OR coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
+        AND ($3 = '' OR coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
       ORDER BY d.numero IS NOT NULL, d.data DESC, d.numero DESC NULLS FIRST`, [tipo, anno, cerca]);
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti ORDER BY anno DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
@@ -86,6 +90,7 @@ export function rotteAmministrazione() {
         <input name="q" value="${cerca}" placeholder="Cliente o numero">
         <button>Cerca</button>
       </form>
+      ${tipo === 'autofattura' ? await riquadroFattureEstere() : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`<div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
@@ -96,7 +101,7 @@ export function rotteAmministrazione() {
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
-        </tr>`)}</tbody></table></div>` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req)));
+        </tr>`)}</tbody></table></div>` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req), tipo === 'autofattura' ? 'acquisizioni.js' : undefined));
   });
 
   r.get('/documenti/nuovo', async (req, res) => {
@@ -123,10 +128,11 @@ export function rotteAmministrazione() {
 
   r.get('/documenti/:id', async (req, res) => {
     const id = Number(req.params.id);
-    const d = await q1(`SELECT d.*, c.ragione_sociale, o.numero AS origine_numero, o.sezionale AS origine_sezionale, o.data AS origine_data,
-        f.numero AS fattura_numero, f.data AS fattura_data
-      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN documenti o ON o.id = d.documento_origine_id
-      LEFT JOIN documenti f ON f.id = d.fattura_id WHERE d.id = $1`, [id]);
+    const d = await q1(`SELECT d.*, coalesce(c.ragione_sociale, fa.ragione_sociale) AS ragione_sociale, o.numero AS origine_numero, o.sezionale AS origine_sezionale,
+        o.data AS origine_data, f.numero AS fattura_numero, f.data AS fattura_data, ri.numero AS ricevuto_numero, ri.data AS ricevuto_data
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
+      LEFT JOIN documenti o ON o.id = d.documento_origine_id LEFT JOIN documenti f ON f.id = d.fattura_id
+      LEFT JOIN documenti_ricevuti ri ON ri.id = d.ricevuto_id WHERE d.id = $1`, [id]);
     if (!d) return res.status(404).send('Documento non trovato');
     const righe = await q(`SELECT r.*, t.numero AS ddt_numero FROM documenti_righe r LEFT JOIN documenti t ON t.id = r.ddt_id
       WHERE r.documento_id = $1 ORDER BY r.posizione`, [id]);
@@ -138,6 +144,7 @@ export function rotteAmministrazione() {
         ${d.origine === 'fic' ? html`<span class="etichetta">da Fatture in Cloud</span>` : ''}</div></div>
       <p><strong>${intestatario}</strong> · ${data(d.data)}
         ${d.origine_numero ? html` · storna la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>` : ''}
+        ${d.ricevuto_id ? html` · ${TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi} sulla <a href="/amministrazione/ricevuti/${d.ricevuto_id}">fattura del fornitore n. ${d.ricevuto_numero} del ${data(d.ricevuto_data)}</a>` : ''}
         ${d.tipo === 'ddt' ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>` : ' · da fatturare') : ''}</p>`;
 
     if (d.stato !== 'bozza') {
@@ -185,9 +192,10 @@ export function rotteAmministrazione() {
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
-          <label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(c =>
+          ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`
+          : html`<label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(c =>
             html`<option value="${c.codice}" ${d.condizione_pagamento === c.codice ? raw('selected') : ''}>${c.descrizione}</option>`)}</select></label>
-          <label>Rif. ordine del cliente <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>
+          <label>Rif. ordine del cliente <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`}
         </div>
         <label>Causale (stampata sulla fattura) <input name="causale" value="${d.causale ?? ''}"></label>
         <label>Note interne (non vanno in fattura) <input name="note" value="${d.note ?? ''}"></label>
@@ -196,7 +204,8 @@ export function rotteAmministrazione() {
           <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
         </table></div>
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
-          <span class="nota">IVA "predefinita" = quella del cliente (lettera d'intento, estero…) o 22 %.</span>
+          <span class="nota">${d.tipo === 'autofattura' ? 'Autofattura: IVA italiana (di solito 22 %) sulle righe della fattura estera, in euro.'
+            : 'IVA "predefinita" = quella del cliente (lettera d\'intento, estero…) o 22 %.'}</span>
           <button class="primario">Salva</button></div>
       </form>
       ${ddt.length ? html`<form method="post" action="/amministrazione/documenti/${id}/ddt" class="blocco">

@@ -40,8 +40,8 @@ export async function contenutoCruscotto(): Promise<Raw> {
         count(*)::int AS quanti, max(d.data) AS ultimo
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato') GROUP BY 1 ORDER BY 2 DESC, 1`),
-    q(`SELECT d.id, d.tipo, d.data, coalesce(c.ragione_sociale, '') AS nome FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE d.stato = 'bozza' ORDER BY d.creato_il DESC`),
+    q(`SELECT d.id, d.tipo, d.data, coalesce(c.ragione_sociale, f.ragione_sociale, '') AS nome FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
+      LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.stato = 'bozza' ORDER BY d.creato_il DESC`),
   ]);
 
   const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -81,7 +81,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
           <p class="nota"><a href="/amministrazione/documenti?tipo=ddt">Elenco dei DDT →</a> · si fatturano da "+ Nuova fattura" scegliendo il cliente.</p>`
           : html`<p class="vuoto">Nessun DDT da fatturare.</p>`}</section>
       <section><h2>Bozze da finire</h2>
-        ${bozze.length ? html`<ul>${bozze.map(b => html`<li><a href="/amministrazione/documenti/${b.id}">${b.tipo === 'nota_credito' ? 'Nota di credito' : 'Fattura'}
+        ${bozze.length ? html`<ul>${bozze.map(b => html`<li><a href="/amministrazione/documenti/${b.id}">${({ nota_credito: 'Nota di credito', autofattura: 'Autofattura' } as Record<string, string>)[b.tipo] ?? 'Fattura'}
           ${b.nome}</a> <span class="nota">del ${data(b.data)}</span></li>`)}</ul>` : html`<p class="vuoto">Nessuna bozza.</p>`}
         <p><a href="/amministrazione/documenti/nuovo?tipo=fattura" class="bottone primario">+ Nuova fattura</a></p></section>
     </div>`;
