@@ -17,7 +17,7 @@ import { q, q1, transazione } from './db.js';
 import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attributi } from '../engine/codifica/regole.js';
 import { daColonneBom, decodificaMpn } from '../engine/codifica/decoder.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
-import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, regolaCondensatori, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
+import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, digikeyParametri, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa } from './lettura-ia.js';
@@ -65,6 +65,8 @@ export async function leggiFileBom(nome: string, contenuto: Buffer): Promise<str
   const n = nome.toLowerCase();
   if (n.endsWith('.csv') || n.endsWith('.txt')) {
     const testo = contenuto.toString('utf8').replace(/^﻿/, '');
+    const fisse = n.endsWith('.txt') ? leggiBomColonneFisse(testo) : null;
+    if (fisse) return fisse;
     const sep = (testo.match(/;/g)?.length ?? 0) > (testo.match(/,/g)?.length ?? 0) ? ';' : (testo.includes('\t') && !testo.includes(',') ? '\t' : ',');
     return leggiCsv(testo, sep);
   }

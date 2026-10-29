@@ -4,6 +4,7 @@
  * I file originali restano sul Drive del cliente (Adriano, 27/10/2026): nel database vanno solo i file che servono
  * a rileggere il pacchetto (BOM, pick and place, Gerber, forature, CAD), compressi, più il risultato.
  */
+import { createHash } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import { q, q1 } from './db.js';
@@ -22,6 +23,7 @@ import { propostaProdotto } from '../engine/scheda/prodotto.js';
 import { notaRichiesta } from '../engine/gmail.js';
 import { leggiEmail } from '../engine/acquisizioni.js';
 import { unisciBomDivise } from '../engine/scheda/bom-divise.js';
+import { allineaAlRame } from '../engine/scheda/allinea.js';
 import { fileDellaVersione, richiesteDaEmail, versioniDaDividere } from '../engine/scheda/versioni.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
@@ -84,7 +86,7 @@ const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani =
  * `giaAperti`: gli zip sono già stati aperti con espandiArchivi (si evita di aprirli due volte).
  */
 const MAIL_CLIENTE = 'mail del cliente: il testo è in cima alla pagina (quantità e versioni)';
-export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = '', giaAperti = false): Promise<Elaborazione> {
+export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = '', giaAperti = false, versione: string | null = null): Promise<Elaborazione> {
   const file = giaAperti ? caricati : espandiArchivi(caricati);
   const elenco: FileElenco[] = [];
   const bomCandidate: { nome: string; righe: RigaBomScheda[]; intestazione: string[][] }[] = [];
@@ -102,8 +104,16 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
     elenco.push({ nome: r.replace(/[\\/]$/, '') || 'ODB++', tipo: 'odb', byte: dentro.reduce((t, f) => t + (f.byte ?? f.dati.length), 0), usato: false,
       nota: `ODB++ (${dentro.length} file): non ancora letto, si usano Gerber e forature` });
   }
+  // lo stesso file due volte (cartella con lo zip e anche il suo contenuto scompattato): si legge una volta sola
+  const visti = new Map<string, string>();
   for (const f of file) {
     if (odb.some(r => f.nome.startsWith(r))) continue;
+    if (f.conservato !== false && f.dati.length) {
+      const impronta = createHash('sha1').update(f.dati).digest('hex');
+      const primo = visti.get(impronta);
+      if (primo) { elenco.push({ nome: f.nome, tipo: tipoFile(f.nome, null), byte: f.dati.length, usato: false, nota: `copia identica di ${primo.split(/[\\/]/).pop()}: ignorata` }); continue; }
+      visti.set(impronta, f.nome);
+    }
     if (f.conservato === false) {
       const tipo = tipoFile(f.nome, null);
       // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
@@ -157,10 +167,18 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
   for (const b of scartate) { const v = elenco.find(x => x.nome === b.nome); if (v) v.nota = 'altra BOM nel pacchetto: non usata (si usa quella che corrisponde al pick and place)'; }
   const bom = prima ? { ...prima, righe: unite.flatMap(b => b.righe) } : null;
   for (const v of elenco) if (v.tipo === 'bom' && bom && v.nome === bom.nome) v.usato = true;
+  // versione della scheda (Dividi per versione): il pick and place è spesso uno solo per tutte le versioni (M0929-C: centri.txt con
+  // HELIOS e CRONOS insieme); i componenti che non sono nella BOM della versione non si montano in questa versione
+  if (versione && bom) {
+    const nellaBom = new Set(bom.righe.flatMap(r => r.designatori.map(d => d.toUpperCase())));
+    for (const p of pickPlace) {
+      const fuori = p.lettura.posizioni.filter(x => !nellaBom.has(x.ref));
+      if (!fuori.length) continue;
+      p.lettura.posizioni = p.lettura.posizioni.filter(x => nellaBom.has(x.ref));
+      p.lettura.avvisi.push(`${fuori.length} componenti non sono nella BOM della versione ${versione}: non montati in questa versione (${fuori.slice(0, 12).map(x => x.ref).join(', ')}${fuori.length > 12 ? '…' : ''}).`);
+    }
+  }
 
-  // contorno della scheda: lo strato del contorno, altrimenti il rame
-  const veroContorno = unione(strati.filter(s => s.ruolo === 'contorno').map(s => s.riquadro));
-  const contorno = veroContorno ?? riquadroSensato(unione(strati.filter(s => s.ruolo === 'rame').map(s => s.riquadro)), pickPlace);
   // piazzole per lato: dal rame, o dalla pasta se il rame di quel lato manca
   const piazzole: Partial<Record<'TOP' | 'BOT', Piazzola[]>> = {};
   for (const lato of ['TOP', 'BOT'] as const) {
@@ -168,6 +186,20 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
     const v = di('rame').length ? di('rame') : di('pasta');
     if (v.length) piazzole[lato] = v;
   }
+  // pick and place con un'altra origine: si sposta sulle piazzole del rame (stesso spostamento per tutti i file e i lati)
+  const pp = pickPlace.flatMap(p => p.lettura.posizioni);
+  const latoGuida = (['TOP', 'BOT'] as const).filter(l => piazzole[l]?.length).sort((a, b) => pp.filter(p => p.lato === b).length - pp.filter(p => p.lato === a).length)[0];
+  const sposta = latoGuida && !cad ? allineaAlRame(pp.filter(p => p.lato === latoGuida && !p.tht), piazzole[latoGuida]!) : null;
+  if (sposta) {
+    for (const p of pickPlace) {
+      p.lettura.posizioni = p.lettura.posizioni.map(x => ({ ...x, x: x.x + sposta.dx, y: x.y + sposta.dy }));
+      p.lettura.fiducial = p.lettura.fiducial.map(x => ({ ...x, x: x.x + sposta.dx, y: x.y + sposta.dy }));
+      p.lettura.avvisi.push(`Coordinate con un'altra origine rispetto ai Gerber: componenti spostati di ${sposta.dx.toFixed(2).replace('.', ',')} mm in X e ${sposta.dy.toFixed(2).replace('.', ',')} mm in Y per combaciare con le piazzole (${Math.round(sposta.dopo * 100)}% dei componenti sul rame).`);
+    }
+  }
+  // contorno della scheda: lo strato del contorno, altrimenti il rame
+  const veroContorno = unione(strati.filter(s => s.ruolo === 'contorno').map(s => s.riquadro));
+  const contorno = veroContorno ?? riquadroSensato(unione(strati.filter(s => s.ruolo === 'rame').map(s => s.riquadro)), pickPlace);
   const analisi = analizzaScheda({
     bom, pickPlace, cad, forature,
     strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno, piazzole,
@@ -191,7 +223,11 @@ function riquadroSensato(r: Riquadro | null, pp: { lettura: LetturaPickPlace }[]
   const pos = pp.flatMap(p => p.lettura.posizioni);
   if (!r || !pos.length) return r;
   const m = 8, xs = pos.map(p => p.x), ys = pos.map(p => p.y);
-  return { x0: Math.max(r.x0, Math.min(...xs) - m), y0: Math.max(r.y0, Math.min(...ys) - m), x1: Math.min(r.x1, Math.max(...xs) + m), y1: Math.min(r.y1, Math.max(...ys) + m) };
+  const t = { x0: Math.max(r.x0, Math.min(...xs) - m), y0: Math.max(r.y0, Math.min(...ys) - m), x1: Math.min(r.x1, Math.max(...xs) + m), y1: Math.min(r.y1, Math.max(...ys) + m) };
+  // pick and place con un'altra origine (RFQ M0929-C, 29/10/2026: Gerber a 103;205 mm, componenti vicino a 0;0): il taglio resterebbe
+  // vuoto o schiacciato e il disegno sparisce. Si taglia solo se resta almeno metà del rame.
+  const area = (q: Riquadro) => Math.max(0, q.x1 - q.x0) * Math.max(0, q.y1 - q.y0);
+  return area(t) >= area(r) / 2 ? t : r;
 }
 
 // ───────────────────────────── database ─────────────────────────────
@@ -230,10 +266,11 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
   return conMemoria(BUDGET, async () => {
     const righe = await q<{ nome: string; byte: number; dati: Buffer }>(`SELECT nome, byte, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 ORDER BY nome`, [id]);
     const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
-    const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
+    const pacchetto = await q1<{ nome: string; versione: string | null }>(`SELECT nome, versione FROM pacchetti_scheda WHERE id = $1`, [id]);
+    const nome = pacchetto?.nome ?? '';
     const file = espandiArchivi(caricati);
     await emailDallaCartella(id, file);
-    const el = await elaboraPacchetto(file, nome, true);
+    const el = await elaboraPacchetto(file, nome, true, pacchetto?.versione ?? null);
     const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
     const presenti = new Set(righe.map(r => r.nome));
     // i file utili usciti dagli zip diventano file a parte (lo zip poi non si conserva)
