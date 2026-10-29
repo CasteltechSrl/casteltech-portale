@@ -243,16 +243,16 @@ export function rottePreventivi() {
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
 /** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
-  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
+  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'campionatura'] }, { nome: '', codici: ['variazioneQuantita'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
     { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia', 'smdAMano'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
     { nome: 'AOI', codici: ['aoiTop', 'aoiBot', 'controlloVisivo'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
-  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
+  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'usaSplicing'] }, { nome: '', codici: ['puliziaSaldature', 'lavaggioSchede'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
-  doppiaFaccia: 'BOT', smdAMano: 'A mano', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+  doppiaFaccia: 'BOT', smdAMano: 'A mano', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata', puliziaSaldature: 'Pulizia saldature', lavaggioSchede: 'Lavaggio',
 };
 
 function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
