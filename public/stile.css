@@ -597,3 +597,13 @@ button.link:disabled { color: var(--tenue); cursor: default; }
 table.editor tr.senza-cliente td { background: #fff4c2; }
 table.editor tr.senza-cliente select { border-color: #e0b100; }
 nav.tasti-anagrafiche a .conta.da-assegnare { background: #fff4c2; color: #8a6100; }
+
+/* ── Impostazioni → Servizi: consumi e limiti (29/10/2026) ── */
+.tabella-scorre { overflow-x: auto; }
+table.servizi td { vertical-align: top; }
+table.servizi td.numero { text-align: right; white-space: nowrap; }
+table.servizi tr.servizio-critico { background: #fdf0ee; }
+table.servizi tr.servizio-attenzione { background: #fffaea; }
+table.servizi meter { width: 5rem; vertical-align: middle; }
+.avviso.servizi-critico { background: #fbe2e0; border-color: #e7a9a3; }
+.avviso.servizi ul { margin: .3rem 0 0; padding-left: 1.2rem; }

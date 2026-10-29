@@ -40,6 +40,9 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
   assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));
   assert.deepEqual(primi('backup'), ['backup']);
+  assert.deepEqual(primi('credito anthropic finito', 1), ['servizi']);
+  assert.deepEqual(primi('quanti token sto usando', 1), ['servizi']);
+  assert.ok(primi('memoria di render', 2).includes('servizi'));
   assert.deepEqual(primi('PIN operatori', 1), ['operatori']);
   assert.ok(primi('cancellare un cliente', 3).includes('eliminare'));
 });
