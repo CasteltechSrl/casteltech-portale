@@ -17,6 +17,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Anagrafiche: nei preventivi cliente, codice e descrizione si scelgono SOLO da clienti/prodotti in anagrafica
   (menu Anagrafiche), mai testo libero; tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi
   preventivi sono collegati con `alias_clienti` / `alias_prodotti`. Clienti/prodotti non in elenco non vanno in anagrafica.
+- Regola codice-cliente (Adriano 29/10/2026, `engine/anagrafiche.ts`, test in `tests/anagrafiche-regola.test.ts`): ogni codice prodotto
+  ha SEMPRE il suo cliente. Non si salva un prodotto senza cliente (Anagrafiche, preventivo, import: i prodotti nuovi senza cliente nel file non entrano);
+  nel preventivo il menu Codice mostra SOLO i codici del cliente scelto (`prodottiPerCliente`), il prodotto nuovo si aggiunge con "+ Nuovo prodotto";
+  i vecchi codici senza cliente sono in evidenza in Anagrafiche → Prodotti (in cima, gialli, conteggio sul tasto) finché non si assegnano o si eliminano.
 
 - Menu in alto (Adriano 28/10/2026, `views/layout.ts`, test in `tests/menu.test.ts`): CRM, Anagrafiche, Quotazioni, Preventivi, Ordini, Commesse,
   Amministrazione, Impostazioni, Suggerimenti, Guida. "Quotazioni" è la ex sezione Componenti (BOM, codifica, prezzi): indirizzo `/quotazioni`,

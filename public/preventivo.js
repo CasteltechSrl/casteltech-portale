@@ -82,7 +82,7 @@
     }, 250);
   }
 
-  // ── Cliente e codice solo dalle anagrafiche ──
+  // ── Cliente e codice solo dalle anagrafiche: nel menu Codice solo i codici del cliente scelto ──
   const selCliente = document.getElementById('sel-cliente');
   const selProdotto = document.getElementById('sel-prodotto');
   const descrizione = document.getElementById('descrizione');
@@ -93,10 +93,10 @@
     if (!selCliente.value) { selProdotto.innerHTML = '<option value="">— prima scegli il cliente —</option>'; return; }
     const elenco = await (await fetch('/preventivi/prodotti?cliente=' + encodeURIComponent(selCliente.value))).json();
     selProdotto.innerHTML = '';
-    const vuota = new Option(elenco.length ? '— scegli il codice —' : 'Nessun prodotto per questo cliente (aggiungilo in Anagrafiche → Prodotti)', '');
+    const vuota = new Option(elenco.length ? '— scegli il codice —' : 'Nessun codice per questo cliente: usa «+ Nuovo prodotto»', '');
     selProdotto.add(vuota);
     for (const p of elenco) {
-      const o = new Option(p.codice + (p.da_assegnare ? ' (non assegnato)' : ''), p.id);
+      const o = new Option(p.codice, p.id);
       o.dataset.descrizione = p.descrizione || '';
       selProdotto.add(o);
     }

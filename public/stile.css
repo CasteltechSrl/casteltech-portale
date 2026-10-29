@@ -592,3 +592,8 @@ button.link:disabled { color: var(--tenue); cursor: default; }
 .nuovo-prodotto .nota { margin: 0; }
 .nuovo-prodotto .azioni-riga { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .rimando-preventivo { display: flex; gap: .8rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* Anagrafiche → Prodotti: codici senza cliente da assegnare o eliminare (regola codice-cliente) */
+table.editor tr.senza-cliente td { background: #fff4c2; }
+table.editor tr.senza-cliente select { border-color: #e0b100; }
+nav.tasti-anagrafiche a .conta.da-assegnare { background: #fff4c2; color: #8a6100; }
