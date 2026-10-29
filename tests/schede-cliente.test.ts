@@ -161,6 +161,10 @@ test('riconoscimento dei file e degli strati', () => {
   assert.deepEqual(ruoloStrato('scheda.gtl'), { ruolo: 'rame', lato: 'TOP' });
   assert.deepEqual(ruoloStrato('scheda.gbs'), { ruolo: 'maschera', lato: 'BOT' });
   assert.equal(ruoloStrato('scheda_GND_Negative.GP1').ruolo, 'interno');
+  // nomi senza estensione con il numero del lato (RFQ M0929-C, 29/10/2026)
+  assert.deepEqual(ruoloStrato('gerber/m0929c_pa1'), { ruolo: 'pasta', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('gerber/m0929c_so1'), { ruolo: 'maschera', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('gerber/m0929c_cu2'), { ruolo: 'rame', lato: 'BOT' });
   assert.deepEqual(ruoloStrato('x.art', '%TF.FileFunction,Paste,Bot*%'), { ruolo: 'pasta', lato: 'BOT' });
   assert.equal(ruoloStrato('SCHEDA_OUTLINE.art').ruolo, 'contorno');
 });

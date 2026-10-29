@@ -6,7 +6,7 @@
 
 export interface Richiesta { quantita: number; descrizione: string; versione: string | null }
 
-const UNITA = '(?:pz\\.?|pezzi|pcs\\.?|pc\\.?|schede|nr\\.?|n\\.|qt[aà]\\.?)';
+const UNITA = '(?:pz\\.?|pezzi|pcs\\.?|pc\\.?|pcba?|schede|nr\\.?|n\\.|qt[aà]\\.?)';
 
 /** Righe tipo "167pz M0929-C versione HELIOS", "M0929-C CRONOS: 90 pz", "n. 500 schede EA1002". Niente righe = nessuna richiesta letta. */
 export function richiesteDaTesto(testo: string): Richiesta[] {
@@ -24,6 +24,17 @@ export function richiesteDaTesto(testo: string): Richiesta[] {
     out.push({ quantita, descrizione, versione: versioneDa(descrizione) });
   }
   return out;
+}
+
+/**
+ * Richieste di una mail: prima il testo, se lì non c'è niente l'oggetto (Adriano 29/10/2026: «Ordine 5 PCB MULTI», 5 pezzi scritti
+ * solo nell'oggetto). R:/RE:/I:/FW: davanti all'oggetto non contano.
+ */
+export function richiesteDaEmail(email: { testo?: string | null; oggetto?: string | null } | null | undefined): Richiesta[] {
+  const dalTesto = richiesteDaTesto(email?.testo ?? '');
+  if (dalTesto.length) return dalTesto;
+  const oggetto = (email?.oggetto ?? '').replace(/^(?:\s*(?:r|re|i|fw|fwd|inoltro)\s*:\s*)+/i, '').replace(/^(?:ordine|richiesta(?:\s+d[i']\s*offerta)?|offerta|preventivo|rfq)\b[\s:.\-–]*/i, '');
+  return richiesteDaTesto(oggetto);
 }
 
 /** "M0929-C versione HELIOS" → "HELIOS"; senza la parola versione/variante/ver. resta null. */

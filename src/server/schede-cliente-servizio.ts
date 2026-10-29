@@ -20,8 +20,9 @@ import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerb
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
 import { notaRichiesta } from '../engine/gmail.js';
+import { leggiEmail } from '../engine/acquisizioni.js';
 import { unisciBomDivise } from '../engine/scheda/bom-divise.js';
-import { fileDellaVersione, richiesteDaTesto, versioniDaDividere } from '../engine/scheda/versioni.js';
+import { fileDellaVersione, richiesteDaEmail, versioniDaDividere } from '../engine/scheda/versioni.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 import { BUDGET, conMemoria } from './memoria.js';
@@ -82,6 +83,7 @@ const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani =
  * Legge tutti i file del pacchetto e fa l'incrocio. Il nome del pacchetto serve a proporre codice e revisione del prodotto.
  * `giaAperti`: gli zip sono già stati aperti con espandiArchivi (si evita di aprirli due volte).
  */
+const MAIL_CLIENTE = 'mail del cliente: il testo è in cima alla pagina (quantità e versioni)';
 export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = '', giaAperti = false): Promise<Elaborazione> {
   const file = giaAperti ? caricati : espandiArchivi(caricati);
   const elenco: FileElenco[] = [];
@@ -106,10 +108,11 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
       const tipo = tipoFile(f.nome, null);
       // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
       const scelta = sceltaFile(f.nome, f.byte ?? 0);
-      const nota = !scelta.carica ? scelta.motivo : tipo === 'archivio' ? 'contenuto già estratto' : 'non conservato nel portale (resta sul Drive)';
+      const nota = !scelta.carica ? scelta.motivo : tipo === 'archivio' ? 'contenuto già estratto' : /\.eml$/i.test(f.nome) ? MAIL_CLIENTE : 'non conservato nel portale (resta sul Drive)';
       elenco.push({ nome: f.nome, tipo, byte: f.byte ?? 0, usato: false, nota });
       continue;
     }
+    if (/\.eml$/i.test(f.nome)) { elenco.push({ nome: f.nome, tipo: 'altro', byte: f.dati.length, usato: true, nota: MAIL_CLIENTE }); continue; }
     const testo = sembraTesto(f.dati) ? testoDi(f.dati) : null;
     const tipo = tipoFile(f.nome, testo);
     const voce: FileElenco = { nome: f.nome, tipo, byte: f.dati.length, usato: false };
@@ -229,6 +232,7 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
     const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
     const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
     const file = espandiArchivi(caricati);
+    await emailDallaCartella(id, file);
     const el = await elaboraPacchetto(file, nome, true);
     const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
     const presenti = new Set(righe.map(r => r.nome));
@@ -239,6 +243,20 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
       [id, JSON.stringify(el.file), JSON.stringify(el.analisi), comprimi(el.disegno), JSON.stringify(el.fonti)]);
     return el;
   });
+}
+
+/**
+ * La mail del cliente salvata come .eml nella cartella (Adriano 29/10/2026: «RFQ_26225 … .eml» insieme ai file): il testo vale come
+ * quello arrivato dal pulsante di Gmail (quantità, versioni, note del preventivo). Solo se il pacchetto non ha già la sua mail.
+ * Gli allegati della mail non si leggono: i file sono già nella cartella.
+ */
+async function emailDallaCartella(id: number, file: FileCaricato[]) {
+  const eml = file.find(f => /\.eml$/i.test(f.nome) && f.dati.length);
+  if (!eml) return;
+  const e = leggiEmail(eml.dati);
+  if (!e.testo && !e.oggetto) return;
+  await q(`UPDATE pacchetti_scheda SET email = $2 WHERE id = $1 AND email IS NULL`, [id, JSON.stringify({
+    mittente: e.mittente.slice(0, 300), oggetto: e.oggetto.slice(0, 300), data: e.data.slice(0, 40), testo: e.testo.slice(0, 20000), messaggioId: e.messaggioId ?? '' })]);
 }
 
 /** Il file della BOM usata, per mandarla alla codifica (sezione Componenti). */
@@ -349,7 +367,7 @@ export async function dividiPerVersioni(id: number, utenteId: number | null): Pr
   const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
   if (!p) throw new Error('Pacchetto non trovato.');
   if (await q1(`SELECT 1 FROM pacchetti_scheda WHERE padre_id = $1`, [id])) throw new Error('Il pacchetto è già diviso per versione.');
-  const versioni = versioniDaDividere(richiesteDaTesto(p.email?.testo ?? ''));
+  const versioni = versioniDaDividere(richiesteDaEmail(p.email));
   if (!versioni.length) throw new Error('Nella mail non ci sono due o più versioni con la loro quantità.');
   const figli: number[] = [];
   for (const v of versioni) {

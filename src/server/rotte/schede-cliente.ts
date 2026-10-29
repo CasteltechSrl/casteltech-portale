@@ -8,7 +8,7 @@ import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
 import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
-import { richiesteDaTesto, versioniDaDividere } from '../../engine/scheda/versioni.js';
+import { richiesteDaEmail, versioniDaDividere } from '../../engine/scheda/versioni.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { caricamentoLimitato } from '../memoria.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
@@ -121,7 +121,7 @@ export function rotteSchedeCliente() {
     const versioni = await q<any>(`SELECT f.id, f.nome, f.versione, f.quantita, f.stato, v.id AS preventivo_id, v.numero AS preventivo_numero, v.stato AS preventivo_stato
       FROM pacchetti_scheda f LEFT JOIN preventivi v ON v.id = f.preventivo_id WHERE f.padre_id = $1 ORDER BY f.id`, [p.id]);
     const padre = p.padre_id ? await q1<{ id: number; nome: string }>(`SELECT id, nome FROM pacchetti_scheda WHERE id = $1`, [p.padre_id]) : null;
-    const richieste = richiesteDaTesto(p.email?.testo ?? '');
+    const richieste = richiesteDaEmail(p.email);
     const daDividere = versioni.length || padre ? [] : versioniDaDividere(richieste);
     const schedeProposte = p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
     const riquadroVersioni = html`
@@ -275,7 +275,11 @@ export function rotteSchedeCliente() {
     const schede = Math.round(Number(String(req.body.schede ?? '').replace(',', '.')));
     if (!(schede > 0)) return res.redirect(`/preventivi/documenti/${req.params.id}`);
     const esistente = await q1<{ preventivo_id: number | null }>(`SELECT preventivo_id FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
-    if (esistente?.preventivo_id) return res.redirect(`/preventivi/${esistente.preventivo_id}`);
+    // già creato (pagina vecchia rimasta aperta, doppio clic): si riapre quello, con le schede scritte qui se è ancora da validare
+    if (esistente?.preventivo_id) {
+      await q(`UPDATE preventivi SET n_schede = $2 WHERE id = $1 AND stato = 'da_validare'`, [esistente.preventivo_id, schede]);
+      return res.redirect(`/preventivi/${esistente.preventivo_id}`);
+    }
     try { res.redirect(`/preventivi/${await creaPreventivoDaPacchetto(Number(req.params.id), schede, req.session.utente!.id)}`); }
     catch (e: any) { res.redirect(`/preventivi/documenti?errore=${encodeURIComponent(e.message)}`); }
   });

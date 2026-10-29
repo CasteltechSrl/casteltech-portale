@@ -64,6 +64,12 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
     cmp: ['rame', 'TOP'], sol: ['rame', 'BOT'], plc: ['serigrafia', 'TOP'], pls: ['serigrafia', 'BOT'], stc: ['maschera', 'TOP'], sts: ['maschera', 'BOT'], crc: ['pasta', 'TOP'], crs: ['pasta', 'BOT'],
   };
   if (perEst[e]) return { ruolo: perEst[e][0], lato: perEst[e][1] };
+  // nomi senza estensione con il numero del lato (RFQ M0929-C, 29/10/2026: m0929c_cu1 rame, _so1 maschera, _pa1 pasta): 1 = TOP, 2 = BOT
+  const numerato = /[_-](CU|SO|SM|PA|SP|SI|SK)([12])$/.exec(n);
+  if (numerato) {
+    const ruolo: RuoloStrato = numerato[1] === 'CU' ? 'rame' : ['SO', 'SM'].includes(numerato[1]) ? 'maschera' : ['PA', 'SP'].includes(numerato[1]) ? 'pasta' : 'serigrafia';
+    return { ruolo, lato: numerato[2] === '1' ? 'TOP' : 'BOT' };
+  }
   const lato: Lato | null = /(^|[^A-Z])(TOP|F)([^A-Z]|$)|_TOP|TOP_|^T[A-Z]{1,2}$|[_-]F[_.]|^F_|SST|SMT|SPT|PASTA_TOP|LATO_?A/.test(n) || /^[A-Z]{0,3}CP?Z$/.test(n) ? 'TOP'
     : /(^|[^A-Z])(BOT|BOTTOM|B)([^A-Z]|$)|_BOT|BOTTOM|[_-]B[_.]|^B_|SSB|SMB|SPB|PASTA_BOT|LATO_?B/.test(n) || /^[A-Z]{0,3}SP?Z$/.test(n) ? 'BOT' : null;
   // (file dei fornitori italiani: lcz/lsz rame lato componenti/saldature, mcz/msz maschere, palcz/palsz pasta, scz/ssz serigrafie)

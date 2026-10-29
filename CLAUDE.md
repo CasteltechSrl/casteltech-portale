@@ -61,7 +61,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    sezioni e campi (`data-dipende`) e attivano fasi e costi (migrazioni 011, 014). Programmazioni solo con 1ª produzione.
    Le voci possono avere un prezzo di vendita fisso (`formula_prezzo`, niente ricarico): es. lamine.
    Montaggio → AOI: TOP · BOT · Visivo (migrazione 038; Adriano 28/10/2026): AOI segue i lati SMD, Visivo toglie ispezione e programmazione AOI
-   e conta il controllo visivo (fase 18V, 60 s a scheda). Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
+   e conta il controllo visivo (fase 18V, 60 s a scheda). Montaggio → SMD → A mano (migrazione 044; Adriano 29/10/2026, campionature):
+   SMD in giostra a 15 s l'uno (`tempoMontaggioSmdMano`), in SMD solo attrezzaggio serigrafia 45 min (`tempoAttrezSerigrafiaMano`), forno e consumi restano. Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
    Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa` (Adriano 28/10/2026;
    `views/stampa-preventivo.ts`, `engine/stampa-preventivo.ts`, `public/stampa-preventivo.css`): impaginata come i preventivi FIC, pannello
@@ -115,7 +116,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (pagina dei documenti), poi rianalisi. Versioni della stessa scheda (migrazione 043, `engine/scheda/versioni.ts`): quantità e versioni
    lette dalla mail ("167pz M0929-C versione HELIOS") → "Dividi per versione" = un pacchetto figlio per versione (`padre_id`, `versione`,
    `quantita` proposta nel preventivo) con i file comuni + quelli con il nome della versione; i file aggiunti al padre passano ai figli
-   (`sincronizzaVersioni`). BOM divisa SMD + PTH (riferimenti diversi) unita in lettura (`engine/scheda/bom-divise.ts`); BOM in PDF non lette.
+   (`sincronizzaVersioni`). Mail salvata .eml nella cartella caricata (`emailDallaCartella`): testo in `pacchetti_scheda.email` se manca, allegati non letti. BOM divisa SMD + PTH (riferimenti diversi) unita in lettura (`engine/scheda/bom-divise.ts`); BOM in PDF non lette.
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

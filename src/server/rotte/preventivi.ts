@@ -243,16 +243,16 @@ export function rottePreventivi() {
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
 /** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
-  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
+  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'campionatura'] }, { nome: '', codici: ['variazioneQuantita'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
-    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
+    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia', 'smdAMano'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
     { nome: 'AOI', codici: ['aoiTop', 'aoiBot', 'controlloVisivo'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
-  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
+  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'usaSplicing'] }, { nome: '', codici: ['puliziaSaldature', 'lavaggioSchede'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
-  doppiaFaccia: 'BOT', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+  doppiaFaccia: 'BOT', smdAMano: 'A mano', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata', puliziaSaldature: 'Pulizia saldature', lavaggioSchede: 'Lavaggio',
 };
 
 function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
@@ -348,6 +348,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
     oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: `${SMD} aoiTop|aoiBot`,
     tempoRevisioneAoi: 'aoiTop', tempoRevisioneAoiLatoB: 'aoiBot', tempoControlloVisivo: 'controlloVisivo',
+    tempoAttrezSerigrafiaMano: `${SMD} smdAMano`, tempoMontaggioSmdMano: `${SMD} smdAMano`,
     preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
     oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
     potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,
@@ -356,7 +357,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     tempoLavaggio: 'lavaggioSchede', costoLiquidoLavaggio: 'lavaggioSchede', costoAvvioLavaggio: 'lavaggioSchede',
   };
   const GRUPPO_DIPENDE: Record<string, string> = {
-    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
+    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda|smdAMano', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
   };
   const esiste = (flag: string) => generali.some(p => p.codice === flag);
   // tiene solo le spunte presenti nel catalogo del preventivo (i preventivi vecchi non le hanno)
