@@ -37,7 +37,8 @@ export async function aggiungiFile(nome: string, dati: Buffer, opz: { origine?: 
 
 /** Il file diviso in pezzi da mandare all'IA (per le email: testo e allegati PDF/immagini). */
 function partiDa(nome: string, tipo: string, mime: string, dati: Buffer): { parti: Parte[]; mittente?: string; oggetto?: string } {
-  if (tipo === 'email') {
+  // anche la fattura estera mandata dal pulsante di Gmail arriva come email intera (.eml)
+  if (tipo === 'email' || /\.eml$/i.test(nome)) {
     const e = leggiEmail(dati);
     const parti: Parte[] = [];
     if (e.testo) parti.push({ tipo: 'testo', nome: `Email da ${e.mittente}, oggetto "${e.oggetto}", del ${e.data}`, testo: e.testo });

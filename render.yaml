@@ -33,6 +33,8 @@ services:
         value: Adriano Gambi
       - key: ANTHROPIC_API_KEY
         sync: false             # inserita a mano su Render: lettura automatica delle schede scansionate
+      - key: GMAIL_ADDON_CHIAVE
+        sync: false             # frase lunga a caso, uguale a PORTALE_CHIAVE del pannello di Gmail (tools/gmail-addon)
       # distributori per prezzi e disponibilità dei componenti (Impostazioni → Componenti): tutte facoltative
       - key: DIGIKEY_CLIENT_ID
         sync: false

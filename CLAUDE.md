@@ -102,6 +102,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    pacchetto in Componenti, una sola volta, collegata a `preventivi.bom_id` senza toccare lo stato), poi il costo arriva dal preventivo con
    `problemiBom` (da completare, da validare, senza prezzo, non disponibili, critici) → "Risolvi nella BOM quotata" → riquadro in testa
    alla BOM → "Torna al preventivo per la quota" (`?quota-bom=1` ricalcola il costo).
+   Pulsante in Gmail (Adriano 29/10/2026; pannello Apps Script in `tools/gmail-addon/` con LEGGIMI per l'installazione, `rotte/gmail.ts`,
+   `engine/gmail.ts`, migrazione 042): da una mail aperta Preventivo / Ordine / Fattura estera. Indirizzi `/api/gmail/*` senza sessione, con la
+   chiave `GMAIL_ADDON_CHIAVE` (Render) = `PORTALE_CHIAVE` (proprietà dello script), montati prima dei lettori da 2 MB. Preventivo: pacchetto
+   con `pacchetti_scheda.email` (testo in cima alla pagina e nelle note del preventivo da validare), nomi e dimensioni → `scegliFileDaCaricare`,
+   poi solo i file utili, analisi dopo la risposta (Gmail aspetta max 30 s; stato `in_analisi`, `errore`); cliente dal mittente solo se sicuro
+   (stessa email o dominio di un solo cliente in CRM/anagrafica). Ordine / Fattura estera: la mail intera .eml in `acquisizioni`, IA dopo la risposta.
+   ⬜ Installazione per tutto l'ufficio (Marketplace privato + console di amministrazione).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
