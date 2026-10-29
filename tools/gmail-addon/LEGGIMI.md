@@ -32,19 +32,11 @@ Esegui il deployment → **Testa i deployment** → Applicazione: Gmail → **In
 l'icona del pannello. Premi "Prova il collegamento": deve rispondere "Collegato al portale come …".
 
 ### 4. Per tutto l'ufficio
-1. Con l'account @casteltech.net crea un progetto Google Cloud nuovo ("Portale Casteltech Gmail", organizzazione casteltech.net),
-   configura la schermata di consenso OAuth con pubblico **Interno**, poi copia il **Numero progetto** (solo cifre) dalla Dashboard
-   e incollalo in Apps Script → Impostazioni progetto → Progetto Google Cloud → Imposta progetto.
-   Nello stesso progetto Cloud abilita l'**API di Gmail** (console.cloud.google.com/apis/library/gmail.googleapis.com):
-   senza, Gmail mostra solo la pagina iniziale del pannello e non i tasti (29/10/2026). Poi Testa i deployment → Disinstalla → Installa.
-   (Non "My First Project": se sta su un account Gmail personale, "Interno" non si può scegliere.)
-2. Nell'editor: Esegui il deployment → **Nuovo deployment** → tipo **Componente aggiuntivo** → copia l'ID del deployment.
-3. Console Google Cloud → API e servizi → abilita **Google Workspace Marketplace SDK** → Configurazione dell'app:
-   visibilità **Privata**, integrazione "Componente aggiuntivo di Google Workspace", incolla l'ID del deployment,
-   ambiti uguali a quelli di `appsscript.json` → Scheda dello store → **Pubblica** (resta interno a casteltech.net,
-   Google non deve approvarlo).
-4. Console di amministrazione Google → App → Google Workspace Marketplace → installa "Portale Casteltech" per tutta
-   l'organizzazione. Il pannello compare a tutti nel giro di qualche ora.
+Lo script resta sul progetto Google standard: **non** collegarlo a un progetto Google Cloud proprio (29/10/2026: dopo il
+collegamento Gmail non faceva più partire il pannello e il cambio non si annulla).
+1. Nello script: Condividi → aggiungi i colleghi dell'ufficio come **Editor** (vedono anche la chiave: solo personale fidato).
+2. Ogni collega, con il suo account: apre lo script → Esegui il deployment → Testa i deployment → **Installa**, poi ricarica Gmail
+   e concede i permessi (se compare "Google non ha verificato l'app": Avanzate → Vai a…).
 
 Quando si cambia `Codice.gs`: incolla la versione nuova e fai Gestisci deployment → modifica → Nuova versione.
 
