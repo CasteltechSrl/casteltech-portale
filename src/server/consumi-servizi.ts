@@ -1,5 +1,5 @@
 /**
- * Consumi dei servizi nel database (tabelle consumi_servizi ed eventi_servizi, migrazione 042) e dati del riquadro
+ * Consumi dei servizi nel database (tabelle consumi_servizi ed eventi_servizi, migrazione 045) e dati del riquadro
  * Impostazioni → Servizi. Regole per Neon gratuito: si scrive solo quando c'è stato un consumo (qualche secondo dopo
  * l'ultima chiamata, tutto insieme) o un errore; si legge all'avvio (che usa già il database) e quando si apre la pagina.
  * Le ore di calcolo di Neon e la spesa ufficiale di Anthropic si chiedono solo aprendo la pagina, e restano 10 minuti.

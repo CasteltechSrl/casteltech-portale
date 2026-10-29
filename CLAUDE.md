@@ -227,7 +227,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (radici italiane, sinonimi, "ordine+documenti" = "ordine documenti"), "Chiedi alla guida" con l'IA che risponde solo dalla guida
    (senza chiave: rimanda agli argomenti trovati). Nessuna query al database.
 4h. ✅ Consumi e limiti dei servizi (Adriano 29/10/2026; Impostazioni → Servizi, `rotte/servizi.ts`, `engine/servizi.ts`, `server/stato-servizi.ts`,
-   `server/consumi-servizi.ts`, migrazione 042): tutte le chiamate all'IA passano da `server/ia.ts` (`chiediTestoIa`: token e costo stimato dal listino
+   `server/consumi-servizi.ts`, migrazione 045): tutte le chiamate all'IA passano da `server/ia.ts` (`chiediTestoIa`: token e costo stimato dal listino
    `PREZZI_IA`, limiti al minuto dalle intestazioni, errori in parole chiare con `erroreIa`: credito finito, tetto di spesa, chiave, troppe richieste).
    Contati anche distributori (richieste al giorno), Drive, Gmail; memoria del processo (picco, riavvii con la stessa versione = inattesi), spazio Neon.
    Contatori in memoria, salvati tutti insieme 15 s dopo l'ultima chiamata (`consumi_servizi`), errori in `eventi_servizi` (stesso errore al massimo ogni 6 ore).
