@@ -31,8 +31,10 @@ Esegui il deployment → **Testa i deployment** → Applicazione: Gmail → **In
 l'icona del pannello. Premi "Prova il collegamento": deve rispondere "Collegato al portale come …".
 
 ### 4. Per tutto l'ufficio
-1. Impostazioni progetto → Progetto Google Cloud → collega il progetto "My First Project" (festive-ally-291807),
-   lo stesso dell'account di servizio. Nella console Google Cloud: schermata di consenso OAuth di tipo **Interno**.
+1. Con l'account @casteltech.net crea un progetto Google Cloud nuovo ("Portale Casteltech Gmail", organizzazione casteltech.net),
+   configura la schermata di consenso OAuth con pubblico **Interno**, poi copia il **Numero progetto** (solo cifre) dalla Dashboard
+   e incollalo in Apps Script → Impostazioni progetto → Progetto Google Cloud → Imposta progetto.
+   (Non "My First Project": se sta su un account Gmail personale, "Interno" non si può scegliere.)
 2. Nell'editor: Esegui il deployment → **Nuovo deployment** → tipo **Componente aggiuntivo** → copia l'ID del deployment.
 3. Console Google Cloud → API e servizi → abilita **Google Workspace Marketplace SDK** → Configurazione dell'app:
    visibilità **Privata**, integrazione "Componente aggiuntivo di Google Workspace", incolla l'ID del deployment,
