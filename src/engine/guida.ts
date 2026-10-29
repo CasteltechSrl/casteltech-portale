@@ -72,6 +72,24 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire'], ['/preventivi/documenti', 'Preventivi → Da documenti del cliente'], ['/quotazioni', 'Quotazioni'], ['/commesse', 'Commesse (schede scansionate)']],
   },
   {
+    id: 'pulsante-gmail', area: 'inizio', titolo: 'Mandare una mail al portale con il pulsante di Gmail',
+    parole: 'gmail mail email posta pulsante tasto pannello inoltrare mandare portale preventivo ordine fattura estera allegati richiesta offerta cliente versioni versione varianti dividere quantità eml aggiungere file mancanti dopo bom pth',
+    testo: [
+      'Quando arriva una mail con una richiesta d\'offerta, un ordine o una fattura di un fornitore estero, non serve scaricare gli allegati: aprila in Gmail e usa il pannello "Portale Casteltech" a destra (sul telefono è in fondo alla mail).',
+      'Preventivo: il testo della mail e gli allegati utili (BOM, pick and place, Gerber, zip) vanno in Preventivi → Documenti del cliente e l\'analisi parte da sola. Il cliente si riconosce dall\'email del mittente se è sicuro, altrimenti lo scegli tu. Il testo della mail si legge in cima alla pagina e finisce nelle note del preventivo da validare.',
+      'Ordine: la mail intera va in Ordini → Da acquisire, l\'IA la legge e prepara la proposta da confermare. Fattura estera: va in Amministrazione → Autofatture. La stessa mail mandata due volte non entra due volte.',
+      'PDF, modelli 3D e immagini restano solo nell\'elenco dei file, come quando carichi una cartella (le BOM in PDF non si leggono: chiedi al cliente Excel, CSV o testo). Gli allegati che Gmail mostra come link a Google Drive (file molto grandi) non arrivano: caricali dal portale.',
+      'Nel pannello ci sono le ultime mail con allegati e la casella Cerca: tocca la mail e compaiono i tasti.',
+      'File arrivati con una mail successiva (es. la BOM in testo): nella mail nuova premi "Aggiungi a documenti già caricati" e scegli il pacchetto, oppure nella pagina dei documenti apri "Aggiungi file a questo pacchetto". Il pacchetto si rianalizza da solo.',
+      'Se la mail chiede più versioni della stessa scheda con le quantità (es. "167pz M0929-C versione HELIOS, 90pz versione CRONOS"), nella pagina dei documenti compare "Dividi per versione": nasce un pacchetto per versione con i file comuni (Gerber, lamine) e quelli con il nome della versione, e il numero di schede già scritto per il preventivo.',
+      'Il numero di schede da quotare si legge dal testo della mail (es. "167pz", "5 pcb"); se nel testo non c\'è, dall\'oggetto (es. "Ordine 5 PCB MULTI"). Se non si trova la proposta è 100: correggila in "Schede da quotare" prima di premere "Crea il preventivo da validare".',
+      'Caricando una cartella dal portale, la mail del cliente salvata come file .eml (in Gmail: ⋮ → Scarica il messaggio) messa insieme agli altri file vale come quella mandata dal pannello di Gmail: testo in cima alla pagina, quantità e versioni lette dal testo, "Dividi per versione". Gli allegati della mail non si leggono: mettili nella cartella.',
+      'Una BOM divisa in due file (SMD e PTH) si unisce da sola; due BOM con gli stessi riferimenti sono versioni diverse e se ne usa una sola.',
+    ],
+    passi: ['Nel pannello "Portale Casteltech" di Gmail tocca la mail (o cercala).', 'Premi Preventivo, Ordine o Fattura estera (o "Aggiungi a documenti già caricati").', 'Premi "Apri nel portale" e controlla quello che ha letto; con più versioni premi "Dividi per versione".'],
+    pagine: [['/preventivi/documenti', 'Documenti del cliente'], ['/ordini/acquisire', 'Ordini → Da acquisire'], ['/amministrazione/fatture-estere', 'Autofatture']],
+  },
+  {
     id: 'eliminare', area: 'inizio', titolo: 'Cosa si può eliminare e cosa no',
     parole: 'elimina cancella cancellare togliere errore sbagliato rimuovere annullare disattiva',
     testo: [
@@ -147,13 +165,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Preventivi ──
   {
     id: 'nuovo-preventivo', area: 'preventivi', titolo: 'Fare un nuovo preventivo',
-    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina aoi visivo controllo ispezione pre-produzione minuti',
+    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina aoi visivo controllo ispezione pre-produzione minuti smd a mano giostra campionatura',
     testo: [
       'Il prezzo si calcola mentre compili. In alto scegli cliente e prodotto dall\'anagrafica, schede, schede per pannello e pannelli.',
       'Le spunte delle INFORMAZIONI GENERALI (1ª produzione, TOP, TOP+BOT, THT a onda o a mano, componenti, PCB, lamina, etichette, pulizia, lavaggio) mostrano solo le sezioni che servono e attivano fasi e costi. Le programmazioni ci sono solo con la 1ª produzione.',
       'Il riquadro dei totali mostra prezzo a scheda, costi una tantum (solo nel primo lotto), margini e ore ciclo/uomo.',
       'Un preventivo salvato conserva le tariffe e le fasi del giorno in cui è stato fatto: se poi cambi le tariffe in Impostazioni, i preventivi vecchi non cambiano.',
       'Montaggio → AOI: TOP è spuntato con il TOP, BOT solo se c\'è anche quel lato. "Visivo" toglie l\'AOI (né ispezione né programmazione) e mette il controllo visivo, 60 secondi a scheda: si usa per campionature di pochi pezzi o schede con pochissimi componenti.',
+      'Montaggio → SMD → "A mano" (campionature di pochi pezzi): gli SMD si montano a mano in giostra insieme ai THT, 15 secondi a componente SMD. Nel gruppo SMD resta solo l\'attrezzaggio serigrafia (45 minuti): niente programmazioni del pick and place, attrezzaggio, avvio, serigrafia a pannello e pick and place. Il forno resta, con tempi, energia e pasta. AOI o Visivo si scelgono come sempre.',
       'Pre-produzione: ogni voce ha 5 minuti di standard, tranne "Disegno e stampa 3D" (0). Acquisto componenti e acquisto PCB contano solo se sono spuntati in Acquisti.',
     ],
     passi: ['Preventivi → + Nuovo preventivo.', 'Cliente, prodotto e revisione (se non è indicata scrivi 0), quantità.', 'Spunte delle informazioni generali.', 'Controlla fasi, materiali e altri costi.', 'Salva.'],

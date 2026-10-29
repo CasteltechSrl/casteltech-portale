@@ -28,6 +28,7 @@ import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
+import { rotteGmail } from './rotte/gmail.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -36,6 +37,8 @@ const app = express();
 app.set('trust proxy', 1); // dietro il proxy https di Render
 app.use(helmet({ referrerPolicy: { policy: 'same-origin' }, contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'img-src': ["'self'", 'data:'] } } }));
 app.use('/static', express.static(join(process.cwd(), 'public'), { maxAge: '1h' }));
+// pulsante "Portale Casteltech" dentro Gmail: entra con la sua chiave, senza sessione, e manda file più grandi dei moduli (prima dei lettori da 2 MB)
+app.use('/api/gmail', rotteGmail());
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 

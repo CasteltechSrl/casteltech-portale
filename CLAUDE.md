@@ -61,7 +61,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    sezioni e campi (`data-dipende`) e attivano fasi e costi (migrazioni 011, 014). Programmazioni solo con 1ª produzione.
    Le voci possono avere un prezzo di vendita fisso (`formula_prezzo`, niente ricarico): es. lamine.
    Montaggio → AOI: TOP · BOT · Visivo (migrazione 038; Adriano 28/10/2026): AOI segue i lati SMD, Visivo toglie ispezione e programmazione AOI
-   e conta il controllo visivo (fase 18V, 60 s a scheda). Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
+   e conta il controllo visivo (fase 18V, 60 s a scheda). Montaggio → SMD → A mano (migrazione 044; Adriano 29/10/2026, campionature):
+   SMD in giostra a 15 s l'uno (`tempoMontaggioSmdMano`), in SMD solo attrezzaggio serigrafia 45 min (`tempoAttrezSerigrafiaMano`), forno e consumi restano. Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
    Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa` (Adriano 28/10/2026;
    `views/stampa-preventivo.ts`, `engine/stampa-preventivo.ts`, `public/stampa-preventivo.css`): impaginata come i preventivi FIC, pannello
@@ -102,6 +103,20 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    pacchetto in Componenti, una sola volta, collegata a `preventivi.bom_id` senza toccare lo stato), poi il costo arriva dal preventivo con
    `problemiBom` (da completare, da validare, senza prezzo, non disponibili, critici) → "Risolvi nella BOM quotata" → riquadro in testa
    alla BOM → "Torna al preventivo per la quota" (`?quota-bom=1` ricalcola il costo).
+   Pulsante in Gmail (Adriano 29/10/2026; pannello Apps Script in `tools/gmail-addon/` con LEGGIMI per l'installazione, `rotte/gmail.ts`,
+   `engine/gmail.ts`, migrazione 042): da una mail aperta Preventivo / Ordine / Fattura estera. Indirizzi `/api/gmail/*` senza sessione, con la
+   chiave `GMAIL_ADDON_CHIAVE` (Render) = `PORTALE_CHIAVE` (proprietà dello script), montati prima dei lettori da 2 MB. Preventivo: pacchetto
+   con `pacchetti_scheda.email` (testo in cima alla pagina e nelle note del preventivo da validare), nomi e dimensioni → `scegliFileDaCaricare`,
+   poi solo i file utili, analisi dopo la risposta (Gmail aspetta max 30 s; stato `in_analisi`, `errore`); cliente dal mittente solo se sicuro
+   (stessa email o dominio di un solo cliente in CRM/anagrafica). Ordine / Fattura estera: la mail intera .eml in `acquisizioni`, IA dopo la risposta.
+   Pannello: la mail aperta NON arriva al pannello (contextual trigger mai chiamato su info@, 29/10/2026): la pagina iniziale elenca le ultime
+   mail con allegati + Cerca (`GmailApp.search`, ambito gmail.readonly). Script sul progetto Google standard (con un progetto Cloud proprio
+   non partiva nulla); colleghi: script condiviso come Editor, ognuno "Testa i deployment → Installa".
+   File arrivati dopo: "Aggiungi a documenti già caricati" (Gmail, `/api/gmail/preventivo/:id/aggiungi`) o "Aggiungi file a questo pacchetto"
+   (pagina dei documenti), poi rianalisi. Versioni della stessa scheda (migrazione 043, `engine/scheda/versioni.ts`): quantità e versioni
+   lette dalla mail ("167pz M0929-C versione HELIOS") → "Dividi per versione" = un pacchetto figlio per versione (`padre_id`, `versione`,
+   `quantita` proposta nel preventivo) con i file comuni + quelli con il nome della versione; i file aggiunti al padre passano ai figli
+   (`sincronizzaVersioni`). Mail salvata .eml nella cartella caricata (`emailDallaCartella`): testo in `pacchetti_scheda.email` se manca, allegati non letti. BOM divisa SMD + PTH (riferimenti diversi) unita in lettura (`engine/scheda/bom-divise.ts`); BOM in PDF non lette.
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
