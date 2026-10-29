@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileDellaVersione, richiesteDaTesto, versioneDa, versioniDaDividere } from '../src/engine/scheda/versioni.js';
+import { fileDellaVersione, richiesteDaEmail, richiesteDaTesto, versioneDa, versioniDaDividere } from '../src/engine/scheda/versioni.js';
 import { unisciBomDivise } from '../src/engine/scheda/bom-divise.js';
 import { leggiBomScheda } from '../src/engine/scheda/analisi.js';
 
@@ -48,4 +48,12 @@ test('BOM divisa in due file (SMD e PTH): si uniscono; la BOM di un\'altra versi
   assert.deepEqual(u.unite.map(b => b.nome), ['BOM_HELIOS.csv', 'BOM_HELIOS_PTH.csv']);
   assert.deepEqual(u.scartate.map(b => b.nome), ['BOM_CRONOS.csv']);
   assert.deepEqual(u.unite.flatMap(b => b.righe.flatMap(r => r.designatori)), ['R1', 'R2', 'C1', 'J1', 'J2']);
+});
+
+test('quantità scritta solo nell\'oggetto della mail (Adriano 29/10/2026: «Ordine 5 PCB MULTI»)', () => {
+  const r = richiesteDaEmail({ oggetto: 'R: Ordine 5 PCB MULTI', testo: 'Buongiorno,\nin allegato i file aggiornati.\nSaluti' });
+  assert.deepEqual(r.map(x => x.quantita), [5]);
+  // il testo vince sull'oggetto
+  assert.deepEqual(richiesteDaEmail({ oggetto: 'Ordine 5 PCB', testo: '167pz M0929-C versione HELIOS' }).map(x => x.quantita), [167]);
+  assert.deepEqual(richiesteDaEmail({ oggetto: 'Richiesta offerta', testo: '' }), []);
 });

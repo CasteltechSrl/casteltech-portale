@@ -21,7 +21,7 @@ import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-pla
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
 import { notaRichiesta } from '../engine/gmail.js';
 import { unisciBomDivise } from '../engine/scheda/bom-divise.js';
-import { fileDellaVersione, richiesteDaTesto, versioniDaDividere } from '../engine/scheda/versioni.js';
+import { fileDellaVersione, richiesteDaEmail, versioniDaDividere } from '../engine/scheda/versioni.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 import { BUDGET, conMemoria } from './memoria.js';
@@ -349,7 +349,7 @@ export async function dividiPerVersioni(id: number, utenteId: number | null): Pr
   const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
   if (!p) throw new Error('Pacchetto non trovato.');
   if (await q1(`SELECT 1 FROM pacchetti_scheda WHERE padre_id = $1`, [id])) throw new Error('Il pacchetto è già diviso per versione.');
-  const versioni = versioniDaDividere(richiesteDaTesto(p.email?.testo ?? ''));
+  const versioni = versioniDaDividere(richiesteDaEmail(p.email));
   if (!versioni.length) throw new Error('Nella mail non ci sono due o più versioni con la loro quantità.');
   const figli: number[] = [];
   for (const v of versioni) {
