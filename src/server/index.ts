@@ -19,6 +19,7 @@ import { avviaBackupNotturno } from './backup.js';
 import { rotteReparto } from './rotte/reparto.js';
 import { avviaPromemoria } from './promemoria.js';
 import { avviaControlloDrive } from './drive.js';
+import { avviaConsumiServizi } from './consumi-servizi.js';
 import { rotteComponenti } from './rotte/componenti.js';
 import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
@@ -145,6 +146,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 await applicaMigrazioni();
 await primoAvvio();
+await avviaConsumiServizi();
 avviaBackupNotturno();
 avviaPromemoria();
 avviaControlloDrive();

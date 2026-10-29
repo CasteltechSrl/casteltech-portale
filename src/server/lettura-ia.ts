@@ -2,11 +2,12 @@
  * Lettura con l'IA (API Anthropic) delle righe di BOM che le regole non riescono a capire:
  * righe senza P/N (es. "RES 2K2 0603") o con P/N non riconosciuto e nessun dato dai distributori.
  * L'IA restituisce famiglia e attributi nei campi Casteltech; i codici li calcolano sempre le regole del portale.
- * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5).
+ * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5). Chiamata e consumi: ia.ts.
  */
 import { ATTR, FAMIGLIE, type Attributi } from '../engine/codifica/regole.js';
+import { chiediTestoIa, iaConfigurata } from './ia.js';
 
-export const iaConfigurata = () => !!process.env.ANTHROPIC_API_KEY;
+export { iaConfigurata };
 
 export interface RigaDaLeggere { riga: number; dati: Record<string, string> }
 export interface Lettura { famiglia: string | null; attributi: Attributi; nota?: string }
@@ -33,24 +34,14 @@ export async function leggiConIa(righe: RigaDaLeggere[]): Promise<Map<number, Le
   for (let i = 0; i < righe.length; i += 40) {
     const lotto = righe.slice(i, i + 40);
     const testo = lotto.map(r => `${r.riga}: ${Object.entries(r.dati).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' | ')}`).join('\n');
-    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 90_000);
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', signal: ctrl.signal,
-        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5-5', max_tokens: 8000, system: ISTRUZIONI,
-          messages: [{ role: 'user', content: `Righe della BOM:\n${testo}` }] }),
-      });
-      const corpo: any = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(corpo?.error?.message ?? `errore ${r.status}`);
-      const risposta = (corpo?.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
-      for (const x of leggiJson(risposta)) {
-        const fam = typeof x?.famiglia === 'string' && x.famiglia.toUpperCase() in FAMIGLIE ? x.famiglia.toUpperCase() : null;
-        const attributi: Attributi = {};
-        for (const [k, v] of Object.entries(x?.attributi ?? {})) if ((ATTR as readonly string[]).includes(k) || k === 'tecnologia') if (v != null && String(v).trim()) (attributi as any)[k] = String(v).trim();
-        out.set(Number(x?.riga), { famiglia: fam, attributi, nota: x?.nota ? String(x.nota).slice(0, 200) : undefined });
-      }
-    } finally { clearTimeout(t); }
+    const risposta = await chiediTestoIa('righe di BOM', { max_tokens: 8000, system: ISTRUZIONI,
+      messages: [{ role: 'user', content: `Righe della BOM:\n${testo}` }] }, 90_000);
+    for (const x of leggiJson(risposta)) {
+      const fam = typeof x?.famiglia === 'string' && x.famiglia.toUpperCase() in FAMIGLIE ? x.famiglia.toUpperCase() : null;
+      const attributi: Attributi = {};
+      for (const [k, v] of Object.entries(x?.attributi ?? {})) if ((ATTR as readonly string[]).includes(k) || k === 'tecnologia') if (v != null && String(v).trim()) (attributi as any)[k] = String(v).trim();
+      out.set(Number(x?.riga), { famiglia: fam, attributi, nota: x?.nota ? String(x.nota).slice(0, 200) : undefined });
+    }
   }
   return out;
 }

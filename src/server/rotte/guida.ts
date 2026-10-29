@@ -8,6 +8,7 @@ import { layout } from '../views/layout.js';
 import { html, type Raw } from '../views/html.js';
 import { AREE_GUIDA, ARGOMENTI_GUIDA, cercaGuida, indirizzoArgomento, type ArgomentoGuida } from '../../engine/guida.js';
 import { chiediAllaGuida, iaConfigurata } from '../guida-ia.js';
+import { ErroreIa } from '../ia.js';
 
 export function rotteGuida() {
   const r = Router();
@@ -75,7 +76,9 @@ export function rotteGuida() {
       res.json({ risposta: r.risposta, argomenti: collegamenti(r.argomenti.length ? r.argomenti : ricerca()) });
     } catch (e) {
       console.error('Guida, domanda all\'IA:', e);
-      res.json({ risposta: 'In questo momento l\'IA non risponde. Intanto ecco gli argomenti della guida che parlano di questo.', argomenti: collegamenti(ricerca()) });
+      // credito finito, tetto di spesa, chiave non valida: si dice il motivo (ErroreIa ha già il messaggio chiaro)
+      const motivo = e instanceof ErroreIa ? ` (${e.message.replace(/\.$/, '')})` : '';
+      res.json({ risposta: `In questo momento l'IA non risponde${motivo}. Intanto ecco gli argomenti della guida che parlano di questo.`, argomenti: collegamenti(ricerca()) });
     }
   });
 

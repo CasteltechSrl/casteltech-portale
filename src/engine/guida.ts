@@ -32,7 +32,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'commesse', nome: 'Commesse e schede di produzione', descrizione: 'Creare la commessa, stampare la scheda con il QR, rientro della scheda compilata.' },
   { id: 'reparto', nome: 'Tempi e reparto', descrizione: 'Tempi dal telefono con il QR, tempi scritti a mano, schede scansionate, promemoria.' },
   { id: 'amministrazione', nome: 'Amministrazione', descrizione: 'Fatture, note di credito, DDT, incassi e pagamenti, fatture dei fornitori.' },
-  { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza.' },
+  { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza, consumi dei servizi.' },
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
 ];
 
@@ -542,6 +542,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'chiave api render ia anthropic digikey mouser tme farnell google drive account servizio configurare',
     testo: ['Le chiavi dei servizi esterni (IA, distributori, Google Drive, SdI) si inseriscono solo su Render (servizio casteltech-portale → Environment), mai nel portale né in chat. Dopo averle salvate Render riavvia il portale. In Impostazioni → Componenti si può provare se funzionano.'],
     pagine: [['/impostazioni/componenti', 'Impostazioni → Componenti']],
+  },
+  {
+    id: 'servizi', area: 'impostazioni', titolo: 'Consumi e limiti dei servizi (credito IA, memoria, database)',
+    parole: 'consumi limiti token credito esaurito finito ricarica anthropic spesa costo dollari render memoria riavvio neon database spazio ore calcolo distributori richieste giorno gmail avviso servizi',
+    testo: [
+      'In Impostazioni → Servizi c\'è il riquadro con quanto il portale usa dei servizi esterni e quanto manca ai limiti: IA di Anthropic (letture, token e costo del giorno e del mese, credito rimasto), Render (memoria del server e riavvii), Neon (spazio del database e ore di calcolo), DigiKey, Mouser, Farnell e TME (richieste del giorno), Google Drive, Gmail e Invoicetronic.',
+      'Anthropic è prepagato e non dice quanto credito resta: scrivi nel riquadro "Credito dell\'IA" l\'importo caricato e da quale giorno, e aggiornalo dopo ogni ricarica. Il portale conta i token di ogni lettura, stima la spesa con il listino e avvisa quando ne resta meno del 20%.',
+      'Quando un servizio supera l\'80% del limite, o si ferma (credito finito, tetto di spesa raggiunto, chiave non valida, il portale riavviato da Render per memoria esaurita), tutti gli utenti dell\'ufficio vedono un avviso giallo o rosso in cima alle pagine con il link al riquadro.',
+      'Se un documento non viene letto per credito finito, nell\'acquisizione c\'è scritto il motivo: ricarica il credito su console.anthropic.com → Billing e premi "Rileggi con l\'IA".',
+      'Facoltativo: con ANTHROPIC_ADMIN_KEY su Render il costo del mese diventa quello ufficiale di Anthropic; con NEON_API_KEY e NEON_PROJECT_ID si vedono le ore di calcolo del database.',
+    ],
+    pagine: [['/impostazioni/servizi', 'Impostazioni → Servizi']],
   },
 
   // ── Suggerimenti ──

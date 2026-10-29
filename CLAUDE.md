@@ -230,6 +230,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    macro aree con argomenti (cosa si fa, come, cosa non si può fare, pulsanti alle pagine), ricerca intelligente mentre si scrive
    (radici italiane, sinonimi, "ordine+documenti" = "ordine documenti"), "Chiedi alla guida" con l'IA che risponde solo dalla guida
    (senza chiave: rimanda agli argomenti trovati). Nessuna query al database.
+4h. ✅ Consumi e limiti dei servizi (Adriano 29/10/2026; Impostazioni → Servizi, `rotte/servizi.ts`, `engine/servizi.ts`, `server/stato-servizi.ts`,
+   `server/consumi-servizi.ts`, migrazione 045): tutte le chiamate all'IA passano da `server/ia.ts` (`chiediTestoIa`: token e costo stimato dal listino
+   `PREZZI_IA`, limiti al minuto dalle intestazioni, errori in parole chiare con `erroreIa`: credito finito, tetto di spesa, chiave, troppe richieste).
+   Contati anche distributori (richieste al giorno), Drive, Gmail; memoria del processo (picco, riavvii con la stessa versione = inattesi), spazio Neon.
+   Contatori in memoria, salvati tutti insieme 15 s dopo l'ultima chiamata (`consumi_servizi`), errori in `eventi_servizi` (stesso errore al massimo ogni 6 ore).
+   Credito Anthropic prepagato scritto dall'ufficio (l'API non lo dà); avviso giallo/rosso in cima alle pagine dell'ufficio dall'80% (`avvisoServizi`, niente query).
+   Facoltativi su Render: ANTHROPIC_ADMIN_KEY (costo ufficiale del mese), NEON_API_KEY + NEON_PROJECT_ID (ore di calcolo), RENDER_MEMORIA_MB, NEON_SPAZIO_MB.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

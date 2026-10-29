@@ -4,7 +4,7 @@
  * Riconosce anche le schede di produzione scansionate e ne legge i fogli tempi (righe per il rientro della commessa).
  * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5), come la lettura delle BOM.
  */
-import { iaConfigurata } from './lettura-ia.js';
+import { chiediTestoIa, iaConfigurata } from './ia.js';
 import { normalizzaDdt, normalizzaProposta, oggettoJson, type DdtLetto, type Proposta } from '../engine/acquisizioni.js';
 import type { FoglioLetto } from '../engine/fogli-tempi.js';
 import { normalizzaFatturaEstera, type FatturaEstera } from '../engine/autofatture.js';
@@ -40,7 +40,7 @@ Rispondi SOLO con un oggetto JSON:
  "righe": [{"codice": "", "descrizione": "", "quantita": 0, "prezzo": 0, "consegna": "AAAA-MM-GG"}], "note": ""}`;
 
 /** Manda i pezzi del documento all'IA con le istruzioni e restituisce l'oggetto JSON della risposta. */
-async function chiediIa(parti: Parte[], sistema: string): Promise<any> {
+async function chiediIa(parti: Parte[], sistema: string, voce: string): Promise<any> {
   if (!iaConfigurata()) throw new Error("manca la chiave dell'IA (ANTHROPIC_API_KEY su Render)");
   const contenuto: any[] = [];
   for (const p of parti) {
@@ -50,24 +50,10 @@ async function chiediIa(parti: Parte[], sistema: string): Promise<any> {
   }
   if (!contenuto.length) throw new Error('il file è vuoto');
   contenuto.push({ type: 'text', text: 'Leggi il documento e rispondi con il JSON.' });
-  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 180_000);
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', signal: ctrl.signal,
-      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5-5', max_tokens: 16000, system: sistema,
-        messages: [{ role: 'user', content: contenuto }] }),
-    });
-    const corpo: any = await r.json().catch(() => null);
-    if (!r.ok) throw new Error(corpo?.error?.message ?? `errore ${r.status}`);
-    const risposta = (corpo?.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
-    const x = oggettoJson(risposta);
-    if (!x) throw new Error("l'IA non ha restituito dati leggibili");
-    return x;
-  } catch (e: any) {
-    if (e?.name === 'AbortError') throw new Error("l'IA non ha risposto in tempo: riprova");
-    throw e;
-  } finally { clearTimeout(t); }
+  const risposta = await chiediTestoIa(voce, { max_tokens: 16000, system: sistema, messages: [{ role: 'user', content: contenuto }] }, 180_000);
+  const x = oggettoJson(risposta);
+  if (!x) throw new Error("l'IA non ha restituito dati leggibili");
+  return x;
 }
 
 /** Esito della prima lettura: un ordine, oppure le schede di produzione di Casteltech (fogli tempi) con i numeri di commessa. */
@@ -76,7 +62,7 @@ export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_p
 
 /** Legge il documento: se è un ordine restituisce la proposta pulita, se è una scheda di produzione i numeri di commessa. */
 export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promise<Lettura> {
-  const x = await chiediIa(parti, istruzioni(clienti));
+  const x = await chiediIa(parti, istruzioni(clienti), 'lettura documenti');
   if (x?.scheda_produzione === true) {
     const commesse = (Array.isArray(x.commesse) ? x.commesse : [x.commessa]).map((c: unknown) => String(c ?? '').toUpperCase().replace(/\s+/g, '')).filter(Boolean);
     return { tipo: 'scheda_produzione', commesse: [...new Set<string>(commesse)] };
@@ -103,7 +89,7 @@ Rispondi SOLO con un oggetto JSON:
 
 /** Legge i fogli tempi scansionati (righe come scritte a mano). */
 export async function leggiFogliTempiConIa(parti: Parte[], fasi: string): Promise<FoglioLetto[]> {
-  const x = await chiediIa(parti, istruzioniTempi(fasi));
+  const x = await chiediIa(parti, istruzioniTempi(fasi), 'fogli tempi');
   return Array.isArray(x?.fogli) ? x.fogli : [];
 }
 
@@ -132,5 +118,5 @@ Rispondi SOLO con un oggetto JSON:
 
 /** Legge la fattura di un fornitore estero (per l'autofattura). */
 export async function leggiFatturaEsteraConIa(parti: Parte[]): Promise<FatturaEstera> {
-  return normalizzaFatturaEstera(await chiediIa(parti, istruzioniFattura));
+  return normalizzaFatturaEstera(await chiediIa(parti, istruzioniFattura, 'fatture estere'));
 }

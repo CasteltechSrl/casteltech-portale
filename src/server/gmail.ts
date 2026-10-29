@@ -10,6 +10,7 @@
  */
 import { createSign } from 'node:crypto';
 import { chiaveAccountServizio } from './drive.js';
+import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
 const SCOPE_INVIO = 'https://www.googleapis.com/auth/gmail.send';
 const SCOPE_LETTURA = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -65,6 +66,11 @@ export async function inviaGmail(messaggio: string, inRispostaA?: string | null)
     body: JSON.stringify({ raw: Buffer.from(messaggio, 'utf8').toString('base64url'), ...(threadId ? { threadId } : {}) }),
   });
   const j: any = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(`Gmail non ha inviato l'email: ${j?.error?.message ?? r.status}`);
+  if (!r.ok) {
+    const msg = `Gmail non ha inviato l'email: ${j?.error?.message ?? r.status}`;
+    erroreServizio('gmail', r.status === 429 ? 'limite' : 'altro', msg);
+    throw new Error(msg);
+  }
+  conta('gmail', 'invio', { chiamate: 1 }); riuscito('gmail');
   return { id: String(j?.id ?? ''), conversazione: j?.threadId ?? threadId };
 }
