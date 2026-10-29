@@ -4,6 +4,7 @@
  * I file originali restano sul Drive del cliente (Adriano, 27/10/2026): nel database vanno solo i file che servono
  * a rileggere il pacchetto (BOM, pick and place, Gerber, forature, CAD), compressi, più il risultato.
  */
+import { createHash } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import { q, q1 } from './db.js';
@@ -102,8 +103,16 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
     elenco.push({ nome: r.replace(/[\\/]$/, '') || 'ODB++', tipo: 'odb', byte: dentro.reduce((t, f) => t + (f.byte ?? f.dati.length), 0), usato: false,
       nota: `ODB++ (${dentro.length} file): non ancora letto, si usano Gerber e forature` });
   }
+  // lo stesso file due volte (cartella con lo zip e anche il suo contenuto scompattato): si legge una volta sola
+  const visti = new Map<string, string>();
   for (const f of file) {
     if (odb.some(r => f.nome.startsWith(r))) continue;
+    if (f.conservato !== false && f.dati.length) {
+      const impronta = createHash('sha1').update(f.dati).digest('hex');
+      const primo = visti.get(impronta);
+      if (primo) { elenco.push({ nome: f.nome, tipo: tipoFile(f.nome, null), byte: f.dati.length, usato: false, nota: `copia identica di ${primo.split(/[\\/]/).pop()}: ignorata` }); continue; }
+      visti.set(impronta, f.nome);
+    }
     if (f.conservato === false) {
       const tipo = tipoFile(f.nome, null);
       // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
@@ -191,7 +200,11 @@ function riquadroSensato(r: Riquadro | null, pp: { lettura: LetturaPickPlace }[]
   const pos = pp.flatMap(p => p.lettura.posizioni);
   if (!r || !pos.length) return r;
   const m = 8, xs = pos.map(p => p.x), ys = pos.map(p => p.y);
-  return { x0: Math.max(r.x0, Math.min(...xs) - m), y0: Math.max(r.y0, Math.min(...ys) - m), x1: Math.min(r.x1, Math.max(...xs) + m), y1: Math.min(r.y1, Math.max(...ys) + m) };
+  const t = { x0: Math.max(r.x0, Math.min(...xs) - m), y0: Math.max(r.y0, Math.min(...ys) - m), x1: Math.min(r.x1, Math.max(...xs) + m), y1: Math.min(r.y1, Math.max(...ys) + m) };
+  // pick and place con un'altra origine (RFQ M0929-C, 29/10/2026: Gerber a 103;205 mm, componenti vicino a 0;0): il taglio resterebbe
+  // vuoto o schiacciato e il disegno sparisce. Si taglia solo se resta almeno metà del rame.
+  const area = (q: Riquadro) => Math.max(0, q.x1 - q.x0) * Math.max(0, q.y1 - q.y0);
+  return area(t) >= area(r) / 2 ? t : r;
 }
 
 // ───────────────────────────── database ─────────────────────────────
