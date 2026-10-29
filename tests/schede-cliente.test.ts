@@ -453,3 +453,29 @@ test('strati PADS: L1_TOP e L4_BOTTOM sono rame esterno, L2 interno', () => {
   assert.deepEqual(ruoloStrato('Gerber/L4_BOTTOM.gdo'), { ruolo: 'rame', lato: 'BOT' });
   assert.equal(ruoloStrato('Gerber/L2.gdo').ruolo, 'interno');
 });
+
+test('zip del cliente: si aprono solo i file utili, PDF e 3D restano chiusi con nome e dimensione (memoria del server)', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { espandiArchivi } = await import('../src/server/schede-cliente-servizio.js');
+  const { zipSync } = await import('fflate');
+  const testo = (s: string) => new TextEncoder().encode(s);
+  const interno = zipSync({ 'dentro/scheda.drl': testo('M48\nT1C0.8\n%\nT1\nX1Y1\nM30\n') });
+  const zip = Buffer.from(zipSync({
+    'gerber/top.gbr': testo('G04 prova*\n%FSLAX46Y46*%\nM02*\n'),
+    'bom.csv': testo('Ref;Valore\nR1;10K\n'),
+    'disegni/assieme.pdf': new Uint8Array(5000),
+    '3d/scheda.step': new Uint8Array(3000),
+    'OLD/bom.csv': testo('vecchia'),
+    'odb/matrix/matrix': testo('STEP {}'),
+    'odb/steps/pcb/profile': testo('x'),
+    'interno.zip': interno,
+  }));
+  const file = espandiArchivi([{ nome: 'pacchetto.zip', dati: zip }]);
+  const aperti = file.filter(f => f.conservato !== false).map(f => f.nome).sort();
+  assert.deepEqual(aperti, ['pacchetto/bom.csv', 'pacchetto/gerber/top.gbr', 'pacchetto/interno/dentro/scheda.drl']);
+  const chiusi = Object.fromEntries(file.filter(f => f.conservato === false).map(f => [f.nome, f.byte]));
+  assert.equal(chiusi['pacchetto/disegni/assieme.pdf'], 5000, 'PDF: solo nome e dimensione');
+  assert.equal(chiusi['pacchetto/3d/scheda.step'], 3000);
+  assert.ok('pacchetto/OLD/bom.csv' in chiusi, 'cartella vecchia non aperta');
+  assert.ok('pacchetto/odb/matrix/matrix' in chiusi && 'pacchetto/odb/steps/pcb/profile' in chiusi, 'ODB++ non aperto');
+});

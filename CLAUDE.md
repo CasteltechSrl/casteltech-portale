@@ -87,6 +87,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    dimensioni, il portale sceglie i file utili; PDF, 3D (STEP da 80 MB), immagini, ODB++, .doc/.dsn…, file oltre 25 MB (zip oltre 60 MB) non si
    mandano e restano solo nell'elenco. Ignorati anche i file di lavoro di Casteltech: cartelle Armadi/Topografico e pick and place/BOM con i
    codici di produzione (`lavoratoDaCasteltech`). Strati PADS L1_TOP/L4_BOTTOM = rame esterno.
+   Memoria (Render 512 MB, riavvio del 29/10/2026; `server/memoria.ts`): caricamenti dei file e analisi prenotano memoria e si mettono in fila
+   (un'analisi alla volta); negli zip si estraggono solo i file utili (`sceltaFile`), PDF/3D/ODB++ restano chiusi; gli zip si aprono una volta sola.
    Prodotto nuovo dal preventivo (Adriano 28/10/2026; `engine/scheda/prodotto.ts`, POST `/preventivi/prodotti`): "+ Nuovo prodotto" accanto al codice
    lo aggiunge all'anagrafica del cliente senza uscire; codice, descrizione e revisione obbligatori (revisione non indicata = "0"), tutto MAIUSCOLO,
    stesso codice già presente = si sceglie quello. La revisione è obbligatoria per salvare ogni preventivo. Dai documenti del cliente codice,

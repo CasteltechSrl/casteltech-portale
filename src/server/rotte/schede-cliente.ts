@@ -9,6 +9,7 @@ import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
 import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, scegliFileDaCaricare, type FileElenco } from '../schede-cliente-servizio.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
+import { caricamentoLimitato } from '../memoria.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
 import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
 import { TITOLI_FOGLIO, type Foglio } from '../../engine/scheda/documentazione.js';
@@ -79,12 +80,14 @@ export function rotteSchedeCliente() {
     res.json(await scegliFileDaCaricare(Number(req.params.id), file));
   });
 
-  r.post('/:id/file', express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res, next) => {
-    if (!/^\d+$/.test(req.params.id)) return next();
+  // caricamentoLimitato: il file si legge solo quando c'è memoria libera (i 4 invii del browser si mettono in fila)
+  r.post('/:id/file', caricamentoLimitato, express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res, next) => {
+    const id = String(req.params.id);
+    if (!/^\d+$/.test(id)) return next();
     const nome = String(req.query.nome ?? '').replace(/\\/g, '/').replace(/^\/+/, '').slice(0, 400);
     if (!nome || !Buffer.isBuffer(req.body)) return res.status(400).json({ errore: 'File mancante.' });
-    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [req.params.id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
-    await aggiungiFile(Number(req.params.id), nome, req.body);
+    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    await aggiungiFile(Number(id), nome, req.body);
     res.json({ ok: true });
   });
 

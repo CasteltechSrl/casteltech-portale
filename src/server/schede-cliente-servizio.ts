@@ -20,7 +20,8 @@ import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerb
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
-import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb as trovaRadiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
+import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
+import { BUDGET, conMemoria } from './memoria.js';
 
 /** byte e conservato servono per i file tenuti solo nell'elenco (PDF, 3D, immagini: restano sul Drive del cliente). */
 export interface FileCaricato { nome: string; dati: Buffer; byte?: number; conservato?: boolean }
@@ -33,7 +34,11 @@ export interface Elaborazione { file: FileElenco[]; analisi: AnalisiScheda; dise
 /** Tipi di file che si conservano nel database (compressi) per poter rifare l'analisi. */
 export const TIPI_DA_CONSERVARE: TipoFile[] = ['bom', 'pick-place', 'gerber', 'foratura', 'gencad'];
 
-/** Apre gli zip (anche uno dentro l'altro, un livello) e toglie i file di sistema. */
+/**
+ * Apre gli zip (anche uno dentro l'altro, un livello) e toglie i file di sistema. Dentro lo zip si estraggono solo i file utili
+ * (stessa scelta della cartella, `sceltaFile`): PDF, 3D, immagini, ODB++ e file troppo grandi restano chiusi e compaiono solo
+ * con nome e dimensione, così uno STEP da 80 MB dentro lo zip non occupa la memoria del server (29/10/2026).
+ */
 export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
   const out: FileCaricato[] = [];
   const aggiungi = (f: FileCaricato, livello: number) => {
@@ -41,9 +46,22 @@ export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
     if (base === 'desktop.ini' || base === 'thumbs.db' || base.startsWith('._') || f.nome.includes('__MACOSX')) return;
     if (base.endsWith('.zip') && livello < 2 && f.conservato !== false) {
       try {
-        const dentro = unzipSync(new Uint8Array(f.dati));
         const prefisso = f.nome.replace(/\.zip$/i, '');
-        for (const [n, d] of Object.entries(dentro)) if (!n.endsWith('/')) aggiungi({ nome: `${prefisso}/${n}`, dati: Buffer.from(d) }, livello + 1);
+        const zip = new Uint8Array(f.dati.buffer, f.dati.byteOffset, f.dati.length);
+        // prima solo i nomi (non si estrae niente), per riconoscere le cartelle ODB++
+        const nomi: string[] = [];
+        unzipSync(zip, { filter: x => { nomi.push(`${prefisso}/${x.name}`); return false; } });
+        const odb = radiciOdb(nomi);
+        const lasciati: FileCaricato[] = [];
+        const dentro = unzipSync(zip, { filter: x => {
+          if (x.name.endsWith('/')) return false;
+          const nome = `${prefisso}/${x.name}`;
+          const s = sceltaFile(nome, x.originalSize, odb);
+          if (!s.carica && !s.sistema) lasciati.push({ nome, dati: Buffer.alloc(0), byte: x.originalSize, conservato: false });
+          return s.carica;
+        } });
+        for (const [n, d] of Object.entries(dentro)) aggiungi({ nome: `${prefisso}/${n}`, dati: Buffer.from(d.buffer, d.byteOffset, d.length) }, livello + 1);
+        for (const l of lasciati) aggiungi(l, livello + 1);
         return;
       } catch { /* zip rovinato: resta come file */ }
     }
@@ -57,9 +75,12 @@ export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
 export const testoDi = (b: Buffer) => { try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^\uFEFF/, ''); } catch { return b.toString('latin1'); } };
 const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani = 0; for (const c of p) if (c === 0 || (c < 9)) strani++; return strani < 5; };
 
-/** Legge tutti i file del pacchetto e fa l'incrocio. Il nome del pacchetto serve a proporre codice e revisione del prodotto. */
-export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = ''): Promise<Elaborazione> {
-  const file = espandiArchivi(caricati);
+/**
+ * Legge tutti i file del pacchetto e fa l'incrocio. Il nome del pacchetto serve a proporre codice e revisione del prodotto.
+ * `giaAperti`: gli zip sono già stati aperti con espandiArchivi (si evita di aprirli due volte).
+ */
+export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = '', giaAperti = false): Promise<Elaborazione> {
+  const file = giaAperti ? caricati : espandiArchivi(caricati);
   const elenco: FileElenco[] = [];
   const bomCandidate: { nome: string; righe: RigaBomScheda[]; intestazione: string[][] }[] = [];
   const inizioGerber: string[] = [];
@@ -70,14 +91,14 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
   let cad: { nome: string; componenti: ReturnType<typeof leggiGenCad>['componenti'] } | null = null;
   let k = 0;
   // ODB++ scompattato (cartelle matrix/, steps/, fonts/…): una sola riga nell'elenco invece di centinaia di file
-  const radiciOdb = trovaRadiciOdb(file.map(f => f.nome));
-  for (const r of radiciOdb) {
+  const odb = radiciOdb(file.map(f => f.nome));
+  for (const r of odb) {
     const dentro = file.filter(f => f.nome.startsWith(r));
     elenco.push({ nome: r.replace(/[\\/]$/, '') || 'ODB++', tipo: 'odb', byte: dentro.reduce((t, f) => t + (f.byte ?? f.dati.length), 0), usato: false,
       nota: `ODB++ (${dentro.length} file): non ancora letto, si usano Gerber e forature` });
   }
   for (const f of file) {
-    if (radiciOdb.some(r => f.nome.startsWith(r))) continue;
+    if (odb.some(r => f.nome.startsWith(r))) continue;
     if (f.conservato === false) {
       const tipo = tipoFile(f.nome, null);
       // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
@@ -195,18 +216,22 @@ export async function scegliFileDaCaricare(id: number, file: { nome: string; byt
  * forature, CAD; quelli dentro gli zip diventano file a parte); degli altri resta solo nome e dimensione.
  */
 export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
-  const righe = await q<{ nome: string; byte: number; dati: Buffer }>(`SELECT nome, byte, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 ORDER BY nome`, [id]);
-  const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
-  const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
-  const el = await elaboraPacchetto(caricati, nome);
-  const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
-  const presenti = new Set(righe.map(r => r.nome));
-  for (const f of espandiArchivi(caricati.filter(r => r.conservato !== false && /\.zip$/i.test(r.nome))))
-    if (daTenere.has(f.nome) && !presenti.has(f.nome)) await aggiungiFile(id, f.nome, f.dati);
-  await q(`UPDATE pacchetti_scheda_file SET dati = ''::bytea WHERE pacchetto_id = $1 AND NOT (nome = ANY($2::text[]))`, [id, [...daTenere]]);
-  await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
-    [id, JSON.stringify(el.file), JSON.stringify(el.analisi), comprimi(el.disegno), JSON.stringify(el.fonti)]);
-  return el;
+  // un'analisi alla volta, e niente caricamenti nel frattempo: tiene in memoria tutti i file del pacchetto aperti
+  return conMemoria(BUDGET, async () => {
+    const righe = await q<{ nome: string; byte: number; dati: Buffer }>(`SELECT nome, byte, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 ORDER BY nome`, [id]);
+    const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
+    const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
+    const file = espandiArchivi(caricati);
+    const el = await elaboraPacchetto(file, nome, true);
+    const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
+    const presenti = new Set(righe.map(r => r.nome));
+    // i file utili usciti dagli zip diventano file a parte (lo zip poi non si conserva)
+    for (const f of file) if (f.conservato !== false && daTenere.has(f.nome) && !presenti.has(f.nome)) await aggiungiFile(id, f.nome, f.dati);
+    await q(`UPDATE pacchetti_scheda_file SET dati = ''::bytea WHERE pacchetto_id = $1 AND NOT (nome = ANY($2::text[]))`, [id, [...daTenere]]);
+    await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
+      [id, JSON.stringify(el.file), JSON.stringify(el.analisi), comprimi(el.disegno), JSON.stringify(el.fonti)]);
+    return el;
+  });
 }
 
 /** Il file della BOM usata, per mandarla alla codifica (sezione Componenti). */
