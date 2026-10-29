@@ -65,6 +65,7 @@ test('guida: preventivo da validare e stampe di montaggio si trovano', () => {
 
 test('guida: segnalazione che va bene', () => {
   assert.ok(primi('segnalazione va bene', 2).includes('documenti-cliente'));
+  assert.ok(primi('cartella troppo grande', 2).includes('documenti-cliente'));
 });
 
 test('guida: prodotto nuovo dal preventivo si trova', () => {

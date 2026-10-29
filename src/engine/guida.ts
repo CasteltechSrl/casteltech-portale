@@ -173,11 +173,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'documenti-cliente', area: 'preventivi', titolo: 'Preventivo dai documenti del cliente (BOM, pick and place, Gerber)',
-    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare',
+    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare',
     testo: [
       'Quando il cliente manda il pacchetto della scheda, caricalo tutto insieme: il portale legge BOM, pick and place, Gerber, forature e GenCAD e li incrocia.',
       'Il risultato: componenti SMD per lato, THT, feeder, refori, misure, disegno della scheda, consumi stimati (pasta, stagno, filo) e le segnalazioni da controllare (valori diversi tra BOM e pick and place, riferimenti mancanti, lati, sovrapposizioni, componenti da non montare).',
-      'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate. PDF, 3D e immagini restano sul Drive.',
+      'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate.',
+      'Se scegli una cartella intera non serve togliere niente: il portale guarda prima i nomi e le dimensioni e carica solo i file utili. PDF, modelli 3D (STEP, anche da 80 MB), immagini, ODB++, documenti Word e file oltre 25 MB restano sul Drive: nell\'elenco dei file compare solo il nome con il motivo. Così non esce più l\'errore "file troppo grande".',
+      'Non entrano nemmeno i file di lavoro di Casteltech finiti nella cartella del cliente: le cartelle Armadi e Topografico e i pick and place o le BOM con i nostri codici di produzione (es. CC-0402-100NF-10-X7R-50V). Si legge solo quello che ha mandato il cliente.',
       '"Codifica la BOM" porta i componenti nella sezione Quotazioni per i codici e i prezzi.',
       'Se una segnalazione è stata controllata e va bene così (es. un simbolo scritto in modo diverso, componente giusto), premi "Va bene": non conta più tra gli errori, non va nel preventivo da validare e i componenti non sono più rossi nelle stampe. Resta anche dopo Rianalizza; "annulla" la riapre.',
     ],

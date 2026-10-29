@@ -7,7 +7,7 @@ import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, scegliFileDaCaricare, type FileElenco } from '../schede-cliente-servizio.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
 import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
@@ -39,7 +39,8 @@ export function rotteSchedeCliente() {
         <p class="nota">Un caricamento per scheda: BOM (Excel o CSV), pick and place (txt, csv), Gerber, forature, file CAD (GenCAD), anche in uno zip
           o scegliendo la cartella intera. Il portale riconosce i file da solo, li incrocia e segnala quello che non torna.
           I file originali restano sul Drive: nel portale si tengono solo quelli che servono a rileggere il pacchetto.
-          Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP si ignorano.</p>
+          Scegliendo una cartella il portale guarda prima nomi e dimensioni e carica solo i file utili: PDF, modelli 3D (STEP), immagini,
+          ODB++ e file oltre 25 MB restano sul Drive e compaiono solo nell'elenco. Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP si ignorano.</p>
         <label>Cliente <small class="unita">facoltativo, dall'anagrafica</small>
           <select id="cliente-pacchetto"><option value="">—</option>${clienti.map(c => html`<option value="${c.id}">${c.ragione_sociale}</option>`)}</select></label>
         <label>Nome <input id="nome-pacchetto" placeholder="es. codice della scheda e revisione; vuoto = nome della cartella o del primo file"></label>
@@ -66,6 +67,16 @@ export function rotteSchedeCliente() {
     const clienteId = /^\d+$/.test(String(req.body?.cliente ?? '')) ? Number(req.body.cliente) : null;
     if (clienteId && !await q1(`SELECT 1 FROM clienti WHERE id = $1`, [clienteId])) return res.status(400).json({ errore: 'Cliente non trovato in anagrafica.' });
     res.json({ id: await creaPacchetto({ nome, clienteId, utenteId: req.session.utente!.id }) });
+  });
+
+  // cartella: prima nomi e dimensioni, il portale risponde con i soli file da mandare (gli altri restano sul Drive, solo il nome)
+  r.post('/:id/scelta', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const file = (Array.isArray(req.body?.file) ? req.body.file : []).slice(0, 5000)
+      .map((f: any) => ({ nome: String(f?.nome ?? '').replace(/\\/g, '/').replace(/^\/+/, '').slice(0, 400), byte: Math.max(0, Number(f?.byte) || 0) }))
+      .filter((f: { nome: string }) => f.nome);
+    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [req.params.id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    res.json(await scegliFileDaCaricare(Number(req.params.id), file));
   });
 
   r.post('/:id/file', express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res, next) => {
