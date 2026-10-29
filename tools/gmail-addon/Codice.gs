@@ -1,6 +1,6 @@
 /**
  * Pannello "Portale Casteltech" dentro Gmail (Adriano, 29/10/2026).
- * Aprendo una mail, a destra (sul telefono: in fondo alla mail) compaiono i tasti Preventivo, Ordine e Fattura estera:
+ * Nel pannello a destra: le ultime mail con allegati (e una ricerca); si sceglie la mail e compaiono i tasti Preventivo, Ordine e Fattura estera:
  *  - Preventivo: testo della mail + allegati utili → Preventivi → Documenti del cliente (l'analisi parte da sola);
  *  - Ordine / Fattura estera: la mail intera → Ordini → Da acquisire (la legge l'IA come i file della cartella Drive).
  * Il portale riceve tutto in src/server/rotte/gmail.ts. Installazione: tools/gmail-addon/LEGGIMI.md.
@@ -36,10 +36,14 @@ function leggiRisposta_(r) {
   return corpo;
 }
 
+/** La mail scelta dall'elenco (parametro id) o quella aperta in Gmail (quando Gmail lo dice al pannello). */
 function messaggio_(e) {
+  if (e.parameters && e.parameters.id) return GmailApp.getMessageById(e.parameters.id);
   GmailApp.setCurrentMessageAccessToken(e.gmail.accessToken);
   return GmailApp.getMessageById(e.gmail.messageId);
 }
+
+var RICERCA_STANDARD = 'in:inbox has:attachment newer_than:14d';
 
 /** Allegati veri (non le immagini dentro il testo), con i nomi resi unici: due "BOM.xlsx" diventano "BOM.xlsx" e "BOM (2).xlsx". */
 function allegati_(m) {
@@ -55,15 +59,53 @@ function allegati_(m) {
 
 // ───────────────────────────── schede del pannello ─────────────────────────────
 
-function paginaIniziale() {
+/**
+ * Pagina iniziale: le ultime mail con allegati (o quelle cercate), ognuna con il tasto per sceglierla.
+ * Serve anche quando Gmail non passa al pannello la mail aperta (29/10/2026: su info@ succedeva sempre).
+ */
+function paginaIniziale(e) {
+  var cercato = (e && e.formInput && e.formInput.cerca) || '';
+  var ricerca = cercato ? cercato + ' in:anywhere -in:trash -in:spam' : RICERCA_STANDARD;
+  var elenco = CardService.newCardSection().setHeader(cercato ? 'Trovate per «' + cercato + '»' : 'Ultime mail con allegati');
+  var discussioni = GmailApp.search(ricerca, 0, 15);
+  discussioni.forEach(function (d) {
+    var m = sceltaDellaDiscussione_(d);
+    var n = m.getAttachments({ includeInlineImages: false }).length;
+    elenco.addWidget(CardService.newDecoratedText()
+      .setTopLabel(nomeMittente_(m.getFrom()) + ' · ' + Utilities.formatDate(m.getDate(), 'Europe/Rome', 'dd/MM HH:mm') + (n ? ' · ' + n + ' allegati' : ''))
+      .setText(m.getSubject() || '(senza oggetto)').setWrapText(true)
+      .setOnClickAction(CardService.newAction().setFunctionName('scegliMail').setParameters({ id: m.getId() })));
+  });
+  if (!discussioni.length) elenco.addWidget(CardService.newTextParagraph().setText('Nessuna mail trovata.'));
   return CardService.newCardBuilder()
     .setHeader(CardService.newCardHeader().setTitle('Portale Casteltech'))
     .addSection(CardService.newCardSection()
-      .addWidget(CardService.newTextParagraph().setText(
-        'Apri una mail: qui compaiono i tasti <b>Preventivo</b>, <b>Ordine</b> e <b>Fattura estera</b> per mandarla al portale con i suoi allegati.'))
-      .addWidget(CardService.newTextButton().setText('Prova il collegamento')
-        .setOnClickAction(CardService.newAction().setFunctionName('provaCollegamento'))))
+      .addWidget(CardService.newTextInput().setFieldName('cerca').setTitle('Cerca una mail (cliente, oggetto, codice…)').setValue(cercato))
+      .addWidget(CardService.newButtonSet()
+        .addButton(CardService.newTextButton().setText('Cerca').setOnClickAction(CardService.newAction().setFunctionName('cercaMail')))
+        .addButton(CardService.newTextButton().setText('Prova il collegamento').setOnClickAction(CardService.newAction().setFunctionName('provaCollegamento')))))
+    .addSection(elenco)
     .build();
+}
+
+/** Della discussione si propone l'ultima mail arrivata con allegati (le risposte di Casteltech di solito non li hanno). */
+function sceltaDellaDiscussione_(d) {
+  var mail = d.getMessages();
+  for (var i = mail.length - 1; i >= 0; i--) if (mail[i].getAttachments({ includeInlineImages: false }).length) return mail[i];
+  return mail[mail.length - 1];
+}
+
+function nomeMittente_(da) {
+  var m = /^\s*"?([^"<]+?)"?\s*</.exec(da);
+  return m ? m[1] : da;
+}
+
+function cercaMail(e) {
+  return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().updateCard(paginaIniziale(e))).build();
+}
+
+function scegliMail(e) {
+  return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().pushCard(schedaMail_(messaggio_(e)))).build();
 }
 
 function provaCollegamento() {
@@ -76,7 +118,11 @@ function provaCollegamento() {
 }
 
 function apriMail(e) {
-  var m = messaggio_(e);
+  return schedaMail_(messaggio_(e));
+}
+
+/** La mail con i tre tasti: Preventivo, Ordine, Fattura estera. */
+function schedaMail_(m) {
   var lista = allegati_(m);
   var sezione = CardService.newCardSection()
     .addWidget(CardService.newDecoratedText().setTopLabel('Da').setText(m.getFrom()).setWrapText(true))
@@ -87,7 +133,7 @@ function apriMail(e) {
   ['preventivo', 'ordine', 'fattura_estera'].forEach(function (tipo) {
     tasti.addButton(CardService.newTextButton().setText(ETICHETTE[tipo])
       .setTextButtonStyle(tipo === 'preventivo' ? CardService.TextButtonStyle.FILLED : CardService.TextButtonStyle.OUTLINED)
-      .setOnClickAction(CardService.newAction().setFunctionName('manda').setParameters({ tipo: tipo })
+      .setOnClickAction(CardService.newAction().setFunctionName('manda').setParameters({ tipo: tipo, id: m.getId() })
         .setLoadIndicator(CardService.LoadIndicator.SPINNER)));
   });
   return CardService.newCardBuilder()

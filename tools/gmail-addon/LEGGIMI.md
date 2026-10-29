@@ -1,6 +1,7 @@
 # Pannello "Portale Casteltech" dentro Gmail
 
-Aprendo una mail in Gmail, a destra (sul telefono: in fondo alla mail) compaiono tre tasti:
+Nel pannello a destra di Gmail ci sono le ultime mail con allegati e una casella di ricerca: si sceglie la mail
+e compaiono tre tasti (se Gmail passa al pannello la mail aperta, i tasti compaiono anche direttamente):
 
 - **Preventivo**: il testo della mail e gli allegati utili (BOM, pick and place, Gerber, zip…) vanno in
   Preventivi → Documenti del cliente. L'analisi parte da sola; il pannello dà il link "Apri nel portale".
