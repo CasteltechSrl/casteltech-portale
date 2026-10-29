@@ -41,7 +41,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato') GROUP BY 1 ORDER BY 2 DESC, 1`),
     q(`SELECT d.id, d.tipo, d.data, coalesce(c.ragione_sociale, f.ragione_sociale, '') AS nome FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.stato = 'bozza' ORDER BY d.creato_il DESC`),
+      LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.stato = 'bozza' AND d.tipo <> 'conferma_ordine' ORDER BY d.creato_il DESC`),
   ]);
 
   const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
