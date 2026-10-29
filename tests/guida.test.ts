@@ -89,3 +89,8 @@ test('guida: pulsante di Gmail si trova', () => {
   assert.ok(primi('pulsante gmail preventivo', 2).includes('pulsante-gmail'));
   assert.ok(primi('richiesta offerta arrivata per email con allegati', 3).includes('pulsante-gmail'));
 });
+
+test('guida: versioni della stessa scheda e file aggiunti dopo', () => {
+  assert.ok(primi('dividi per versione', 3).includes('pulsante-gmail'));
+  assert.ok(primi('aggiungere file mancanti', 3).includes('pulsante-gmail'));
+});

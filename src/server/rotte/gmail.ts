@@ -13,7 +13,7 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { q, q1 } from '../db.js';
 import { caricamentoLimitato } from '../memoria.js';
-import { aggiungiFile, analizzaPacchetto, creaPacchetto, scegliFileDaCaricare } from '../schede-cliente-servizio.js';
+import { aggiungiFile, analizzaPacchetto, creaPacchetto, scegliFileDaCaricare, sincronizzaVersioni } from '../schede-cliente-servizio.js';
 import { aggiungiFile as aggiungiAcquisizione, elabora } from '../acquisizioni-servizio.js';
 import { chiaveGiusta, dominioAziendale, indirizzoDa, nomeFileEmail, nomePacchettoDaEmail, TIPI_GMAIL, type TipoGmail } from '../../engine/gmail.js';
 
@@ -83,12 +83,41 @@ export function rotteGmail() {
     res.json({ id, nome, daMandare: scelta.carica, soloElenco: scelta.soloElenco.length, link: `${indirizzoPortale(req)}/preventivi/documenti/${id}` });
   });
 
+  // ── Aggiungi a documenti già caricati: i pacchetti recenti, prima quelli dello stesso cliente o dello stesso mittente ──
+  r.get('/pacchetti', async (req, res) => {
+    const mittente = testo(req.query.mittente, 300);
+    const clienteId = await clientePerMittente(mittente);
+    const dominio = dominioAziendale(indirizzoDa(mittente)) ?? '';
+    const elenco = await q<{ id: number; nome: string; creato_il: Date; cliente: string | null }>(`
+      SELECT p.id, p.nome, p.creato_il, c.ragione_sociale AS cliente FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id
+      WHERE p.padre_id IS NULL AND p.creato_il > now() - interval '90 days'
+      ORDER BY (p.cliente_id = $1 OR ($2 <> '' AND lower(p.email->>'mittente') LIKE '%@' || $2 || '%')) DESC NULLS LAST, p.creato_il DESC LIMIT 12`, [clienteId ?? -1, dominio]);
+    res.json(elenco.map(p => ({ id: p.id, nome: p.nome, cliente: p.cliente, data: new Date(p.creato_il).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }) })));
+  });
+
+  // nomi degli allegati per un pacchetto già caricato; il testo della mail nuova si aggiunge sotto a quello di prima
+  r.post('/preventivo/:id/aggiungi', express.json({ limit: '1mb' }), async (req, res) => {
+    const id = String(req.params.id);
+    const p = /^\d+$/.test(id) ? await q1<{ id: number; nome: string; email: any }>(`SELECT id, nome, email FROM pacchetti_scheda WHERE id = $1`, [id]) : undefined;
+    if (!p) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    const b = req.body ?? {};
+    const file = (Array.isArray(b.file) ? b.file : []).slice(0, 500)
+      .map((f: any) => ({ nome: testo(f?.nome, 400).replace(/\\/g, '/').replace(/^\/+/, ''), byte: Math.max(0, Number(f?.byte) || 0) }))
+      .filter((f: { nome: string }) => f.nome);
+    const nuova = { mittente: testo(b.mittente, 300), oggetto: testo(b.oggetto, 300), data: testo(b.data, 40), testo: testo(b.testo, 20000), messaggioId: testo(b.messaggioId, 300) };
+    const email = !p.email ? nuova : p.email.messaggioId && p.email.messaggioId === nuova.messaggioId ? p.email
+      : { ...p.email, testo: `${p.email.testo}\n\n── Email successiva: ${nuova.mittente}${nuova.data ? `, ${nuova.data}` : ''}, «${nuova.oggetto}» ──\n${nuova.testo}`.slice(0, 40000) };
+    await q(`UPDATE pacchetti_scheda SET email = $2 WHERE id = $1`, [p.id, JSON.stringify(email)]);
+    const scelta = await scegliFileDaCaricare(p.id, file);
+    res.json({ id: p.id, nome: p.nome, daMandare: scelta.carica, soloElenco: scelta.soloElenco.length, link: `${indirizzoPortale(req)}/preventivi/documenti/${p.id}` });
+  });
+
   // 2) un allegato alla volta (si mettono in fila come quelli del browser)
   r.post('/preventivo/:id/file', caricamentoLimitato, express.raw({ type: () => true, limit: '60mb' }), async (req, res) => {
     const id = String(req.params.id);
     const nome = testo(req.query.nome, 400).replace(/\\/g, '/').replace(/^\/+/, '');
     if (!/^\d+$/.test(id) || !nome || !Buffer.isBuffer(req.body)) return res.status(400).json({ errore: 'File mancante.' });
-    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1 AND email IS NOT NULL`, [id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
     await aggiungiFile(Number(id), nome, req.body);
     res.json({ ok: true });
   });
@@ -96,9 +125,9 @@ export function rotteGmail() {
   // 3) analisi: parte qui e continua dopo la risposta (Gmail non aspetta più di 30 secondi)
   r.post('/preventivo/:id/analizza', async (req, res) => {
     const id = String(req.params.id);
-    if (!/^\d+$/.test(id) || !await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1 AND email IS NOT NULL`, [id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    if (!/^\d+$/.test(id) || !await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
     await q(`UPDATE pacchetti_scheda SET stato = 'in_analisi', errore = NULL WHERE id = $1`, [id]);
-    analizzaPacchetto(Number(id)).catch(async (e: any) => {
+    analizzaPacchetto(Number(id)).then(() => sincronizzaVersioni(Number(id))).catch(async (e: any) => {
       console.error(e);
       await q(`UPDATE pacchetti_scheda SET stato = 'caricamento', errore = $2 WHERE id = $1`, [id, `Analisi non riuscita: ${String(e?.message ?? e).slice(0, 400)}`]).catch(() => {});
     });

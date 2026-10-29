@@ -1,6 +1,7 @@
 # Pannello "Portale Casteltech" dentro Gmail
 
-Aprendo una mail in Gmail, a destra (sul telefono: in fondo alla mail) compaiono tre tasti:
+Nel pannello a destra di Gmail ci sono le ultime mail con allegati e una casella di ricerca: si sceglie la mail
+e compaiono tre tasti (se Gmail passa al pannello la mail aperta, i tasti compaiono anche direttamente):
 
 - **Preventivo**: il testo della mail e gli allegati utili (BOM, pick and place, Gerber, zip…) vanno in
   Preventivi → Documenti del cliente. L'analisi parte da sola; il pannello dà il link "Apri nel portale".
@@ -31,15 +32,11 @@ Esegui il deployment → **Testa i deployment** → Applicazione: Gmail → **In
 l'icona del pannello. Premi "Prova il collegamento": deve rispondere "Collegato al portale come …".
 
 ### 4. Per tutto l'ufficio
-1. Impostazioni progetto → Progetto Google Cloud → collega il progetto "My First Project" (festive-ally-291807),
-   lo stesso dell'account di servizio. Nella console Google Cloud: schermata di consenso OAuth di tipo **Interno**.
-2. Nell'editor: Esegui il deployment → **Nuovo deployment** → tipo **Componente aggiuntivo** → copia l'ID del deployment.
-3. Console Google Cloud → API e servizi → abilita **Google Workspace Marketplace SDK** → Configurazione dell'app:
-   visibilità **Privata**, integrazione "Componente aggiuntivo di Google Workspace", incolla l'ID del deployment,
-   ambiti uguali a quelli di `appsscript.json` → Scheda dello store → **Pubblica** (resta interno a casteltech.net,
-   Google non deve approvarlo).
-4. Console di amministrazione Google → App → Google Workspace Marketplace → installa "Portale Casteltech" per tutta
-   l'organizzazione. Il pannello compare a tutti nel giro di qualche ora.
+Lo script resta sul progetto Google standard: **non** collegarlo a un progetto Google Cloud proprio (29/10/2026: dopo il
+collegamento Gmail non faceva più partire il pannello e il cambio non si annulla).
+1. Nello script: Condividi → aggiungi i colleghi dell'ufficio come **Editor** (vedono anche la chiave: solo personale fidato).
+2. Ogni collega, con il suo account: apre lo script → Esegui il deployment → Testa i deployment → **Installa**, poi ricarica Gmail
+   e concede i permessi (se compare "Google non ha verificato l'app": Avanzate → Vai a…).
 
 Quando si cambia `Codice.gs`: incolla la versione nuova e fai Gestisci deployment → modifica → Nuova versione.
 
