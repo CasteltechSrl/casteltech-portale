@@ -130,16 +130,22 @@ export function rotteSchedeCliente() {
     const richieste = richiesteDaEmail(p.email);
     const daDividere = versioni.length || padre ? [] : versioniDaDividere(richieste);
     const schedeProposte = p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
+    // più codici nella stessa mail (Elemaster 20149766 / 1022303): si divide come le versioni, un pacchetto per codice
+    const perCodice = richieste.some(x => x.codice);
+    const nomeParte = perCodice ? 'codice' : 'versione';
     const riquadroVersioni = html`
-      ${padre ? html`<p class="avviso info">Versione <b>${p.versione}</b> di <a href="/preventivi/documenti/${padre.id}">${padre.nome}</a>: file comuni più quelli con «${p.versione}» nel nome.${p.quantita ? ` Richieste ${p.quantita} schede.` : ''}</p>` : ''}
-      ${richieste.length && !padre ? html`<p class="nota">Richiesta del cliente: ${richieste.map(x => `${x.quantita} pz ${x.descrizione}`).join(' · ')}</p>` : ''}
+      ${padre ? html`<p class="avviso info">${perCodice ? 'Codice' : 'Versione'} <b>${p.versione}</b> di <a href="/preventivi/documenti/${padre.id}">${padre.nome}</a>: file comuni più quelli con «${p.versione}» nel nome.${p.quantita ? ` Richieste ${p.quantita} schede.` : ''}</p>` : ''}
+      ${richieste.length && !padre ? html`<p class="nota">Richiesta del cliente: ${richieste.map(x => `${x.quantita} pz ${x.codice ? `${x.codice} ` : ''}${x.descrizione}${x.forecast?.length ? ` (${x.forecast.join('; ')})` : ''}`).join(' · ')}</p>` : ''}
+      ${richieste.some(x => x.cicli?.length) ? html`<details class="blocco"><summary>Cicli di lavorazione scritti dal cliente</summary>${richieste.filter(x => x.cicli?.length).map(x => html`
+          <p><b>${x.codice ?? x.descrizione}</b>: ${x.cicli!.join(' · ')}</p>`)}
+          <p class="nota">Nel preventivo da validare accendono onda, saldatura a mano, AOI, etichette, pulizia e lavaggio; le altre lavorazioni vanno in «Da controllare».</p></details>` : ''}
       ${daDividere.length ? html`<form method="post" action="/preventivi/documenti/${p.id}/dividi" class="inline"
-          data-conferma="Creare un pacchetto per ogni versione (${daDividere.map(v => v.versione).join(', ')})? I file comuni vanno in tutti, quelli con il nome della versione solo nella sua.">
-          <button class="primario" title="Un pacchetto e un preventivo per ogni versione, con la sua quantità">Dividi per versione: ${daDividere.map(v => `${v.versione} ${v.quantita} pz`).join(' · ')}</button></form>` : ''}
+          data-conferma="Creare un pacchetto per ogni ${nomeParte} (${daDividere.map(v => v.versione).join(', ')})? I file comuni vanno in tutti, quelli con il ${nomeParte} nel nome solo nel suo.">
+          <button class="primario" title="Un pacchetto e un preventivo per ogni ${nomeParte}, con la sua quantità">Dividi per ${nomeParte}: ${daDividere.map(v => `${v.versione} ${v.quantita} pz`).join(' · ')}</button></form>` : ''}
       ${versioni.length ? html`<table class="dati-scheda"><tbody>${versioni.map(v => html`<tr><th><a href="/preventivi/documenti/${v.id}">${v.versione}</a></th>
           <td>${v.quantita ? `${v.quantita} pz` : ''}${v.preventivo_id ? html` · preventivo <a href="/preventivi/${v.preventivo_id}">${v.preventivo_numero}</a> <span class="stato ${v.preventivo_stato}">${String(v.preventivo_stato).replace('_', ' ')}</span>`
             : html` · <a href="/preventivi/documenti/${v.id}">crea il preventivo</a>`}</td></tr>`)}</tbody></table>
-          <p class="nota">I file aggiunti qui vanno anche nelle versioni (quelli con il nome di una versione solo nella sua).</p>` : ''}`;
+          <p class="nota">I file aggiunti qui vanno anche nelle parti divise (quelli con il nome di un${perCodice ? ' codice' : 'a versione'} solo nella sua).</p>` : ''}`;
     const aggiungiFileForm = html`
       <details class="blocco"><summary>Aggiungi file a questo pacchetto</summary>
         <div class="stretto-form">

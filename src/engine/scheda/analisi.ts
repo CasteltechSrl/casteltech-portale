@@ -6,6 +6,7 @@
  *  - Il codice del componente: quello del cliente se è nella BOM, altrimenti la codifica Casteltech (sezione Componenti).
  * Nessun accesso al database.
  */
+import { unisciAlternative } from '../codifica/alternative-bom.js';
 import { elencoDesignatori, nomiColonne, pnKey, rigaIntestazione, rilevaColonne } from '../codifica/bom.js';
 import type { ComponenteCad } from './gencad.js';
 import { contaRefori, type Foratura } from './foratura.js';
@@ -33,6 +34,12 @@ export interface RigaBomScheda {
   montaggio: 'SMD' | 'THT' | null;   // come lo scrive il cliente
   montato: boolean;                  // false = DNP / non montare
   note: string;
+  /** montaggio dedotto dalla descrizione (BOM tipo Elemaster: "SMD RES. …" = SMD, le altre righe THT) invece che da una colonna */
+  montaggioDa?: 'colonna' | 'descrizione';
+  /** materiale di montaggio o documento (dissipatore, vite, grasso, etichetta, specifica…): non è un componente da montare */
+  accessorio?: boolean;
+  /** montato dopo l'onda ("POST WAVE ASSEMBLY"): THT saldato o inserito a mano */
+  dopoOnda?: boolean;
 }
 
 export interface Componente {
@@ -83,10 +90,15 @@ const RE_SMD = /^(SMD|SMT|SM|SURFACE ?MOUNT)$/i;
 const RE_THT = /^(THT|PTH|TH|THROUGH ?HOLE|TRADIZIONALE)$/i;
 const RE_NON_MONTATO = /^(NO|N|NM|DNP|DNF|DNI|NON MONTARE|NON MONTATO|NOT MOUNTED|NOT FITTED|NO MOUNT|NOPOP|FALSE|0)$/i;
 const RE_VALORE_DNP = /^(DNP|DNF|DNI|NM|N\.M\.|NON MONTARE|NOT ?MOUNTED|NOT ?FITTED|NO ?POP)$/i;
+/** Descrizione che dichiara il montaggio in testa (Elemaster: "SMD RES. 4,7KOHM 0805", "SMD IC LM358 SO8"). */
+const RE_DESCR_SMD = /^(SMD|SMT)\b/i;
+/** Righe che non sono componenti da montare: meccanica, consumabili, imballo, documenti (Adriano 29/10/2026, BOM Elemaster). */
+const RE_ACCESSORIO = /^(HEAT ?SINK|DISSIPATOR[EI]?|GREASE|GRASSO|PASTA TERMICA|SILICON[EI]?|GLUE|COLLA|ADHESIVE|ADESIVO|NUT|DADO|SCREW|VITE|VITI|WASHER|RONDELL[AE]|CABLE TIE|FASCETT[AE]|TUBE|GUAINA|BAG|BUSTA|SACCHETTO|LABEL|ETICHETT[AE]|KNOB|MANOPOLA|CAP FOR|CAP KNOB|CAPPUCCIO|SPACER|DISTANZIAL[EI]|CONTACT|JUMPER|PONTICELLO|SPEC\b|SPEC\.|SPECIFICA|TOPOGRAFICO|SCHEMA|ELENCO MAT|TOOLING|CONTROLLO|DISEGNO|ASSEMBLY DRAWING|PCB\b|CIRCUITO STAMPATO)/i;
 
 /** Righe della BOM con le colonne riconosciute (anche quelle che servono qui: montaggio SMD/THT, montato sì/no, note). */
-export function leggiBomScheda(righe: string[][]): { righe: RigaBomScheda[]; colonne: Record<string, string>; avvisi: string[] } {
+export function leggiBomScheda(grezze: string[][]): { righe: RigaBomScheda[]; colonne: Record<string, string>; avvisi: string[] } {
   const avvisi: string[] = [];
+  const righe = unisciAlternative(grezze); // alternative del cliente (Pref/Alt, LLC): non sono altri componenti
   const h = rigaIntestazione(righe);
   const colonne = nomiColonne(righe[h] ?? []);
   const dati = righe.slice(h + 1).filter(r => r.some(c => String(c ?? '').trim()));
@@ -102,25 +114,39 @@ export function leggiBomScheda(righe: string[][]): { righe: RigaBomScheda[]; col
   const iMontato = colonne.findIndex((c, i) => i !== iMont && !usate.has(c) && /^(MOUNTED|MONTATO|MONTARE|FITTED|POPULATED?|POPULATE|DNP|ASSEMBLED|FIT)$/.test(norm(c)));
   const iNote = colonne.findIndex(c => !usate.has(c) && /^(NOTE|NOTES|NOTA|ASS\.?Y NOTE|NOTE DI MONTAGGIO|ASSEMBLY NOTE|COMMENTI?)$/.test(norm(c)));
   const iNote2 = colonne.findIndex((c, i) => i !== iNote && !usate.has(c) && /ASS\.?Y NOTE|ASSEMBLY NOTE/.test(norm(c)));
+  // descrizioni che cominciano con SMD (almeno un quarto delle righe): chi non comincia con SMD è THT (Adriano 29/10/2026)
+  const testoDescr = (r: string[]) => String(r[idx(mappa.descrizione)] ?? r[idx(mappa.valore)] ?? '').trim();
+  const conDescr = mappa.descrizione || mappa.valore ? dati.filter(r => testoDescr(r) && !RE_ACCESSORIO.test(testoDescr(r))) : [];
+  const smdInDescrizione = conDescr.length >= 4 && conDescr.filter(r => RE_DESCR_SMD.test(testoDescr(r))).length / conDescr.length >= 0.25;
   if (!mappa.designatori) avvisi.push('Nella BOM non trovo la colonna dei riferimenti (R1, C2…): non si può incrociare con il pick and place.');
   const out: RigaBomScheda[] = [];
   dati.forEach((r) => {
     const cella = (i: number) => i >= 0 ? String(r[i] ?? '').trim() : '';
     const designatori = elencoDesignatori(cella(idx(mappa.designatori))).filter(d => RE_RIFERIMENTO.test(d));
-    if (!designatori.length && !cella(idx(mappa.pn))) return;
+    const pn = cella(idx(mappa.pn)), produttore = cella(idx(mappa.produttore));
+    if (!designatori.length && !pn) return;
     const montaggioTesto = cella(iMont);
     const montatoTesto = cella(iMontato);
     const valore = cella(idx(mappa.valore));
+    const descrizione = cella(idx(mappa.descrizione));
     const q = Number(cella(idx(mappa.quantita)).replace(',', '.'));
-    out.push({
+    const dopoOnda = /POST[ -]?WAVE|DOPO (L')?ONDA|POST[ -]?ONDA/i.test(montaggioTesto);
+    const accessorio = RE_ACCESSORIO.test(descrizione || valore) || /MECHANICAL|MECCANIC/i.test(montaggioTesto);
+    let montaggio: RigaBomScheda['montaggio'] = RE_SMD.test(montaggioTesto) ? 'SMD' : RE_THT.test(montaggioTesto) || dopoOnda ? 'THT' : null;
+    let montaggioDa: RigaBomScheda['montaggioDa'] = montaggio ? 'colonna' : undefined;
+    if (!montaggio && smdInDescrizione && !accessorio && (descrizione || valore)) { montaggio = RE_DESCR_SMD.test(descrizione || valore) ? 'SMD' : 'THT'; montaggioDa = 'descrizione'; }
+    const riga: RigaBomScheda = {
       riga: righe.indexOf(r) + 1, designatori,
       quantita: cella(idx(mappa.quantita)) && Number.isFinite(q) ? q : null,
-      pn: cella(idx(mappa.pn)), produttore: cella(idx(mappa.produttore)), valore, footprint: cella(idx(mappa.footprint)), descrizione: cella(idx(mappa.descrizione)),
-      montaggio: RE_SMD.test(montaggioTesto) ? 'SMD' : RE_THT.test(montaggioTesto) ? 'THT' : null,
+      pn, produttore, valore, footprint: cella(idx(mappa.footprint)), descrizione,
+      montaggio,
       montato: !(montatoTesto && RE_NON_MONTATO.test(montatoTesto)) && !RE_VALORE_DNP.test(valore),
       note: [cella(iNote), cella(iNote2)].filter(Boolean).join(' · '),
-    });
+      ...(montaggioDa ? { montaggioDa } : {}), ...(accessorio ? { accessorio } : {}), ...(dopoOnda ? { dopoOnda } : {}),
+    };
+    out.push(riga);
   });
+  if (smdInDescrizione) avvisi.push('La BOM non ha la colonna del montaggio: le righe con la descrizione che comincia per SMD sono SMD, le altre THT.');
   return { righe: out, colonne: { ...mappa, ...(iMont >= 0 ? { montaggio: colonne[iMont] } : {}), ...(iMontato >= 0 ? { montato: colonne[iMontato] } : {}), ...(iNote >= 0 ? { note: colonne[iNote] } : {}) }, avvisi };
 }
 
@@ -202,17 +228,26 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
 
   // ── BOM: riferimento → riga ──
   const bomPerRef = new Map<string, RigaBomScheda>();
+  const refDopoOnda = new Set<string>(); // riferimenti con un pezzo montato dopo l'onda (anche se il pezzo saldato è un altro)
   const ripetuti = new Set<string>();
+  const accessori = (ing.bom?.righe ?? []).filter(r => r.accessorio);
+  if (accessori.length) S('info', `${accessori.length} righe della BOM sono materiale di montaggio o documenti (dissipatori, viti, grasso, etichette, specifiche…): non sono componenti da montare.`);
   for (const r of ing.bom?.righe ?? []) {
+    if (r.accessorio) continue;
     if (r.quantita != null && r.designatori.length && r.quantita !== r.designatori.length && r.montato)
       S('avviso', `BOM riga ${r.riga}: quantità ${r.quantita} ma ${r.designatori.length} riferimenti.`, r.designatori);
     for (const d of r.designatori) {
       const prima = bomPerRef.get(d);
-      if (prima) { ripetuti.add(d); if (!prima.pn && r.pn) bomPerRef.set(d, r); }
-      else bomPerRef.set(d, r);
+      if (prima) {
+        ripetuti.add(d);
+        // il pezzo saldato vince su quello messo dopo l'onda (portafusibile e fusibile, morsetto maschio e femmina)
+        if ((!prima.pn && r.pn && !r.dopoOnda) || (prima.dopoOnda && !r.dopoOnda)) bomPerRef.set(d, r);
+        if (r.dopoOnda) refDopoOnda.add(d);
+      }
+      else { bomPerRef.set(d, r); if (r.dopoOnda) refDopoOnda.add(d); }
     }
   }
-  if (ripetuti.size) S('avviso', `${ripetuti.size} riferimenti compaiono in più righe della BOM (alternative o doppioni): uso la riga con il codice produttore.`, [...ripetuti]);
+  if (ripetuti.size) S('avviso', `${ripetuti.size} riferimenti compaiono in più righe della BOM (alternative o doppioni): uso la riga del pezzo saldato con il codice produttore.`, [...ripetuti]);
   const haBom = !!ing.bom && ing.bom.righe.length > 0;
 
   const cad = new Map((ing.cad?.componenti ?? []).map(c => [c.ref, c]));
@@ -373,6 +408,10 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   if (nonMontati) S('info', `${nonMontati} componenti non montati (DNP) esclusi dai conteggi.`, componenti.filter(c => !c.montato).map(c => c.ref));
   if (!haBom) S('avviso', 'Manca la BOM: codici e valori non si possono controllare.');
   if (!haPp) S('avviso', 'Manca il pick and place: lati e posizioni dei componenti non si conoscono.');
+  const dopoOnda = montati.filter(c => refDopoOnda.has(c.ref)).map(c => c.ref);
+  if (dopoOnda.length) S('info', `${dopoOnda.length} riferimenti hanno pezzi da montare dopo l'onda (POST WAVE ASSEMBLY nella BOM: fusibili, ponticelli, morsetti femmina, componenti saldati a mano): lavoro a mano da stimare.`, dopoOnda);
+  const daDescrizione = montati.filter(c => c.tipoDa === 'BOM' && bomPerRef.get(c.ref)?.montaggioDa === 'descrizione');
+  if (daDescrizione.length && !ing.cad && !haPp) S('info', `SMD e THT presi dalla descrizione della BOM (${daDescrizione.filter(c => c.tipo === 'SMD').length} SMD, ${daDescrizione.filter(c => c.tipo === 'THT').length} THT): senza pick and place e CAD i lati non si conoscono, gli SMD sono messi tutti sul TOP.`);
 
   const dimensioni = ing.contorno ? { larghezza: arrot(ing.contorno.x1 - ing.contorno.x0, 1), altezza: arrot(ing.contorno.y1 - ing.contorno.y0, 1), stima: !!ing.contornoStimato } : null;
   const ordine: Record<Livello, number> = { errore: 0, avviso: 1, info: 2 };
