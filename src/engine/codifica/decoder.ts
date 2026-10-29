@@ -280,9 +280,10 @@ const PAROLE: [RegExp, string][] = [[/\bRES(ISTOR|ISTENZA)?\b/, 'RS'], [/\bCAP(A
   [/\bRELAY|\bREL[EÈ](?![A-Z0-9_])/, 'RL'], [/\bCONN|\bHEADER|\bSOCKET|\bTERMINAL/, 'CN'], [/\bSWITCH|\bPULSANT/, 'IT'],
   [/\bVARISTOR/, 'VR'], [/\bIC\b|\bMCU\b|\bREGULATOR|\bAMPLIFIER|\bOPAMP|\bLDO\b/, 'IC']];
 const CASE_RE = /(?<![\d.])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2220|2512)(?![\d.])/;
-const PKG_RE = new RegExp('\\b(SOT-?\\d{2,3}(?:-\\d)?|SOD-?\\d{2,3}[A-Z]?|SC-?\\d{2}(?:-\\d)?|TSOT-?\\d{2}(?:-\\d)?|'
+// confini senza \b: nei footprint di KiCad il case segue un trattino basso (D_SOD-123, SOIC-16_3.9x9.9mm)
+const PKG_RE = new RegExp('(?<![A-Z0-9])(SOT-?\\d{2,3}(?:-\\d)?|SOD-?\\d{2,3}[A-Z]?|SC-?\\d{2}(?:-\\d)?|TSOT-?\\d{2}(?:-\\d)?|'
   + '(?:SOIC|SO|TSSOP|SSOP|MSOP|VSSOP|QFN|VQFN|WQFN|UQFN|DFN|WDFN|LQFP|TQFP|BGA|LGA)-?\\d{1,3}|'
-  + 'DO-?214A[ABC]|SM[ABC]|SMAF|D2PAK|DPAK|TO-?\\d{2,3}(?:AB)?|MELF)\\b', 'i');
+  + 'DO-?214A[ABC]|SM[ABC]|SMAF|D2PAK|DPAK|TO-?\\d{2,3}(?:AB)?|MELF)(?![A-Z0-9])', 'i');
 
 export function famigliaDa(designatori?: unknown, descr?: unknown): string | null {
   if (descr) {
@@ -315,7 +316,7 @@ export function caseDaTesto(...testi: unknown[]): string | null {
 export function daColonneBom(fam: string | null, valore?: unknown, footprint?: unknown, descr?: unknown, designatori?: unknown): [string | null, Attributi] {
   fam = fam || famigliaDa(designatori, descr);
   const a: Attributi = {};
-  a.case = caseDaTesto(footprint, descr);
+  a.case = caseDaTesto(footprint, descr, valore); // anche dal valore: "1N5819S4/SOD123"
   const T = [valore, descr].filter(x => x).map(String).join(' ').toUpperCase();
   const V = String(valore ?? '').toUpperCase();
   if (fam === 'RS' || fam === 'RR') {

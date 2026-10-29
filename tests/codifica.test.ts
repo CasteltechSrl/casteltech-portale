@@ -236,3 +236,50 @@ test('BOM collegata al preventivo: costo a scheda per le schede del preventivo, 
   assert.equal(costoMaterialiPer(righe as any, 100, REGOLE_SCARTO_DEFAULT).aScheda, 10);
   assert.deepEqual(righe[0].acquisti, []);
 });
+
+// ── BOM senza colonna P/N: codice in Valore o Descrizione (Adriano 29/10/2026) ──
+import { candidatiPn, differenzeBomCodice, notaDueCodici, pnDaCella, scegliCandidato, stessoComponente } from '../src/engine/codifica/candidati-pn.js';
+import { caseDaTesto } from '../src/engine/codifica/decoder.js';
+
+test('codifica: codici del produttore nelle celle Valore / Descrizione', () => {
+  assert.equal(pnDaCella('1N5819S4/SOD123'), '1N5819S4');
+  assert.equal(pnDaCella('BAT54C(SOT23-3)'), 'BAT54C');
+  assert.equal(pnDaCella('MAX3485CSA+CT-ND'), 'MAX3485CSA+CT');
+  for (const no of ['100nF/10V/10%/X7R/C0603', '470k/R0402', '49.9R', '68Ω', '12.4k', 'Conn_01x02', 'Fiducial', 'GREEN', 'SOT-23',
+    'Capacitor Ceramic 0.1 µF ±10% 25V X7R 0805', 'Diode_SMD:D_SOD-123']) assert.equal(pnDaCella(no), null, no);
+  const c = candidatiPn({ valore: '1N5819S4/SOD123', descrizione: '1N5819HW-7-F' });
+  assert.deepEqual(c.map(x => x.pn), ['1N5819HW-7-F', '1N5819S4']);
+});
+
+test('codifica: case dai footprint di KiCad con il trattino basso', () => {
+  assert.equal(caseDaTesto('Diode_SMD:D_SOD-123'), 'SOD123');
+  assert.equal(caseDaTesto('Package_SO:SOIC-16_3.9x9.9mm_P1.27mm'), 'SOIC16');
+  assert.equal(daColonneBom(null, '1N5819S4/SOD123', 'Diode_SMD:D_SOD-123', '1N5819HW-7-F', 'D1,D4,D5')[1].case, 'SOD123');
+});
+
+test('codifica: due codici nella stessa riga, equivalenti o da validare', () => {
+  assert.equal(stessoComponente('1N5819S4', '1N5819HW-7-F')?.tipo, 'jedec');
+  assert.equal(stessoComponente('BAT54C', 'BAT54C,215')?.tipo, 'contenuto');
+  assert.equal(stessoComponente('BLM18PG121SN1D', 'BLM18AG121SN1D'), null);
+  const off = (pn: string): Offerta[] => pn === '1N5819S4' ? [] : [{ fornitore: 'mouser', codiceFornitore: 'x', mpn: pn, produttore: '', descrizione: '', stock: 5000, moq: 1, multiplo: 1, scaglioni: [{ qta: 1, prezzo: 0.2 }], valuta: 'EUR' }];
+  const c = candidatiPn({ valore: '1N5819S4/SOD123', descrizione: '1N5819HW-7-F' }, ['valore', 'descrizione']);
+  const s = scegliCandidato(c, off, 300)!;
+  assert.equal(s.scelto.pn, '1N5819HW-7-F'); // si compra quello che si trova, anche se nella colonna guardata dopo
+  assert.match(notaDueCodici(c, s.scelto, s)!, /equivalenti.*si compra 1N5819HW-7-F \(disponibile\)/);
+  const b = candidatiPn({ valore: 'BLM18PG121SN1D', descrizione: 'BLM18AG121SN1D' });
+  assert.match(notaDueCodici(b, b[0], { trovato: true, disponibile: true })!, /^CODICE DA VALIDARE: nella BOM ci sono codici diversi/);
+});
+
+test('codifica: dati della BOM diversi da quelli del codice', () => {
+  const [, aBom] = daColonneBom('RS', '168K', 'Resistor_SMD:R_0805_2012Metric', 'RC0805FR-07162KL', 'R_FBT1');
+  assert.deepEqual(differenzeBomCodice('RS', aBom, decodificaMpn('RC0805FR-07162KL')[1]), ['valore 168K nella BOM, 162K nel codice']);
+  const [, aC] = daColonneBom('CC', '1nF/630V/5%/C0G/C1206', 'Capacitor_SMD:C_1206_3216Metric', 'GRM32ER71H475KA88L', 'C1');
+  assert.equal(differenzeBomCodice('CC', aC, decodificaMpn('GRM32ER71H475KA88L')[1]).length, 4);
+  // tensione più alta e tolleranza più stretta del codice vanno bene
+  const [, aOk] = daColonneBom('CC', '100nF/10V/10%/X7R/C0603', 'Capacitor_SMD:C_0603_1608Metric', 'CC0603JRX7R9BB104', 'C1');
+  assert.deepEqual(differenzeBomCodice('CC', aOk, decodificaMpn('CC0603JRX7R9BB104')[1]), []);
+});
+
+test('codifica: tra due codici uno dentro l\'altro si prova prima quello completo', () => {
+  assert.deepEqual(candidatiPn({ valore: 'LMR51430YDDCR', descrizione: 'LMR51430Y' }).map(c => c.pn), ['LMR51430YDDCR', 'LMR51430Y']);
+});
