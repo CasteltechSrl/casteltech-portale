@@ -345,3 +345,24 @@ test('AOI TOP / BOT / visivo (Adriano 28/10/2026): visivo 60 s a scheda, senza A
   // AOI BOT senza il lato BOT non conta
   assert.equal(sec(calc({ doppiaFaccia: 0, aoiBot: 1 }), 'ispezioneAOI'), 60 * 10);
 });
+
+test('SMD a mano (Adriano 29/10/2026): SMD in giostra a 15 s, in SMD solo attrezzaggio serigrafia 45 min, il forno resta', () => {
+  const t: Tariffe = { costoAziendaH: 25, costoOperatoreProduzioneH: 15, costoOperatoreUfficioH: 20, ricarico: 1 };
+  const def = Object.fromEntries(PARAMETRI.filter(p => p.default != null).map(p => [p.codice, p.default!]));
+  const base = { ...def, nPCB: 5, qtSmd: 100, qtFeeder: 20, qntCompMontaggio: 10, primaProduzione: 1, presenteTht: 1 };
+  const calc = (x: Record<string, number>) => calcolaPreventivo(FASI, VOCI, t, { nSchede: 5, parametri: { ...base, ...x } });
+  const sec = (r: ReturnType<typeof calc>, c: string) => r.fasi.find(f => f.codice === c)?.secondiCiclo ?? 0;
+  const macchina = calc({}), mano = calc({ smdAMano: 1 });
+  assert.equal(sec(macchina, 'giostra'), 5 * 10 * 5);
+  assert.equal(sec(mano, 'giostra'), (5 * 10 + 15 * 100) * 5);                 // THT al loro tempo + SMD a 15 s
+  assert.equal(sec(macchina, 'equipSerigrafiaTop'), 20 * 60);
+  assert.equal(sec(mano, 'equipSerigrafiaTop'), 45 * 60);
+  for (const c of ['progArmadi', 'filePeP', 'progPeP', 'progSerigrafiaTop', 'equipPePTop', 'avvioTop', 'serigrafiaTop', 'pepTop', 'smontaggioTop']) {
+    if (c !== 'progArmadi') assert.ok(sec(macchina, c) > 0, c);   // armadi: dipende dalla provenienza del materiale
+    assert.equal(sec(mano, c), 0, c);
+  }
+  assert.equal(sec(mano, 'fornoTop'), sec(macchina, 'fornoTop'));
+  assert.ok(sec(mano, 'fornoTop') > 0);
+  // con il lato BOT anche i suoi SMD vanno in giostra
+  assert.equal(sec(calc({ smdAMano: 1, doppiaFaccia: 1, qtSmdLatoB: 20 }), 'giostra'), (5 * 10 + 15 * 120) * 5);
+});
