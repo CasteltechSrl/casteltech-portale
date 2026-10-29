@@ -98,3 +98,7 @@ test('guida: versioni della stessa scheda e file aggiunti dopo', () => {
 test('guida: SMD montati a mano', () => {
   assert.ok(primi('smd a mano giostra', 3).includes('nuovo-preventivo'));
 });
+
+test('guida: mail .eml nella cartella', () => {
+  assert.ok(primi('mail eml', 3).includes('pulsante-gmail'));
+});

@@ -57,3 +57,11 @@ test('quantità scritta solo nell\'oggetto della mail (Adriano 29/10/2026: «Ord
   assert.deepEqual(richiesteDaEmail({ oggetto: 'Ordine 5 PCB', testo: '167pz M0929-C versione HELIOS' }).map(x => x.quantita), [167]);
   assert.deepEqual(richiesteDaEmail({ oggetto: 'Richiesta offerta', testo: '' }), []);
 });
+
+test('mail salvata come .eml nella cartella: quantità e versioni dal suo testo (Adriano 29/10/2026)', async () => {
+  const { leggiEmail } = await import('../src/engine/acquisizioni.js');
+  const eml = 'From: Marco <m@cliente.it>\r\nSubject: RFQ_26225 *** Documentazione per scheda M0929-C\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n'
+    + 'Buongiorno,\r\n=E2=80=A2         167pz      M0929-C versione HELIOS\r\n=E2=80=A2         90pz       M0929-C Versione CRONOS\r\n';
+  const e = leggiEmail(Buffer.from(eml, 'latin1'));
+  assert.deepEqual(versioniDaDividere(richiesteDaEmail(e)).map(v => `${v.versione} ${v.quantita}`), ['HELIOS 167', 'CRONOS 90']);
+});
