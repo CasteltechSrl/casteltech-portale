@@ -483,3 +483,32 @@ test('zip del cliente: si aprono solo i file utili, PDF e 3D restano chiusi con 
   assert.ok('pacchetto/OLD/bom.csv' in chiusi, 'cartella vecchia non aperta');
   assert.ok('pacchetto/odb/matrix/matrix' in chiusi && 'pacchetto/odb/steps/pcb/profile' in chiusi, 'ODB++ non aperto');
 });
+
+test('M0929-C (Control Systems, 29/10/2026): centri in pollici, BOM a colonne fisse, pick and place con un\'altra origine', async () => {
+  const { allineaAlRame } = await import('../src/engine/scheda/allinea.js');
+  const { leggiBomColonneFisse } = await import('../src/engine/codifica/bom.js');
+  // centri: X Y lato rotazione unità, poi le coordinate in centomillesimi di mm
+  const pp = leggiPickPlace('centri.txt', ' U23 0.7875 0.625 1 270 IN 2000250 1587500 \r\n R74 3.05 1.475 1 90 IN 7747000 3746500 \r\n C1 5.5 1.3 2 0 IN 13970000 3302000 \r\n');
+  assert.equal(pp.unita, 'inch');
+  assert.deepEqual(pp.posizioni.map(p => [p.ref, Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, p.rot, p.lato]),
+    [['U23', 20, 15.88, 270, 'TOP'], ['R74', 77.47, 37.47, 90, 'TOP'], ['C1', 139.7, 33.02, 0, 'BOT']]);
+  // BOM stampata a colonne fisse con i puntini e le righe di pagina
+  const bom = leggiBomColonneFisse([
+    '          CONTROL SYSTEMS SRL                                   29.10.2026',
+    '         Reference        NxU.M.    Componente                           Costruttore              Descrizione componente',
+    '',
+    '         C1                         C0402C220J5GAC.....................  Kemet................... Condensatore smd (0402) 22pF 50V 5%',
+    '         JSER1                      LU003505-R.........................  ADIMPEX................. Connettore subminiatura D, 9 poli',
+    '                                                                                                    Pag.  di ',
+  ].join('\n'))!;
+  assert.deepEqual(bom.slice(1), [['C1', '', 'C0402C220J5GAC', 'Kemet', 'Condensatore smd (0402) 22pF 50V 5%'],
+    ['JSER1', '', 'LU003505-R', 'ADIMPEX', 'Connettore subminiatura D, 9 poli']]);
+  assert.equal(leggiBomColonneFisse('Reference;Value;Footprint\nR1;10k;0603\n'), null);
+  // allineamento: chip 0402 (piazzole a ±0,5 mm) su una scheda spostata di 101,6 / 203,2 mm, con le piazzole dei vicini a 1,27 mm
+  const comp = Array.from({ length: 30 }, (_, i) => ({ x: 5 + (i % 10) * 6, y: 5 + Math.floor(i / 10) * 2.54 }));
+  const piazzole = comp.flatMap(c => [-0.53, 0.53].map(d => ({ x: c.x + 101.6 + d, y: c.y + 203.2, w: 0.56, h: 0.76 })));
+  const s = allineaAlRame(comp, piazzole)!;
+  assert.deepEqual([s.dx, s.dy], [101.6, 203.2]);
+  // già allineati: niente spostamento
+  assert.equal(allineaAlRame(comp.map(c => ({ x: c.x + 101.6, y: c.y + 203.2 })), piazzole), null);
+});

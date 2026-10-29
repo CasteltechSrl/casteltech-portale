@@ -200,3 +200,30 @@ export function leggiCsv(testo: string, sep: string): string[][] {
   return righe;
 }
 
+
+/**
+ * BOM stampata come report a colonne fisse (Control Systems, M0929-C 29/10/2026: "Reference  NxU.M.  Componente....  Costruttore....
+ * Descrizione componente", valori riempiti con puntini, intestazione ripetuta a ogni pagina). Le colonne si prendono dalla riga di
+ * intestazione: ogni titolo inizia una colonna. Ritorna null se il testo non ha un'intestazione così.
+ */
+export function leggiBomColonneFisse(testo: string): string[][] | null {
+  const righe = testo.replace(/\f/g, '\n').split(/\r?\n/);
+  const eIntestazione = (r: string) => /^\s*(Reference|Riferiment[oi]|Designator|Ref\.?)\s{2,}\S/i.test(r) && r.trim().split(/\s{2,}/).length >= 3;
+  const i = righe.findIndex(eIntestazione);
+  if (i < 0) return null;
+  // le altre righe devono usare spazi, non separatori (altrimenti è un CSV normale)
+  const dati = righe.slice(i + 1).filter(r => r.trim());
+  if (!dati.length || dati.filter(r => /[;\t]/.test(r)).length * 2 > dati.length) return null;
+  const inizi: number[] = [];
+  const re = /\S+(?: \S+)*/g;
+  for (let m; (m = re.exec(righe[i]));) inizi.push(m.index);
+  const taglia = (r: string) => inizi.map((da, k) => r.slice(da, inizi[k + 1] ?? undefined).replace(/\.{3,}\s*$/, '').trim());
+  const out = [taglia(righe[i])];
+  for (const r of righe.slice(i + 1)) {
+    if (!r.trim() || eIntestazione(r)) continue;
+    // la prima colonna deve essere un riferimento; le righe di pagina, data, titolo restano fuori
+    if (!/^[A-Z][A-Z0-9_]{0,15}$/i.test(r.slice(inizi[0], inizi[1]).trim())) continue;
+    out.push(taglia(r));
+  }
+  return out.length > 1 ? out : null;
+}
