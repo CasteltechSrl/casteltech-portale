@@ -23,6 +23,18 @@ body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 10pt; col
 .pannello-stampa .aggiunte a { display: block; color: #111; text-decoration: none; padding: 3px 0; }
 .pannello-stampa .aggiunte a::before { content: "☐ "; font-size: 12pt; }
 .pannello-stampa .aggiunte a.si::before { content: "☑ "; color: #1b5e52; }
+.pannello-stampa .ritocchi { border-top: 1px solid #ddd; margin-top: 10px; padding-top: 8px; }
+.pannello-stampa .ritocchi .aiuto, .pannello-stampa .ritocchi small { color: #555; font-size: 8.5pt; margin: 0 0 6px; display: block; }
+.pannello-stampa .ritocchi label { display: block; font-size: 9pt; margin-bottom: 6px; }
+.pannello-stampa .ritocchi textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 9pt; margin-top: 2px; }
+.pannello-stampa .ritocchi .spunta { display: flex; gap: 6px; align-items: flex-start; }
+.pannello-stampa .ritocchi fieldset { min-width: 0; border: 1px solid #d5dedb; border-radius: 6px; padding: 6px; margin: 0 0 8px; font-size: 9pt; }
+.pannello-stampa .ritocchi fieldset > input { width: 70px; }
+.pannello-stampa .ritocchi input, .pannello-stampa .ritocchi select { font: inherit; font-size: 9pt; box-sizing: border-box; }
+.pannello-stampa .ritocchi .riga-in-piu { display: grid; grid-template-columns: minmax(0, 1fr) 40px 52px; gap: 3px; margin-bottom: 3px; }
+.pannello-stampa .ritocchi .riga-in-piu input { width: 100%; min-width: 0; }
+.pannello-stampa .ritocchi button { width: 100%; padding: 6px; background: #1b5e52; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+table.righe tr.sconto td { color: #1b5e52; }
 @media (max-width: 1000px) {
   .schermo { flex-direction: column; align-items: stretch; }
   .pannello-stampa { position: static; width: auto; flex: none; }

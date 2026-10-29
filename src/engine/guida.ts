@@ -248,15 +248,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'stampa-preventivo', area: 'preventivi', titolo: 'Stampare o mandare il preventivo al cliente',
-    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali',
+    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali sconto note riga aggiungere ritocchi modificare',
     testo: [
       'Dal preventivo salvato, "Stampa" apre la pagina per il cliente con i soli prezzi, impaginata come i preventivi di Fatture in Cloud: dati di Casteltech, destinatario con i dati fiscali, riquadro verde con i prezzi, tabella, pagamento e totale.',
       'A sinistra, nel riquadro "Cosa stampare", scegli la versione: Essenziale (codice, quantità e prezzo a scheda, senza dettaglio; se ci sono costi una tantum sono compresi nel prezzo a scheda e sotto la descrizione c\'è solo "Comprensivo dei costi una tantum"), Essenziale con dettaglio (componenti, PCB, SMD, THT, materiale di consumo e spedizione, ognuno con il prezzo), Macro aree o Dettaglio per fasi.',
       'Nella versione con dettaglio gestione materiale e imballaggio non si vedono: sono già dentro SMD e THT, 70% su SMD e 30% su THT, pesati sul valore delle due aree (con SMD 10 € e THT 90 € all\'SMD va circa il 21%).',
       'Le condizioni generali di fornitura sono sulla seconda pagina, con lo spazio per la firma del cliente per accettazione (senza condizioni la firma va in fondo alla prima pagina): si tolgono con le spunte del riquadro. Il modo di pagamento è quello del cliente in anagrafica.',
+      'Le note del preventivo sono interne (mail del cliente, cose da controllare, appunti dell\'ufficio): non si stampano, salvo la spunta "Stampa anche le note interne".',
+      'Sotto, nel riquadro "Ritocchi per il cliente", puoi scrivere le note per il cliente, uno sconto (in % su tutto, oppure in € tolto dal totale del lotto) e righe in più con descrizione, quantità e prezzo (es. collaudo, trasporto). Premi "Aggiorna la stampa": restano salvati sul preventivo. Valgono solo nella stampa, il calcolo del preventivo non cambia. Per togliere una riga cancella la descrizione.',
       'Premi "Stampa / salva PDF" e nella finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
     ],
-    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Stampa / salva PDF.'],
+    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Se serve: note per il cliente, sconto, righe in più → Aggiorna la stampa.', 'Stampa / salva PDF.'],
     pagine: [['/preventivi', 'Elenco preventivi']],
   },
   {
