@@ -15,7 +15,8 @@ import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
 import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attributi } from '../engine/codifica/regole.js';
-import { daColonneBom, decodificaMpn } from '../engine/codifica/decoder.js';
+import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/decoder.js';
+import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandidato, type CandidatoPn, type ColonnaPn } from '../engine/codifica/candidati-pn.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
@@ -168,7 +169,9 @@ export async function caricaRegoleScarto(): Promise<RegoleScarto> {
 
 const NON_MONTARE = /\b(DNP|DNM|DNI|NM|N\.M\.|NOT\s+(MOUNTED|FITTED|POPULATED|PLACED)|NON\s+MONTA(RE|TO))\b/i;
 /** Righe che non sono componenti da acquistare (fiducial, fori di fissaggio, loghi). */
-const NON_COMPONENTE = /\b(FIDUCIAL|FIDUCIALE|MOUNTING\s*HOLE|FORO\s+DI\s+FISSAGGIO|LOGO)\b|^FID\d/i;
+const NON_COMPONENTE = /\b(FIDUCIAL|FIDUCIALE|MOUNTING\s*HOLE|FORO\s+DI\s+FISSAGGIO|LOGO)\b|^FID\d|TESTPOINT_PAD/i;
+/** Cella di una colonna DNP / "Exclude from BOM" (KiCad) che toglie la riga dagli acquisti. */
+const CELLA_ESCLUSA = /^(DNP|DNM|DNI|NM|EXCLUDED FROM BOM|NON MONTARE|NON MONTATO)$/i;
 const unico = <T>(xs: T[]) => [...new Set(xs)];
 
 /** Elabora (o rielabora) una BOM in background. */
@@ -205,20 +208,27 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     return v && v.toLowerCase() !== 'nan' ? v : null;
   };
   // 1. righe di base
-  const righe: RigaBom[] = (a.righe_file as { n: number; celle: string[] }[]).map(({ n, celle }) => {
+  const righeFile = a.righe_file as { n: number; celle: string[] }[];
+  // senza P/N: il codice si cerca in Valore e Descrizione, prima nella colonna che ne contiene di più (Adriano 29/10/2026)
+  const ordinePn = (['descrizione', 'valore'] as ColonnaPn[])
+    .map(c => ({ c, q: quotaPn(righeFile.map(r => val(r.celle, c))) })).sort((x, y) => y.q - x.q).map(x => x.c);
+  const righe: RigaBom[] = righeFile.map(({ n, celle }) => {
     const qt = quantitaRiga(val(celle, 'quantita'), val(celle, 'designatori'));
     const r: RigaBom = { n, pn: val(celle, 'pn'), produttore: val(celle, 'produttore'), designatori: val(celle, 'designatori'), valore: val(celle, 'valore'),
       footprint: val(celle, 'footprint'), descrizioneBom: val(celle, 'descrizione'), qtaScheda: qt.qta, esito: ESITI.INC, famiglia: null, attributi: {},
       codiceProduzione: null, codiceGestionale: null, descrizione: null, fonti: [], note: qt.nota ? [qt.nota] : [], offerte: [], acquisti: [],
       clienteFornisce: precedenti.get(n)?.clienteFornisce };
     // le alternative scritte a mano e quella scelta restano anche dopo "Rielabora" (se il P/N della riga è lo stesso)
+    const candidati = r.pn ? [] : candidatiPn({ valore: r.valore, descrizione: r.descrizioneBom }, ordinePn);
     const prima = precedenti.get(n);
-    if (prima && pnKey(prima.pn) === pnKey(r.pn)) {
+    if (prima && (pnKey(prima.pn) === pnKey(r.pn) || (!r.pn && candidati.some(c => pnKey(c.pn) === pnKey(prima.pn))))) {
       r.alternative = (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
       r.alternativaScelta = prima.alternativaScelta ?? null;
       r.prezzoManuale = prima.prezzoManuale ?? null;
     }
     (r as any)._fam = val(celle, 'famiglia');
+    (r as any)._candidati = candidati;
+    (r as any)._escluso = celle.some(c => CELLA_ESCLUSA.test(String(c ?? '').trim()));
     return r;
   });
   av.totale = righe.length;
@@ -228,14 +238,27 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   for (const c of await perPn(unico(righe.map(r => pnKey(r.pn)).filter((k): k is string => !!k)))) inArchivio.set(c.pn_key!, [...(inArchivio.get(c.pn_key!) ?? []), c]);
   // 3. distributori (servono anche i dati tecnici DigiKey per la codifica)
   av.fase = 'prezzi e disponibilità dai distributori'; av.fatti = 0;
-  const conPn = righe.filter(r => r.pn && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`));
-  const ricerca = await cercaPn(unico(conPn.map(r => r.pn!)), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+  const daCercare = righe.filter(r => !(r as any)._escluso && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
+    .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
+  const ricerca = await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
+  // codici trovati in Valore / Descrizione: si compra quello che i distributori hanno (anche se costa di più)
+  const maxSchede = Math.max(1, ...(a.quantita ?? []));
+  for (const r of righe) {
+    const cand = (r as any)._candidati as CandidatoPn[];
+    if (r.pn || !cand.length) continue;
+    const s = scegliCandidato(cand, pn => Object.values(dist(pn)).flatMap(x => x?.offerte ?? []), Math.ceil(r.qtaScheda * maxSchede))!;
+    r.pn = s.scelto.pn;
+    r.fonti.push(`P/N dalla colonna ${s.scelto.da === 'valore' ? 'Valore' : 'Descrizione'}`);
+    const nota = notaDueCodici(cand, s.scelto, s);
+    if (nota) r.note.push(nota);
+  }
   // 4. codifica
   av.fase = 'codifica'; av.fatti = 0;
   const daLeggereIa: RigaBom[] = [];
   for (const r of righe) {
     av.fatti++;
+    if ((r as any)._escluso) { r.esito = ESITI.NON_MONTATO; r.note.push('escluso nella BOM (DNP / non in distinta)'); continue; }
     if (NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''}`)) { r.esito = ESITI.NON_MONTATO; r.note.push('componente da non montare'); continue; }
     if (NON_COMPONENTE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''} ${r.footprint ?? ''}`) || NON_COMPONENTE.test(r.designatori ?? '')) {
       r.esito = ESITI.NON_MONTATO; r.note.push('non è un componente da acquistare (fiducial, foro, logo)'); continue;
@@ -244,6 +267,14 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     const famColonna = String((r as any)._fam ?? '').toUpperCase() || null;
     // senza colonna valore il valore si cerca nella descrizione (es. "RES 10K 1% 0402")
     const [famBom, aBom] = daColonneBom(famDec ?? famColonna, r.valore ?? r.descrizioneBom, r.footprint, r.descrizioneBom, r.designatori);
+    // dati scritti nella BOM diversi da quelli del codice (es. BOM 168K, RC0805FR-07162KL = 162K): da validare
+    if (famDec) {
+      const diff = differenzeBomCodice(famDec, aBom, aDec);
+      const gravi = diff.filter(d => !d.startsWith('tolleranza')), lievi = diff.filter(d => d.startsWith('tolleranza'));
+      if (gravi.length) r.note.push(`${NOTA_DA_VALIDARE}: la BOM non corrisponde al codice ${r.pn}: ${gravi.join('; ')}`);
+      if (lievi.length) r.note.push(`VERIFICA: ${lievi.join('; ')}`);
+    }
+    (r as any)._famDebole = !famDec && !famColonna && !famigliaDa(null, r.descrizioneBom ?? r.valore);
     const hits = r.pn ? inArchivio.get(pnKey(r.pn)!) ?? [] : [];
     if (hits.length) {
       const completi = hits.filter(h => h.codice_gestionale);
@@ -298,7 +329,12 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
         if (!l) continue;
         if (!l.famiglia && l.nota) { r.note.push(`IA: ${l.nota}`); continue; }
         if (!r.famiglia) r.famiglia = l.famiglia;
-        if (l.famiglia && l.famiglia !== r.famiglia) { r.note.push(`IA: secondo l'IA è ${l.famiglia}`); continue; }
+        if (l.famiglia && l.famiglia !== r.famiglia) {
+          // famiglia presa solo dalla lettera del riferimento (D1 = diodo): vale quella dell'IA (es. diodo Schottky)
+          if (!(r as any)._famDebole || !r.fonti.every(f => f === 'colonne BOM' || f.startsWith('P/N dalla'))) { r.note.push(`IA: secondo l'IA è ${l.famiglia}`); continue; }
+          r.note.push(`famiglia ${l.famiglia} letta dall'IA (dal riferimento sembrava ${r.famiglia})`);
+          r.famiglia = l.famiglia;
+        }
         const prima = Object.keys(r.attributi).length;
         r.attributi = { ...l.attributi, ...r.attributi };
         if (Object.keys(r.attributi).length > prima || !r.fonti.length) r.fonti.push('lettura IA');
@@ -736,7 +772,7 @@ export async function costoBomPerPreventivo(id: number, schede: number) {
 export async function salvaRighe(id: number, righe: RigaBom[]) {
   const a = await q1<{ quantita: number[] }>(`SELECT quantita FROM bom_analisi WHERE id = $1`, [id]);
   await q(`UPDATE bom_analisi SET righe = $2, riepilogo = $3, aggiornato_il = now() WHERE id = $1`,
-    [id, JSON.stringify(righe.map(r => { const { _fam, ...x } = r as any; return x; })), JSON.stringify(riepilogo(righe, a?.quantita ?? []))]);
+    [id, JSON.stringify(righe.map(r => { const { _fam, _candidati, _escluso, _famDebole, ...x } = r as any; return x; })), JSON.stringify(riepilogo(righe, a?.quantita ?? []))]);
 }
 
 /** Correzione a mano di una riga: famiglia, attributi, fornito dal cliente. Ricalcola codici e acquisti. */

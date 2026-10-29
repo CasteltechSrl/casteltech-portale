@@ -165,7 +165,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    se la quantità va divisa o un distributore non ha risposto (`nonControllati`); fine vita/scorte basse solo note. P/N critico → alternative
    (`cercaAlternative`: varianti dello stesso P/N + stesse caratteristiche = stesso codice di produzione, solo famiglie senza RID/PN nel codice),
    prezzate da tutti; l'operatore sceglie ("Usa questa", `alternativaScelta`) o ne scrive una a mano (POST `/componenti/bom/:id/riga/:n/alternativa`);
-   scelte e alternative a mano restano dopo Rielabora. Prezzo a mano per riga (`prezzoManuale`, POST `.../riga/:n/prezzo`): vale al posto di quello proposto.
+   scelte e alternative a mano restano dopo Rielabora. BOM senza colonna P/N (Adriano 29/10/2026, `engine/codifica/candidati-pn.ts`): codici cercati in Valore e Descrizione,
+   si compra quello che i distributori hanno; due codici diversi = stesso codice / JEDEC equivalente / "codice da validare"; dati BOM diversi dal codice
+   (valore, case, tensione più bassa) = da validare; celle DNP / "Excluded from BOM" = non montato. Prezzo a mano per riga (`prezzoManuale`, POST `.../riga/:n/prezzo`): vale al posto di quello proposto.
    Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave

@@ -36,6 +36,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('firma del cliente sul preventivo', 2).includes('stampa-preventivo'));
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);
+  assert.ok(primi('due codici diversi nella bom', 2).includes('alternative-componenti'));
   assert.deepEqual(primi('BOLLA spedita'), ['ddt-acquisiti']);
   assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
   assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));
