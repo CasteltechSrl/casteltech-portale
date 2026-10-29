@@ -11,6 +11,7 @@ import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
   creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
+import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
@@ -77,7 +78,7 @@ export function rotteComponenti() {
     const quantita = leggiQuantita(req.query.quantita);
     if (!quantita.length) return res.status(400).json({ errore: 'Scrivi quante schede (es. 100 oppure 100, 250).' });
     try {
-      const righe = await leggiFileBom(fileNome, req.body as Buffer);
+      const righe = unisciAlternative(await leggiFileBom(fileNome, req.body as Buffer)); // alternative del cliente in una colonna
       if (righe.length < 2) return res.status(400).json({ errore: 'Il file non contiene righe.' });
       const id = await creaAnalisi({ nome: String(req.query.nome ?? '').trim() || fileNome.replace(/\.[^.]+$/, ''), fileNome, righe, quantita, utenteId: req.session.utente!.id });
       avviaElaborazione(id);

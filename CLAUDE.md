@@ -123,6 +123,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    lette dalla mail ("167pz M0929-C versione HELIOS") → "Dividi per versione" = un pacchetto figlio per versione (`padre_id`, `versione`,
    `quantita` proposta nel preventivo) con i file comuni + quelli con il nome della versione; i file aggiunti al padre passano ai figli
    (`sincronizzaVersioni`). Mail salvata .eml nella cartella caricata (`emailDallaCartella`): testo in `pacchetti_scheda.email` se manca, allegati non letti. BOM divisa SMD + PTH (riferimenti diversi) unita in lettura (`engine/scheda/bom-divise.ts`); BOM in PDF non lette. BOM .txt a colonne fisse (`leggiBomColonneFisse`), pick and place "centri" (rif, X, Y, lato 1/2, rot, unità); pick and place con altra origine allineato al rame (`engine/scheda/allinea.ts`, avviso); nei figli di versione i riferimenti fuori dalla BOM della versione non contano (M0929-C, 29/10/2026).
+   Più codici nella stessa mail (RDO Elemaster 20149766 / 1022303, Adriano 29/10/2026; `richiestePerCodice` in `engine/scheda/versioni.ts`): riga "codice descrizione"
+   riconosciuta solo se il codice è nell'oggetto o nel nome di un allegato, quantità ("Primo odp 43pz") prima o dopo, Forecast e cicli sotto il codice →
+   "Dividi per codice" (stesso meccanismo delle versioni, `versione` = codice); nel preventivo codice e descrizione dalla mail, cicli → spunte (`parametriDaCicli`:
+   onda, THT a mano, AOI, etichette, pulizia, lavaggio; il resto in "Da controllare"). BOM con alternative del cliente (Pref/Alt, LLC 1/2;
+   `engine/codifica/alternative-bom.ts`, anche in Quotazioni): una riga per componente, codice dalla preferita, colonna "Alternative del cliente".
+   SMD/THT senza colonna di montaggio: descrizione "SMD …" = SMD, le altre THT (se almeno 1/4 delle righe comincia per SMD); dissipatori, viti, grasso,
+   etichette, specifiche… = `accessorio` (non contano); "POST WAVE ASSEMBLY" = `dopoOnda` (vince il pezzo saldato sullo stesso riferimento).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

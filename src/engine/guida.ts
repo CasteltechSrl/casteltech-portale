@@ -84,6 +84,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Se la mail chiede più versioni della stessa scheda con le quantità (es. "167pz M0929-C versione HELIOS, 90pz versione CRONOS"), nella pagina dei documenti compare "Dividi per versione": nasce un pacchetto per versione con i file comuni (Gerber, lamine) e quelli con il nome della versione, e il numero di schede già scritto per il preventivo.',
       'Il numero di schede da quotare si legge dal testo della mail (es. "167pz", "5 pcb"); se nel testo non c\'è, dall\'oggetto (es. "Ordine 5 PCB MULTI"). Se non si trova la proposta è 100: correggila in "Schede da quotare" prima di premere "Crea il preventivo da validare".',
       'Caricando una cartella dal portale, la mail del cliente salvata come file .eml (in Gmail: ⋮ → Scarica il messaggio) messa insieme agli altri file vale come quella mandata dal pannello di Gmail: testo in cima alla pagina, quantità e versioni lette dal testo, "Dividi per versione". Gli allegati della mail non si leggono: mettili nella cartella.',
+      'Se la mail chiede più codici diversi (es. "Primo odp 43pz … 20149766 PCA …" e "Primo odp 131pz … 1022303 PCA …"), il portale li riconosce quando il codice è anche nell\'oggetto o nel nome di un allegato: compare "Dividi per codice", un pacchetto per codice con i file che hanno il codice nel nome (es. lo zip 20149766-1596216), la sua quantità, le previsioni (Forecast) e i cicli di lavorazione. Nel preventivo il codice e la descrizione sono quelli della mail.',
       'Dopo "Dividi per versione" ogni versione conta solo i componenti della sua BOM: quelli dell\'altra versione sono segnalati come non montati. Si leggono anche le BOM in testo a colonne e il pick and place "centri" in pollici; se le coordinate hanno un\'altra origine rispetto ai Gerber il portale le sposta da solo e lo scrive tra gli avvisi.',
       'Una BOM divisa in due file (SMD e PTH) si unisce da sola; due BOM con gli stessi riferimenti sono versioni diverse e se ne usa una sola.',
     ],
@@ -209,7 +210,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'documenti-cliente', area: 'preventivi', titolo: 'Preventivo dai documenti del cliente (BOM, pick and place, Gerber)',
-    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare',
+    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare alternative pref alt llc elemaster dissipatore viti post wave dopo onda',
     testo: [
       'Quando il cliente manda il pacchetto della scheda, caricalo tutto insieme: il portale legge BOM, pick and place, Gerber, forature e GenCAD e li incrocia.',
       'Il risultato: componenti SMD per lato, THT, feeder, refori, misure, disegno della scheda, consumi stimati (pasta, stagno, filo) e le segnalazioni da controllare (valori diversi tra BOM e pick and place, riferimenti mancanti, lati, sovrapposizioni, componenti da non montare).',
@@ -218,6 +219,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Anche dentro uno zip il portale apre solo i file utili: PDF, 3D e immagini restano chiusi. Se qualcun altro sta caricando o analizzando documenti nello stesso momento, il caricamento aspetta il suo turno qualche secondo: è normale, serve a non riempire la memoria del server.',
       'Non entrano nemmeno i file di lavoro di Casteltech finiti nella cartella del cliente: le cartelle Armadi e Topografico e i pick and place o le BOM con i nostri codici di produzione (es. CC-0402-100NF-10-X7R-50V). Si legge solo quello che ha mandato il cliente.',
       '"Codifica la BOM" porta i componenti nella sezione Quotazioni per i codici e i prezzi.',
+      'SMD o THT: decide prima il CAD (fori dell\'impronta), poi il pick and place, poi la BOM. Se la BOM non ha la colonna del montaggio ma molte descrizioni cominciano per "SMD" (es. "SMD RES. 4,7KOHM 0805"), le righe che non cominciano per SMD sono THT. Senza pick and place e CAD i lati non si conoscono: gli SMD vanno tutti sul TOP.',
+      'Nelle BOM con le alternative del cliente (colonna Pref/Alt o livelli LLC 1 e 2) le righe alternative non sono altri componenti: si conta solo il componente, con il codice della preferita, e le alternative finiscono nella colonna "Alternative del cliente" anche in Quotazioni. Dissipatori, viti, dadi, rondelle, grasso, silicone, fascette, etichette, buste, specifiche e topografici non sono componenti da montare. Le righe "POST WAVE ASSEMBLY" sono pezzi montati dopo l\'onda: tra le segnalazioni, da stimare a mano.',
       'Se una segnalazione è stata controllata e va bene così (es. un simbolo scritto in modo diverso, componente giusto), premi "Va bene": non conta più tra gli errori, non va nel preventivo da validare e i componenti non sono più rossi nelle stampe. Resta anche dopo Rianalizza; "annulla" la riapre.',
     ],
     passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Crea il preventivo da validare (vedi sotto).'],
@@ -225,11 +228,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'preventivo-da-validare', area: 'preventivi', titolo: 'Preventivo "da validare" compilato dai documenti',
-    parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc',
+    parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc cicli lavorazione ciclo mail onda aoi etichette',
     testo: [
       'Nella pagina dei documenti della scheda, "Crea il preventivo da validare" (scrivi quante schede) prepara il preventivo con le tariffe di oggi e i numeri letti: SMD e feeder per lato, lamine, THT a onda o a mano, stagno, pasta, item.',
       'Il preventivo resta "da validare": in alto c\'è l\'elenco delle cose da controllare (segnalazioni, lamine del cliente, THT da preparare). Quando l\'hai controllato, il primo Salva lo porta a bozza.',
       'Se il prodotto non è ancora in anagrafica, codice, descrizione e revisione letti dai file sono già scritti nel riquadro "Nuovo prodotto": controllali e premi "Aggiungi in anagrafica".',
+      'Se la mail del cliente elenca i cicli di lavorazione sotto il codice (es. "SALD ONDA THT", "MTG/SALD MANUALE COMP. THT", "ISP. VISIVA AOI SMT", "APPLICAZIONE ETICHETTE"), il preventivo accende le spunte onda, THT a mano, AOI, etichette, pulizia e lavaggio; le altre lavorazioni (preformatura, colla, cablaggi, parti meccaniche, rasatura) sono in "Da controllare" da stimare a mano.',
       'Il portale controlla anche le piazzole dei componenti chip sul Gerber con la norma IPC-7351: se la BOM dice 0603 ma le piazzole sono da 0805 (o il contrario) lo segnala come errore, prima di andare in macchina.',
     ],
     passi: ['Apri i documenti della scheda.', 'Scrivi il numero di schede e premi "Crea il preventivo da validare".', 'Controlla l\'elenco giallo, correggi, Salva.'],

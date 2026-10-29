@@ -38,6 +38,9 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);
   assert.ok(primi('due codici diversi nella bom', 2).includes('alternative-componenti'));
+  assert.ok(primi('mail con due codici e forecast', 2).includes('pulsante-gmail'));
+  assert.ok(primi('cicli di lavorazione della mail', 2).includes('preventivo-da-validare'));
+  assert.ok(primi('bom con alternative pref alt', 2).includes('documenti-cliente'));
   assert.deepEqual(primi('BOLLA spedita'), ['ddt-acquisiti']);
   assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
   assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));

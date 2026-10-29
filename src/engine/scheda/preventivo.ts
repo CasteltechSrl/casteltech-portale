@@ -67,3 +67,31 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
   if (errori) daControllare.unshift(`${errori} segnalazioni da chiarire con il cliente (vedi i documenti)`);
   return { parametri: Object.fromEntries(voci.map(v => [v.codice, v.valore])), voci, daControllare };
 }
+
+/**
+ * Cicli di lavorazione scritti dal cliente nella mail (Adriano 29/10/2026, RDO Elemaster): accendono le spunte che hanno una voce
+ * nel preventivo (onda, saldatura a mano, AOI, etichette, pulizia, lavaggio); le altre lavorazioni (preformatura, colla, cablaggi,
+ * parti meccaniche, rasatura, verniciatura, collaudo…) finiscono in "Da controllare" perché il tempo lo stima l'ufficio.
+ * Le serigrafie, i montaggi SMD, le rifusioni e le ispezioni visive sono già nel preventivo standard e non cambiano niente.
+ */
+export function parametriDaCicli(cicli: string[]): { parametri: Record<string, number>; voci: VoceCompilata[]; daControllare: string[] } {
+  const voci: VoceCompilata[] = [];
+  const altre: string[] = [];
+  const metti = (codice: string, valore: number, perche: string) => { if (!voci.some(v => v.codice === codice)) voci.push({ codice, valore, perche }); };
+  for (const grezzo of cicli) {
+    const c = grezzo.toUpperCase();
+    const breve = grezzo.replace(/\s*-+>.*$/, '').trim();
+    const perche = `ciclo del cliente «${breve}»`;
+    if (/\bONDA\b/.test(c) && /SALD/.test(c) && !/INSERIM/.test(c)) metti('usaOnda', 1, perche);
+    else if (/MANUAL/.test(c) && /SALD/.test(c) && !/ONDA/.test(c)) metti('presenteTht', 1, perche);
+    else if (/\bAOI\b/.test(c)) metti('aoiTop', 1, perche);
+    else if (/ETICHET/.test(c)) metti('etichette', 1, perche);
+    else if (/LAVAGG/.test(c)) metti('lavaggioSchede', 1, perche);
+    else if (/PULIZIA/.test(c)) metti('puliziaSaldature', 1, perche);
+    else if (/SERIG|MONT\.? ?AUTOM|RIFUSIONE|ISP\.? ?VISIVA|INSERIM/.test(c)) continue;
+    else altre.push(breve);
+  }
+  const daControllare = altre.length ? [`lavorazioni chieste dal cliente da stimare a mano: ${altre.join(', ')}`] : [];
+  if (voci.some(v => v.codice === 'presenteTht')) daControllare.push('saldatura THT a mano chiesta dal cliente: scrivere i punti di saldatura a mano');
+  return { parametri: Object.fromEntries(voci.map(v => [v.codice, v.valore])), voci, daControllare };
+}

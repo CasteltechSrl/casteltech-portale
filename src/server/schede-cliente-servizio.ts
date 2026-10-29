@@ -11,7 +11,7 @@ import { q, q1 } from './db.js';
 import { avviaElaborazione, costoBomPerPreventivo, creaAnalisi, leggiFileBom } from './codifica-servizio.js';
 import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
 import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
-import { parametriDaAnalisi } from '../engine/scheda/preventivo.js';
+import { parametriDaAnalisi, parametriDaCicli } from '../engine/scheda/preventivo.js';
 import { conAccettate } from '../engine/scheda/accettate.js';
 import { analizzaScheda, leggiBomScheda, type AnalisiScheda, type RigaBomScheda, type StratoGerberInfo } from '../engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
@@ -26,6 +26,7 @@ import { unisciBomDivise } from '../engine/scheda/bom-divise.js';
 import { allineaAlRame } from '../engine/scheda/allinea.js';
 import { fileDellaVersione, richiesteDaEmail, versioniDaDividere } from '../engine/scheda/versioni.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
+import { unisciAlternative } from '../engine/codifica/alternative-bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 import { BUDGET, conMemoria } from './memoria.js';
 
@@ -318,8 +319,21 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
   const standard = Object.fromEntries(cat.parametri.filter(x => x.default != null && x.gruppo !== 'GENERALE' && x.gruppo !== 'PRE-PRODUZIONE').map(x => [x.codice, x.default]));
   const { parametri, voci, daControllare } = parametriDaAnalisi(conAccettate(p.analisi, p.accettate));
+  // codice, descrizione e cicli scritti nella mail (più codici nella stessa mail: quello del pacchetto diviso)
+  const richieste = richiesteDaEmail(p.email);
+  const richiesta = p.versione ? richieste.find(x => x.versione === p.versione) : richieste.length === 1 ? richieste[0] : undefined;
+  if (richiesta?.cicli?.length) {
+    const daCicli = parametriDaCicli(richiesta.cicli);
+    Object.assign(parametri, daCicli.parametri);
+    for (const v of daCicli.voci) { const i = voci.findIndex(x => x.codice === v.codice); if (i >= 0) voci[i] = v; else voci.push(v); }
+    daControllare.push(...daCicli.daControllare);
+  }
   const esistenti = new Set(cat.parametri.map(x => x.codice));
-  const proposta = (p.analisi as AnalisiScheda).prodotto ?? null;
+  const letta = (p.analisi as AnalisiScheda).prodotto ?? null;
+  const proposta = richiesta?.codice
+    ? { codice: richiesta.codice, descrizione: richiesta.descrizione || letta?.descrizione || null, revisione: letta?.revisione ?? null,
+        fonti: { ...letta?.fonti, codice: 'mail del cliente', ...(richiesta.descrizione ? { descrizione: 'mail del cliente' } : {}) } }
+    : letta;
   const compilati = voci.filter(v => esistenti.has(v.codice));
 
   // prodotto del cliente il cui codice compare nel nome del pacchetto (il più lungo, se più d'uno)
@@ -376,7 +390,7 @@ export async function bomDelPacchetto(id: number, schede: number, utenteId: numb
   const f = await fileBom(id);
   if (!f) return null;
   const nomeFile = f.nome.split('/').pop()!;
-  const righe = await leggiFileBom(nomeFile, f.dati);
+  const righe = unisciAlternative(await leggiFileBom(nomeFile, f.dati));
   const bomId = await creaAnalisi({ nome: p.nome, fileNome: nomeFile, righe, quantita: [schede], utenteId });
   await q(`UPDATE pacchetti_scheda SET bom_id = $2 WHERE id = $1`, [id, bomId]);
   avviaElaborazione(bomId);
@@ -403,9 +417,9 @@ export async function quotaBomPacchetto(preventivoId: number, schede: number, ut
 export async function dividiPerVersioni(id: number, utenteId: number | null): Promise<number[]> {
   const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
   if (!p) throw new Error('Pacchetto non trovato.');
-  if (await q1(`SELECT 1 FROM pacchetti_scheda WHERE padre_id = $1`, [id])) throw new Error('Il pacchetto è già diviso per versione.');
+  if (await q1(`SELECT 1 FROM pacchetti_scheda WHERE padre_id = $1`, [id])) throw new Error('Il pacchetto è già diviso (per versione o per codice).');
   const versioni = versioniDaDividere(richiesteDaEmail(p.email));
-  if (!versioni.length) throw new Error('Nella mail non ci sono due o più versioni con la loro quantità.');
+  if (!versioni.length) throw new Error('Nella mail non ci sono due o più versioni o codici con la loro quantità.');
   const figli: number[] = [];
   for (const v of versioni) {
     const r = await q1<{ id: number }>(`INSERT INTO pacchetti_scheda (nome, cliente_id, creato_da, email, padre_id, versione, quantita)
