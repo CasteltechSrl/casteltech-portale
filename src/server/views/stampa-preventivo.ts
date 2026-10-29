@@ -10,7 +10,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, righeDettaglio, righeUnaTantum, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -20,6 +20,8 @@ export interface ClienteStampa {
 }
 
 export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean }
+/** Righe vuote del modulo per aggiungere righe alla stampa. */
+const RIGHE_VUOTE = 2;
 
 /** Dati di Casteltech da usare se in Impostazioni → Amministrazione mancano (Adriano, 27/10/2026). */
 export const AZIENDA_PREDEFINITA = {
@@ -32,7 +34,7 @@ const VUOTO = '';
 export function stampaPreventivo(o: {
   p: any; d: { nSchede: number; nSchedeInPCB: number; note?: string };
   ris: Risultato; doppia: boolean; nLamine: number; nPannelli: number;
-  azienda: Partial<DatiAzienda>; cliente: ClienteStampa | null; opz: OpzioniStampa;
+  azienda: Partial<DatiAzienda>; cliente: ClienteStampa | null; opz: OpzioniStampa; rit: Ritocchi;
 }): Raw {
   const { p, d, ris, opz } = o;
   const r = riepilogo(ris);
@@ -52,6 +54,11 @@ export function stampaPreventivo(o: {
   // Essenziale: un solo prezzo; con la prima produzione comprende le una tantum (Adriano, 28/10/2026)
   const prezzoUnico = essenziale && r.unaTantum > 0;
   const totale = r.prezzoLottoConUnaTantum;
+  // ritocchi scritti dall'ufficio nel pannello (sconto, righe in più): cambiano solo gli importi stampati
+  const rit = o.rit;
+  const conti = contiStampa({ prezzoScheda: prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, lotto: prezzoUnico ? totale : r.prezzoLotto,
+    unaTantum: prezzoUnico ? 0 : r.unaTantum, nSchede: d.nSchede }, rit);
+  const scontato = conti.sconto > 0 ? ' scontato' : '';
 
   const link = (cambia: Partial<OpzioniStampa>) => {
     const x = { ...opz, ...cambia };
@@ -95,6 +102,15 @@ export function stampaPreventivo(o: {
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
       <table class="ut">${ut.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</table></td>
       <td class="n">1</td><td class="n">${euro(r.unaTantum)}</td><td class="n">${euro(r.unaTantum)}</td></tr>` : '';
+  const righeAggiunte = html`${conti.righe.map(x => html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
+      <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`)}
+    ${conti.sconto > 0 ? html`<tr class="prodotto sconto"><td></td><td><b>${conti.etichettaSconto}</b></td><td></td><td></td><td class="n">− ${euro(conti.sconto)}</td></tr>` : ''}`;
+  const noteStampate = [rit.noteCliente, rit.noteInterne ? d.note ?? '' : ''].map(x => x.trim()).filter(Boolean).join('\n\n');
+  const valoreRiga = (k: number, campo: 'descrizione' | 'quantita' | 'prezzo') => {
+    const x = rit.righe[k];
+    if (!x) return '';
+    return campo === 'descrizione' ? x.descrizione : String(x[campo]).replace('.', ',');
+  };
 
   const firme = html`<div class="firme"><div><b>${az.nome}</b></div><div><b>Per accettazione del cliente</b>Data, timbro e firma</div></div>`;
   const piede = html`<footer class="piede"><span>Preventivo nr. ${numero}</span><span>${az.nome} · ${az.email} · ${az.tel}</span></footer>`;
@@ -115,6 +131,26 @@ export function stampaPreventivo(o: {
     <a href="${link({ condizioni: !opz.condizioni })}" class="${opz.condizioni ? 'si' : ''}">Condizioni generali</a>
     <a href="${link({ firma: !opz.firma })}" class="${opz.firma ? 'si' : ''}">Spazio firma del cliente</a>
   </div>
+  <form class="ritocchi" method="post" action="/preventivi/${p.id}/stampa">
+    <h2>Ritocchi per il cliente</h2>
+    <p class="aiuto">Valgono solo in questa stampa: il preventivo non cambia.</p>
+    <input type="hidden" name="torna" value="${link({})}">
+    <label>Note per il cliente<textarea name="noteCliente" rows="4">${rit.noteCliente}</textarea></label>
+    <label class="spunta"><input type="checkbox" name="noteInterne" value="si"${rit.noteInterne ? html` checked` : ''}> Stampa anche le note interne del preventivo</label>
+    <fieldset><legend>Sconto</legend>
+      <input name="scontoValore" inputmode="decimal" value="${rit.sconto ? String(rit.sconto.valore).replace('.', ',') : ''}" placeholder="0" aria-label="Sconto">
+      <select name="scontoTipo" aria-label="Tipo di sconto"><option value="percento"${rit.sconto?.tipo !== 'euro' ? html` selected` : ''}>% su tutto</option>
+        <option value="euro"${rit.sconto?.tipo === 'euro' ? html` selected` : ''}>€ sul totale</option></select>
+    </fieldset>
+    <fieldset><legend>Righe in più</legend>
+      ${Array.from({ length: rit.righe.length + RIGHE_VUOTE }, (_, k) => html`<div class="riga-in-piu">
+        <input name="rigaDescrizione" value="${valoreRiga(k, 'descrizione')}" placeholder="Descrizione" aria-label="Descrizione">
+        <input name="rigaQuantita" inputmode="decimal" value="${valoreRiga(k, 'quantita')}" placeholder="Q.tà" aria-label="Quantità">
+        <input name="rigaPrezzo" inputmode="decimal" value="${valoreRiga(k, 'prezzo')}" placeholder="€ cad." aria-label="Prezzo unitario"></div>`)}
+      <small>Per togliere una riga cancella la descrizione.</small>
+    </fieldset>
+    <button type="submit">Aggiorna la stampa</button>
+  </form>
 </nav>
 
 <div class="fogli">
@@ -133,22 +169,22 @@ export function stampaPreventivo(o: {
   </div>
 
   <div class="riquadro-prezzi">
-    <div><div class="etic">Prezzo a scheda${prezzoUnico ? ' (prima produzione)' : ''}</div><strong>${euro(prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda)}</strong></div>
-    <div><div class="etic">Totale lotto (${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? `, ${num(o.nPannelli, 0)} pannelli` : ''})</div><strong>${euro(prezzoUnico ? totale : r.prezzoLotto)}</strong></div>
-    ${!prezzoUnico && r.unaTantum > 0 ? html`<div><div class="etic">Una tantum (primo lotto)</div><strong>${euro(r.unaTantum)}</strong></div>` : ''}
+    <div><div class="etic">Prezzo a scheda${scontato}${prezzoUnico ? ' (prima produzione)' : ''}</div><strong>${euro(conti.prezzoScheda)}</strong></div>
+    <div><div class="etic">Totale lotto (${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? `, ${num(o.nPannelli, 0)} pannelli` : ''})</div><strong>${euro(conti.lotto)}</strong></div>
+    ${!prezzoUnico && r.unaTantum > 0 ? html`<div><div class="etic">Una tantum (primo lotto)</div><strong>${euro(conti.unaTantum)}</strong></div>` : ''}
   </div>
 
   <table class="righe">
     <thead><tr><th class="codice">Codice</th><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo unitario</th><th class="n">Importo</th></tr></thead>
-    <tbody>${corpo}${rigaUnaTantum}</tbody>
+    <tbody>${corpo}${rigaUnaTantum}${righeAggiunte}</tbody>
   </table>
 
-  ${d.note ? html`<div class="etic titoletto">Note</div><p class="note">${d.note}</p>` : ''}
+  ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
   <div class="spinta"></div>
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>
-    <div class="totale"><div class="etic">Totale preventivo${r.unaTantum > 0 ? ' (primo lotto)' : ''}</div><strong>${euro(totale)}</strong><small>IVA esclusa</small></div>
+    <div class="totale"><div class="etic">Totale preventivo${r.unaTantum > 0 ? ' (primo lotto)' : ''}</div><strong>${euro(conti.totale)}</strong><small>IVA esclusa</small></div>
   </div>
   ${opz.firma && !opz.condizioni ? firme : ''}
   ${piede}

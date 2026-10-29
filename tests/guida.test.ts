@@ -33,6 +33,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
   assert.deepEqual(primi('stampare la scheda di produzione'), ['crea-commessa']);
   assert.deepEqual(primi('preventivo essenziale'), ['stampa-preventivo']);
+  assert.ok(primi('sconto sul preventivo', 2).includes('stampa-preventivo'));
   assert.ok(primi('firma del cliente sul preventivo', 2).includes('stampa-preventivo'));
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);

@@ -18,7 +18,7 @@ import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
 import { stampaPreventivo, type ClienteStampa } from '../views/stampa-preventivo.js';
-import { versioneStampa } from '../../engine/stampa-preventivo.js';
+import { leggiRitocchi, versioneStampa } from '../../engine/stampa-preventivo.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 
 const PROVENIENZE: [number, string, string][] = [
@@ -166,7 +166,16 @@ export function rottePreventivi() {
       nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
       azienda: await caricaAzienda(), cliente: cliente ?? null,
       opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
+      rit: leggiRitocchi(p.stampa),
     })));
+  });
+
+  // ── Ritocchi della stampa (note per il cliente, sconto, righe in più): solo nella stampa (Adriano, 29/10/2026) ──
+  r.post('/:id/stampa', async (req, res) => {
+    const id = Number(req.params.id);
+    await q(`UPDATE preventivi SET stampa = $2 WHERE id = $1`, [id, JSON.stringify(leggiRitocchi(req.body))]);
+    const torna = String(req.body.torna ?? '');
+    res.redirect(`/preventivi/${id}/stampa${/^\?[\w=&%.-]*$/.test(torna) ? torna : ''}`);
   });
 
   // ── Calcolo in tempo reale (non salva) ──
@@ -498,8 +507,9 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </details>
 
       <fieldset class="blocco">
-        <legend>Note</legend>
+        <legend>Note interne</legend>
         <textarea data-campo="note" rows="3">${d.note}</textarea>
+        <small class="aiuto">Non vanno nella stampa per il cliente: lì ci sono "Note per il cliente", sconto e righe in più.</small>
       </fieldset>
     </section>
 

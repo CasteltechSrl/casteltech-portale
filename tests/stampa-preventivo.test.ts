@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calcolaPreventivo, type FaseDef, type Tariffe, type VoceDef } from '../src/engine/calcolo.js';
-import { quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
+import { contiStampa, leggiRitocchi, quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
 
 const t: Tariffe = { costoAziendaH: 0, costoOperatoreProduzioneH: 60, costoOperatoreUfficioH: 60, ricarico: 1 };
 // una fase da "euro" € a lotto (60 €/h × 1 persona, ricarico 1: secondi = euro × 60)
@@ -54,4 +54,36 @@ test('stampa con dettaglio: i centesimi degli arrotondamenti tornano con il prez
   const righe = righeDettaglio(ris);
   assert.equal(Math.round(righe.reduce((a, r) => a + r.scheda, 0) * 100) / 100, ris.totali.prezzoSchedaSecondoLotto);
   assert.equal(Math.round(righe.reduce((a, r) => a + r.lotto, 0) * 100) / 100, ris.totali.totaleSecondoLotto);
+});
+
+test('stampa: ritocchi dal modulo (Adriano 29/10/2026): righe vuote saltate, numeri all\'italiana, note interne solo con la spunta', () => {
+  const r = leggiRitocchi({ noteCliente: ' Consegna in 3 settimane ', scontoTipo: 'percento', scontoValore: '5,5',
+    rigaDescrizione: ['Collaudo funzionale', '', 'Trasporto'], rigaQuantita: ['257', '', ''], rigaPrezzo: ['0,80', '', '35'] });
+  assert.equal(r.noteCliente, 'Consegna in 3 settimane');
+  assert.deepEqual(r.sconto, { tipo: 'percento', valore: 5.5 });
+  assert.deepEqual(r.righe, [{ descrizione: 'Collaudo funzionale', quantita: 257, prezzo: 0.8 }, { descrizione: 'Trasporto', quantita: 1, prezzo: 35 }]);
+  assert.equal(r.noteInterne, false);
+  assert.equal(leggiRitocchi({ noteInterne: 'si' }).noteInterne, true);
+  assert.equal(leggiRitocchi({ scontoValore: '0' }).sconto, null);
+  assert.deepEqual(leggiRitocchi(r), r); // quello salvato si rilegge uguale
+  assert.deepEqual(leggiRitocchi(null).righe, []);
+});
+
+test('stampa: sconto in % su tutto, sconto in € sul lotto, righe in più nel totale', () => {
+  const base = { prezzoScheda: 3.25, lotto: 834.79, unaTantum: 347.5, nSchede: 257 };
+  const p = contiStampa(base, leggiRitocchi({ scontoTipo: 'percento', scontoValore: '10', rigaDescrizione: 'Trasporto', rigaPrezzo: '50' }));
+  assert.equal(p.extra, 50);
+  assert.equal(p.sconto, 123.23);            // 10% di 834,79 + 347,50 + 50
+  assert.equal(p.totale, 1109.06);
+  assert.equal(p.lotto, 751.31);
+  assert.equal(p.unaTantum, 312.75);
+  assert.equal(p.etichettaSconto, 'Sconto 10%');
+  const e = contiStampa(base, leggiRitocchi({ scontoTipo: 'euro', scontoValore: '34,79' }));
+  assert.equal(e.lotto, 800);
+  assert.equal(e.prezzoScheda, 3.11);
+  assert.equal(e.unaTantum, 347.5);
+  assert.equal(e.totale, 1147.5);
+  const nulla = contiStampa(base, leggiRitocchi({}));
+  assert.equal(nulla.totale, 1182.29);
+  assert.equal(nulla.prezzoScheda, 3.25);
 });

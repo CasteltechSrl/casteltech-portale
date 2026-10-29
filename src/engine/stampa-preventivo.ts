@@ -126,3 +126,70 @@ export const CONDIZIONI_GENERALI = [
   'Collaudo funzionale compreso solo se indicato. Reclami entro 8 giorni dal ricevimento della merce; la garanzia è limitata al rifacimento o alla riparazione della lavorazione, esclusi danni indiretti.',
   'Costi una tantum fatturati con il primo lotto. Per ogni controversia è competente il Foro di Piacenza.',
 ];
+
+/**
+ * Ritocchi della stampa per il cliente (Adriano, 29/10/2026), salvati sul preventivo (`preventivi.stampa`) e usati SOLO nella stampa:
+ * note per il cliente, sconto (in % su tutto o in € sul totale), righe in più scritte a mano. Le note del preventivo (mail del cliente,
+ * "Da controllare", appunti dell'ufficio) sono interne: si stampano solo con la spunta. Il calcolo del preventivo non cambia.
+ */
+export interface RigaAggiunta { descrizione: string; quantita: number; prezzo: number }
+export interface Ritocchi {
+  noteCliente: string;
+  sconto: { tipo: 'percento' | 'euro'; valore: number } | null;
+  righe: RigaAggiunta[];
+  noteInterne: boolean;
+}
+export const RITOCCHI_VUOTI: Ritocchi = { noteCliente: '', sconto: null, righe: [], noteInterne: false };
+
+const numeroIt = (v: unknown): number | null => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const s = String(v ?? '').replace(/[€%\s]/g, '');
+  if (!s) return null;
+  const n = Number(/,/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s);
+  return Number.isFinite(n) ? n : null;
+};
+const elenco = (v: unknown): string[] => (Array.isArray(v) ? v : v == null ? [] : [v]).map(x => String(x ?? ''));
+
+/** Ritocchi dal modulo della stampa (o dal database): righe vuote saltate, sconto solo se > 0 (% al massimo 100). */
+export function leggiRitocchi(x: any): Ritocchi {
+  if (!x || typeof x !== 'object') return { ...RITOCCHI_VUOTI, righe: [] };
+  const tipo = x.scontoTipo === 'euro' || x.sconto?.tipo === 'euro' ? 'euro' : 'percento';
+  const valore = numeroIt(x.sconto?.valore ?? x.scontoValore);
+  const descr = Array.isArray(x.righe) ? x.righe.map((r: any) => r?.descrizione) : elenco(x.rigaDescrizione);
+  const qta = Array.isArray(x.righe) ? x.righe.map((r: any) => r?.quantita) : elenco(x.rigaQuantita);
+  const prezzi = Array.isArray(x.righe) ? x.righe.map((r: any) => r?.prezzo) : elenco(x.rigaPrezzo);
+  const righe: RigaAggiunta[] = [];
+  descr.forEach((d: unknown, k: number) => {
+    const descrizione = String(d ?? '').trim().slice(0, 300);
+    if (!descrizione) return;
+    righe.push({ descrizione, quantita: numeroIt(qta[k]) ?? 1, prezzo: numeroIt(prezzi[k]) ?? 0 });
+  });
+  return {
+    noteCliente: String(x.noteCliente ?? '').trim().slice(0, 3000),
+    sconto: valore && valore > 0 ? { tipo, valore: tipo === 'percento' ? Math.min(valore, 100) : valore } : null,
+    righe,
+    noteInterne: x.noteInterne === true || x.noteInterne === 'si' || x.noteInterne === 'on',
+  };
+}
+
+/**
+ * Importi stampati con i ritocchi. Sconto in %: vale per tutto (prezzo a scheda, lotto, una tantum, righe in più);
+ * sconto in €: si toglie dal totale del lotto (e quindi dal prezzo a scheda). Le righe in più vanno solo nel totale.
+ */
+export function contiStampa(base: { prezzoScheda: number; lotto: number; unaTantum: number; nSchede: number }, rit: Ritocchi) {
+  const righe = rit.righe.map(x => ({ ...x, importo: r2(x.quantita * x.prezzo) }));
+  const extra = r2(righe.reduce((a, x) => a + x.importo, 0));
+  const lordo = r2(base.lotto + base.unaTantum + extra);
+  const s = rit.sconto;
+  const sconto = !s ? 0 : s.tipo === 'percento' ? r2(lordo * s.valore / 100) : r2(Math.min(s.valore, base.lotto + extra));
+  const f = s?.tipo === 'percento' ? 1 - s.valore / 100 : 1;
+  const menoLotto = s?.tipo === 'euro' ? Math.min(sconto, base.lotto) : 0;
+  return {
+    righe, extra, lordo, sconto,
+    etichettaSconto: !s ? '' : s.tipo === 'percento' ? `Sconto ${String(s.valore).replace('.', ',')}%` : 'Sconto',
+    prezzoScheda: r2(base.nSchede ? (base.lotto * f - menoLotto) / base.nSchede : base.prezzoScheda * f),
+    lotto: r2(base.lotto * f - menoLotto),
+    unaTantum: r2(base.unaTantum * f),
+    totale: r2(lordo - sconto),
+  };
+}
