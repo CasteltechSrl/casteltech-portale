@@ -34,6 +34,8 @@ l'icona del pannello. Premi "Prova il collegamento": deve rispondere "Collegato 
 1. Con l'account @casteltech.net crea un progetto Google Cloud nuovo ("Portale Casteltech Gmail", organizzazione casteltech.net),
    configura la schermata di consenso OAuth con pubblico **Interno**, poi copia il **Numero progetto** (solo cifre) dalla Dashboard
    e incollalo in Apps Script → Impostazioni progetto → Progetto Google Cloud → Imposta progetto.
+   Nello stesso progetto Cloud abilita l'**API di Gmail** (console.cloud.google.com/apis/library/gmail.googleapis.com):
+   senza, Gmail mostra solo la pagina iniziale del pannello e non i tasti (29/10/2026). Poi Testa i deployment → Disinstalla → Installa.
    (Non "My First Project": se sta su un account Gmail personale, "Interno" non si può scegliere.)
 2. Nell'editor: Esegui il deployment → **Nuovo deployment** → tipo **Componente aggiuntivo** → copia l'ID del deployment.
 3. Console Google Cloud → API e servizi → abilita **Google Workspace Marketplace SDK** → Configurazione dell'app:
