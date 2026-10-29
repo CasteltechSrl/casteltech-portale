@@ -11,6 +11,7 @@ import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from '../anagrafiche-servizio.js';
 import { cercaComponenti, conteggiComponenti } from '../codifica-servizio.js';
+import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
@@ -19,13 +20,15 @@ const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornito
 /** Pagina della sezione: tasti in alto (con quanti sono) e il contenuto della scheda scelta. */
 export type PaginaAnagrafiche = (req: Request, scheda: SchedaAnagrafiche, contenuto: Raw, avviso?: string, script?: string) => Promise<string>;
 const paginaAnagrafiche: PaginaAnagrafiche = async (req, scheda, contenuto, avviso, script) => {
-  const n = (await q1<Record<SchedaAnagrafiche, number>>(`SELECT (SELECT count(*)::int FROM clienti) AS clienti,
+  const n = (await q1<Record<SchedaAnagrafiche | 'senza_cliente', number>>(`SELECT (SELECT count(*)::int FROM clienti) AS clienti,
+    (SELECT count(*)::int FROM prodotti WHERE cliente_id IS NULL) AS senza_cliente,
     (SELECT count(*)::int FROM fornitori_anagrafica) AS fornitori, (SELECT count(*)::int FROM prodotti) AS prodotti,
     (SELECT count(*)::int FROM componenti) AS componenti`))!;
   const titolo = SCHEDE.find(([s]) => s === scheda)![1];
   return String(layout({ titolo, utente: req.session.utente, attiva: 'anagrafiche', avviso, script: ['ricerca.js', ...(script ? [script] : [])], contenuto: html`
     <h1>Anagrafiche</h1>
-    <nav class="tasti-anagrafiche">${SCHEDE.map(([s, t]) => html`<a href="/anagrafiche/${s}" class="${s === scheda ? 'attiva' : ''}">${t} <span class="conta">${num(n[s], 0)}</span></a>`)}</nav>
+    <nav class="tasti-anagrafiche">${SCHEDE.map(([s, t]) => html`<a href="/anagrafiche/${s}" class="${s === scheda ? 'attiva' : ''}">${t} <span class="conta">${num(n[s], 0)}</span>${s === 'prodotti' && n.senza_cliente
+      ? html` <span class="conta da-assegnare" title="Codici senza cliente: da assegnare o eliminare">${num(n.senza_cliente, 0)} senza cliente</span>` : ''}</a>`)}</nav>
     ${contenuto}` }));
 };
 
@@ -99,15 +102,21 @@ export function rotteAnagrafiche() {
         (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
           + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id) AS altri
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
-      ORDER BY p.codice LIMIT 2000`, [filtro]);
+      ORDER BY (p.cliente_id IS NULL) DESC, p.codice LIMIT 2000`, [filtro]);
+    // regola codice-cliente (Adriano 29/10/2026): i codici senza cliente si vedono subito, in cima e in giallo
+    const senzaCliente = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM prodotti WHERE cliente_id IS NULL`))!.n;
+    const avvisoCodici = avvisoSenzaCliente(senzaCliente);
+    // "— senza cliente —" solo per mostrare i codici ancora da assegnare: non si può salvare
     const opzClienti = (sel: number | null, conVuoto = true) => html`
-      ${conVuoto ? html`<option value="">— senza cliente —</option>` : ''}
+      ${conVuoto ? html`<option value="" disabled ${sel === null ? raw('selected') : ''}>— scegli il cliente —</option>` : ''}
       ${clienti.map(c => html`<option value="${c.id}" ${c.id === sel ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}`;
     res.send(await pag(req, 'prodotti', html`
-      <p class="nota">Nei preventivi codice e descrizione si scelgono solo da qui. Tutto viene salvato in MAIUSCOLO.
+      <p class="nota">Nei preventivi codice e descrizione si scelgono solo da qui. Ogni codice deve avere il suo cliente. Tutto viene salvato in MAIUSCOLO.
         Il tasto <b>Elimina</b> compare solo sui prodotti mai usati (preventivi, commesse, ordini).</p>
+      ${avvisoCodici ? html`<div class="avviso senza-cliente">${avvisoCodici}
+        ${filtro === -1 ? '' : html` <a href="/anagrafiche/prodotti?cliente=-1">Mostra solo i codici senza cliente</a>`}</div>` : ''}
       <form method="get" class="cerca" action="/anagrafiche/prodotti">
-        <select name="cliente" class="invia-subito"><option value="0">Tutti i clienti</option><option value="-1" ${filtro === -1 ? raw('selected') : ''}>— senza cliente —</option>${opzClienti(filtro, false)}</select>
+        <select name="cliente" class="invia-subito"><option value="0">Tutti i clienti</option><option value="-1" ${filtro === -1 ? raw('selected') : ''}>— senza cliente (da assegnare) —</option>${opzClienti(filtro, false)}</select>
         <noscript><button>Filtra</button></noscript>
       </form>
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length)}
@@ -117,13 +126,13 @@ export function rotteAnagrafiche() {
           <tr class="nuova-riga">
             <td><input name="codice" form="p-nuovo" class="maiuscolo" required placeholder="NUOVO CODICE"></td>
             <td class="largo"><input name="descrizione" form="p-nuovo" class="maiuscolo" required></td>
-            <td><select name="cliente_id" form="p-nuovo">${opzClienti(filtro > 0 ? filtro : null)}</select></td><td></td>
+            <td><select name="cliente_id" form="p-nuovo" required>${opzClienti(filtro > 0 ? filtro : null)}</select></td><td></td>
             <td><form method="post" action="/anagrafiche/prodotti" id="p-nuovo"><input type="hidden" name="filtro" value="${filtro}"><button class="primario">Aggiungi</button></form></td>
           </tr>
-          ${prodotti.map(p => html`<tr>
+          ${prodotti.map(p => html`<tr class="${p.cliente_id === null ? 'senza-cliente' : ''}" title="${p.cliente_id === null ? 'Codice senza cliente: assegnalo a un cliente o eliminalo' : ''}">
             <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo"></td>
             <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
-            <td><select name="cliente_id" form="p-${p.id}">${opzClienti(p.cliente_id)}</select></td><td class="n">${p.preventivi}</td>
+            <td><select name="cliente_id" form="p-${p.id}" required>${opzClienti(p.cliente_id)}</select></td><td class="n">${p.preventivi}</td>
             <td class="nowrap"><form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
@@ -210,6 +219,8 @@ export function rotteAnagrafiche() {
   r.post('/prodotti', async (req, res) => {
     const codice = maiuscolo(req.body.codice), descrizione = maiuscolo(req.body.descrizione), cliente = idCliente(req.body.cliente_id);
     if (!codice || !descrizione) return res.redirect(torna('Servono codice e descrizione.', '/prodotti'));
+    const senza = erroreClienteProdotto(cliente);
+    if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
     if (await duplicatoProdotto(codice, cliente)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
     await q(`INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1,$2,$3)`, [codice, descrizione, cliente]);
     res.redirect(torna(`${codice} aggiunto.`, '/prodotti', dopoProdotto(req.body, cliente)));
@@ -218,6 +229,8 @@ export function rotteAnagrafiche() {
     const id = Number(req.params.id);
     const codice = maiuscolo(req.body.codice), descrizione = maiuscolo(req.body.descrizione), cliente = idCliente(req.body.cliente_id);
     if (!codice || !descrizione) return res.redirect(torna('Servono codice e descrizione.', '/prodotti'));
+    const senza = erroreClienteProdotto(cliente);
+    if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
     if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
     await q(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = $4 WHERE id = $1`, [id, codice, descrizione, cliente]);
     await q(`UPDATE preventivi v SET intestazione = v.intestazione || jsonb_build_object('codice', $2::text, 'descrizione', $3::text)

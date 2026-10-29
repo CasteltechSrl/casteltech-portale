@@ -101,11 +101,14 @@ export function rottePreventivi() {
     if (!cliente) return res.status(400).json({ errore: 'Scegli prima il cliente dall\'elenco.' });
     const { valori, errore } = controllaProdottoNuovo(req.body ?? {});
     if (errore) return res.status(400).json({ errore });
-    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente): si usa quello
+    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente: gli si assegna questo cliente): si usa quello
     const esistente = await q1<{ id: number; codice: string; descrizione: string | null }>(
       `SELECT id, codice, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND (cliente_id = $2 OR cliente_id IS NULL)
        ORDER BY cliente_id NULLS LAST, id LIMIT 1`, [chiaveCodice(valori.codice), clienteId]);
-    if (esistente) return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    if (esistente) {
+      await q(`UPDATE prodotti SET cliente_id = $2 WHERE id = $1 AND cliente_id IS NULL`, [esistente.id, clienteId]);
+      return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    }
     const nuovo = await q1<{ id: number; codice: string; descrizione: string }>(
       `INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1, $2, $3) RETURNING id, codice, descrizione`, [valori.codice, valori.descrizione, clienteId]);
     res.json({ ...nuovo, revisione: valori.revisione, esisteva: false });
@@ -179,7 +182,7 @@ export function rottePreventivi() {
     const cliente = dati.clienteId ? await q1<{ ragione_sociale: string }>(`SELECT ragione_sociale FROM clienti WHERE id = $1`, [dati.clienteId]) : undefined;
     if (!cliente) return res.status(400).json({ errore: 'Scegli il cliente dall\'elenco' });
     const prodotto = dati.prodottoId ? await q1<{ codice: string; descrizione: string }>(
-      `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [dati.prodottoId, dati.clienteId]) : undefined;
+      `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND cliente_id = $2`, [dati.prodottoId, dati.clienteId]) : undefined;
     if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente (o aggiungilo con «Nuovo prodotto»)' });
     if (!dati.revisione) return res.status(400).json({ errore: 'Scrivi la revisione del prodotto (se il cliente non la indica metti 0)' });
     Object.assign(dati, { cliente: maiuscolo(cliente.ragione_sociale), codice: maiuscolo(prodotto.codice), descrizione: maiuscolo(prodotto.descrizione) });
@@ -438,7 +441,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
           <label>Codice
             <select data-id="prodottoId" id="sel-prodotto" required>
               <option value="">${d.clienteId ? '— scegli il codice —' : '— prima scegli il cliente —'}</option>
-              ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}${x.da_assegnare ? ' (non assegnato)' : ''}</option>`)}
+              ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}</option>`)}
             </select></label>
           <label class="stretto">Rev. <input data-campo="revisione" id="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20" required
             placeholder="0" title="Revisione del prodotto: se il cliente non la indica scrivi 0"></label>

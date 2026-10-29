@@ -72,6 +72,8 @@ test('guida: prodotto nuovo dal preventivo si trova', () => {
   assert.ok(primi('prodotto nuovo nel preventivo', 2).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('non trovo il codice nell\'elenco', 3).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('revisione 0', 3).includes('prodotto-nuovo-preventivo'));
+  assert.ok(primi('codici senza cliente', 2).includes('prodotti'));
+  assert.ok(primi('codice non assegnato', 3).includes('prodotti'));
 });
 
 test('guida: AOI visivo e BOM quotata', () => {

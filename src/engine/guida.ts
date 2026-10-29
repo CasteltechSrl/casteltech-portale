@@ -114,13 +114,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'prodotti', area: 'anagrafiche', titolo: 'Aggiungere un prodotto (codice della scheda)',
-    parole: 'prodotto prodotti codice scheda articolo descrizione revisione nuovo',
+    parole: 'prodotto prodotti codice scheda articolo descrizione revisione nuovo senza cliente non assegnato assegnare',
     testo: [
-      'Ogni prodotto appartiene a un cliente. Nei preventivi codice e descrizione si scelgono solo da qui.',
+      'Ogni prodotto appartiene a un cliente: è una regola, un codice senza cliente non si salva. Nei preventivi codice e descrizione si scelgono solo da qui.',
+      'I codici rimasti senza cliente (vecchi caricamenti) sono in cima all\'elenco, in giallo, e il tasto Prodotti dice quanti sono: assegna a ognuno il suo cliente e premi Salva, oppure eliminalo se è stato inserito per errore. Finché non hanno un cliente non compaiono nei preventivi.',
       'Dall\'elenco dei clienti, il numero dei prodotti porta ai prodotti di quel cliente.',
       'Se stai facendo un preventivo e il codice non c\'è, non serve uscire: nel preventivo premi "+ Nuovo prodotto" (vedi "Prodotto nuovo dal preventivo").',
     ],
-    passi: ['Anagrafiche → Prodotti.', 'Scegli il cliente, scrivi codice e descrizione nella riga in alto e premi Aggiungi.'],
+    passi: ['Anagrafiche → Prodotti.', 'Scegli il cliente, scrivi codice e descrizione nella riga in alto e premi Aggiungi.', 'Codici senza cliente: "Mostra solo i codici senza cliente", scegli il cliente di ognuno e premi Salva (o Elimina).'],
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
   },
   {
@@ -162,7 +163,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'prodotto-nuovo-preventivo', area: 'preventivi', titolo: 'Prodotto nuovo dal preventivo (codice non in anagrafica)',
     parole: 'prodotto nuovo codice manca non trovo elenco aggiungere anagrafica revisione zero descrizione scheda nuova inserire manualmente',
     testo: [
-      'Se il prodotto è nuovo e il codice non è nell\'elenco del cliente, lo aggiungi all\'anagrafica direttamente dal preventivo, senza chiuderlo.',
+      'Scelto il cliente, il menu Codice mostra solo i codici di quel cliente.',
+      'Se il prodotto è nuovo e il codice non è nell\'elenco del cliente, lo aggiungi all\'anagrafica direttamente dal preventivo, senza chiuderlo: entra in anagrafica già con il suo cliente.',
       'Servono tre cose, senza non si prosegue: codice, descrizione e revisione. Se il cliente non indica la revisione scrivi 0. Tutto viene salvato in MAIUSCOLO.',
       'Se il codice c\'è già per quel cliente (anche scritto con trattini o spazi diversi) il portale non fa un doppione: sceglie quello dell\'elenco.',
       'Nel preventivo compilato dai documenti del cliente codice, descrizione e revisione sono già proposti, letti dai file (righe in alto nella BOM, Gerber, GenCAD, nome della cartella come "EA1002-0"): sono da convalidare, controllali prima di premere "Aggiungi in anagrafica".',
