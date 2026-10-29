@@ -8,6 +8,7 @@ import { contaRefori, leggiForatura, sembraForatura } from '../src/engine/scheda
 import { leggiGenCad } from '../src/engine/scheda/gencad.js';
 import { analizzaScheda, CONSUMI, leggiBomScheda, numeroPassivo, stessoComponente } from '../src/engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile } from '../src/engine/scheda/classifica.js';
+import { CARTELLA_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../src/engine/scheda/scelta-file.js';
 import { parametriDaAnalisi } from '../src/engine/scheda/preventivo.js';
 import { controllaPiazzole, misuraPiazzole, PIAZZOLE_IPC } from '../src/engine/scheda/piazzole.js';
 import { latoFoglio, righeFoglio } from '../src/engine/scheda/documentazione.js';
@@ -404,4 +405,51 @@ test('BOM quotata per il preventivo: problemi da risolvere prima della quota', a
   const p = problemiBom([riga(ESITI.INC), riga(ESITI.NUOVO_VER), riga(ESITI.DB, { reperibilita: { livello: 'critico' } }), riga(ESITI.INC, { clienteFornisce: true })],
     { senzaPrezzo: 2, nonDisponibili: 1 });
   assert.deepEqual(p, ['1 riga da completare', '1 codice da validare', '2 righe senza prezzo', '1 componente non disponibile', '1 componente con reperibilità critica']);
+});
+
+test('cartella del cliente: si caricano solo i file utili, il resto resta sul Drive con il solo nome', () => {
+  const MB = 1024 * 1024;
+  const { carica, soloElenco } = scegliFile([
+    { nome: '3D/scheda.step', byte: 83 * MB },          // il file che dava "troppo grande"
+    { nome: '3D/scheda.pdf', byte: 10 * MB },
+    { nome: 'PDF/foto.tif', byte: MB },
+    { nome: 'ODBpp/scheda.tgz', byte: 2 * MB },
+    { nome: 'DOC/legenda.doc', byte: 20000 },
+    { nome: 'Gerber/template.dsn', byte: 1500 },
+    { nome: 'desktop.ini', byte: 352 },
+    { nome: 'Gerber/OLD/L1_TOP.gdo', byte: 1000 },
+    { nome: 'odb/matrix/matrix', byte: 500 }, { nome: 'odb/steps/pcb/layers/top/features', byte: 9000 },
+    { nome: 'EC/BOM.xlsx', byte: 100000 },
+    { nome: 'GenCAD/gencad.cad', byte: 2.5 * MB },
+    { nome: 'Gerber/L1_TOP.gdo', byte: 160000 },
+    { nome: 'gerber/lcz', byte: 800000 },                 // senza estensione: si capisce dal contenuto
+    { nome: 'P&P/vb_ais.txt', byte: 38000 },
+    { nome: 'tutto.zip', byte: 40 * MB },
+    { nome: 'enorme.zip', byte: 90 * MB },
+    { nome: 'enorme.gbr', byte: MAX_FILE + 1 },
+  ]);
+  assert.deepEqual(carica, ['EC/BOM.xlsx', 'GenCAD/gencad.cad', 'Gerber/L1_TOP.gdo', 'gerber/lcz', 'P&P/vb_ais.txt', 'tutto.zip']);
+  assert.ok(!soloElenco.some(f => f.nome === 'desktop.ini'), 'i file di sistema non compaiono');
+  assert.equal(soloElenco.find(f => f.nome === '3D/scheda.step')?.byte, 83 * MB);
+  assert.equal(soloElenco.find(f => f.nome === 'enorme.zip')?.motivo, TROPPO_GRANDE);
+  assert.equal(soloElenco.find(f => f.nome === 'enorme.gbr')?.motivo, TROPPO_GRANDE);
+  assert.equal(soloElenco.find(f => f.nome === 'Gerber/OLD/L1_TOP.gdo')?.motivo, VERSIONI_VECCHIE);
+  assert.ok(soloElenco.some(f => f.nome === 'odb/steps/pcb/layers/top/features'));
+  assert.equal(sceltaFile('archivio.rar', 1000).carica, false);
+  assert.deepEqual(sceltaFile('Armadi/Armadi_1001_1_TOP.txt', 400), { carica: false, motivo: CARTELLA_CASTELTECH });
+  assert.equal(sceltaFile('Topografico/1001_TOP.af', 800000).carica, false);
+});
+
+test('file già lavorati da Casteltech (codici di produzione) non sono del cliente', () => {
+  const nostro = ['Colonna1;Colonna2;Colonna3;Colonna4;Colonna5;Colonna8',
+    ...Array.from({ length: 8 }, (_, i) => `C${i + 1};C_100N_50V_X7R_0402_10TOL;180;${10 + i}.5;20.1;CC-0402-100NF-10-X7R-50V`)].join('\n');
+  assert.ok(lavoratoDaCasteltech(nostro));
+  const cliente = ['Designator;Comment;X;Y;Rotation', ...Array.from({ length: 8 }, (_, i) => `R${i + 1};10K;${i}.0;5.0;0`)].join('\n');
+  assert.ok(!lavoratoDaCasteltech(cliente));
+});
+
+test('strati PADS: L1_TOP e L4_BOTTOM sono rame esterno, L2 interno', () => {
+  assert.deepEqual(ruoloStrato('Gerber/L1_TOP.gdo'), { ruolo: 'rame', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('Gerber/L4_BOTTOM.gdo'), { ruolo: 'rame', lato: 'BOT' });
+  assert.equal(ruoloStrato('Gerber/L2.gdo').ruolo, 'interno');
 });

@@ -20,6 +20,7 @@ import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerb
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
+import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb as trovaRadiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 
 /** byte e conservato servono per i file tenuti solo nell'elenco (PDF, 3D, immagini: restano sul Drive del cliente). */
 export interface FileCaricato { nome: string; dati: Buffer; byte?: number; conservato?: boolean }
@@ -31,8 +32,6 @@ export interface Elaborazione { file: FileElenco[]; analisi: AnalisiScheda; dise
 
 /** Tipi di file che si conservano nel database (compressi) per poter rifare l'analisi. */
 export const TIPI_DA_CONSERVARE: TipoFile[] = ['bom', 'pick-place', 'gerber', 'foratura', 'gencad'];
-const MAX_FILE = 25 * 1024 * 1024;
-const CARTELLE_VECCHIE = /(^|[\\/])(OLD|VECCHI|VECCHIO|OBSOLET[EIO]|ARCHIVIO|BACKUP)([\\/])/i;
 
 /** Apre gli zip (anche uno dentro l'altro, un livello) e toglie i file di sistema. */
 export function espandiArchivi(file: FileCaricato[]): FileCaricato[] {
@@ -71,25 +70,30 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
   let cad: { nome: string; componenti: ReturnType<typeof leggiGenCad>['componenti'] } | null = null;
   let k = 0;
   // ODB++ scompattato (cartelle matrix/, steps/, fonts/…): una sola riga nell'elenco invece di centinaia di file
-  const radiciOdb = [...new Set(file.map(f => /^(.*?[\\/]|)matrix[\\/]matrix$/i.exec(f.nome)?.[1]).filter((x): x is string => x != null))];
+  const radiciOdb = trovaRadiciOdb(file.map(f => f.nome));
   for (const r of radiciOdb) {
     const dentro = file.filter(f => f.nome.startsWith(r));
-    elenco.push({ nome: r.replace(/[\\/]$/, '') || 'ODB++', tipo: 'odb', byte: dentro.reduce((t, f) => t + f.dati.length, 0), usato: false,
+    elenco.push({ nome: r.replace(/[\\/]$/, '') || 'ODB++', tipo: 'odb', byte: dentro.reduce((t, f) => t + (f.byte ?? f.dati.length), 0), usato: false,
       nota: `ODB++ (${dentro.length} file): non ancora letto, si usano Gerber e forature` });
   }
   for (const f of file) {
     if (radiciOdb.some(r => f.nome.startsWith(r))) continue;
     if (f.conservato === false) {
       const tipo = tipoFile(f.nome, null);
-      elenco.push({ nome: f.nome, tipo, byte: f.byte ?? 0, usato: false, nota: tipo === 'archivio' ? 'contenuto già estratto' : 'non conservato nel portale (resta sul Drive)' });
+      // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
+      const scelta = sceltaFile(f.nome, f.byte ?? 0);
+      const nota = !scelta.carica ? scelta.motivo : tipo === 'archivio' ? 'contenuto già estratto' : 'non conservato nel portale (resta sul Drive)';
+      elenco.push({ nome: f.nome, tipo, byte: f.byte ?? 0, usato: false, nota });
       continue;
     }
     const testo = sembraTesto(f.dati) ? testoDi(f.dati) : null;
     const tipo = tipoFile(f.nome, testo);
     const voce: FileElenco = { nome: f.nome, tipo, byte: f.dati.length, usato: false };
     elenco.push(voce);
-    if (CARTELLE_VECCHIE.test(`/${f.nome}`)) { voce.nota = 'in una cartella di versioni vecchie: ignorato'; continue; }
-    if (f.dati.length > MAX_FILE) { voce.nota = 'troppo grande'; continue; }
+    if (CARTELLE_VECCHIE.test(`/${f.nome}`)) { voce.nota = VERSIONI_VECCHIE; continue; }
+    if (CARTELLE_CASTELTECH.test(`/${f.nome}`)) { voce.nota = CARTELLA_CASTELTECH; continue; }
+    if (testo && ['bom', 'pick-place'].includes(tipo) && lavoratoDaCasteltech(testo)) { voce.nota = LAVORATO_CASTELTECH; continue; }
+    if (f.dati.length > MAX_FILE) { voce.nota = TROPPO_GRANDE; continue; }
     try {
       if (tipo === 'bom') {
         const grezze = await leggiFileBom(f.nome.split(/[\\/]/).pop()!, f.dati);
@@ -176,6 +180,17 @@ export async function aggiungiFile(id: number, nome: string, dati: Buffer) {
     ON CONFLICT (pacchetto_id, nome) DO UPDATE SET byte = EXCLUDED.byte, dati = EXCLUDED.dati`, [id, nome, dati.length, conserva ? gzipSync(dati) : Buffer.alloc(0)]);
 }
 /**
+ * Prima del caricamento di una cartella: il browser manda solo nomi e dimensioni, qui si sceglie cosa serve davvero.
+ * I file che non servono (PDF, 3D, immagini, troppo grandi…) entrano subito nel pacchetto con il solo nome; si risponde con i file da mandare.
+ */
+export async function scegliFileDaCaricare(id: number, file: { nome: string; byte: number }[]) {
+  const scelta = scegliFile(file);
+  for (const f of scelta.soloElenco)
+    await q(`INSERT INTO pacchetti_scheda_file (pacchetto_id, nome, byte, dati) VALUES ($1, $2, $3, ''::bytea)
+      ON CONFLICT (pacchetto_id, nome) DO UPDATE SET byte = EXCLUDED.byte, dati = EXCLUDED.dati`, [id, f.nome, Math.min(f.byte, 2_147_483_647)]);
+  return scelta;
+}
+/**
  * Rilegge i file del pacchetto e salva il risultato. Nel database restano compressi solo i file utili (BOM, pick and place, Gerber,
  * forature, CAD; quelli dentro gli zip diventano file a parte); degli altri resta solo nome e dimensione.
  */
@@ -184,7 +199,7 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
   const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
   const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
   const el = await elaboraPacchetto(caricati, nome);
-  const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== 'troppo grande').map(f => f.nome));
+  const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
   const presenti = new Set(righe.map(r => r.nome));
   for (const f of espandiArchivi(caricati.filter(r => r.conservato !== false && /\.zip$/i.test(r.nome))))
     if (daTenere.has(f.nome) && !presenti.has(f.nome)) await aggiungiFile(id, f.nome, f.dati);

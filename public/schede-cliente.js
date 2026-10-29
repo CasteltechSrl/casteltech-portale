@@ -1,6 +1,7 @@
 // Preventivi → Da documenti: caricamento del pacchetto (file, zip o cartella), disegno del Gerber, filtri della tabella componenti.
 (() => {
-  // ── caricamento: si crea il pacchetto, si mandano i file uno alla volta (4 insieme), poi si chiede l'analisi ──
+  // ── caricamento: si crea il pacchetto, il portale sceglie dai nomi i file utili (PDF, 3D, immagini, file troppo grandi restano
+  //    sul Drive, solo il nome: regola in src/engine/scheda/scelta-file.ts), si mandano quelli uno alla volta (4 insieme), poi l'analisi ──
   const invia = document.getElementById('invia-pacchetto');
   if (invia) invia.addEventListener('click', async () => {
     const esito = document.getElementById('esito-pacchetto');
@@ -17,14 +18,25 @@
         body: JSON.stringify({ nome, cliente: document.getElementById('cliente-pacchetto').value }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.errore || 'Errore nella creazione del pacchetto');
+      const nomeIn = f => cartella && f.webkitRelativePath ? f.webkitRelativePath.split('/').slice(1).join('/') : percorso(f);
+      esito.textContent = 'Scelta dei file utili…';
+      const rs = await fetch(`/preventivi/documenti/${j.id}/scelta`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: file.map(f => ({ nome: nomeIn(f), byte: f.size })) }) });
+      const js = await rs.json().catch(() => ({}));
+      if (!rs.ok) throw new Error(js.errore || 'Scelta dei file non riuscita');
+      const daMandare = new Set(js.carica);
+      const utili = file.filter(f => daMandare.has(nomeIn(f)));
+      const mb = n => (n / 1048576).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' MB';
+      const lasciati = js.soloElenco.length
+        ? ` (${js.soloElenco.length} restano sul Drive, solo il nome: ${mb(js.soloElenco.reduce((t, f) => t + f.byte, 0))} di PDF, 3D, immagini e simili)` : '';
       let fatti = 0;
-      const coda = [...file];
+      const coda = [...utili];
       const lavora = async () => {
         for (let f = coda.shift(); f; f = coda.shift()) {
-          const p = cartella && f.webkitRelativePath ? f.webkitRelativePath.split('/').slice(1).join('/') : percorso(f);
+          const p = nomeIn(f);
           const rf = await fetch(`/preventivi/documenti/${j.id}/file?nome=${encodeURIComponent(p)}`, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
           if (!rf.ok) { const e = await rf.json().catch(() => ({})); throw new Error(`${p}: ${e.errore || 'file non caricato (troppo grande?)'}`); }
-          esito.textContent = `Caricamento ${++fatti} di ${file.length}…`;
+          esito.textContent = `Caricamento dei file utili: ${++fatti} di ${utili.length}${lasciati}…`;
         }
       };
       await Promise.all([lavora(), lavora(), lavora(), lavora()]);
