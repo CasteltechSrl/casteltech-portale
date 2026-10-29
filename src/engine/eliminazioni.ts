@@ -60,3 +60,14 @@ export function confermaEliminaCommessa(c: { numero: string; stato: string; temp
   if (c.stato !== 'aperta') t += `\n\nLa commessa è già ${c.stato.replace('_', ' ')}.`;
   return t + '\n\nIl preventivo resta. Non si può annullare (prima viene salvato un backup).';
 }
+
+/**
+ * Elimina dall'elenco delle commesse (Adriano, 29/10/2026: spunte e pulsanti come nei preventivi): vanno via insieme solo
+ * le commesse create per errore, cioè ancora aperte e senza tempi registrati. Le altre si eliminano una per volta dalla
+ * loro pagina, dove la conferma dice quanti tempi si perdono.
+ */
+export function commesseEliminabiliDallElenco<T extends { stato: string; tempi: number }>(commesse: T[]): { si: T[]; no: T[] } {
+  const si: T[] = [], no: T[] = [];
+  for (const c of commesse) (c.stato === 'aperta' && !c.tempi ? si : no).push(c);
+  return { si, no };
+}

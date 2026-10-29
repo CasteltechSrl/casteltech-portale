@@ -19,6 +19,7 @@ import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
 import { stampaPreventivo, type ClienteStampa } from '../views/stampa-preventivo.js';
 import { versioneStampa } from '../../engine/stampa-preventivo.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -42,6 +43,15 @@ export function rottePreventivi() {
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
       ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
     const msg = String(req.query.msg ?? '');
+    const modulo = moduloAzioni({
+      azione: '/preventivi/azioni', nome: { singolare: 'preventivo', plurale: 'preventivi' },
+      pulsanti: [
+        { azione: 'commessa', testo: 'Crea commessa', serve: '1', titolo: 'Crea la commessa dal preventivo selezionato (uno alla volta)' },
+        { azione: 'duplica', testo: 'Duplica', serve: '1+', titolo: 'Nuovo preventivo con fasi, tariffe e prezzi attuali' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Elimina i preventivi selezionati (non quelli già diventati commessa)',
+          chiedi: 'Eliminare {n} preventiv{o|i}? L\'operazione non si può annullare (prima viene salvato un backup).' },
+      ],
+    });
     res.send(String(layout({
       titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi', largo: true, avviso: msg || undefined,
       contenuto: html`
@@ -51,20 +61,14 @@ export function rottePreventivi() {
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
-      <form method="post" action="/preventivi/azioni" id="azioni-elenco">
-      <div class="barra-azioni">
-        <span id="n-selezionati" class="nota">Nessun preventivo selezionato</span>
-        <button name="azione" value="commessa" data-serve="1" disabled title="Crea la commessa dal preventivo selezionato (uno alla volta)">Crea commessa</button>
-        <button name="azione" value="duplica" data-serve="1+" disabled title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica</button>
-        <button name="azione" value="elimina" data-serve="1+" disabled class="pericolo" title="Elimina i preventivi selezionati (non quelli già diventati commessa)">Elimina</button>
-      </div>
+      ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco preventivi">
-        <thead><tr><th class="selezione"><input type="checkbox" id="seleziona-tutti" title="Seleziona tutti" aria-label="Seleziona tutti"></th><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
+        <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
           <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
           <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
-            <td class="selezione"><input type="checkbox" name="ids" value="${p.id}" aria-label="Seleziona ${p.numero}"></td>
+            ${casella(p.id, p.numero)}
             <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}${p.stato === 'da_validare' ? html` <span class="stato da_validare" title="Compilato dai documenti del cliente: da controllare e salvare">da validare</span>` : ''}</td>
             <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
@@ -72,7 +76,7 @@ export function rottePreventivi() {
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
           </tr>`)}
         </tbody></table></div>
-      </form>
+      ${modulo.chiudi}
       ${righe.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
       script: 'elenco.js',
     })));
@@ -206,7 +210,7 @@ export function rottePreventivi() {
 
   // azioni dall'elenco su uno o più preventivi spuntati
   r.post('/azioni', async (req, res) => {
-    const ids = [...new Set(([] as unknown[]).concat(req.body?.ids ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0))];
+    const ids = idsSpuntati(req.body);
     const torna = (msg: string) => res.redirect(`/preventivi?msg=${encodeURIComponent(msg)}`);
     if (!ids.length) return torna('Seleziona almeno un preventivo.');
     const azione = String(req.body?.azione ?? '');
