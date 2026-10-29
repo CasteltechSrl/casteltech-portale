@@ -10,7 +10,7 @@
  *   PORTALE_CHIAVE la stessa di GMAIL_ADDON_CHIAVE su Render
  */
 
-var ETICHETTE = { preventivo: 'Preventivo', ordine: 'Ordine', fattura_estera: 'Fattura estera' };
+var ETICHETTE = { preventivo: 'Preventivo', ordine: 'Ordine', fattura_estera: 'Fattura estera', aggiunta: 'File aggiunti' };
 
 function impostazioni_() {
   var p = PropertiesService.getScriptProperties();
@@ -140,6 +140,8 @@ function schedaMail_(m) {
     .setHeader(CardService.newCardHeader().setTitle('Manda al portale'))
     .addSection(sezione)
     .addSection(CardService.newCardSection().addWidget(tasti)
+      .addWidget(CardService.newTextButton().setText('Aggiungi a documenti già caricati')
+        .setOnClickAction(CardService.newAction().setFunctionName('scegliPacchetto').setParameters({ id: m.getId() })))
       .addWidget(CardService.newTextParagraph().setText(
         '<font color="#666666">Preventivo: testo e allegati vanno nei Documenti del cliente. Ordine e Fattura estera: la mail va in Da acquisire e la legge l\'IA.</font>')))
     .build();
@@ -149,7 +151,7 @@ function manda(e) {
   var tipo = e.parameters.tipo;
   try {
     var m = messaggio_(e);
-    var esito = tipo === 'preventivo' ? mandaPreventivo_(m) : mandaEmail_(m, tipo);
+    var esito = tipo === 'aggiunta' ? mandaPreventivo_(m, e.parameters.pacchetto) : tipo === 'preventivo' ? mandaPreventivo_(m) : mandaEmail_(m, tipo);
     var card = CardService.newCardBuilder()
       .setHeader(CardService.newCardHeader().setTitle(ETICHETTE[tipo] + ': mandato al portale'))
       .addSection(CardService.newCardSection()
@@ -164,12 +166,34 @@ function manda(e) {
   }
 }
 
+/** File arrivati in una mail successiva (es. BOM in testo): si sceglie il pacchetto già caricato a cui aggiungerli. */
+function scegliPacchetto(e) {
+  try {
+    var m = messaggio_(e);
+    var elenco = chiama_('/api/gmail/pacchetti?mittente=' + encodeURIComponent(m.getFrom()), { method: 'get' });
+    var sezione = CardService.newCardSection().setHeader('Aggiungi gli allegati di «' + (m.getSubject() || 'questa mail') + '» a:');
+    elenco.forEach(function (p) {
+      sezione.addWidget(CardService.newDecoratedText().setTopLabel((p.cliente || 'cliente da scegliere') + ' · ' + p.data).setText(p.nome).setWrapText(true)
+        .setOnClickAction(CardService.newAction().setFunctionName('manda').setParameters({ tipo: 'aggiunta', id: m.getId(), pacchetto: String(p.id) })
+          .setLoadIndicator(CardService.LoadIndicator.SPINNER)));
+    });
+    if (!elenco.length) sezione.addWidget(CardService.newTextParagraph().setText('Nessun pacchetto caricato negli ultimi 90 giorni.'));
+    var card = CardService.newCardBuilder().setHeader(CardService.newCardHeader().setTitle('Documenti già caricati')).addSection(sezione).build();
+    return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().pushCard(card)).build();
+  } catch (err) {
+    return CardService.newActionResponseBuilder().setNotification(CardService.newNotification().setText('Non riuscito: ' + err.message)).build();
+  }
+}
+
 // ───────────────────────────── invii ─────────────────────────────
 
-/** Preventivo: 1) email e nomi degli allegati, 2) solo i file che il portale chiede, tutti insieme, 3) parte l'analisi. */
-function mandaPreventivo_(m) {
+/**
+ * Preventivo: 1) email e nomi degli allegati, 2) solo i file che il portale chiede, tutti insieme, 3) parte l'analisi.
+ * Con `pacchetto` gli allegati si aggiungono a un pacchetto già caricato (e alle sue versioni) invece di crearne uno nuovo.
+ */
+function mandaPreventivo_(m, pacchetto) {
   var lista = allegati_(m);
-  var inizio = chiama_('/api/gmail/preventivo', {
+  var inizio = chiama_(pacchetto ? '/api/gmail/preventivo/' + pacchetto + '/aggiungi' : '/api/gmail/preventivo', {
     method: 'post', contentType: 'application/json',
     payload: JSON.stringify({
       utente: Session.getActiveUser().getEmail(),
@@ -191,7 +215,7 @@ function mandaPreventivo_(m) {
   });
   if (richieste.length) UrlFetchApp.fetchAll(richieste).forEach(leggiRisposta_);
   var fine = chiama_('/api/gmail/preventivo/' + inizio.id + '/analizza', { method: 'post' });
-  var testo = 'Documenti del cliente «' + inizio.nome + '»: ' + richieste.length + ' file mandati'
+  var testo = 'Documenti del cliente «' + inizio.nome + '»: ' + richieste.length + (pacchetto ? ' file aggiunti' : ' file mandati')
     + (inizio.soloElenco ? ', ' + inizio.soloElenco + ' solo nell\'elenco (PDF, 3D, immagini…)' : '')
     + '. L\'analisi è partita: nel portale controlla i dati e crea il preventivo da validare.';
   return { testo: testo, link: fine.link };

@@ -108,7 +108,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    con `pacchetti_scheda.email` (testo in cima alla pagina e nelle note del preventivo da validare), nomi e dimensioni → `scegliFileDaCaricare`,
    poi solo i file utili, analisi dopo la risposta (Gmail aspetta max 30 s; stato `in_analisi`, `errore`); cliente dal mittente solo se sicuro
    (stessa email o dominio di un solo cliente in CRM/anagrafica). Ordine / Fattura estera: la mail intera .eml in `acquisizioni`, IA dopo la risposta.
-   ⬜ Installazione per tutto l'ufficio (Marketplace privato + console di amministrazione).
+   Pannello: la mail aperta NON arriva al pannello (contextual trigger mai chiamato su info@, 29/10/2026): la pagina iniziale elenca le ultime
+   mail con allegati + Cerca (`GmailApp.search`, ambito gmail.readonly). Script sul progetto Google standard (con un progetto Cloud proprio
+   non partiva nulla); colleghi: script condiviso come Editor, ognuno "Testa i deployment → Installa".
+   File arrivati dopo: "Aggiungi a documenti già caricati" (Gmail, `/api/gmail/preventivo/:id/aggiungi`) o "Aggiungi file a questo pacchetto"
+   (pagina dei documenti), poi rianalisi. Versioni della stessa scheda (migrazione 043, `engine/scheda/versioni.ts`): quantità e versioni
+   lette dalla mail ("167pz M0929-C versione HELIOS") → "Dividi per versione" = un pacchetto figlio per versione (`padre_id`, `versione`,
+   `quantita` proposta nel preventivo) con i file comuni + quelli con il nome della versione; i file aggiunti al padre passano ai figli
+   (`sincronizzaVersioni`). BOM divisa SMD + PTH (riferimenti diversi) unita in lettura (`engine/scheda/bom-divise.ts`); BOM in PDF non lette.
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

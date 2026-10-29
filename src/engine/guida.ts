@@ -73,14 +73,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'pulsante-gmail', area: 'inizio', titolo: 'Mandare una mail al portale con il pulsante di Gmail',
-    parole: 'gmail mail email posta pulsante tasto pannello inoltrare mandare portale preventivo ordine fattura estera allegati richiesta offerta cliente',
+    parole: 'gmail mail email posta pulsante tasto pannello inoltrare mandare portale preventivo ordine fattura estera allegati richiesta offerta cliente versioni versione varianti dividere quantità aggiungere file mancanti dopo bom pth',
     testo: [
       'Quando arriva una mail con una richiesta d\'offerta, un ordine o una fattura di un fornitore estero, non serve scaricare gli allegati: aprila in Gmail e usa il pannello "Portale Casteltech" a destra (sul telefono è in fondo alla mail).',
       'Preventivo: il testo della mail e gli allegati utili (BOM, pick and place, Gerber, zip) vanno in Preventivi → Documenti del cliente e l\'analisi parte da sola. Il cliente si riconosce dall\'email del mittente se è sicuro, altrimenti lo scegli tu. Il testo della mail si legge in cima alla pagina e finisce nelle note del preventivo da validare.',
       'Ordine: la mail intera va in Ordini → Da acquisire, l\'IA la legge e prepara la proposta da confermare. Fattura estera: va in Amministrazione → Autofatture. La stessa mail mandata due volte non entra due volte.',
-      'PDF, modelli 3D e immagini restano solo nell\'elenco dei file, come quando carichi una cartella. Gli allegati che Gmail mostra come link a Google Drive (file molto grandi) non arrivano: caricali dal portale.',
+      'PDF, modelli 3D e immagini restano solo nell\'elenco dei file, come quando carichi una cartella (le BOM in PDF non si leggono: chiedi al cliente Excel, CSV o testo). Gli allegati che Gmail mostra come link a Google Drive (file molto grandi) non arrivano: caricali dal portale.',
+      'Nel pannello ci sono le ultime mail con allegati e la casella Cerca: tocca la mail e compaiono i tasti.',
+      'File arrivati con una mail successiva (es. la BOM in testo): nella mail nuova premi "Aggiungi a documenti già caricati" e scegli il pacchetto, oppure nella pagina dei documenti apri "Aggiungi file a questo pacchetto". Il pacchetto si rianalizza da solo.',
+      'Se la mail chiede più versioni della stessa scheda con le quantità (es. "167pz M0929-C versione HELIOS, 90pz versione CRONOS"), nella pagina dei documenti compare "Dividi per versione": nasce un pacchetto per versione con i file comuni (Gerber, lamine) e quelli con il nome della versione, e il numero di schede già scritto per il preventivo.',
+      'Una BOM divisa in due file (SMD e PTH) si unisce da sola; due BOM con gli stessi riferimenti sono versioni diverse e se ne usa una sola.',
     ],
-    passi: ['Apri la mail in Gmail.', 'Nel pannello "Portale Casteltech" premi Preventivo, Ordine o Fattura estera.', 'Premi "Apri nel portale" e controlla quello che ha letto.'],
+    passi: ['Nel pannello "Portale Casteltech" di Gmail tocca la mail (o cercala).', 'Premi Preventivo, Ordine o Fattura estera (o "Aggiungi a documenti già caricati").', 'Premi "Apri nel portale" e controlla quello che ha letto; con più versioni premi "Dividi per versione".'],
     pagine: [['/preventivi/documenti', 'Documenti del cliente'], ['/ordini/acquisire', 'Ordini → Da acquisire'], ['/amministrazione/fatture-estere', 'Autofatture']],
   },
   {
