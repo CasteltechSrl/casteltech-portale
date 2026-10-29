@@ -19,6 +19,7 @@ import { leggiGenCad } from '../engine/scheda/gencad.js';
 import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerber.js';
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
+import { notaRichiesta } from '../engine/gmail.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 import { BUDGET, conMemoria } from './memoria.js';
@@ -189,7 +190,7 @@ function riquadroSensato(r: Riquadro | null, pp: { lettura: LetturaPickPlace }[]
 export const comprimi = (x: unknown) => gzipSync(Buffer.from(JSON.stringify(x)));
 export const decomprimi = <T>(b: Buffer | null): T | null => b ? JSON.parse(gunzipSync(b).toString('utf8')) as T : null;
 
-export async function creaPacchetto(opz: { nome: string; clienteId: number | null; utenteId: number }): Promise<number> {
+export async function creaPacchetto(opz: { nome: string; clienteId: number | null; utenteId: number | null }): Promise<number> {
   const r = await q1<{ id: number }>(`INSERT INTO pacchetti_scheda (nome, cliente_id, creato_da) VALUES ($1, $2, $3) RETURNING id`, [opz.nome, opz.clienteId, opz.utenteId]);
   return r!.id;
 }
@@ -228,7 +229,7 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
     // i file utili usciti dagli zip diventano file a parte (lo zip poi non si conserva)
     for (const f of file) if (f.conservato !== false && daTenere.has(f.nome) && !presenti.has(f.nome)) await aggiungiFile(id, f.nome, f.dati);
     await q(`UPDATE pacchetti_scheda_file SET dati = ''::bytea WHERE pacchetto_id = $1 AND NOT (nome = ANY($2::text[]))`, [id, [...daTenere]]);
-    await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
+    await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', errore = NULL, file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
       [id, JSON.stringify(el.file), JSON.stringify(el.analisi), comprimi(el.disegno), JSON.stringify(el.fonti)]);
     return el;
   });
@@ -286,6 +287,7 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   }
 
   const note = [`Compilato in automatico dai documenti del cliente «${p.nome}».`,
+    p.email ? notaRichiesta(p.email) : '',
     `Valori presi dai documenti: ${compilati.map(v => `${v.codice} = ${String(v.valore).replace('.', ',')}`).join(', ')}.`,
     daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : ''].filter(Boolean).join('\n');
   const dati = normalizza({

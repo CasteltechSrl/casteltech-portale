@@ -97,6 +97,8 @@ details.blocco { padding: 0; }
 details.blocco > summary { padding: .8rem 1rem; cursor: pointer; font-weight: 650; list-style: none; display: flex; align-items: center; gap: .6rem; }
 details.blocco > summary::before { content: "▸"; color: var(--tenue); transition: transform .15s; }
 details.blocco[open] > summary::before { transform: rotate(90deg); }
+details.email-richiesta { margin-bottom: 1rem; }
+.testo-email { white-space: pre-wrap; font: inherit; margin: 0; padding: 0 1rem 1rem; max-height: 22rem; overflow: auto; }
 details.blocco > summary .conta { font-size: .72rem; background: var(--accento-chiaro); color: var(--accento); padding: .05rem .45rem; border-radius: 99px; }
 .campi-parametri { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .8rem; padding: 0 1rem 1rem; }
 .riga-campi { display: flex; gap: .7rem; flex-wrap: wrap; }

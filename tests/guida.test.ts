@@ -83,3 +83,9 @@ test('guida: AOI visivo e BOM quotata', () => {
   assert.ok(primi('perché è critico', 3).includes('alternative-componenti'));
   assert.ok(primi('scrivere il prezzo a mano di un componente', 3).includes('alternative-componenti'));
 });
+
+test('guida: pulsante di Gmail si trova', () => {
+  assert.ok(primi('mandare una mail al portale', 2).includes('pulsante-gmail'));
+  assert.ok(primi('pulsante gmail preventivo', 2).includes('pulsante-gmail'));
+  assert.ok(primi('richiesta offerta arrivata per email con allegati', 3).includes('pulsante-gmail'));
+});

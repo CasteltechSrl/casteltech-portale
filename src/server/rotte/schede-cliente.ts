@@ -18,6 +18,10 @@ import { paginaStampa, type Protezioni } from '../views/stampa-scheda-cliente.js
 import { chiaveSegnalazione, conAccettate } from '../../engine/scheda/accettate.js';
 
 const ETICHETTE_LIVELLO: Record<Segnalazione['livello'], string> = { errore: 'Da chiarire', avviso: 'Attenzione', info: 'Nota' };
+/** Email della richiesta del cliente (pacchetto mandato dal pulsante di Gmail): mittente, oggetto e testo da leggere. */
+const riquadroEmail = (e: { mittente: string; oggetto: string; data?: string; testo: string } | null) => e ? html`
+  <details class="blocco email-richiesta" open><summary><b>Email del cliente</b> · ${e.mittente}${e.data ? ` · ${e.data}` : ''} · «${e.oggetto}»</summary>
+    <pre class="testo-email">${e.testo || '(senza testo)'}</pre></details>` : '';
 const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `${num(Math.max(1, b / 1024), 0)} KB`;
 
 export function rotteSchedeCliente() {
@@ -29,7 +33,7 @@ export function rotteSchedeCliente() {
   r.get('/', async (req, res) => {
     const elenco = await q<any>(`SELECT p.id, p.nome, p.stato, p.creato_il, p.analisi->'conteggi' AS conteggi, p.analisi->'lavorazione' AS lavorazione,
         (SELECT count(*)::int FROM jsonb_array_elements(p.analisi->'segnalazioni') s WHERE s->>'livello' = 'errore' AND NOT p.accettate ? (s->>'livello' || '|' || (s->>'testo'))) AS errori,
-        c.ragione_sociale AS cliente, u.nome AS utente
+        c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
       FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN utenti u ON u.id = p.creato_da
       ORDER BY p.creato_il DESC LIMIT 200`);
     const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -57,7 +61,7 @@ export function rotteSchedeCliente() {
           <td><a href="/preventivi/documenti/${p.id}">${p.nome}</a></td><td>${p.cliente ?? ''}</td><td>${data(p.creato_il)}${p.utente ? html` <small class="nota">${p.utente}</small>` : ''}</td>
           ${p.stato === 'analizzato' ? html`<td>${testoLati(p.lavorazione)}</td><td class="n">${p.conteggi?.smdTop}</td><td class="n">${p.conteggi?.smdBot}</td><td class="n">${p.conteggi?.tht}</td>
             <td>${p.lavorazione?.saldaturaTht ?? ''}</td><td class="n">${p.errori ? html`<span class="livello critico">${p.errori}</span>` : ''}</td>`
-          : html`<td colspan="6" class="nota">caricamento non finito</td>`}
+          : html`<td colspan="6" class="nota">${p.stato === 'in_analisi' ? 'analisi in corso' : 'caricamento non finito'}${p.da_gmail ? ' · da Gmail' : ''}</td>`}
           <td><form method="post" action="/preventivi/documenti/${p.id}/elimina" class="inline" data-conferma="Eliminare questo pacchetto e la sua analisi? I file originali sul Drive non cambiano."><button class="link negativo">Elimina</button></form></td></tr>`)}
         </tbody></table></div>` : html`<p class="vuoto">Nessun pacchetto caricato.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
@@ -113,9 +117,14 @@ export function rotteSchedeCliente() {
     const a: AnalisiScheda | null = p.analisi ? conAccettate(p.analisi, p.accettate) : null;
     const file: FileElenco[] = p.file_elenco ?? [];
     if (!a) return res.send(pag(req, p.nome, html`
-      <div class="intestazione-pagina"><h1>${p.nome}</h1><a href="/preventivi/documenti">← Documenti del cliente</a></div>
-      <p class="vuoto">Il caricamento non è finito.</p>
-      <form method="post" action="/preventivi/documenti/${p.id}/analizza"><button class="primario">Analizza i file caricati</button></form>`));
+      <div class="intestazione-pagina"><h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1><a href="/preventivi/documenti">← Documenti del cliente</a></div>
+      ${p.errore ? html`<p class="avviso">${p.errore}</p>` : ''}
+      ${p.stato === 'in_analisi'
+        ? html`<p class="avviso info">Analisi in corso: ricarica la pagina tra qualche secondo. Se dopo un paio di minuti è ancora così, premi «Analizza di nuovo».</p>`
+        : html`<p class="vuoto">${p.email ? 'Dalla mail non è ancora arrivato nessun documento analizzato.' : 'Il caricamento non è finito.'}</p>`}
+      <form method="post" action="/preventivi/documenti/${p.id}/analizza"><button class="${p.stato === 'in_analisi' ? '' : 'primario'}">${p.stato === 'in_analisi' ? 'Analizza di nuovo' : 'Analizza i file caricati'}</button></form>
+      ${riquadroEmail(p.email)}
+      ${file.length ? html`<h2>File</h2><ul>${file.map(f => html`<li>${f.nome} <small class="nota">${kb(f.byte)}${f.nota ? ` · ${f.nota}` : ''}</small></li>`)}</ul>` : ''}`));
     const c = a.conteggi, l = a.lavorazione;
     const perLivello = (lv: Segnalazione['livello']) => [...a.segnalazioni.filter(s => s.livello === lv && !s.accettata), ...a.segnalazioni.filter(s => s.livello === lv && s.accettata)];
     res.send(pag(req, p.nome, html`
@@ -129,6 +138,7 @@ export function rotteSchedeCliente() {
           <a href="/preventivi/documenti">← Documenti del cliente</a>
         </div>
       </div>
+      ${riquadroEmail(p.email)}
       <div class="griglia-scheda-cliente">
         <section class="blocco">
           <h2>Per il preventivo</h2>
