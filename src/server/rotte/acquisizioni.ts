@@ -7,6 +7,7 @@ import { q, q1 } from '../db.js';
 import { aggiungiFile, conferma, elabora, salvaProposta, scarta, type PropostaDb } from '../acquisizioni-servizio.js';
 import { iaConfigurata } from '../lettura-ordini-ia.js';
 import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { TIPI_ACQUISIZIONE, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
@@ -125,6 +126,12 @@ export function rotteAcquisizioni() {
       WHERE a.stato IN ('nuovo', 'da_confermare', 'errore') OR a.creato_il > now() - interval '60 days'
       ORDER BY (a.stato IN ('da_confermare', 'errore', 'nuovo')) DESC, a.creato_il DESC LIMIT 200`);
     const daFare = elenco.filter(a => a.stato === 'da_confermare').length;
+    // si scartano solo i file non ancora diventati ordine, DDT, fattura o rientro (quelli confermati non hanno la spunta)
+    const modulo = moduloAzioni({
+      azione: '/ordini/acquisire/azioni', nome: { singolare: 'file', plurale: 'file' },
+      pulsanti: [{ azione: 'scarta', testo: 'Scarta', serve: '1+', pericolo: true,
+        chiedi: 'Scartare {n} file? Non diventano ordini: il contenuto si cancella e resta solo la riga, così non si rilegge dal Drive.' }],
+    });
     res.send(pagina(req.session.utente, 'Da acquisire', 'acquisire', html`
       <section class="blocco">
         <h2>Cartella Google Drive</h2>
@@ -146,16 +153,17 @@ export function rotteAcquisizioni() {
         <output id="esito-acquisizioni" class="nota"></output>
       </section>
       ${daFare ? html`<p><b>${daFare} ${daFare === 1 ? 'ordine da confermare' : 'ordini da confermare'}.</b></p>` : ''}
-      ${elenco.length ? html`<div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Arrivato</th><th>File</th><th>Tipo</th><th>Da</th><th>Cliente / fornitore letto</th><th class="n">Righe</th><th>Stato</th></tr></thead>
+      ${elenco.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
+        <thead><tr>${casellaTutti()}<th>Arrivato</th><th>File</th><th>Tipo</th><th>Da</th><th>Cliente / fornitore letto</th><th class="n">Righe</th><th>Stato</th></tr></thead>
         <tbody>${elenco.map(a => html`<tr class="cliccabile" data-href="/ordini/acquisire/${a.id}">
+          ${a.stato === 'confermato' || a.stato === 'scartato' ? raw('<td class="selezione"></td>') : casella(a.id, a.nome_file)}
           <td class="nowrap">${oraRoma(a.creato_il)}</td><td class="taglia"><a href="/ordini/acquisire/${a.id}">${a.nome_file}</a></td>
           <td>${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</td><td>${a.origine === 'drive' ? 'Drive' : 'caricato'}</td>
           <td class="taglia">${a.cliente}${a.e_ordine === false ? html` <span class="esito verifica">non sembra un ordine</span>` : ''}</td>
           <td class="n">${a.righe || ''}</td>
           <td><span class="stato acq-${a.stato}">${a.tipo === 'ddt' && a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
-            ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>`
-        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: 'acquisizioni.js', avviso: req.query.drive ? String(req.query.drive) : undefined }));
+            ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>${modulo.chiudi}`
+        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: ['acquisizioni.js', 'elenco.js'], avviso: req.query.drive ? String(req.query.drive) : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
   r.post('/drive', async (req, res) => {
@@ -306,6 +314,13 @@ export function rotteAcquisizioni() {
     await q(`UPDATE acquisizioni SET stato = 'nuovo' WHERE id = $1 AND stato IN ('da_confermare', 'errore', 'scartato') AND contenuto IS NOT NULL`, [id]);
     await elabora(id);
     res.redirect(`/ordini/acquisire/${id}`);
+  });
+
+  // azioni dall'elenco sui file spuntati
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    if (req.body?.azione === 'scarta') for (const id of ids) await scarta(id);
+    res.redirect(`/ordini/acquisire${ids.length ? `?msg=${encodeURIComponent(`${ids.length === 1 ? '1 file scartato' : `${ids.length} file scartati`}.`)}` : ''}`);
   });
 
   r.post('/:id/scarta', async (req, res) => {

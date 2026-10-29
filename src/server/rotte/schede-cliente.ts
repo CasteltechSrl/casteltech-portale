@@ -5,6 +5,7 @@
  */
 import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
 import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
@@ -28,10 +29,15 @@ const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `
 export function rotteSchedeCliente() {
   const r = Router();
   const pag = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'preventivi', largo: true, avviso, script: 'schede-cliente.js', contenuto }));
+    String(layout({ titolo, utente: req.session.utente, attiva: 'preventivi', largo: true, avviso, script: ['schede-cliente.js', 'elenco.js'], contenuto }));
 
   // ── elenco e caricamento ──
   r.get('/', async (req, res) => {
+    const modulo = moduloAzioni({
+      azione: '/preventivi/documenti/azioni', nome: { singolare: 'pacchetto', plurale: 'pacchetti' },
+      pulsanti: [{ azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+        chiedi: 'Eliminare {n} pacchett{o|i} e la loro analisi? I file originali sul Drive non cambiano; i preventivi già fatti restano.' }],
+    });
     const elenco = await q<any>(`SELECT p.id, p.nome, p.stato, p.creato_il, p.analisi->'conteggi' AS conteggi, p.analisi->'lavorazione' AS lavorazione,
         (SELECT count(*)::int FROM jsonb_array_elements(p.analisi->'segnalazioni') s WHERE s->>'livello' = 'errore' AND NOT p.accettate ? (s->>'livello' || '|' || (s->>'testo'))) AS errori,
         c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
@@ -56,15 +62,15 @@ export function rotteSchedeCliente() {
         <output id="esito-pacchetto" class="nota"></output>
       </section>
       <h2>Pacchetti caricati</h2>
-      ${elenco.length ? html`<div class="tabella-scorre"><table><thead><tr><th>Nome</th><th>Cliente</th><th>Caricato</th><th>Lati SMD</th>
-        <th class="n">SMD TOP</th><th class="n">SMD BOT</th><th class="n">THT</th><th>Saldatura THT</th><th class="n">Da chiarire</th><th></th></tr></thead><tbody>
-        ${elenco.map(p => html`<tr>
+      ${elenco.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Nome</th><th>Cliente</th><th>Caricato</th><th>Lati SMD</th>
+        <th class="n">SMD TOP</th><th class="n">SMD BOT</th><th class="n">THT</th><th>Saldatura THT</th><th class="n">Da chiarire</th></tr></thead><tbody>
+        ${elenco.map(p => html`<tr class="cliccabile" data-href="/preventivi/documenti/${p.id}">
+          ${casella(p.id, p.nome)}
           <td><a href="/preventivi/documenti/${p.id}">${p.nome}</a></td><td>${p.cliente ?? ''}</td><td>${data(p.creato_il)}${p.utente ? html` <small class="nota">${p.utente}</small>` : ''}</td>
           ${p.stato === 'analizzato' ? html`<td>${testoLati(p.lavorazione)}</td><td class="n">${p.conteggi?.smdTop}</td><td class="n">${p.conteggi?.smdBot}</td><td class="n">${p.conteggi?.tht}</td>
             <td>${p.lavorazione?.saldaturaTht ?? ''}</td><td class="n">${p.errori ? html`<span class="livello critico">${p.errori}</span>` : ''}</td>`
-          : html`<td colspan="6" class="nota">${p.stato === 'in_analisi' ? 'analisi in corso' : 'caricamento non finito'}${p.da_gmail ? ' · da Gmail' : ''}</td>`}
-          <td><form method="post" action="/preventivi/documenti/${p.id}/elimina" class="inline" data-conferma="Eliminare questo pacchetto e la sua analisi? I file originali sul Drive non cambiano."><button class="link negativo">Elimina</button></form></td></tr>`)}
-        </tbody></table></div>` : html`<p class="vuoto">Nessun pacchetto caricato.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
+          : html`<td colspan="6" class="nota">${p.stato === 'in_analisi' ? 'analisi in corso' : 'caricamento non finito'}${p.da_gmail ? ' · da Gmail' : ''}</td>`}</tr>`)}
+        </tbody></table></div>${modulo.chiudi}` : html`<p class="vuoto">Nessun pacchetto caricato.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
   r.post('/nuovo', async (req, res) => {
@@ -330,6 +336,13 @@ export function rotteSchedeCliente() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const bomId = await bomDelPacchetto(Number(req.params.id), 100, req.session.utente!.id);
     res.redirect(bomId ? `/quotazioni/bom/${bomId}` : `/preventivi/documenti/${req.params.id}`);
+  });
+
+  // azioni dall'elenco sui pacchetti spuntati
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    if (ids.length && req.body?.azione === 'elimina') await q(`DELETE FROM pacchetti_scheda WHERE id = ANY($1)`, [ids]);
+    res.redirect('/preventivi/documenti');
   });
 
   // più versioni nella richiesta del cliente: un pacchetto per versione (Adriano 29/10/2026)

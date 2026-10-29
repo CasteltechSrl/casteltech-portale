@@ -40,6 +40,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Tasto Elimina (Adriano, 26/10/2026: in tutte le sezioni, per le righe inserite per errore): conferma con `data-conferma="testo"`
   sul modulo o sul pulsante (`public/conferma.js`, caricato in ogni pagina); regole in `src/engine/eliminazioni.ts`. Ciò che è già usato
   non si elimina (preventivo con commessa, cliente/prodotto usati, fasi/parametri del catalogo di partenza → spunta "Attiva", utenti che hanno lavorato → "Attivo").
+- Elenchi con spunte (Adriano 29/10/2026; `views/azioni-elenco.ts` + `public/elenco.js`, test in `tests/azioni-elenco.test.ts`): come l'elenco Preventivi,
+  casella su ogni riga e pulsanti in alto a destra (`moduloAzioni`, POST `<sezione>/azioni`). Ci sono in Preventivi, Commesse (Stampa scheda, Rientro,
+  Duplica, Elimina: insieme solo aperte e senza tempi), Ordini (righe; Conferma d'ordine, Segna evase, Stato dai DDT, Elimina = ordini interi; niente
+  Duplica), BOM di Quotazioni, Documenti del cliente, Da acquisire (Scarta), Suggerimenti. Un elenco nuovo con azioni usa lo stesso schema.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 

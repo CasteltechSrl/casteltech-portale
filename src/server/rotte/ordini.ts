@@ -11,9 +11,10 @@ import {
   type Barra, type DaPianificare, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
-import { confermeDellOrdine } from '../conferme-ordine-servizio.js';
+import { confermeDellOrdine, creaConferma } from '../conferme-ordine-servizio.js';
 import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
+import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import type { Utente } from '../views/layout.js';
 
@@ -26,7 +27,7 @@ function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
-export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string } = {}) =>
+export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string | string[] } = {}) =>
   String(layout({ titolo, utente, attiva: 'ordini', largo: true, script: opz.script ?? 'elenco.js', avviso: opz.avviso,
     contenuto: html`<div class="intestazione-pagina"><h1>Ordini clienti</h1></div>${schede(attiva)}${contenuto}` }));
 
@@ -48,16 +49,32 @@ export function rotteOrdini() {
       : righe.sort((a, b) => b.anno - a.anno || b.numero - a.numero);
     const totale = righe.reduce((a, x) => a + x.residuoValore, 0);
     const oggi = oggiRoma();
+    const modulo = moduloAzioni({
+      azione: '/ordini/azioni', nome: { singolare: 'riga', plurale: 'righe', femminile: true }, gruppi: { singolare: 'ordine', plurale: 'ordini' },
+      extra: html`<input type="hidden" name="torna" value="${req.originalUrl}">`,
+      pulsanti: [
+        { azione: 'conferma', testo: "Conferma d'ordine", serve: '1', titolo: "Prepara la conferma d'ordine dell'ordine selezionato (righe di un solo ordine)" },
+        { azione: 'evase', testo: 'Segna evase', serve: '1+', titolo: 'Segna come evase le righe spuntate (consegne non riconosciute dai DDT)',
+          chiedi: 'Segnare come evas{a|e} {n} rig{a|he}? Lo stato si può cambiare di nuovo dalla pagina dell\'ordine o con «Stato dai DDT».' },
+        { azione: 'automatico', testo: 'Stato dai DDT', serve: '1+', titolo: 'Toglie lo stato scritto a mano: la riga torna da evadere, parziale o evasa secondo i DDT' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Elimina gli ordini delle righe spuntate (tutto l\'ordine, con tutte le sue righe)',
+          chiedi: 'Ordini da eliminare: {g}, con TUTTE le loro righe (non solo quelle spuntate). I DDT e le fatture collegate restano, tra le fatture senza ordine.\n\n'
+            + 'Un ordine che viene dal file di Impostazioni → Ordini torna se ricarichi lo stesso file; uno letto dall\'IA torna in Da acquisire.\n\n'
+            + 'Non si può annullare (prima viene salvato un backup).' },
+      ],
+    });
     res.send(pagina(req.session.utente, 'Ordini', vista, html`
       <form class="cerca" method="get">${vista !== 'aperti' ? html`<input type="hidden" name="vista" value="${vista}">` : ''}
         <input name="q" value="${req.query.q ?? ''}" placeholder="Cerca cliente, codice, n° ordine, rif. cliente…" type="search"><button>Cerca</button></form>
       ${tutte.length ? '' : html`<p class="vuoto">Nessun ordine nel portale. Si caricano da <a href="/impostazioni/ordini">Impostazioni → Ordini</a>.</p>`}
+      ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco ordini">
-        <thead><tr><th>Ordine</th><th>Data</th><th>Cliente</th><th>Rif. cliente</th><th>Codice</th><th>Descrizione</th>
+        <thead><tr>${casellaTutti()}<th>Ordine</th><th>Data</th><th>Cliente</th><th>Rif. cliente</th><th>Codice</th><th>Descrizione</th>
           <th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Da fare</th><th class="n">Prezzo</th><th class="n">Valore da evadere</th>
           <th>Arrivo mat.</th><th>Consegna richiesta</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(x => html`
           <tr class="cliccabile ${x.tipo === 'servizio' ? 'servizio' : ''} ${x.consegna && x.consegna < oggi && x.residuoQuantita > 0 ? 'scaduta' : ''}" data-href="/ordini/${x.ordineId}">
+            ${casella(x.id, `${x.numero}/${x.anno} ${x.codice ?? x.descrizione ?? ''}`, x.ordineId)}
             <td class="nowrap"><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a></td><td>${data(x.dataOrdine)}</td>
             <td class="taglia">${x.cliente}</td><td>${x.rifCliente}</td><td class="nowrap">${x.codice}</td><td class="taglia">${x.descrizione}</td>
             <td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
@@ -67,8 +84,9 @@ export function rotteOrdini() {
             <td>${data(x.prevista)}</td><td>${ritardo(x.ritardo)}</td>
             <td><span class="stato ${x.stato}">${STATI_ORDINE[x.stato]}</span></td>
           </tr>`)}</tbody>
-        ${righe.length ? html`<tfoot><tr><td colspan="10">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
+        ${righe.length ? html`<tfoot><tr><td colspan="11">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
       </table></div>
+      ${modulo.chiudi}
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
         I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.
         Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum, trasporto) non sono da evadere da sole:
@@ -245,6 +263,37 @@ export function rotteOrdini() {
       </div>`, { avviso: req.query.salvato ? 'Salvato' : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
+  // ── Azioni dall'elenco sulle righe spuntate ──
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    const indietro = /^\/ordini(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : '/ordini';
+    const torna = (msg: string) => res.redirect(conMessaggio(indietro, msg));
+    if (!ids.length) return torna('Seleziona almeno una riga.');
+    const righe = await q<{ id: number; ordine_id: number }>(`SELECT id, ordine_id FROM ordini_righe WHERE id = ANY($1)`, [ids]);
+    const ordini = [...new Set(righe.map(x => x.ordine_id))];
+    if (!righe.length) return torna('Righe non trovate.');
+    const azione = String(req.body?.azione ?? '');
+    if (azione === 'conferma') {
+      if (ordini.length !== 1) return torna("La conferma d'ordine si prepara per un ordine alla volta: spunta righe di un solo ordine.");
+      try {
+        const cid = await creaConferma(ordini[0], req.session.utente?.id ?? null);
+        return res.redirect(`/ordini/${ordini[0]}/conferme/${cid}?msg=${encodeURIComponent('Conferma preparata con le righe e le date dell\'ordine: controlla, correggi e poi Emetti.')}`);
+      } catch (e: any) { return torna(e?.message ?? String(e)); }
+    }
+    if (azione === 'evase' || azione === 'automatico') {
+      await q(`UPDATE ordini_righe SET stato_manuale = $2 WHERE id = ANY($1)`, [righe.map(x => x.id), azione === 'evase' ? 'evaso' : null]);
+      await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = ANY($1)`, [ordini]);
+      return torna(azione === 'evase' ? `${righe.length === 1 ? '1 riga segnata come evasa' : `${righe.length} righe segnate come evase`}.`
+        : `${righe.length === 1 ? '1 riga torna' : `${righe.length} righe tornano`} allo stato calcolato dai DDT.`);
+    }
+    if (azione === 'elimina') {
+      const nomi: string[] = [];
+      for (const id of ordini) { const o = await eliminaOrdine(id); if (o) nomi.push(`${o.numero}/${o.anno}`); }
+      return torna(nomi.length === 1 ? `Ordine ${nomi[0]} eliminato.` : `Eliminati ${nomi.length} ordini: ${nomi.join(', ')}.`);
+    }
+    torna('Azione non riconosciuta.');
+  });
+
   r.post('/:id', async (req, res) => {
     const id = Number(req.params.id);
     const dataO = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
@@ -275,15 +324,8 @@ export function rotteOrdini() {
 
   // ── Elimina (righe inserite per errore) ──
   r.post('/:id/elimina', async (req, res) => {
-    const id = Number(req.params.id);
-    const o = await q1(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
+    const o = await eliminaOrdine(Number(req.params.id));
     if (!o) return res.redirect('/ordini?vista=tutti');
-    await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
-    await transazione(async c => {
-      // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
-      await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);
-      await c.query(`DELETE FROM ordini WHERE id = $1`, [id]);   // righe e consegne vanno via con l'ordine; DDT e fatture restano senza ordine
-    });
     res.redirect(`/ordini?vista=tutti&msg=${encodeURIComponent(`Ordine ${o.numero}/${o.anno} eliminato.`)}`);
   });
 
@@ -296,6 +338,19 @@ export function rotteOrdini() {
 
   r.use(rotteConferme());
   return r;
+}
+
+/** Elimina un ordine con righe e consegne (DDT e fatture restano, senza ordine). Prima un backup. */
+async function eliminaOrdine(id: number): Promise<{ numero: number; anno: number } | null> {
+  const o = await q1<{ numero: number; anno: number }>(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
+  if (!o) return null;
+  await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
+  await transazione(async c => {
+    // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
+    await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);
+    await c.query(`DELETE FROM ordini WHERE id = $1`, [id]);   // righe e consegne vanno via con l'ordine; DDT e fatture restano senza ordine
+  });
+  return o;
 }
 
 /** Le date scritte a mano (non quelle calcolate) della riga. */

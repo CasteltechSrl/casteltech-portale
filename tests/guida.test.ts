@@ -84,6 +84,11 @@ test('guida: AOI visivo e BOM quotata', () => {
   assert.ok(primi('scrivere il prezzo a mano di un componente', 3).includes('alternative-componenti'));
 });
 
+test('guida: spunte e pulsanti negli elenchi (Adriano 29/10/2026)', () => {
+  assert.ok(primi('eliminare più commesse insieme', 3).includes('azioni-elenchi'));
+  assert.ok(primi('spuntare più righe', 2).includes('azioni-elenchi'));
+});
+
 test('guida: pulsante di Gmail si trova', () => {
   assert.ok(primi('mandare una mail al portale', 2).includes('pulsante-gmail'));
   assert.ok(primi('pulsante gmail preventivo', 2).includes('pulsante-gmail'));

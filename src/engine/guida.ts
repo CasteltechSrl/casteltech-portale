@@ -93,11 +93,25 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'eliminare', area: 'inizio', titolo: 'Cosa si può eliminare e cosa no',
     parole: 'elimina cancella cancellare togliere errore sbagliato rimuovere annullare disattiva',
     testo: [
-      'In tutte le sezioni c\'è il tasto Elimina per le righe inserite per errore. Prima di eliminare il portale chiede conferma.',
+      'In tutte le sezioni c\'è il tasto Elimina per le righe inserite per errore. Prima di eliminare il portale chiede conferma. Negli elenchi si possono spuntare più righe ed eliminarle insieme (vedi "Fare un\'operazione su più righe insieme").',
       'Quello che è già usato non si elimina, per non rovinare lo storico: un preventivo con commessa, un cliente o un prodotto usato in preventivi o ordini, le fasi e i parametri del catalogo di partenza, gli utenti che hanno lavorato. In questi casi si toglie la spunta "Attiva" (o "Attivo"): non compaiono più nelle scelte ma lo storico resta.',
       'Le fatture e le note di credito emesse non si eliminano: una fattura sbagliata si storna con una nota di credito. Si elimina solo una bozza.',
     ],
     pagine: [],
+  },
+  {
+    id: 'azioni-elenchi', area: 'inizio', titolo: 'Fare un\'operazione su più righe insieme (caselle di spunta)',
+    parole: 'spunta spuntare casella caselle selezionare selezione seleziona tutti più righe insieme elenco pulsanti azioni multiple elimina duplica senza entrare',
+    testo: [
+      'Negli elenchi di Preventivi, Commesse, Ordini, BOM di Quotazioni, Documenti del cliente, Da acquisire e Suggerimenti ogni riga ha una casella a sinistra: spunti le righe e premi il pulsante in alto a destra, senza aprirle una per una. La casella nell\'intestazione spunta tutto l\'elenco.',
+      'I pulsanti si accendono solo quando servono: quelli che valgono per una riga sola (es. Crea commessa, Stampa scheda, Rientro, Duplica di una commessa, Conferma d\'ordine) restano spenti se ne spunti più di una.',
+      'Commesse: Stampa scheda, Rientro, Duplica (nuova commessa dallo stesso preventivo con quantità, referente e scheda tecnica copiati: numero, ordine e date si scrivono e poi si salva), Elimina. Dall\'elenco si eliminano solo le commesse ancora aperte e senza tempi registrati; le altre si eliminano dalla loro pagina, dove il portale dice quanti tempi si perdono.',
+      'Ordini: l\'elenco mostra le righe degli ordini. Conferma d\'ordine (righe di un solo ordine), Segna evase (consegne che i DDT non riconoscono), Stato dai DDT (toglie lo stato scritto a mano), Elimina: elimina gli ordini interi delle righe spuntate, con tutte le loro righe. Gli ordini non si duplicano: un ordine nuovo arriva sempre dal documento del cliente (Da acquisire).',
+      'BOM: Excel, Elimina. Documenti del cliente: Elimina. Da acquisire: Scarta (i file già diventati ordine, DDT o fattura non hanno la casella). Suggerimenti: Segna fatto, Scarta, Elimina.',
+      'Prima di eliminare o scartare il portale chiede conferma e dice quante righe sono spuntate.',
+    ],
+    passi: ['Apri l\'elenco (es. Commesse).', 'Spunta le righe (o tutte con la casella in alto).', 'Premi il pulsante in alto a destra e conferma.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse'], ['/ordini', 'Ordini'], ['/quotazioni/bom', 'Quotazioni → BOM'], ['/suggerimenti', 'Suggerimenti']],
   },
   {
     id: 'accesso', area: 'inizio', titolo: 'Accesso, ufficio e produzione',
