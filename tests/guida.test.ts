@@ -72,6 +72,8 @@ test('guida: prodotto nuovo dal preventivo si trova', () => {
   assert.ok(primi('prodotto nuovo nel preventivo', 2).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('non trovo il codice nell\'elenco', 3).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('revisione 0', 3).includes('prodotto-nuovo-preventivo'));
+  assert.ok(primi('codici senza cliente', 2).includes('prodotti'));
+  assert.ok(primi('codice non assegnato', 3).includes('prodotti'));
 });
 
 test('guida: AOI visivo e BOM quotata', () => {
@@ -85,4 +87,23 @@ test('guida: AOI visivo e BOM quotata', () => {
 test('guida: spunte e pulsanti negli elenchi (Adriano 29/10/2026)', () => {
   assert.ok(primi('eliminare più commesse insieme', 3).includes('azioni-elenchi'));
   assert.ok(primi('spuntare più righe', 2).includes('azioni-elenchi'));
+});
+
+test('guida: pulsante di Gmail si trova', () => {
+  assert.ok(primi('mandare una mail al portale', 2).includes('pulsante-gmail'));
+  assert.ok(primi('pulsante gmail preventivo', 2).includes('pulsante-gmail'));
+  assert.ok(primi('richiesta offerta arrivata per email con allegati', 3).includes('pulsante-gmail'));
+});
+
+test('guida: versioni della stessa scheda e file aggiunti dopo', () => {
+  assert.ok(primi('dividi per versione', 3).includes('pulsante-gmail'));
+  assert.ok(primi('aggiungere file mancanti', 3).includes('pulsante-gmail'));
+});
+
+test('guida: SMD montati a mano', () => {
+  assert.ok(primi('smd a mano giostra', 3).includes('nuovo-preventivo'));
+});
+
+test('guida: mail .eml nella cartella', () => {
+  assert.ok(primi('mail eml', 3).includes('pulsante-gmail'));
 });

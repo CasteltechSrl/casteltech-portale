@@ -19,6 +19,10 @@ import { leggiGenCad } from '../engine/scheda/gencad.js';
 import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerber.js';
 import { leggiPickPlace, type LetturaPickPlace } from '../engine/scheda/pick-place.js';
 import { propostaProdotto } from '../engine/scheda/prodotto.js';
+import { notaRichiesta } from '../engine/gmail.js';
+import { leggiEmail } from '../engine/acquisizioni.js';
+import { unisciBomDivise } from '../engine/scheda/bom-divise.js';
+import { fileDellaVersione, richiesteDaEmail, versioniDaDividere } from '../engine/scheda/versioni.js';
 import { rigaIntestazione } from '../engine/codifica/bom.js';
 import { CARTELLA_CASTELTECH, CARTELLE_CASTELTECH, CARTELLE_VECCHIE, LAVORATO_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, radiciOdb, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../engine/scheda/scelta-file.js';
 import { BUDGET, conMemoria } from './memoria.js';
@@ -29,7 +33,7 @@ export interface FileElenco { nome: string; tipo: TipoFile; byte: number; usato:
 export interface StratoDisegno extends StratoGerberInfo { defs: string; corpo: string; riquadro: Riquadro | null }
 type ConPiazzole = StratoDisegno & { piazzole: Piazzola[] };
 export interface Disegno { strati: StratoDisegno[]; riquadro: Riquadro | null; forature: { x: number; y: number; d: number; metallizzato: boolean | null }[] }
-export interface Elaborazione { file: FileElenco[]; analisi: AnalisiScheda; disegno: Disegno; fonti: { bom: string | null; pickPlace: string[]; cad: string | null; forature: string[]; gerber: string[] } }
+export interface Elaborazione { file: FileElenco[]; analisi: AnalisiScheda; disegno: Disegno; fonti: { bom: string | null; bomUnite: string[]; pickPlace: string[]; cad: string | null; forature: string[]; gerber: string[] } }
 
 /** Tipi di file che si conservano nel database (compressi) per poter rifare l'analisi. */
 export const TIPI_DA_CONSERVARE: TipoFile[] = ['bom', 'pick-place', 'gerber', 'foratura', 'gencad'];
@@ -79,6 +83,7 @@ const sembraTesto = (b: Buffer) => { const p = b.subarray(0, 4000); let strani =
  * Legge tutti i file del pacchetto e fa l'incrocio. Il nome del pacchetto serve a proporre codice e revisione del prodotto.
  * `giaAperti`: gli zip sono già stati aperti con espandiArchivi (si evita di aprirli due volte).
  */
+const MAIL_CLIENTE = 'mail del cliente: il testo è in cima alla pagina (quantità e versioni)';
 export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto = '', giaAperti = false): Promise<Elaborazione> {
   const file = giaAperti ? caricati : espandiArchivi(caricati);
   const elenco: FileElenco[] = [];
@@ -103,10 +108,11 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
       const tipo = tipoFile(f.nome, null);
       // non caricato perché scelto prima dell'invio (PDF, 3D, troppo grande…) o non conservato dopo l'analisi
       const scelta = sceltaFile(f.nome, f.byte ?? 0);
-      const nota = !scelta.carica ? scelta.motivo : tipo === 'archivio' ? 'contenuto già estratto' : 'non conservato nel portale (resta sul Drive)';
+      const nota = !scelta.carica ? scelta.motivo : tipo === 'archivio' ? 'contenuto già estratto' : /\.eml$/i.test(f.nome) ? MAIL_CLIENTE : 'non conservato nel portale (resta sul Drive)';
       elenco.push({ nome: f.nome, tipo, byte: f.byte ?? 0, usato: false, nota });
       continue;
     }
+    if (/\.eml$/i.test(f.nome)) { elenco.push({ nome: f.nome, tipo: 'altro', byte: f.dati.length, usato: true, nota: MAIL_CLIENTE }); continue; }
     const testo = sembraTesto(f.dati) ? testoDi(f.dati) : null;
     const tipo = tipoFile(f.nome, testo);
     const voce: FileElenco = { nome: f.nome, tipo, byte: f.dati.length, usato: false };
@@ -144,9 +150,13 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
   const refsPp = new Set(pickPlace.flatMap(p => p.lettura.posizioni.map(x => x.ref)));
   const punteggio = (b: { righe: RigaBomScheda[] }) => { const refs = b.righe.flatMap(r => r.designatori); return refs.filter(r => refsPp.has(r)).length * 1000 + refs.length; };
   bomCandidate.sort((a, b) => punteggio(b) - punteggio(a));
-  const bom = bomCandidate[0] ?? null;
+  const prima = bomCandidate[0] ?? null;
+  // BOM divisa in più file con riferimenti diversi (es. SMD e PTH): si uniscono (regola in engine/scheda/bom-divise.ts)
+  const { unite, scartate } = unisciBomDivise(bomCandidate);
+  for (const b of unite.slice(1)) { const v = elenco.find(x => x.nome === b.nome); if (v) { v.usato = true; v.nota = `BOM unita a ${prima!.nome.split(/[\\/]/).pop()} (riferimenti diversi)`; } }
+  for (const b of scartate) { const v = elenco.find(x => x.nome === b.nome); if (v) v.nota = 'altra BOM nel pacchetto: non usata (si usa quella che corrisponde al pick and place)'; }
+  const bom = prima ? { ...prima, righe: unite.flatMap(b => b.righe) } : null;
   for (const v of elenco) if (v.tipo === 'bom' && bom && v.nome === bom.nome) v.usato = true;
-  for (const b of bomCandidate.slice(1)) { const v = elenco.find(x => x.nome === b.nome); if (v) v.nota = 'altra BOM nel pacchetto: non usata (si usa quella che corrisponde al pick and place)'; }
 
   // contorno della scheda: lo strato del contorno, altrimenti il rame
   const veroContorno = unione(strati.filter(s => s.ruolo === 'contorno').map(s => s.riquadro));
@@ -168,7 +178,7 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
     strati: strati.map(({ piazzole: _, ...s }) => s), riquadro: contorno ?? unione(strati.map(s => s.riquadro)),
     forature: forature.flatMap(f => f.foratura.fori).slice(0, 20000),
   };
-  return { file: elenco, analisi, disegno, fonti: { bom: bom?.nome ?? null, pickPlace: pickPlace.map(p => p.nome), cad: cad?.nome ?? null, forature: forature.map(f => f.nome), gerber: strati.map(s => s.nome) } };
+  return { file: elenco, analisi, disegno, fonti: { bom: bom?.nome ?? null, bomUnite: unite.slice(1).map(b => b.nome), pickPlace: pickPlace.map(p => p.nome), cad: cad?.nome ?? null, forature: forature.map(f => f.nome), gerber: strati.map(s => s.nome) } };
 }
 
 function unione(r: (Riquadro | null)[]): Riquadro | null {
@@ -189,7 +199,7 @@ function riquadroSensato(r: Riquadro | null, pp: { lettura: LetturaPickPlace }[]
 export const comprimi = (x: unknown) => gzipSync(Buffer.from(JSON.stringify(x)));
 export const decomprimi = <T>(b: Buffer | null): T | null => b ? JSON.parse(gunzipSync(b).toString('utf8')) as T : null;
 
-export async function creaPacchetto(opz: { nome: string; clienteId: number | null; utenteId: number }): Promise<number> {
+export async function creaPacchetto(opz: { nome: string; clienteId: number | null; utenteId: number | null }): Promise<number> {
   const r = await q1<{ id: number }>(`INSERT INTO pacchetti_scheda (nome, cliente_id, creato_da) VALUES ($1, $2, $3) RETURNING id`, [opz.nome, opz.clienteId, opz.utenteId]);
   return r!.id;
 }
@@ -222,16 +232,31 @@ export async function analizzaPacchetto(id: number): Promise<Elaborazione> {
     const caricati: FileCaricato[] = righe.map(r => r.dati.length ? { nome: r.nome, dati: gunzipSync(r.dati) } : { nome: r.nome, dati: Buffer.alloc(0), byte: r.byte, conservato: false });
     const nome = (await q1<{ nome: string }>(`SELECT nome FROM pacchetti_scheda WHERE id = $1`, [id]))?.nome ?? '';
     const file = espandiArchivi(caricati);
+    await emailDallaCartella(id, file);
     const el = await elaboraPacchetto(file, nome, true);
     const daTenere = new Set(el.file.filter(f => TIPI_DA_CONSERVARE.includes(f.tipo) && !f.nota?.includes('ignorato') && f.nota !== TROPPO_GRANDE).map(f => f.nome));
     const presenti = new Set(righe.map(r => r.nome));
     // i file utili usciti dagli zip diventano file a parte (lo zip poi non si conserva)
     for (const f of file) if (f.conservato !== false && daTenere.has(f.nome) && !presenti.has(f.nome)) await aggiungiFile(id, f.nome, f.dati);
     await q(`UPDATE pacchetti_scheda_file SET dati = ''::bytea WHERE pacchetto_id = $1 AND NOT (nome = ANY($2::text[]))`, [id, [...daTenere]]);
-    await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
+    await q(`UPDATE pacchetti_scheda SET stato = 'analizzato', errore = NULL, file_elenco = $2, analisi = $3, disegno = $4, fonti = $5, analizzato_il = now() WHERE id = $1`,
       [id, JSON.stringify(el.file), JSON.stringify(el.analisi), comprimi(el.disegno), JSON.stringify(el.fonti)]);
     return el;
   });
+}
+
+/**
+ * La mail del cliente salvata come .eml nella cartella (Adriano 29/10/2026: «RFQ_26225 … .eml» insieme ai file): il testo vale come
+ * quello arrivato dal pulsante di Gmail (quantità, versioni, note del preventivo). Solo se il pacchetto non ha già la sua mail.
+ * Gli allegati della mail non si leggono: i file sono già nella cartella.
+ */
+async function emailDallaCartella(id: number, file: FileCaricato[]) {
+  const eml = file.find(f => /\.eml$/i.test(f.nome) && f.dati.length);
+  if (!eml) return;
+  const e = leggiEmail(eml.dati);
+  if (!e.testo && !e.oggetto) return;
+  await q(`UPDATE pacchetti_scheda SET email = $2 WHERE id = $1 AND email IS NULL`, [id, JSON.stringify({
+    mittente: e.mittente.slice(0, 300), oggetto: e.oggetto.slice(0, 300), data: e.data.slice(0, 40), testo: e.testo.slice(0, 20000), messaggioId: e.messaggioId ?? '' })]);
 }
 
 /** Il file della BOM usata, per mandarla alla codifica (sezione Componenti). */
@@ -286,6 +311,7 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   }
 
   const note = [`Compilato in automatico dai documenti del cliente «${p.nome}».`,
+    p.email ? notaRichiesta(p.email) : '',
     `Valori presi dai documenti: ${compilati.map(v => `${v.codice} = ${String(v.valore).replace('.', ',')}`).join(', ')}.`,
     daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : ''].filter(Boolean).join('\n');
   const dati = normalizza({
@@ -329,4 +355,41 @@ export async function quotaBomPacchetto(preventivoId: number, schede: number, ut
   await q(`UPDATE preventivi SET bom_id = $2 WHERE id = $1`, [preventivoId, bomId]);
   const b = await q1<{ nome: string; stato: string; creato_il: string }>(`SELECT nome, stato, creato_il FROM bom_analisi WHERE id = $1`, [bomId]);
   return { bomId, nome: b!.nome, stato: b!.stato, creatoIl: b!.creato_il };
+}
+
+// ───────────────────────────── versioni della stessa scheda ─────────────────────────────
+
+/**
+ * Divide il pacchetto per versione (quantità e versioni lette dalla mail del cliente): un pacchetto figlio per versione con i file
+ * comuni e quelli che nel nome portano la versione, la quantità richiesta e la stessa email. Ritorna gli id dei figli, già analizzati.
+ */
+export async function dividiPerVersioni(id: number, utenteId: number | null): Promise<number[]> {
+  const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
+  if (!p) throw new Error('Pacchetto non trovato.');
+  if (await q1(`SELECT 1 FROM pacchetti_scheda WHERE padre_id = $1`, [id])) throw new Error('Il pacchetto è già diviso per versione.');
+  const versioni = versioniDaDividere(richiesteDaEmail(p.email));
+  if (!versioni.length) throw new Error('Nella mail non ci sono due o più versioni con la loro quantità.');
+  const figli: number[] = [];
+  for (const v of versioni) {
+    const r = await q1<{ id: number }>(`INSERT INTO pacchetti_scheda (nome, cliente_id, creato_da, email, padre_id, versione, quantita)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`, [`${p.nome} – ${v.versione}`.slice(0, 200), p.cliente_id, utenteId, p.email, id, v.versione, v.quantita]);
+    figli.push(r!.id);
+  }
+  await sincronizzaVersioni(id);
+  return figli;
+}
+
+/** Copia nelle versioni i file del pacchetto padre che mancano (file aggiunti dopo la divisione) e le rianalizza. */
+export async function sincronizzaVersioni(padreId: number): Promise<void> {
+  const figli = await q<{ id: number; versione: string }>(`SELECT id, versione FROM pacchetti_scheda WHERE padre_id = $1 AND versione IS NOT NULL ORDER BY id`, [padreId]);
+  if (!figli.length) return;
+  const tutte = figli.map(f => f.versione);
+  const nomi = (await q<{ nome: string }>(`SELECT nome FROM pacchetti_scheda_file WHERE pacchetto_id = $1`, [padreId])).map(f => f.nome);
+  for (const f of figli) {
+    const suoi = nomi.filter(n => fileDellaVersione(n, f.versione, tutte));
+    await q(`INSERT INTO pacchetti_scheda_file (pacchetto_id, nome, byte, dati)
+      SELECT $1, nome, byte, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $2 AND nome = ANY($3::text[])
+      ON CONFLICT (pacchetto_id, nome) DO UPDATE SET byte = EXCLUDED.byte, dati = EXCLUDED.dati`, [f.id, padreId, suoi]);
+    await analizzaPacchetto(f.id);
+  }
 }

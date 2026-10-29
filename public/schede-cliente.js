@@ -48,6 +48,35 @@
     } catch (e) { esito.textContent = e.message; invia.disabled = false; }
   });
 
+  // ── file arrivati dopo (Adriano 29/10/2026): si aggiungono al pacchetto già caricato, poi si rianalizza (anche le sue versioni) ──
+  const aggiungi = document.getElementById('aggiungi-file');
+  if (aggiungi) aggiungi.addEventListener('click', async () => {
+    const esito = document.getElementById('esito-aggiunti');
+    const file = [...document.getElementById('file-aggiunti').files];
+    if (!file.length) { esito.textContent = 'Scegli prima i file.'; return; }
+    const id = aggiungi.dataset.id;
+    aggiungi.disabled = true;
+    try {
+      const rs = await fetch(`/preventivi/documenti/${id}/scelta`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: file.map(f => ({ nome: f.name, byte: f.size })) }) });
+      const js = await rs.json().catch(() => ({}));
+      if (!rs.ok) throw new Error(js.errore || 'Scelta dei file non riuscita');
+      const daMandare = new Set(js.carica);
+      const utili = file.filter(f => daMandare.has(f.name));
+      let fatti = 0;
+      for (const f of utili) {
+        const rf = await fetch(`/preventivi/documenti/${id}/file?nome=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
+        if (!rf.ok) { const e = await rf.json().catch(() => ({})); throw new Error(`${f.name}: ${e.errore || 'file non caricato'}`); }
+        esito.textContent = `Caricamento: ${++fatti} di ${utili.length}…`;
+      }
+      esito.textContent = 'Analisi dei file…';
+      const ra = await fetch(`/preventivi/documenti/${id}/analizza`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const ja = await ra.json().catch(() => ({}));
+      if (!ra.ok) throw new Error(ja.errore || 'Analisi non riuscita');
+      location.reload();
+    } catch (e) { esito.textContent = e.message; aggiungi.disabled = false; }
+  });
+
   // ── tabella componenti: filtri, ricerca, riga evidenziata ──
   const tabella = document.getElementById('tabella-componenti');
   const filtri = document.getElementById('filtri-componenti');

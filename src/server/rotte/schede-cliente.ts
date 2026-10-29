@@ -8,7 +8,8 @@ import { q, q1 } from '../db.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, scegliFileDaCaricare, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
+import { richiesteDaEmail, versioniDaDividere } from '../../engine/scheda/versioni.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { caricamentoLimitato } from '../memoria.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
@@ -19,6 +20,10 @@ import { paginaStampa, type Protezioni } from '../views/stampa-scheda-cliente.js
 import { chiaveSegnalazione, conAccettate } from '../../engine/scheda/accettate.js';
 
 const ETICHETTE_LIVELLO: Record<Segnalazione['livello'], string> = { errore: 'Da chiarire', avviso: 'Attenzione', info: 'Nota' };
+/** Email della richiesta del cliente (pacchetto mandato dal pulsante di Gmail): mittente, oggetto e testo da leggere. */
+const riquadroEmail = (e: { mittente: string; oggetto: string; data?: string; testo: string } | null) => e ? html`
+  <details class="blocco email-richiesta" open><summary><b>Email del cliente</b> · ${e.mittente}${e.data ? ` · ${e.data}` : ''} · «${e.oggetto}»</summary>
+    <pre class="testo-email">${e.testo || '(senza testo)'}</pre></details>` : '';
 const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `${num(Math.max(1, b / 1024), 0)} KB`;
 
 export function rotteSchedeCliente() {
@@ -35,7 +40,7 @@ export function rotteSchedeCliente() {
     });
     const elenco = await q<any>(`SELECT p.id, p.nome, p.stato, p.creato_il, p.analisi->'conteggi' AS conteggi, p.analisi->'lavorazione' AS lavorazione,
         (SELECT count(*)::int FROM jsonb_array_elements(p.analisi->'segnalazioni') s WHERE s->>'livello' = 'errore' AND NOT p.accettate ? (s->>'livello' || '|' || (s->>'testo'))) AS errori,
-        c.ragione_sociale AS cliente, u.nome AS utente
+        c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
       FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN utenti u ON u.id = p.creato_da
       ORDER BY p.creato_il DESC LIMIT 200`);
     const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
@@ -64,7 +69,7 @@ export function rotteSchedeCliente() {
           <td><a href="/preventivi/documenti/${p.id}">${p.nome}</a></td><td>${p.cliente ?? ''}</td><td>${data(p.creato_il)}${p.utente ? html` <small class="nota">${p.utente}</small>` : ''}</td>
           ${p.stato === 'analizzato' ? html`<td>${testoLati(p.lavorazione)}</td><td class="n">${p.conteggi?.smdTop}</td><td class="n">${p.conteggi?.smdBot}</td><td class="n">${p.conteggi?.tht}</td>
             <td>${p.lavorazione?.saldaturaTht ?? ''}</td><td class="n">${p.errori ? html`<span class="livello critico">${p.errori}</span>` : ''}</td>`
-          : html`<td colspan="6" class="nota">caricamento non finito</td>`}</tr>`)}
+          : html`<td colspan="6" class="nota">${p.stato === 'in_analisi' ? 'analisi in corso' : 'caricamento non finito'}${p.da_gmail ? ' · da Gmail' : ''}</td>`}</tr>`)}
         </tbody></table></div>${modulo.chiudi}` : html`<p class="vuoto">Nessun pacchetto caricato.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
@@ -101,6 +106,7 @@ export function rotteSchedeCliente() {
     if (!/^\d+$/.test(req.params.id)) return next();
     try {
       await analizzaPacchetto(Number(req.params.id));
+      await sincronizzaVersioni(Number(req.params.id));   // file aggiunti dopo la divisione per versione
       if (req.is('application/json')) return res.json({ ok: true });
       res.redirect(`/preventivi/documenti/${req.params.id}`);
     } catch (e: any) {
@@ -118,10 +124,41 @@ export function rotteSchedeCliente() {
     if (!p) return next();
     const a: AnalisiScheda | null = p.analisi ? conAccettate(p.analisi, p.accettate) : null;
     const file: FileElenco[] = p.file_elenco ?? [];
+    const versioni = await q<any>(`SELECT f.id, f.nome, f.versione, f.quantita, f.stato, v.id AS preventivo_id, v.numero AS preventivo_numero, v.stato AS preventivo_stato
+      FROM pacchetti_scheda f LEFT JOIN preventivi v ON v.id = f.preventivo_id WHERE f.padre_id = $1 ORDER BY f.id`, [p.id]);
+    const padre = p.padre_id ? await q1<{ id: number; nome: string }>(`SELECT id, nome FROM pacchetti_scheda WHERE id = $1`, [p.padre_id]) : null;
+    const richieste = richiesteDaEmail(p.email);
+    const daDividere = versioni.length || padre ? [] : versioniDaDividere(richieste);
+    const schedeProposte = p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
+    const riquadroVersioni = html`
+      ${padre ? html`<p class="avviso info">Versione <b>${p.versione}</b> di <a href="/preventivi/documenti/${padre.id}">${padre.nome}</a>: file comuni più quelli con «${p.versione}» nel nome.${p.quantita ? ` Richieste ${p.quantita} schede.` : ''}</p>` : ''}
+      ${richieste.length && !padre ? html`<p class="nota">Richiesta del cliente: ${richieste.map(x => `${x.quantita} pz ${x.descrizione}`).join(' · ')}</p>` : ''}
+      ${daDividere.length ? html`<form method="post" action="/preventivi/documenti/${p.id}/dividi" class="inline"
+          data-conferma="Creare un pacchetto per ogni versione (${daDividere.map(v => v.versione).join(', ')})? I file comuni vanno in tutti, quelli con il nome della versione solo nella sua.">
+          <button class="primario" title="Un pacchetto e un preventivo per ogni versione, con la sua quantità">Dividi per versione: ${daDividere.map(v => `${v.versione} ${v.quantita} pz`).join(' · ')}</button></form>` : ''}
+      ${versioni.length ? html`<table class="dati-scheda"><tbody>${versioni.map(v => html`<tr><th><a href="/preventivi/documenti/${v.id}">${v.versione}</a></th>
+          <td>${v.quantita ? `${v.quantita} pz` : ''}${v.preventivo_id ? html` · preventivo <a href="/preventivi/${v.preventivo_id}">${v.preventivo_numero}</a> <span class="stato ${v.preventivo_stato}">${String(v.preventivo_stato).replace('_', ' ')}</span>`
+            : html` · <a href="/preventivi/documenti/${v.id}">crea il preventivo</a>`}</td></tr>`)}</tbody></table>
+          <p class="nota">I file aggiunti qui vanno anche nelle versioni (quelli con il nome di una versione solo nella sua).</p>` : ''}`;
+    const aggiungiFileForm = html`
+      <details class="blocco"><summary>Aggiungi file a questo pacchetto</summary>
+        <div class="stretto-form">
+          <p class="nota">Per i file arrivati dopo (es. BOM e pick and place in formato testo): si aggiungono a quelli già caricati e il pacchetto si rianalizza.</p>
+          <label>File <input type="file" id="file-aggiunti" multiple></label>
+          <button class="primario" id="aggiungi-file" data-id="${p.id}">Aggiungi e rianalizza</button>
+          <output id="esito-aggiunti" class="nota"></output>
+        </div></details>`;
     if (!a) return res.send(pag(req, p.nome, html`
-      <div class="intestazione-pagina"><h1>${p.nome}</h1><a href="/preventivi/documenti">← Documenti del cliente</a></div>
-      <p class="vuoto">Il caricamento non è finito.</p>
-      <form method="post" action="/preventivi/documenti/${p.id}/analizza"><button class="primario">Analizza i file caricati</button></form>`));
+      <div class="intestazione-pagina"><h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1><a href="/preventivi/documenti">← Documenti del cliente</a></div>
+      ${p.errore ? html`<p class="avviso">${p.errore}</p>` : ''}
+      ${p.stato === 'in_analisi'
+        ? html`<p class="avviso info">Analisi in corso: ricarica la pagina tra qualche secondo. Se dopo un paio di minuti è ancora così, premi «Analizza di nuovo».</p>`
+        : html`<p class="vuoto">${p.email ? 'Dalla mail non è ancora arrivato nessun documento analizzato.' : 'Il caricamento non è finito.'}</p>`}
+      <form method="post" action="/preventivi/documenti/${p.id}/analizza"><button class="${p.stato === 'in_analisi' ? '' : 'primario'}">${p.stato === 'in_analisi' ? 'Analizza di nuovo' : 'Analizza i file caricati'}</button></form>
+      ${riquadroEmail(p.email)}
+      ${riquadroVersioni}
+      ${aggiungiFileForm}
+      ${file.length ? html`<h2>File</h2><ul>${file.map(f => html`<li>${f.nome} <small class="nota">${kb(f.byte)}${f.nota ? ` · ${f.nota}` : ''}</small></li>`)}</ul>` : ''}`, req.query.errore ? String(req.query.errore) : undefined));
     const c = a.conteggi, l = a.lavorazione;
     const perLivello = (lv: Segnalazione['livello']) => [...a.segnalazioni.filter(s => s.livello === lv && !s.accettata), ...a.segnalazioni.filter(s => s.livello === lv && s.accettata)];
     res.send(pag(req, p.nome, html`
@@ -135,13 +172,16 @@ export function rotteSchedeCliente() {
           <a href="/preventivi/documenti">← Documenti del cliente</a>
         </div>
       </div>
+      ${riquadroEmail(p.email)}
+      ${aggiungiFileForm}
       <div class="griglia-scheda-cliente">
         <section class="blocco">
           <h2>Per il preventivo</h2>
-          ${p.preventivo_id
+          ${riquadroVersioni}
+          ${versioni.length ? '' : p.preventivo_id
             ? html`<p class="avviso info">Preventivo <a href="/preventivi/${p.preventivo_id}">${p.preventivo_numero}</a> <span class="stato ${p.preventivo_stato}">${p.preventivo_stato.replace('_', ' ')}</span></p>`
             : html`<form method="post" action="/preventivi/documenti/${p.id}/preventivo" class="crea-preventivo">
-                <label>Schede da quotare <input name="schede" inputmode="numeric" value="100" required></label>
+                <label>Schede da quotare <input name="schede" inputmode="numeric" value="${schedeProposte}" required></label>
                 <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare">Crea il preventivo da validare</button></form>`}
           <table class="dati-scheda"><tbody>
             ${a.prodotto ? html`<tr><th>Prodotto letto dai file <small class="nota">(da convalidare)</small></th><td>${[
@@ -220,7 +260,7 @@ export function rotteSchedeCliente() {
           <td>${f.usato ? '✓' : ''}</td><td class="nota-file">${f.nota ?? ''}</td></tr>`)}
       </tbody></table></div>
       <p class="nota">Analizzato il ${data(p.analizzato_il)}. Il codice Casteltech dei componenti senza codice del cliente si ottiene con «Codifica la BOM»
-        (sezione Quotazioni). Il preventivo compilato in automatico e le rotazioni per le macchine arriveranno nei prossimi passi.</p>`));
+        (sezione Quotazioni). Il preventivo compilato in automatico e le rotazioni per le macchine arriveranno nei prossimi passi.</p>`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
   // disegno: JSON compresso così com'è salvato (gli strati Gerber in SVG e i fori), più le posizioni dei componenti
@@ -241,7 +281,11 @@ export function rotteSchedeCliente() {
     const schede = Math.round(Number(String(req.body.schede ?? '').replace(',', '.')));
     if (!(schede > 0)) return res.redirect(`/preventivi/documenti/${req.params.id}`);
     const esistente = await q1<{ preventivo_id: number | null }>(`SELECT preventivo_id FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
-    if (esistente?.preventivo_id) return res.redirect(`/preventivi/${esistente.preventivo_id}`);
+    // già creato (pagina vecchia rimasta aperta, doppio clic): si riapre quello, con le schede scritte qui se è ancora da validare
+    if (esistente?.preventivo_id) {
+      await q(`UPDATE preventivi SET n_schede = $2 WHERE id = $1 AND stato = 'da_validare'`, [esistente.preventivo_id, schede]);
+      return res.redirect(`/preventivi/${esistente.preventivo_id}`);
+    }
     try { res.redirect(`/preventivi/${await creaPreventivoDaPacchetto(Number(req.params.id), schede, req.session.utente!.id)}`); }
     catch (e: any) { res.redirect(`/preventivi/documenti?errore=${encodeURIComponent(e.message)}`); }
   });
@@ -299,6 +343,13 @@ export function rotteSchedeCliente() {
     const ids = idsSpuntati(req.body);
     if (ids.length && req.body?.azione === 'elimina') await q(`DELETE FROM pacchetti_scheda WHERE id = ANY($1)`, [ids]);
     res.redirect('/preventivi/documenti');
+  });
+
+  // più versioni nella richiesta del cliente: un pacchetto per versione (Adriano 29/10/2026)
+  r.post('/:id/dividi', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    try { await dividiPerVersioni(Number(req.params.id), req.session.utente!.id); res.redirect(`/preventivi/documenti/${req.params.id}`); }
+    catch (e: any) { res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent(e.message)}`); }
   });
 
   r.post('/:id/elimina', async (req, res, next) => {
