@@ -70,8 +70,11 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
     const ruolo: RuoloStrato = numerato[1] === 'CU' ? 'rame' : ['SO', 'SM'].includes(numerato[1]) ? 'maschera' : ['PA', 'SP'].includes(numerato[1]) ? 'pasta' : 'serigrafia';
     return { ruolo, lato: numerato[2] === '1' ? 'TOP' : 'BOT' };
   }
-  const lato: Lato | null = /(^|[^A-Z])(TOP|F)([^A-Z]|$)|_TOP|TOP_|^T[A-Z]{1,2}$|[_-]F[_.]|^F_|SST|SMT|SPT|PASTA_TOP|LATO_?A/.test(n) || /^[A-Z]{0,3}CP?Z$/.test(n) ? 'TOP'
-    : /(^|[^A-Z])(BOT|BOTTOM|B)([^A-Z]|$)|_BOT|BOTTOM|[_-]B[_.]|^B_|SSB|SMB|SPB|PASTA_BOT|LATO_?B/.test(n) || /^[A-Z]{0,3}SP?Z$/.test(n) ? 'BOT' : null;
+  // nomi attaccati di CAM350 (LPS 30/10/2026): pastetop, masktop, silktop, maskbot, pastebot
+  const latoAttaccato: Lato | null = /^(PASTE|MASK|SILK|SOLDER|SOLDERMASK|SOLDERPASTE|COPPER|LEGEND)TOP$/.test(n) ? 'TOP'
+    : /^(PASTE|MASK|SILK|SOLDER|SOLDERMASK|SOLDERPASTE|COPPER|LEGEND)(BOT|BOTTOM)$/.test(n) ? 'BOT' : null;
+  const lato: Lato | null = latoAttaccato ?? (/(^|[^A-Z])(TOP|F)([^A-Z]|$)|_TOP|TOP_|^T[A-Z]{1,2}$|[_-]F[_.]|^F_|SST|SMT|SPT|PASTA_TOP|LATO_?A/.test(n) || /^[A-Z]{0,3}CP?Z$/.test(n) ? 'TOP'
+    : /(^|[^A-Z])(BOT|BOTTOM|B)([^A-Z]|$)|_BOT|BOTTOM|[_-]B[_.]|^B_|SSB|SMB|SPB|PASTA_BOT|LATO_?B/.test(n) || /^[A-Z]{0,3}SP?Z$/.test(n) ? 'BOT' : null);
   // (file dei fornitori italiani: lcz/lsz rame lato componenti/saldature, mcz/msz maschere, palcz/palsz pasta, scz/ssz serigrafie)
   if (/OUTLINE|EDGE[_ ]?CUTS|BOARD[_ ]?SHAPE|PROFILE|CONTORNO|ROUT|KEEP-?OUT|BORDO|MECHANICAL ?1\b/.test(n)) return { ruolo: 'contorno', lato: null };
   if (/DRILL|FORAT|NCDRILL|DRL|DRILL_?DRAWING|FAB/.test(n)) return { ruolo: 'foratura', lato: null };
@@ -80,7 +83,7 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
   if (/SILK|SERIGRAF|OVERLAY|LEGEND|^SS[TB]$|SS[TB]$|^S[CS]Z$|ASSEMBLY/.test(n)) return { ruolo: 'serigrafia', lato };
   // PADS numera gli strati: L1_TOP e L4_BOTTOM sono i rami esterni, L2, L3 gli interni
   if (/^L\d+[_-]?(TOP|BOT|BOTTOM)$/.test(n)) return { ruolo: 'rame', lato };
-  if (/INNER|INTERN|NEGATIVE|PLANE|^L\d+|IN\d|_L[2-9]|^L[2-9]PZ/.test(n)) return { ruolo: 'interno', lato: null };
-  if (/COPPER|RAME|ETCH|SIGNAL|^TOP$|^BOTTOM$|_TOP$|_BOTTOM$|_TOP_|_BOTTOM_|F_CU|B_CU|^L[CS]Z$/.test(n)) return { ruolo: 'rame', lato };
+  if (/INNER|INTERN|NEGATIVE|PLANE|^L\d+|IN\d|^INT\d+$|_L[2-9]|^L[2-9]PZ/.test(n)) return { ruolo: 'interno', lato: null };
+  if (/COPPER|RAME|ETCH|SIGNAL|^TOP$|^BOTTOM$|_TOP$|_BOTTOM$|_TOP_|_BOTTOM_|F_CU|B_CU|^L[CS]Z$|^BOT$/.test(n)) return { ruolo: 'rame', lato };
   return { ruolo: 'altro', lato };
 }

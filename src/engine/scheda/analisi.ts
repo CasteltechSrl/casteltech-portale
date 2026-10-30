@@ -90,6 +90,8 @@ const RE_SMD = /^(SMD|SMT|SM|SURFACE ?MOUNT)$/i;
 const RE_THT = /^(THT|PTH|TH|THROUGH ?HOLE|TRADIZIONALE)$/i;
 const RE_NON_MONTATO = /^(NO|N|NM|DNP|DNF|DNI|NON MONTARE|NON MONTATO|NOT MOUNTED|NOT FITTED|NO MOUNT|NOPOP|FALSE|0)$/i;
 const RE_VALORE_DNP = /^(DNP|DNF|DNI|NM|N\.M\.|NON MONTARE|NOT ?MOUNTED|NOT ?FITTED|NO ?POP)$/i;
+/** Nota della BOM che dice di non montare (LPS VariBase Top ridotta, 30/10/2026: colonna "Note" = "Non Montare"). */
+const RE_NOTA_DNP = /(^|[^A-Z])(NON ?MONTAR[EI]|NON ?MONTATO|DA NON MONTARE|DNP|DNF|DNI|NOT ?MOUNTED|NOT ?FITTED|DO NOT (MOUNT|FIT|POPULATE)|NO ?POP)([^A-Z]|$)/i;
 /** Descrizione che dichiara il montaggio in testa (Elemaster: "SMD RES. 4,7KOHM 0805", "SMD IC LM358 SO8"). */
 const RE_DESCR_SMD = /^(SMD|SMT)\b/i;
 /** Righe che non sono componenti da montare: meccanica, consumabili, imballo, documenti (Adriano 29/10/2026, BOM Elemaster). */
@@ -140,7 +142,7 @@ export function leggiBomScheda(grezze: string[][]): { righe: RigaBomScheda[]; co
       quantita: cella(idx(mappa.quantita)) && Number.isFinite(q) ? q : null,
       pn, produttore, valore, footprint: cella(idx(mappa.footprint)), descrizione,
       montaggio,
-      montato: !(montatoTesto && RE_NON_MONTATO.test(montatoTesto)) && !RE_VALORE_DNP.test(valore),
+      montato: !(montatoTesto && RE_NON_MONTATO.test(montatoTesto)) && !RE_VALORE_DNP.test(valore) && !RE_NOTA_DNP.test(cella(iNote)),
       note: [cella(iNote), cella(iNote2)].filter(Boolean).join(' · '),
       ...(montaggioDa ? { montaggioDa } : {}), ...(accessorio ? { accessorio } : {}), ...(dopoOnda ? { dopoOnda } : {}),
     };
@@ -258,7 +260,10 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   for (const ref of [...tutti].sort(ordinaRef)) {
     const b = bomPerRef.get(ref), p = pp.get(ref), c = cad.get(ref);
     const note: string[] = [];
-    const montato = b ? b.montato : true;
+    // con la BOM, chi è solo nel pick and place non si monta (connettori a pettine, punti di test, piazzole per cavi: LPS 30/10/2026);
+    // resta l'errore "non sono nella BOM" per farlo controllare
+    const soloPp = haBom && !b && !!p && !c;
+    const montato = b ? b.montato : !soloPp;
     // tipo SMD/THT: CAD > pick and place "_TH_" > BOM > impronta > SMD
     let tipo: 'SMD' | 'THT', tipoDa: Componente['tipoDa'];
     const daImpronta = tipoDaImpronta(`${p?.footprint ?? ''} ${p?.valore ?? ''} ${b?.footprint ?? ''} ${c?.impronta ?? ''}`);
@@ -273,6 +278,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     const caseB = b ? caseDi(`${b.footprint} ${b.valore}`) : null, caseP = p ? caseDi(`${p.footprint} ${p.valore}`) : null;
     if (caseB && caseP && caseB !== caseP && montato) note.push(`case diverso: BOM ${caseB}, pick and place ${caseP}`);
     if (b && !montato && p) note.push('non montato (BOM) ma presente nel pick and place');
+    if (soloPp) note.push('non è nella BOM: non contato tra i componenti da montare');
     if (c && p && (c.lato !== p.lato)) note.push(`lato diverso: CAD ${c.lato}, pick and place ${p.lato}`);
     componenti.push({
       ref, lato: p?.lato ?? c?.lato ?? (tipo === 'THT' ? 'TOP' : null), tipo, tipoDa, montato,
@@ -318,7 +324,11 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
       caseAtteso: (c.bom ? caseDi(`${c.bom.footprint} ${c.bom.valore} ${c.bom.descrizione}`) : null) ?? caseDi(`${c.pp!.footprint} ${c.pp!.valore}`) ?? '',
     })).filter(c => c.caseAtteso);
     const esiti = controllaPiazzole(chip, ing.piazzole);
-    const misurati = esiti.filter(e => e.misura), diversi = esiti.filter(e => e.ok === false);
+    const misurati = esiti.filter(e => e.misura);
+    // piazzole trovate per pochi componenti (coordinate di una scheda sola su un Gerber a pannello, LPS VariBase Main 30/10/2026):
+    // il confronto non è affidabile e non si segnala
+    const affidabile = esiti.length < 5 || misurati.length >= esiti.length * 0.3;
+    const diversi = affidabile ? esiti.filter(e => e.ok === false) : [];
     controlloPiazzole = { controllati: esiti.length, misurati: misurati.length, diversi: diversi.length };
     for (const e of diversi) {
       const k = componenti.find(c => c.ref === e.ref)!;
