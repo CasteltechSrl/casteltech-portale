@@ -34,6 +34,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Un'anagrafica nuova si aggiunge come altro tasto qui. I vecchi indirizzi /impostazioni/anagrafiche e /impostazioni/fornitori portano qui.
 
 ## Come lavorare
+- Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).
+  Se tocca formule economiche, preventivi salvati o anagrafiche, chiedi conferma ad Adriano prima di scrivere codice; il resto si fa e si pubblica dopo i test.
+  Alla fine un riepilogo in italiano di cosa cambia per chi usa il portale (pagine, pulsanti, cosa fare di diverso), non l'elenco dei file.
+  Quando Adriano corregge un modo di lavorare, la correzione si scrive qui (o nella memoria del progetto, se vale solo per un caso).
 - Struttura database: mai modificare un file già esistente in `db/migrazioni/`; aggiungerne uno nuovo (`002_...sql`).
 - Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
   nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
