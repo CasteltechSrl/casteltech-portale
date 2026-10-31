@@ -17,7 +17,20 @@ export interface DatiPdfConferma {
     partita_iva?: string | null; codice_fiscale?: string | null; codice_sdi?: string | null; pec?: string | null };
   rifCliente?: string | null; dataRif?: string | null; pagamento?: string | null; note?: string | null;
   righe: RigaConferma[];
+  /** testi che cambiano tra conferma d'ordine e ordine a fornitore (stesso impaginato) */
+  modello?: ModelloPdf;
 }
+
+export interface ModelloPdf { titolo: string; destinatario: string; rif: string; firma: string; piede: string; bozza: string; iban: boolean; nomeDocumento: string }
+export const MODELLO_CONFERMA: ModelloPdf = {
+  titolo: "CONFERMA D'ORDINE", destinatario: 'DESTINATARIO', rif: 'VOSTRO ORDINE', firma: 'Per accettazione del cliente', piede: "Conferma d'ordine",
+  bozza: 'BOZZA - NON VALIDA COME CONFERMA', iban: true, nomeDocumento: "Conferma d'ordine",
+};
+/** Ordine a fornitore (Adriano 31/10/2026): stesso impaginato; niente IBAN di Casteltech (paghiamo noi), firma del fornitore. */
+export const MODELLO_ORDINE_FORNITORE: ModelloPdf = {
+  titolo: 'ORDINE A FORNITORE', destinatario: 'FORNITORE', rif: 'VOSTRA OFFERTA', firma: 'Per accettazione del fornitore', piede: 'Ordine a fornitore',
+  bozza: 'BOZZA - NON VALIDO COME ORDINE', iban: false, nomeDocumento: 'Ordine a fornitore',
+};
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
 const VERDE_CHIARO = rgb(0xe8 / 255, 0xf3 / 255, 0xf0 / 255);
@@ -35,8 +48,9 @@ async function caricaLogo(): Promise<Buffer | null> {
 }
 
 export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
+  const m = d.modello ?? MODELLO_CONFERMA;
   const doc = await PDFDocument.create();
-  doc.setTitle(`Conferma d'ordine ${d.numero ?? 'bozza'}/${d.anno}`);
+  doc.setTitle(`${m.nomeDocumento} ${d.numero ?? 'bozza'}/${d.anno}`);
   doc.setAuthor(d.azienda.nome);
   doc.setCreator('Portale Casteltech');
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -89,14 +103,14 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
     .forEach((t, i) => scrivi(p, t, L - M, y - 23 - i * 10, { dim: 7.5, colore: GRIGIO, destra: true }));
   y -= 72;
   // titolo a destra: CONFERMA D'ORDINE nr. 12 del 28/10/2026
-  const pezzi: [string, boolean][] = [["CONFERMA D'ORDINE", true], [' nr. ', false], [numeroTesto, true], [' del ', false], [dataIt(d.data), true]];
+  const pezzi: [string, boolean][] = [[m.titolo, true], [' nr. ', false], [numeroTesto, true], [' del ', false], [dataIt(d.data), true]];
   let xt = L - M - pezzi.reduce((s, [t, g]) => s + larghezza(t, g ? grassetto : font, 12), 0);
   for (const [t, g] of pezzi) { scrivi(p, t, xt, y, { f: g ? grassetto : font, dim: 12, colore: g ? NERO : GRIGIO }); xt += larghezza(t, g ? grassetto : font, 12); }
   y -= 12;
   linea(p, M, y, L - M);
   y -= 12;
   const c = d.cliente, meta = (L - 2 * M) / 2;
-  scrivi(p, 'DESTINATARIO', M, y, { dim: 6.5, colore: GRIGIO });
+  scrivi(p, m.destinatario, M, y, { dim: 6.5, colore: GRIGIO });
   const destinatario = [c.indirizzo ?? '', [c.cap, c.comune].filter(Boolean).join(' ') + (c.provincia ? ` (${c.provincia})` : '') + (c.nazione && c.nazione !== 'IT' ? ` · ${c.nazione}` : '')].filter(x => x.trim());
   let yd = y - 12;
   for (const r of aCapo(c.ragione_sociale, meta - 10, grassetto, 10)) { scrivi(p, r, M, yd, { f: grassetto, dim: 10 }); yd -= 12; }
@@ -112,7 +126,7 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   const totale = totaleConferma(d.righe);
   const date = d.righe.map(r => r.consegna).filter((x): x is string => !!x).sort();
   const caselle: [string, string][] = [
-    ['VOSTRO ORDINE', d.rifCliente ? `${d.rifCliente}${d.dataRif ? ` del ${dataIt(d.dataRif)}` : ''}` : '—'],
+    [m.rif, d.rifCliente ? `${d.rifCliente}${d.dataRif ? ` del ${dataIt(d.dataRif)}` : ''}` : '—'],
     [date.length > 1 && date[0] !== date[date.length - 1] ? 'CONSEGNE' : 'CONSEGNA', date.length ? (date[0] === date[date.length - 1] ? dataIt(date[0]) : `dal ${dataIt(date[0])} al ${dataIt(date[date.length - 1])}`) : 'da definire'],
     ['TOTALE ORDINE (IVA ESCLUSA)', euro(totale)],
   ];
@@ -179,13 +193,13 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   p.drawLine({ start: { x: xTot, y }, end: { x: xTot, y: y - altoFondo }, thickness: 0.7, color: LINEA });
   scrivi(p, 'MODALITÀ DI PAGAMENTO', M + 6, y - 11, { dim: 6.5, colore: GRIGIO });
   scrivi(p, d.pagamento || 'Da concordare', M + 6, y - 24, { f: grassetto, dim: 9 });
-  if (d.azienda.iban) scrivi(p, `IBAN ${d.azienda.iban}${d.azienda.banca ? ` · ${d.azienda.banca}` : ''}`, M + 6, y - 36, { dim: 7.5, colore: GRIGIO });
+  if (m.iban && d.azienda.iban) scrivi(p, `IBAN ${d.azienda.iban}${d.azienda.banca ? ` · ${d.azienda.banca}` : ''}`, M + 6, y - 36, { dim: 7.5, colore: GRIGIO });
   scrivi(p, 'TOTALE ORDINE', L - M - 6, y - 11, { dim: 6.5, colore: GRIGIO, destra: true });
   scrivi(p, euro(totale), L - M - 6, y - 30, { f: grassetto, dim: 16, destra: true });
   scrivi(p, 'IVA esclusa', L - M - 6, y - 41, { dim: 7, colore: GRIGIO, destra: true });
   y -= altoFondo + 34;
   const largoFirma = (L - 2 * M - 30) / 2;
-  [[d.azienda.nome, ''], ['Per accettazione del cliente', 'Data, timbro e firma']].forEach(([t, s], i) => {
+  [[d.azienda.nome, ''], [m.firma, 'Data, timbro e firma']].forEach(([t, s], i) => {
     const x = M + i * (largoFirma + 30);
     linea(p, x, y, x + largoFirma, NERO, 0.7);
     scrivi(p, t, x, y - 10, { f: grassetto, dim: 8 });
@@ -194,10 +208,10 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
 
   // ── piede su ogni pagina ──
   pagine.forEach((pg, i) => {
-    scrivi(pg, `Conferma d'ordine nr. ${numeroTesto} del ${dataIt(d.data)}`, M, M - 8, { dim: 7, colore: GRIGIO });
+    scrivi(pg, `${m.piede} nr. ${numeroTesto} del ${dataIt(d.data)}`, M, M - 8, { dim: 7, colore: GRIGIO });
     scrivi(pg, `${d.azienda.nome} · ${d.azienda.email} · ${d.azienda.tel}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
       L - M, M - 8, { dim: 7, colore: GRIGIO, destra: true });
-    if (!d.numero) scrivi(pg, 'BOZZA - NON VALIDA COME CONFERMA', L / 2 - larghezza('BOZZA - NON VALIDA COME CONFERMA', grassetto, 9) / 2, M + 6, { f: grassetto, dim: 9, colore: rgb(0.75, 0.2, 0.2) });
+    if (!d.numero) scrivi(pg, m.bozza, L / 2 - larghezza(m.bozza, grassetto, 9) / 2, M + 6, { f: grassetto, dim: 9, colore: rgb(0.75, 0.2, 0.2) });
   });
   return Buffer.from(await doc.save());
 }

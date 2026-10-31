@@ -43,7 +43,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Elenchi con spunte (Adriano 29/10/2026; `views/azioni-elenco.ts` + `public/elenco.js`, test in `tests/azioni-elenco.test.ts`): come l'elenco Preventivi,
   casella su ogni riga e pulsanti in alto a destra (`moduloAzioni`, POST `<sezione>/azioni`). Ci sono in Preventivi, Commesse (Stampa scheda, Rientro,
   Duplica, Elimina: insieme solo aperte e senza tempi), Ordini (righe; Conferma d'ordine, Segna evase, Stato dai DDT, Elimina = ordini interi; niente
-  Duplica), BOM di Quotazioni, Documenti del cliente, Da acquisire (Scarta), Suggerimenti. Un elenco nuovo con azioni usa lo stesso schema.
+  Duplica), BOM di Quotazioni, Ordini a fornitore (Duplica, Elimina = bozze eliminate, emessi annullati), Documenti del cliente, Da acquisire (Scarta), Suggerimenti. Un elenco nuovo con azioni usa lo stesso schema.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
@@ -218,6 +218,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    ancora (PDF rifatto, stesso numero), bozza si elimina, emessa si annulla. Invio con Gmail (`server/gmail.ts`): account di servizio
    GOOGLE_SERVICE_ACCOUNT + delega di dominio Google Workspace, casella GMAIL_MITTENTE (info@casteltech.net), ambiti gmail.send (+ gmail.readonly per
    trovare la conversazione); risposta all'email dell'ordine (.eml in acquisizioni: Message-ID → In-Reply-To/References). ⬜ Delega da attivare.
+   ✅ Ordini a fornitore (Adriano 31/10/2026: in FIC ~20 al mese, n. 204 del 30/10; `rotte/ordini-fornitore.ts`, `ordini-fornitore-servizio.ts`,
+   `engine/ordini-fornitore.ts`, migrazione 047): Ordini → Ordini a fornitore (`/ordini/fornitori`), documento 'ordine_fornitore' con fornitore SOLO
+   dall'anagrafica; bozza → Emetti (serie 'ordine_fornitore', PDF con `MODELLO_ORDINE_FORNITORE` di `pdf-conferma-ordine.ts`) → Invia con Gmail;
+   arrivo merce per riga (`documenti_righe.arrivati`, caselle `arrivati[pN]`: con i soli numeri qs compatta l'elenco), fattura del fornitore collegata
+   (`documenti.ricevuto_id`), commessa (`commessa_id`). Da Quotazioni → BOM → "Ordina i componenti": una bozza per distributore scelto (`righeOrdineDaBom`,
+   fornitore abbinato per nome `fornitorePerDistributore`) + CSV per il carrello. Avviso finché la numerazione 2026 è sotto il 204 di FIC (allinearla il giorno del passaggio).
+   In FIC molti ordini a Mouser/DigiKey/Anthropic erano fatti DOPO la fattura ("RELATIVO A FATTURA …"): nel portale l'autofattura nasce dalla fattura, non serve.
    ⬜ Script che salva le email d'ordine di info@ nella cartella.
 4d. ✅ CRM (`rotte/crm.ts`, `crm-servizio.ts`, `engine/crm.ts`, migrazione 025): ricerca aziende (nome, città, referenti, telefoni, email, P.IVA),
    scheda con recapiti e referenti, registro attività (telefonata, email, visita, offerta, fiera, nota) con prossima azione e data

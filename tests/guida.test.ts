@@ -50,6 +50,9 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('BOLLA spedita'), ['ddt-acquisiti']);
   assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
   assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));
+  assert.ok(primi('ordine al fornitore', 2).includes('ordini-fornitore'));
+  assert.ok(primi('comprare i componenti da mouser', 2).includes('ordini-fornitore'));
+  assert.ok(primi('merce arrivata dal fornitore', 2).includes('ordini-fornitore'));
   assert.deepEqual(primi('backup'), ['backup']);
   assert.deepEqual(primi('credito anthropic finito', 1), ['servizi']);
   assert.deepEqual(primi('quanti token sto usando', 1), ['servizi']);

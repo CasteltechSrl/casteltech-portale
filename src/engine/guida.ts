@@ -331,6 +331,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini', 'Ordini da evadere']],
   },
   {
+    id: 'ordini-fornitore', area: 'ordini', titolo: 'Ordini a fornitore (componenti, PCB, lavorazioni)',
+    parole: 'fornitore fornitori compera comprare comprato ordinare pcb componenti distributore mouser digikey farnell tme carrello arrivo arrivata arrivati merce',
+    testo: [
+      'Gli ordini che Casteltech fa ai fornitori stanno in Ordini → Ordini a fornitore (prima si facevano in Fatture in Cloud). Il fornitore si sceglie solo dall\'anagrafica: se manca si aggiunge in Anagrafiche → Fornitori.',
+      '"+ Nuovo ordine" crea una bozza: si scrivono le righe (codice del fornitore o P/N, descrizione, quantità, prezzo, consegna richiesta), la vostra offerta, il pagamento e la commessa per cui si compra. Emetti dà il numero (numerazione degli ordini a fornitore) e conserva il PDF; un ordine emesso si corregge ancora (il PDF si rifà con lo stesso numero), ma il fornitore non si cambia più.',
+      'Dalla BOM quotata (Quotazioni → apri la BOM → "Ordina i componenti") il portale prepara una bozza per ogni distributore scelto (DigiKey, Mouser, Farnell, TME) con le quantità già comprensive dello scarto. Il pulsante del carrello scarica codice e quantità da usare sul sito del distributore.',
+      'Quando arriva la merce si scrivono i pezzi arrivati riga per riga ("Tutto arrivato" se è completo): l\'ordine risulta da ricevere, arrivato in parte o arrivato. Quando arriva la fattura dallo SdI la si collega all\'ordine nel riquadro "Fattura del fornitore" (se il totale è diverso dall\'ordine il portale lo dice).',
+      'L\'elenco mostra gli ordini da completare (bozze, merce da ricevere, fattura da collegare); "Tutti" mostra anche quelli finiti. Con le spunte: Duplica (stesse righe, nuova bozza) ed Elimina (le bozze spariscono, gli ordini emessi restano come annullati e il numero non si riusa).',
+      'Il giorno del passaggio da Fatture in Cloud scrivi l\'ultimo numero di FIC in Impostazioni → Amministrazione → Numerazioni (Ordini a fornitore), altrimenti il primo ordine prende il n. 1: il portale lo ricorda con un avviso.',
+    ],
+    passi: ['Ordini → Ordini a fornitore.', 'Scegli il fornitore e premi "+ Nuovo ordine" (o parti dalla BOM: "Ordina i componenti").', 'Scrivi le righe.',
+      'Premi Emetti, poi "Invia con Gmail" o "Apri il PDF" e mandalo dalla posta.', 'Quando arriva la merce: scrivi i pezzi arrivati; poi collega la fattura.'],
+    pagine: [['/ordini/fornitori', 'Ordini a fornitore'], ['/quotazioni', 'Quotazioni (BOM)']],
+  },
+  {
     id: 'ddt-acquisiti', area: 'ordini', titolo: 'DDT spediti: segnare la merce consegnata',
     parole: 'ddt spedizione spedito consegnato evaso parziale bolla documento trasporto',
     testo: [
