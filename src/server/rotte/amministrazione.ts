@@ -11,7 +11,7 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
-import { acquistiPerFornitore } from '../../engine/cruscotto-amministrazione.js';
+import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
@@ -582,19 +582,43 @@ export function rotteAmministrazione() {
     const totale = righe.reduce((s, d) => s + segno(d) * Number(d.imponibile), 0);
     const totaleDaPagare = righe.reduce((s, d) => s + segno(d) * d.da_pagare, 0);
     const oggi = oggiRoma();
+    // riquadro "Scadute da pagare" (Adriano 31/10/2026): sempre tutte, di qualsiasi anno, qualunque sia il filtro
+    const rate = await q<RataDaPagare>(`SELECT s.documento_id, coalesce(f.ragione_sociale, d.intestatario->>'nome', '') AS nome,
+        coalesce(d.numero, '') AS numero, d.tipo, s.data::text AS scadenza, s.importo::float AS importo
+      FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id
+      LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+      WHERE s.pagata_il IS NULL AND s.data < $1::date`, [oggi]);
+    const scadute = fattureScadute(rate, oggi);
+    const filtrato = cerca !== '' || daPagare;
     res.send(pagina(req, 'Fatture fornitori', html`
       <div class="intestazione-pagina"><h1>Amministrazione</h1></div>
       ${menuAmministrazione('ricevuti')}
-      <form class="cerca" method="get">
-        <select name="anno" ${daPagare ? raw('disabled') : ''}>${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
-        <input name="q" value="${cerca}" placeholder="Fornitore o numero">
-        <label class="riga-spunta"><input type="checkbox" name="da_pagare" value="1" ${daPagare ? raw('checked') : ''}> solo da pagare (tutti gli anni)</label>
-        <button>Cerca</button> <a href="/amministrazione/ricevuti/mesi?anno=${anno}">Acquisti per fornitore e mese →</a>
-      </form>
+      <div class="barra-filtro">
+        <form class="filtro-elenco" method="get">
+          <label>Anno<select name="anno" ${daPagare ? raw('disabled title="Con «Solo da pagare» si vedono tutti gli anni"') : ''}>${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select></label>
+          <label class="largo">Cerca<input type="search" name="q" value="${cerca}" placeholder="Nome del fornitore o numero della fattura"></label>
+          <label class="spunta"><input type="checkbox" name="da_pagare" value="1" ${daPagare ? raw('checked') : ''}> Solo da pagare <small>(tutti gli anni)</small></label>
+          <button class="primario">Filtra</button>
+          ${filtrato ? html`<a href="/amministrazione/ricevuti?anno=${anno}">Togli il filtro</a>` : ''}
+        </form>
+        <div class="collegamenti">
+          <a href="/amministrazione/ricevuti/mesi?anno=${anno}">Acquisti per fornitore e mese →</a>
+          ${ambienteAttuale() ? html`<form method="post" action="/amministrazione/ricevuti/scarica" class="inline"><button title="Se una fattura che aspetti non è ancora arrivata">Scarica dallo SdI</button></form>` : ''}
+        </div>
+      </div>
+      <section class="riquadro-scadute ${scadute.fatture.length ? '' : 'tutto-ok'}">
+        ${scadute.fatture.length ? html`
+          <h2>Scadute da pagare <span>${scadute.fatture.length === 1 ? '1 fattura' : `${scadute.fatture.length} fatture`} · ${euro(scadute.totale)}</span></h2>
+          <div class="tabella-scorre corta"><table class="elenco">
+            <thead><tr><th>Scaduta il</th><th class="num">Giorni</th><th>Fornitore</th><th>Numero</th><th class="num">Da pagare</th></tr></thead>
+            <tbody>${scadute.fatture.map(f => html`<tr><td>${data(f.scadenza)}</td><td class="num">${f.giorni}</td><td>${f.nome}</td>
+              <td><a href="/amministrazione/ricevuti/${f.documento_id}">${f.numero || 'senza n.'}</a>${f.rate > 1 ? html` <span class="nota">(${f.rate} rate)</span>` : ''}</td>
+              <td class="num">${euro(f.importo)}</td></tr>`)}</tbody></table></div>
+          <p class="nota">Solo le rate già scadute e non segnate pagate, di tutti gli anni. Aprendo la fattura si segna pagata con data e conto.</p>`
+          : html`<h2>Scadute da pagare</h2><p class="nota">Nessuna fattura fornitore scaduta da pagare.</p>`}
+      </section>
       <p class="nota">${righe.length} documenti${daPagare ? html` · da pagare ${euro(totaleDaPagare)}` : html` · imponibile ${euro(totale)}`}.
         Le fatture elettroniche arrivano da sole dallo SdI (Invoicetronic); lo storico viene da Fatture in Cloud.</p>
-      ${ambienteAttuale() ? html`<form method="post" action="/amministrazione/ricevuti/scarica" class="inline"><button>Scarica dallo SdI</button>
-        <span class="nota">se una fattura che aspetti non è ancora arrivata</span></form>` : ''}
       <div class="tabella-scorre limitata"><table class="elenco">
         <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th><th>Scadenza</th></tr></thead>
         <tbody>${righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">

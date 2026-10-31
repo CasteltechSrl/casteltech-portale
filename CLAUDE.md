@@ -295,7 +295,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    AltriDatiGestionali, bollo virtuale, DatiDDT, cliente estero XXXXXXX, PEC), DDT segnati fatturati; con errori non si emette e il numero non si consuma. Bozza senza errori: "Scarica XML di prova" (numero 0, non consuma la numerazione).
    ✅ Cruscotto (`/amministrazione`, `rotte/cruscotto-amministrazione.ts`, conti in `engine/cruscotto-amministrazione.ts`; Adriano 27/10/2026): fatturato e acquisti
    dell'anno con lo stesso periodo dell'anno prima, grafico per mese, incassi e pagamenti aperti per urgenza (scadute, 7 gg, 30 gg, oltre), DDT da fatturare, bozze.
-   Fatture fornitori (`/amministrazione/ricevuti`): elenco, "solo da pagare", dettaglio; ogni rata (anche delle fatture emesse) si segna incassata/pagata con data e conto.
+   Fatture fornitori (`/amministrazione/ricevuti`): filtro con etichette (anno, cerca, "Solo da pagare") in un riquadro, riquadro "Scadute da pagare"
+   tra filtro ed elenco (Adriano 31/10/2026, `fattureScadute`: rate scadute non pagate di tutti gli anni, note di credito escluse), elenco, dettaglio; ogni rata (anche delle fatture emesse) si segna incassata/pagata con data e conto.
    ✅ Autofatture TD17/18/19 (Adriano 28/10/2026; `engine/autofatture.ts`, `autofatture-servizio.ts`, `rotte/autofatture.ts`, migrazione 039):
    la fattura del fornitore estero (PDF) si carica in Documenti emessi → Autofatture o si mette nella cartella Drive degli ordini (l'IA la riconosce,
    acquisizione tipo 'fattura_estera'); l'IA legge fornitore, numero, data, valuta, tutte le righe. Pagina di controllo `/amministrazione/fatture-estere/:id`:

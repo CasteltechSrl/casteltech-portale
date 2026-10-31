@@ -31,3 +31,22 @@ test('Cruscotto: imponibile per mese, note di credito tolte, stesso periodo dell
   assert.equal(variazione(79, 100), -21);
   assert.equal(variazione(50, 0), null);
 });
+
+test('Fatture fornitori: riquadro "Scadute da pagare" (una riga per fattura, la più vecchia in cima, niente note di credito)', async () => {
+  const { fattureScadute } = await import('../src/engine/cruscotto-amministrazione.js');
+  const oggi = '2026-10-31';
+  const r = fattureScadute([
+    { documento_id: 1, nome: 'MOUSER', numero: '10', tipo: 'fattura', scadenza: '2026-10-15', importo: 100.1 },
+    { documento_id: 1, nome: 'MOUSER', numero: '10', tipo: 'fattura', scadenza: '2026-09-30', importo: 50 },
+    { documento_id: 1, nome: 'MOUSER', numero: '10', tipo: 'fattura', scadenza: '2026-11-30', importo: 70 },   // non ancora scaduta
+    { documento_id: 2, nome: 'TME', numero: '5', tipo: 'fattura', scadenza: '2026-10-31', importo: 20 },         // scade oggi: non ancora
+    { documento_id: 3, nome: 'RS', numero: 'NC1', tipo: 'nota_credito', scadenza: '2026-08-01', importo: 30 },   // nota di credito: fuori
+    { documento_id: 4, nome: 'FARNELL', numero: '7', tipo: 'fattura', scadenza: '2026-08-31', importo: 12.2 },
+  ], oggi);
+  assert.deepEqual(r.fatture.map(f => f.documento_id), [4, 1]);
+  assert.equal(r.fatture[1].importo, 150.1);
+  assert.equal(r.fatture[1].rate, 2);
+  assert.equal(r.fatture[1].scadenza, '2026-09-30');
+  assert.equal(r.fatture[1].giorni, 31);
+  assert.equal(r.totale, 162.3);
+});
