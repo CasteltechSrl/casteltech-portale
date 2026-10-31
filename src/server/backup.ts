@@ -5,10 +5,12 @@
  * - in qualsiasi momento dal pannello Impostazioni → Backup (scarica il file).
  * Ripristino: tools/ripristina-backup.ts
  */
-import { gzipSync } from 'node:zlib';
-import { mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createGzip } from 'node:zlib';
+import { createWriteStream, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { q } from './db.js';
+import { Readable, type Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { pool } from './db.js';
 
 /** Tabelle in ordine di dipendenza (per il ripristino). Le sessioni di login non servono. */
 export const TABELLE_BACKUP = [
@@ -17,16 +19,72 @@ export const TABELLE_BACKUP = [
   'scansioni', 'rilevazioni', 'notifiche', 'segnalazioni', 'analisi_commesse', 'componenti', 'bom_analisi', 'migrazioni_applicate',
 ];
 
-export async function creaBackup(): Promise<Buffer> {
-  const dati: Record<string, unknown[]> = {};
+/** Righe lette dal database per volta: il backup non tiene mai tutto il database in memoria. */
+export const RIGHE_PER_VOLTA = 100;
+
+/** Legge `n` righe della tabella a partire dalla riga `da` (null = la tabella non esiste). */
+export type LettoreTabelle = (tabella: string, da: number, n: number) => Promise<Record<string, unknown>[] | null>;
+
+/**
+ * Testo del backup un pezzo alla volta (stesso formato di sempre, letto da tools/ripristina-backup.ts):
+ * { creato_il, versione: 1, tabelle: { nome: [righe] } }. I file (bytea) diventano testo base64.
+ * 30/10/2026: costruire tutto il JSON in una volta faceva uscire il portale per memoria esaurita (stato 134) alle 20:30.
+ */
+export async function* testoBackup(leggi: LettoreTabelle, creatoIl = new Date().toISOString()): AsyncGenerator<string> {
+  yield `{"creato_il":${JSON.stringify(creatoIl)},"versione":1,"tabelle":{`;
+  let primaTabella = true;
   for (const t of TABELLE_BACKUP) {
-    const esiste = await q(`SELECT to_regclass($1) AS r`, [t]);
-    // i file (bytea) diventano testo base64 per stare nel JSON
-    if (esiste[0]?.r) dati[t] = (await q(`SELECT * FROM ${t}`)).map(r =>
-      Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Buffer.isBuffer(v) ? { __bytea: v.toString('base64') } : v])));
+    let righe = await leggi(t, 0, RIGHE_PER_VOLTA);
+    if (!righe) continue;
+    yield `${primaTabella ? '' : ','}${JSON.stringify(t)}:[`;
+    primaTabella = false;
+    let prima = true;
+    for (let da = 0; righe; ) {
+      if (righe.length) {
+        yield (prima ? '' : ',') + righe.map(r => JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) =>
+          [k, Buffer.isBuffer(v) ? { __bytea: v.toString('base64') } : v])))).join(',');
+        prima = false;
+      }
+      if (righe.length < RIGHE_PER_VOLTA) break;
+      da += RIGHE_PER_VOLTA;
+      righe = await leggi(t, da, RIGHE_PER_VOLTA);
+    }
+    yield ']';
   }
-  const contenuto = { creato_il: new Date().toISOString(), versione: 1, tabelle: dati };
-  return gzipSync(Buffer.from(JSON.stringify(contenuto)));
+  yield '}}';
+}
+
+/**
+ * Scrive il backup compresso in `destinazione` (file o risposta del browser) mentre lo legge. Tutto da una sola
+ * fotografia del database (transazione in sola lettura), così le righe cambiate durante il backup non si mescolano.
+ */
+export async function scriviBackup(destinazione: Writable): Promise<void> {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const leggi: LettoreTabelle = async (t, da, n) => {
+      if (da === 0 && !(await c.query(`SELECT to_regclass($1) AS r`, [t])).rows[0]?.r) return null;
+      return (await c.query(`SELECT * FROM ${t} ORDER BY ctid LIMIT $1 OFFSET $2`, [n, da])).rows;
+    };
+    await pipeline(Readable.from(testoBackup(leggi)), createGzip(), destinazione);
+    await c.query('COMMIT');
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { c.release(); }
+}
+
+/** Backup in un file della cartella: si scrive con un nome provvisorio e si rinomina solo se è completo. */
+async function scriviBackupSuFile(cartella: string, nome: string) {
+  mkdirSync(cartella, { recursive: true });
+  const provvisorio = join(cartella, `in-corso-${nome}`);
+  try {
+    await scriviBackup(createWriteStream(provvisorio));
+    renameSync(provvisorio, join(cartella, nome));
+  } catch (e) {
+    try { unlinkSync(provvisorio); } catch { /* già tolto */ }
+    throw e;
+  }
 }
 
 export const nomeFileBackup = () => `casteltech-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json.gz`;
@@ -35,11 +93,12 @@ async function backupNotturno() {
   const cartella = process.env.BACKUP_DIR;
   if (!cartella) return;
   try {
-    mkdirSync(cartella, { recursive: true });
-    writeFileSync(join(cartella, nomeFileBackup()), await creaBackup());
+    await scriviBackupSuFile(cartella, nomeFileBackup());
     const limite = Date.now() - 30 * 24 * 3600_000;
     for (const f of readdirSync(cartella)) {
-      if (f.startsWith('casteltech-backup-') && statSync(join(cartella, f)).mtimeMs < limite) unlinkSync(join(cartella, f));
+      // anche i file provvisori rimasti da un backup interrotto (più vecchi di un giorno)
+      const vecchio = f.startsWith('in-corso-') ? Date.now() - 24 * 3600_000 : limite;
+      if ((f.startsWith('casteltech-backup-') || f.startsWith('in-corso-')) && statSync(join(cartella, f)).mtimeMs < vecchio) unlinkSync(join(cartella, f));
     }
     console.log('Backup serale salvato');
   } catch (e) {
@@ -51,9 +110,8 @@ async function backupNotturno() {
 export async function salvaBackupSuDisco(motivo: string): Promise<string | null> {
   const cartella = process.env.BACKUP_DIR;
   if (!cartella) return null;
-  mkdirSync(cartella, { recursive: true });
   const nome = nomeFileBackup().replace('.json.gz', `-${motivo}.json.gz`);
-  writeFileSync(join(cartella, nome), await creaBackup());
+  await scriviBackupSuFile(cartella, nome);
   return nome;
 }
 

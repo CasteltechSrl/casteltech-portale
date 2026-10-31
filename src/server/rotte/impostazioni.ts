@@ -9,7 +9,7 @@ import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
 import { layout } from '../views/layout.js';
 import { html, raw, type Raw } from '../views/html.js';
-import { creaBackup, elencoBackup, nomeFileBackup, salvaBackupSuDisco } from '../backup.js';
+import { elencoBackup, nomeFileBackup, salvaBackupSuDisco, scriviBackup } from '../backup.js';
 import { leggiOperatori } from '../../engine/operatori.js';
 import { caricaOperatori } from '../commesse-servizio.js';
 import { caricaPin } from './reparto.js';
@@ -463,11 +463,11 @@ export function rotteImpostazioni() {
         ${copie.map(c => html`<tr><td><code>${c.nome}</code></td><td class="n">${c.kb} KB</td><td><a href="/impostazioni/backup/file/${encodeURIComponent(c.nome)}">Scarica</a></td></tr>`)}
       </tbody></table>` : html`<p class="vuoto">Nessuna copia automatica ancora${process.env.BACKUP_DIR ? '' : ' (cartella backup non configurata)'}.</p>`}`));
   });
+  // il file arriva al browser mentre si legge il database (non tutto in memoria)
   r.post('/backup/scarica', async (_req, res) => {
-    const file = await creaBackup();
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeFileBackup()}"`);
-    res.send(file);
+    await scriviBackup(res).catch(e => { console.error('Backup scaricato NON riuscito', e); res.destroy(); });
   });
   r.get('/backup/file/:nome', (req, res) => {
     const nome = basename(String(req.params.nome));
