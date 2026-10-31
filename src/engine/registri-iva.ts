@@ -16,8 +16,8 @@ const fineMese = (anno: number, mese: number) => new Date(Date.UTC(anno, mese, 0
 const dueCifre = (n: number) => String(n).padStart(2, '0');
 
 /**
- * Periodo dal codice: "M01"…"M12" (mese), "T1"…"T4" (trimestre), "A" (anno). Codice sconosciuto = trimestre di `oggi`.
- * La liquidazione IVA è mensile o trimestrale: lo decide il commercialista, il portale li offre tutti e due.
+ * Periodo dal codice: "M01"…"M12" (mese), "T1"…"T4" (trimestre), "A" (anno). Codice mancante = mese da liquidare (`meseDaLiquidare`),
+ * codice sconosciuto = 1° trimestre. Casteltech liquida l'IVA ogni mese (Adriano, 31/10/2026): il mese è la vista standard.
  */
 export function periodoDa(anno: number, codice: string | undefined, oggi = new Date().toISOString().slice(0, 10)): Periodo {
   const c = String(codice ?? '').toUpperCase();
@@ -27,16 +27,36 @@ export function periodoDa(anno: number, codice: string | undefined, oggi = new D
     return { codice: `M${dueCifre(mese)}`, tipo: 'mese', anno, dal: `${anno}-${dueCifre(mese)}-01`, al: `${anno}-${dueCifre(mese)}-${fineMese(anno, mese)}`, nome: `${MESI[mese - 1]} ${anno}` };
   }
   if (c === 'A') return { codice: 'A', tipo: 'anno', anno, dal: `${anno}-01-01`, al: `${anno}-12-31`, nome: `anno ${anno}` };
-  const tr = t ? Number(t[1]) : (Number(oggi.slice(0, 4)) === anno ? Math.floor((Number(oggi.slice(5, 7)) - 1) / 3) + 1 : 1);
+  if (!c) {
+    const m = meseDaLiquidare(oggi);
+    return periodoDa(anno, m.anno === anno ? m.codice : 'M12', oggi);
+  }
+  const tr = t ? Number(t[1]) : 1;
   const primo = (tr - 1) * 3 + 1, ultimo = primo + 2;
   return { codice: `T${tr}`, tipo: 'trimestre', anno, dal: `${anno}-${dueCifre(primo)}-01`, al: `${anno}-${dueCifre(ultimo)}-${fineMese(anno, ultimo)}`, nome: `${tr}° trimestre ${anno}` };
 }
 
-/** Elenco dei periodi per il menu a tendina (trimestri, mesi, anno). */
+/**
+ * Mese da liquidare oggi: fino al 16 quello prima (si sta preparando il versamento), dopo il 16 il mese in corso.
+ */
+export function meseDaLiquidare(oggi: string): { anno: number; codice: string } {
+  let anno = Number(oggi.slice(0, 4)), mese = Number(oggi.slice(5, 7));
+  if (Number(oggi.slice(8, 10)) <= 16) { mese -= 1; if (!mese) { mese = 12; anno -= 1; } }
+  return { anno, codice: `M${dueCifre(mese)}` };
+}
+
+/** Elenco dei periodi per il menu a tendina (mesi, poi trimestri e anno). */
 export const CODICI_PERIODO: [string, string][] = [
-  ['T1', '1° trimestre'], ['T2', '2° trimestre'], ['T3', '3° trimestre'], ['T4', '4° trimestre'],
-  ...MESI.map((m, i): [string, string] => [`M${dueCifre(i + 1)}`, m[0].toUpperCase() + m.slice(1)]), ['A', 'Anno intero'],
+  ...MESI.map((m, i): [string, string] => [`M${dueCifre(i + 1)}`, m[0].toUpperCase() + m.slice(1)]),
+  ['T1', '1° trimestre'], ['T2', '2° trimestre'], ['T3', '3° trimestre'], ['T4', '4° trimestre'], ['A', 'Anno intero'],
 ];
+
+/** Sabato e domenica → lunedì (le scadenze fiscali che cadono nel fine settimana slittano al primo giorno lavorativo). */
+export function primoGiornoLavorativo(data: string): string {
+  const d = new Date(`${data}T12:00:00Z`);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 // ───────────────────────────── riepilogo IVA del documento ─────────────────────────────
 
@@ -171,6 +191,53 @@ export function liquidazione(vendite: RigaRegistro[], acquisti: RigaRegistro[], 
   const debitoVendite = arrotonda2(iva(vendite) - splitPayment), debitoAutofatture = iva(autofatture), creditoAcquisti = iva(acquisti), creditoAutofatture = debitoAutofatture;
   const debito = arrotonda2(debitoVendite + debitoAutofatture), credito = arrotonda2(creditoAcquisti + creditoAutofatture);
   return { splitPayment, debitoVendite, debitoAutofatture, creditoAcquisti, creditoAutofatture, debito, credito, saldo: arrotonda2(debito - credito) };
+}
+
+// ───────────────────────────── liquidazione mensile ─────────────────────────────
+
+/** Sotto questa cifra l'IVA del mese non si versa: si somma a quella del mese dopo (art. 1 DPR 100/1998). */
+export const MINIMO_VERSAMENTO_IVA = 25.82;
+
+/** Scadenza del versamento dell'IVA del mese: il 16 del mese dopo (luglio: 20 agosto), nel fine settimana il lunedì. */
+export function scadenzaVersamentoIva(anno: number, mese: number): string {
+  const a = mese === 12 ? anno + 1 : anno, m = mese === 12 ? 1 : mese + 1;
+  return primoGiornoLavorativo(`${a}-${dueCifre(m)}-${mese === 7 ? '20' : '16'}`);
+}
+
+/** Codice tributo dell'F24 per l'IVA mensile: 6001 gennaio … 6012 dicembre (acconto di dicembre: 6013). */
+export const codiceTributoIva = (mese: number) => `60${dueCifre(mese)}`;
+
+export interface LiquidazioneMese extends Liquidazione {
+  mese: number; nome: string;
+  /** Riporto dal mese prima: negativo = credito, positivo = IVA sotto i 25,82 € rinviata. */
+  riporto: number;
+  /** Saldo del mese più il riporto. */
+  risultato: number;
+  daVersare: number; scadenza: string; codiceTributo: string;
+  /** Credito che passa al mese dopo (positivo) o IVA rinviata perché sotto il minimo. */
+  creditoRiportato: number; rinviata: number;
+}
+
+/**
+ * Liquidazioni mensili dell'anno fino a `finoAMese`, con il credito che passa da un mese all'altro e l'IVA sotto i 25,82 € rinviata.
+ * Non conosce il credito dell'anno prima (si scrive in `creditoIniziale`) né l'acconto di dicembre (27/12, codice 6013).
+ */
+export function liquidazioniMensili(anno: number, finoAMese: number, vendite: RigaRegistro[], acquisti: RigaRegistro[], autofatture: RigaRegistro[],
+  creditoIniziale = 0): LiquidazioneMese[] {
+  const delMese = (rr: RigaRegistro[], m: number) => rr.filter(r => String(r.data).slice(0, 7) === `${anno}-${dueCifre(m)}`);
+  const esito: LiquidazioneMese[] = [];
+  let riporto = -Math.abs(creditoIniziale);
+  for (let m = 1; m <= finoAMese; m++) {
+    const l = liquidazione(delMese(vendite, m), delMese(acquisti, m), delMese(autofatture, m));
+    const risultato = arrotonda2(l.saldo + riporto);
+    const daVersare = risultato > MINIMO_VERSAMENTO_IVA ? risultato : 0;
+    const rinviata = risultato > 0 && !daVersare ? risultato : 0;
+    const creditoRiportato = risultato < 0 ? -risultato : 0;
+    esito.push({ ...l, mese: m, nome: `${MESI[m - 1]} ${anno}`, riporto, risultato, daVersare, rinviata, creditoRiportato,
+      scadenza: scadenzaVersamentoIva(anno, m), codiceTributo: codiceTributoIva(m) });
+    riporto = risultato > 0 && !daVersare ? risultato : risultato < 0 ? risultato : 0;
+  }
+  return esito;
 }
 
 // ───────────────────────────── controlli ─────────────────────────────

@@ -9,8 +9,8 @@ import { q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
-import { CODICI_PERIODO, NOMI_REGISTRO, nomeVoce, periodoDa, segno, type Registro, type RigaRegistro } from '../../engine/registri-iva.js';
-import { caricaRegistri, excelRegistri, nomeFileRegistri, scriviPacchetto } from '../registri-iva-servizio.js';
+import { CODICI_PERIODO, MINIMO_VERSAMENTO_IVA, NOMI_REGISTRO, meseDaLiquidare, nomeVoce, periodoDa, segno, type Registro, type RigaRegistro } from '../../engine/registri-iva.js';
+import { caricaLiquidazioniMensili, caricaRegistri, excelRegistri, nomeFileRegistri, salvaCreditoIvaIniziale, scriviPacchetto } from '../registri-iva-servizio.js';
 import { controllaVies, soggettiUe, ultimiControlli, ultimoControllo } from '../vies.js';
 import { GIORNI_VALIDITA_VIES, partitaIvaPerVies, statoControllo } from '../../engine/vies.js';
 
@@ -20,7 +20,7 @@ const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, s
 const msg = (req: Request) => (req.query.msg ? String(req.query.msg) : undefined);
 const periodoRichiesta = (req: Request) => {
   const oggi = oggiRoma();
-  return periodoDa(Number(req.query.anno) || Number(oggi.slice(0, 4)), req.query.periodo ? String(req.query.periodo) : undefined, oggi);
+  return periodoDa(Number(req.query.anno) || meseDaLiquidare(oggi).anno, req.query.periodo ? String(req.query.periodo) : undefined, oggi);
 };
 
 function tabellaRegistro(registro: Registro, righe: RigaRegistro[]): Raw {
@@ -48,6 +48,8 @@ export function rotteRegistriIva() {
   r.get('/', async (req, res) => {
     const p = periodoRichiesta(req);
     const d = await caricaRegistri(p);
+    const mensili = await caricaLiquidazioniMensili(p, d);
+    const lm = mensili?.[mensili.length - 1];
     const l = d.liquidazione;
     const anni = Array.from({ length: Number(oggiRoma().slice(0, 4)) - 2024 }, (_, i) => Number(oggiRoma().slice(0, 4)) - i);
     const qs = `anno=${p.anno}&periodo=${p.codice}`;
@@ -69,9 +71,26 @@ export function rotteRegistriIva() {
       <div class="cifre">
         <div class="cifra"><span>IVA a debito</span><b>${euro(l.debito)}</b><small>vendite ${euro(l.debitoVendite)} · autofatture ${euro(l.debitoAutofatture)}${l.splitPayment ? html` · split payment ${euro(l.splitPayment)} non a debito` : ''}</small></div>
         <div class="cifra"><span>IVA a credito</span><b>${euro(l.credito)}</b><small>acquisti ${euro(l.creditoAcquisti)} · autofatture ${euro(l.creditoAutofatture)}</small></div>
-        <div class="cifra"><span>${l.saldo >= 0 ? 'IVA da versare (indicativa)' : 'IVA a credito (indicativa)'}</span><b class="${l.saldo > 0 ? 'negativo' : ''}">${euro(Math.abs(l.saldo))}</b>
-          <small>senza credito precedente, acconto, IVA indetraibile e interessi</small></div>
+        ${lm ? html`<div class="cifra"><span>${lm.daVersare ? html`Da versare entro il ${data(lm.scadenza)}` : lm.creditoRiportato ? 'Credito per il mese dopo' : 'Niente da versare'}</span>
+            <b class="${lm.daVersare ? 'negativo' : ''}">${euro(lm.daVersare || lm.creditoRiportato || lm.rinviata)}</b>
+            <small>${lm.daVersare ? html`F24, codice tributo ${lm.codiceTributo}` : lm.rinviata ? html`sotto ${euro(MINIMO_VERSAMENTO_IVA)}: si somma al mese dopo` : html`saldo del mese ${euro(lm.saldo)}`}${lm.riporto
+              ? html` · ${lm.riporto < 0 ? 'credito' : 'rinviata'} dal mese prima ${euro(Math.abs(lm.riporto))}` : ''}</small></div>`
+          : html`<div class="cifra"><span>${l.saldo >= 0 ? 'Saldo IVA del periodo' : 'Credito IVA del periodo'}</span><b class="${l.saldo > 0 ? 'negativo' : ''}">${euro(Math.abs(l.saldo))}</b>
+            <small>la liquidazione è mensile: scegli un mese per il versamento</small></div>`}
       </div>
+      ${mensili ? html`<details class="non-stampare"${mensili.length > 1 ? '' : raw(' open')}><summary>Liquidazioni mensili ${p.anno} (da gennaio)</summary>
+        <div class="tabella-scorre"><table class="elenco">
+          <thead><tr><th>Mese</th><th class="num">A debito</th><th class="num">A credito</th><th class="num">Dal mese prima</th><th class="num">Da versare</th><th>Entro il</th><th>Codice</th><th class="num">Al mese dopo</th></tr></thead>
+          <tbody>${mensili.map(m => html`<tr><td><a href="/amministrazione/registri?anno=${p.anno}&periodo=M${String(m.mese).padStart(2, '0')}">${m.nome}</a></td>
+            <td class="num">${euro(m.debito)}</td><td class="num">${euro(m.credito)}</td><td class="num">${m.riporto < 0 ? html`credito ${euro(-m.riporto)}` : m.riporto ? html`rinviata ${euro(m.riporto)}` : ''}</td>
+            <td class="num">${m.daVersare ? html`<strong>${euro(m.daVersare)}</strong>` : ''}</td><td>${m.daVersare ? data(m.scadenza) : ''}</td><td>${m.daVersare ? m.codiceTributo : ''}</td>
+            <td class="num">${m.creditoRiportato ? html`credito ${euro(m.creditoRiportato)}` : m.rinviata ? html`rinviata ${euro(m.rinviata)}` : ''}</td></tr>`)}</tbody></table></div>
+        <form method="post" action="/amministrazione/registri/credito-iniziale" class="cerca">
+          <input type="hidden" name="anno" value="${p.anno}"><input type="hidden" name="periodo" value="${p.codice}">
+          <label>Credito IVA dal ${p.anno - 1} (dalla dichiarazione IVA) <input name="credito" inputmode="decimal" value="${mensili[0].riporto ? String(-mensili[0].riporto).replace('.', ',') : ''}" size="10"></label>
+          <button>Salva</button></form>
+        <p class="nota">Il credito passa da un mese all'altro; sotto ${euro(MINIMO_VERSAMENTO_IVA)} non si versa e si somma al mese dopo.
+          Acconto di dicembre (entro il 27/12, codice 6013) e compensazioni nell'F24 restano al commercialista.</p></details>` : ''}
       ${d.controlli.length ? html`<h2>Da controllare (${d.controlli.length})</h2><ul class="segnalazioni">${d.controlli.map(c => html`<li>${c}</li>`)}</ul>` : ''}
       <h2>Riepilogo per aliquota</h2>
       <div class="tabella-scorre"><table class="elenco">
@@ -92,11 +111,18 @@ export function rotteRegistriIva() {
         e i file XML delle fatture emesse e ricevute del periodo.</p>`, msg(req), 'stampa.js'));
   });
 
+  r.post('/credito-iniziale', async (req, res) => {
+    const anno = Number(req.body?.anno), credito = Number(String(req.body?.credito ?? '').replace(/\./g, '').replace(',', '.')) || 0;
+    if (!anno) return res.redirect('/amministrazione/registri');
+    await salvaCreditoIvaIniziale(anno, credito);
+    res.redirect(`/amministrazione/registri?anno=${anno}&periodo=${encodeURIComponent(String(req.body?.periodo ?? 'M01'))}&msg=${encodeURIComponent(`Credito IVA dal ${anno - 1} salvato.`)}`);
+  });
+
   r.get('/excel', async (req, res) => {
     const p = periodoRichiesta(req);
     const d = await caricaRegistri(p);
     const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
-    const file = await excelRegistri(d, azienda);
+    const file = await excelRegistri(d, azienda, await caricaLiquidazioniMensili(p, d));
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeFileRegistri(p, 'xlsx')}"`);
     res.send(file);
@@ -106,7 +132,7 @@ export function rotteRegistriIva() {
     const p = periodoRichiesta(req);
     const d = await caricaRegistri(p);
     const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
-    await scriviPacchetto(res, d, await excelRegistri(d, azienda));
+    await scriviPacchetto(res, d, await excelRegistri(d, azienda, await caricaLiquidazioniMensili(p, d)));
   });
 
   return r;

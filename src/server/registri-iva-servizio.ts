@@ -11,7 +11,7 @@ import { q, q1 } from './db.js';
 import { caricaAliquote } from './amministrazione-servizio.js';
 import { siglaNazione } from '../engine/amministrazione.js';
 import {
-  NOMI_REGISTRO, STATI_ESCLUSI, controlliRegistro, liquidazione, nomeVoce, numeriMancanti, numeroRegistro, protocolla, riepilogoDocumento, riepilogoRegistro,
+  NOMI_REGISTRO, STATI_ESCLUSI, controlliRegistro, liquidazione, liquidazioniMensili, type LiquidazioneMese, nomeVoce, numeriMancanti, numeroRegistro, protocolla, riepilogoDocumento, riepilogoRegistro,
   segno, type Liquidazione, type Periodo, type Registro, type RigaRegistro,
 } from '../engine/registri-iva.js';
 
@@ -45,7 +45,8 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
         coalesce(nullif(r.intestatario->>'paese', ''), nullif(r.intestatario->>'nazione', ''), f.paese, 'IT') AS paese,
         CASE WHEN r.data BETWEEN $2 AND $3 THEN ${RIEPILOGO_XML('r.xml')} END AS riepilogo_xml
       FROM documenti_ricevuti r LEFT JOIN fornitori_anagrafica f ON f.id = r.fornitore_id
-      WHERE extract(year FROM r.data)::int = $1`, [periodo.anno, periodo.dal, periodo.al]),
+      WHERE extract(year FROM r.data)::int = $1
+        AND (r.elettronica OR r.imposta <> 0)   -- spese senza fattura (scontrini, affitto, polizze): fuori dal registro IVA`, [periodo.anno, periodo.dal, periodo.al]),
     q<{ tipo: string; sezionale: string; numeri: number[] }>(`SELECT tipo, sezionale, array_agg(numero) AS numeri FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito', 'autofattura') AND anno = $1 AND numero IS NOT NULL AND data <= $2 GROUP BY tipo, sezionale`, [periodo.anno, periodo.al]),
     q(`SELECT numero, sezionale, data FROM documenti WHERE tipo IN ('fattura', 'nota_credito', 'autofattura') AND stato = 'scartato' AND data BETWEEN $1 AND $2`, [periodo.dal, periodo.al]),
@@ -84,13 +85,34 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
   };
 }
 
+// ───────────────────────────── liquidazione mensile ─────────────────────────────
+
+/** Credito IVA dell'anno prima (scritto dall'ufficio, dalla dichiarazione IVA): parte da lì la liquidazione di gennaio. */
+export async function creditoIvaIniziale(anno: number): Promise<number> {
+  const v = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'liquidazione_iva'`))?.valore ?? {};
+  return Number(v.crediti?.[String(anno)] ?? 0) || 0;
+}
+export async function salvaCreditoIvaIniziale(anno: number, credito: number) {
+  const v = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'liquidazione_iva'`))?.valore ?? {};
+  const valore = { ...v, crediti: { ...(v.crediti ?? {}), [String(anno)]: Math.max(0, Math.round(credito * 100) / 100) } };
+  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('liquidazione_iva', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(valore)]);
+}
+
+/** Liquidazioni mensili da gennaio al mese del periodo (solo per i periodi mensili; Casteltech liquida ogni mese). */
+export async function caricaLiquidazioniMensili(p: Periodo, dati?: DatiRegistri): Promise<LiquidazioneMese[] | null> {
+  if (p.tipo !== 'mese') return null;
+  const mese = Number(p.codice.slice(1));
+  const d = mese === 1 && dati ? dati : await caricaRegistri({ ...p, dal: `${p.anno}-01-01` });
+  return liquidazioniMensili(p.anno, mese, d.vendite, d.acquisti, d.autofatture, await creditoIvaIniziale(p.anno));
+}
+
 // ───────────────────────────── Excel per il commercialista ─────────────────────────────
 
 const dataIt = (d: string) => d.split('-').reverse().join('/');
 const TIPI: Record<string, string> = { fattura: 'Fattura', nota_credito: 'Nota di credito', autofattura: 'Autofattura' };
 
 /** Excel dei registri: un foglio per registro (una riga per documento e aliquota), riepilogo IVA, liquidazione, controlli. */
-export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?: string; partita_iva?: string }): Promise<Buffer> {
+export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?: string; partita_iva?: string }, mensili: LiquidazioneMese[] | null = null): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Portale Casteltech';
   const euro = '#,##0.00';
@@ -136,7 +158,21 @@ export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?
   for (const [nome, valore] of [...(l.splitPayment ? [['IVA in split payment (la versa la PA, non a debito)', l.splitPayment] as [string, number]] : []), ['IVA a debito sulle vendite', l.debitoVendite], ['IVA a debito sulle autofatture', l.debitoAutofatture],
     ['IVA a credito sugli acquisti', l.creditoAcquisti], ['IVA a credito sulle autofatture', l.creditoAutofatture],
     [l.saldo >= 0 ? 'IVA da versare' : 'IVA a credito', Math.abs(l.saldo)]] as [string, number][]) ws.addRow([nome, '', '', valore]);
-  ws.addRow(['Indicativa: non comprende credito del periodo precedente, acconto, IVA indetraibile, interessi trimestrali. La liquidazione la fa il commercialista.']);
+  if (mensili?.length) {
+    const ultimo = mensili[mensili.length - 1];
+    ws.addRow([]);
+    ws.addRow(['Liquidazione mensile', '', '', 'Euro']).font = { bold: true };
+    for (const [nome, valore] of [[ultimo.riporto < 0 ? 'Credito dal mese prima' : 'IVA rinviata dal mese prima (sotto 25,82 €)', Math.abs(ultimo.riporto)],
+      [`Da versare entro il ${dataIt(ultimo.scadenza)} (F24, codice tributo ${ultimo.codiceTributo})`, ultimo.daVersare],
+      ['Credito da riportare al mese dopo', ultimo.creditoRiportato], ['IVA rinviata al mese dopo (sotto 25,82 €)', ultimo.rinviata]] as [string, number][])
+      ws.addRow([nome, '', '', valore]);
+    const wm = wb.addWorksheet('Liquidazioni mensili');
+    wm.columns = [{ header: 'Mese', width: 18 }, { header: 'IVA a debito', width: 14 }, { header: 'IVA a credito', width: 14 }, { header: 'Riporto', width: 12 },
+      { header: 'Risultato', width: 12 }, { header: 'Da versare', width: 12 }, { header: 'Scadenza', width: 12 }, { header: 'Codice tributo', width: 14 }];
+    for (const m of mensili) wm.addRow([m.nome, m.debito, m.credito, m.riporto, m.risultato, m.daVersare, dataIt(m.scadenza), m.codiceTributo]);
+    wm.getRow(1).font = { bold: true };
+  }
+  ws.addRow(['Indicativa: non comprende acconto di dicembre, IVA indetraibile e rettifiche. La liquidazione la controlla il commercialista.']);
   const wc = wb.addWorksheet('Da controllare');
   wc.columns = [{ header: 'Segnalazione', width: 140 }];
   for (const c of d.controlli.length ? d.controlli : ['Nessuna segnalazione.']) wc.addRow([c]);

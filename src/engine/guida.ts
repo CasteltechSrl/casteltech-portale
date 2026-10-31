@@ -636,16 +636,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'registri-iva', area: 'amministrazione', titolo: 'Registri IVA, liquidazione e file per il commercialista',
-    parole: 'registro registri iva vendite acquisti liquidazione versare credito debito commercialista trimestre mese export excel zip xml protocollo riepilogo aliquota',
+    parole: 'registro registri iva vendite acquisti liquidazione mensile versare versamento f24 codice tributo 6001 scadenza 16 credito debito commercialista trimestre mese export excel zip xml protocollo riepilogo aliquota',
     testo: [
       'In Amministrazione → Registri IVA scegli anno e periodo (mese, trimestre o anno intero). Il portale mette insieme le fatture e le note di credito emesse (anche lo storico di Fatture in Cloud), le autofatture e le fatture dei fornitori con data nel periodo. Le note di credito sono in negativo; bozze, documenti annullati e scartati dallo SdI non entrano.',
-      'In alto: IVA a debito, IVA a credito e IVA da versare (o a credito) del periodo. È indicativa: non comprende il credito del periodo prima, l\'acconto di dicembre, l\'IVA non detraibile e gli interessi trimestrali. La liquidazione vera la fa il commercialista.',
+      'Casteltech liquida l\'IVA ogni mese: la pagina si apre sul mese da versare (fino al 16 quello prima, poi il mese in corso). In alto IVA a debito, IVA a credito e quanto versare entro il 16 del mese dopo (luglio: 20 agosto; sabato e domenica si passa al lunedì) con il codice tributo dell\'F24: 6001 gennaio … 6012 dicembre.',
+      'Il credito passa da un mese all\'altro; se l\'IVA del mese è sotto 25,82 € non si versa e si somma al mese dopo. In "Liquidazioni mensili" c\'è tutto l\'anno da gennaio; lì si scrive il credito IVA dell\'anno prima (dalla dichiarazione IVA). Restano al commercialista l\'acconto di dicembre (27/12, codice 6013), l\'IVA non detraibile e le compensazioni.',
+      'Le spese senza fattura elettronica e senza IVA (scontrini, affitto da un privato, polizze) non entrano nel registro IVA.',
       'Sotto: il riepilogo per aliquota o natura (22 %, N3.5 lettera d\'intento, N3.2 cessioni UE…) e l\'elenco dei documenti di ogni registro. Il riepilogo di ogni fattura si legge dal suo file XML; per lo storico senza file dalle righe. Le fatture dei fornitori hanno il protocollo: progressivo nell\'anno in ordine di data.',
       'L\'IVA delle autofatture (reverse charge TD16–TD19) va sia a debito sia a credito, quindi nella liquidazione si annulla. L\'IVA delle fatture alla pubblica amministrazione in split payment è nel registro (voce "split payment") ma non va a debito: la versa l\'ente.',
       '"Da controllare" segnala numeri mancanti nella numerazione delle fatture, fatture scartate dallo SdI da rimandare, bozze con data nel periodo e documenti con il riepilogo che non torna.',
       'Per il commercialista: "Excel dei registri" (un foglio per registro, riepilogo IVA, liquidazione, cose da controllare) oppure "Pacchetto per il commercialista", uno zip con l\'Excel e tutti i file XML delle fatture emesse e ricevute del periodo. "Stampa" la stampa o la salva in PDF.',
     ],
-    passi: ['Amministrazione → Registri IVA.', 'Scegli anno e periodo e premi Mostra.', 'Guarda "Da controllare" e sistema quello che serve.', 'Scarica il pacchetto zip e mandalo al commercialista.'],
+    passi: ['Amministrazione → Registri IVA (si apre sul mese da versare).', 'Per un altro mese scegli anno e periodo e premi Mostra.', 'Guarda "Da controllare" e sistema quello che serve.', 'Scarica il pacchetto zip e mandalo al commercialista.'],
     pagine: [['/amministrazione/registri', 'Registri IVA']],
   },
   {
