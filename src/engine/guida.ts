@@ -190,14 +190,16 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'prezzi-anagrafiche', area: 'anagrafiche', titolo: 'Prezzo di vendita dei prodotti e ultimo acquisto dei componenti',
-    parole: 'prezzo prezzi listino vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
+    parole: 'prezzo prezzi listino scaglioni scaglione fasce range quantità vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
     testo: [
       'In Anagrafiche → Prodotti c\'è la colonna Prezzo €: il prezzo di vendita a scheda, IVA esclusa. Passando sopra la casella si vede da dove arriva: l\'ultima fattura emessa al cliente, l\'anagrafica prodotti di Fatture in Cloud o "scritto a mano".',
       'I prezzi sono stati presi da Fatture in Cloud: per ogni codice vale il più recente tra l\'ultima fattura e l\'anagrafica di FIC (se l\'anagrafica è stata aggiornata dopo l\'ultima fattura vale quella). I casi in cui erano diversi sono in un Excel a parte da controllare.',
       'In Anagrafiche → Componenti, cercando un componente, si vede l\'ultimo prezzo d\'acquisto con fornitore, data e pezzi ordinati: viene dall\'ultimo ordine a fornitore con quel P/N o quel codice. Anche l\'Excel dell\'archivio ha queste colonne.',
       'Un prezzo si corregge scrivendolo nella casella e premendo Salva: da quel momento vale quello e un nuovo caricamento da Fatture in Cloud non lo cambia. Vuotando la casella il prodotto torna senza prezzo.',
+      'Prezzi a scaglioni di quantità (facoltativi): nella casella "Scaglioni di quantità" del prodotto scrivi ad esempio 1-5=10; 6-20=8; 21+=7 (da 1 a 5 pezzi 10 €, da 6 a 20 pezzi 8 €, da 21 in su 7 €) e premi Salva. Senza scaglioni vale il Prezzo € per tutte le quantità.',
+      'In una fattura, nota di credito o DDT basta scrivere codice e quantità: il prezzo dello scaglione giusto si mette da solo (e la descrizione, se manca). Se cambi la quantità il prezzo si aggiorna; un prezzo scritto a mano resta quello.',
     ],
-    passi: ['Anagrafiche → Prodotti (scegli il cliente per vedere solo i suoi).', 'Correggi il prezzo nella casella Prezzo € e premi Salva.', 'Per ricaricare i prezzi: in fondo alla pagina "Carica i prezzi da Fatture in Cloud", scegli quello preparato da Claude, "Controlla", poi "Conferma e carica".'],
+    passi: ['Anagrafiche → Prodotti (scegli il cliente per vedere solo i suoi).', 'Correggi il prezzo nella casella Prezzo € (e, se servono, gli scaglioni) e premi Salva.', 'Per ricaricare i prezzi: in fondo alla pagina "Carica i prezzi da Fatture in Cloud", scegli quello preparato da Claude, "Controlla", poi "Conferma e carica".'],
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti'], ['/anagrafiche/componenti', 'Anagrafiche → Componenti']],
   },
 

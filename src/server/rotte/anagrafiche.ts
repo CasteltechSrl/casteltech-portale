@@ -15,7 +15,8 @@ import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafi
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
-import { caricaPrezzi } from '../prezzi-servizio.js';
+import { caricaPrezzi, scaglioniDi, salvaScaglioni } from '../prezzi-servizio.js';
+import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
@@ -123,6 +124,7 @@ export function rotteAnagrafiche() {
           + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id) AS altri
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
       ORDER BY (p.cliente_id IS NULL) DESC, p.codice LIMIT 2000`, [filtro]);
+    const scaglioni = await scaglioniDi(prodotti.map((p: any) => p.id));
     // regola codice-cliente (Adriano 29/10/2026): i codici senza cliente si vedono subito, in cima e in giallo
     const senzaCliente = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM prodotti WHERE cliente_id IS NULL`))!.n;
     const avvisoCodici = avvisoSenzaCliente(senzaCliente);
@@ -141,13 +143,15 @@ export function rotteAnagrafiche() {
       </form>
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length)}
       <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
-        <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th><th class="n">Preventivi</th><th></th></tr></thead>
+        <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>
+          <th title="Facoltativi: prezzi diversi per quantità, es. 1-5=10; 6-20=8; 21+=7">Scaglioni di quantità</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
           <tr class="nuova-riga">
             <td><input name="codice" form="p-nuovo" class="maiuscolo" required placeholder="NUOVO CODICE"></td>
             <td class="largo"><input name="descrizione" form="p-nuovo" class="maiuscolo" required></td>
             <td><select name="cliente_id" form="p-nuovo" required>${opzClienti(filtro > 0 ? filtro : null)}</select></td>
-            <td><input name="prezzo" form="p-nuovo" class="prezzo" inputmode="decimal"></td><td></td>
+            <td><input name="prezzo" form="p-nuovo" class="prezzo" inputmode="decimal"></td>
+            <td><input name="scaglioni" form="p-nuovo" class="scaglioni" placeholder="es. 1-5=10; 6-20=8; 21+=7"></td><td></td>
             <td><form method="post" action="/anagrafiche/prodotti" id="p-nuovo"><input type="hidden" name="filtro" value="${filtro}"><button class="primario">Aggiungi</button></form></td>
           </tr>
           ${prodotti.map(p => html`<tr class="${p.cliente_id === null ? 'senza-cliente' : ''}" title="${p.cliente_id === null ? 'Codice senza cliente: assegnalo a un cliente o eliminalo' : ''}">
@@ -155,13 +159,17 @@ export function rotteAnagrafiche() {
             <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
             <td><select name="cliente_id" form="p-${p.id}" required>${opzClienti(p.cliente_id)}</select></td>
             <td><input name="prezzo" form="p-${p.id}" class="prezzo" inputmode="decimal" value="${p.prezzo == null ? '' : num(p.prezzo, 5)}"
-              title="${testoPrezzo(p)}"></td><td class="n">${p.preventivi}</td>
+              title="${testoPrezzo(p)}"></td>
+            <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"
+              placeholder="un prezzo per tutte le quantità" title="Facoltativi: es. 1-5=10; 6-20=8; 21+=7 (21+ = da 21 in su)"></td><td class="n">${p.preventivi}</td>
             <td class="nowrap"><form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
       ${prodotti.length === 2000 ? html`<p class="nota">Mostrati i primi 2.000: scegli un cliente per vedere gli altri.</p>` : ''}
-      <p class="nota">Prezzo: di vendita a scheda, IVA esclusa. Passa sopra la casella per vedere da dove arriva (fattura, anagrafica di Fatture in Cloud o scritto a mano).</p>
+      <p class="nota">Prezzo: di vendita a scheda, IVA esclusa. Passa sopra la casella per vedere da dove arriva (fattura, anagrafica di Fatture in Cloud o scritto a mano).
+        Scaglioni di quantità (facoltativi): <b>1-5=10; 6-20=8; 21+=7</b> vuol dire da 1 a 5 pezzi 10 €, da 6 a 20 pezzi 8 €, da 21 in su 7 €.
+        In fattura, nota di credito e DDT, scrivendo codice e quantità senza prezzo, il portale mette da solo quello dello scaglione giusto; senza scaglioni vale il Prezzo €.</p>
       ${caricaFile}${caricaPrezziFic}`, msg(req)));
   });
 
@@ -306,9 +314,12 @@ export function rotteAnagrafiche() {
     if (await duplicatoProdotto(codice, cliente)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
     const prezzo = leggiPrezzo(req.body.prezzo);
     if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
-    await q(`INSERT INTO prodotti (codice, descrizione, cliente_id, prezzo_vendita, prezzo_fonte, prezzo_data, prezzo_nota)
+    const sc = leggiScaglioni(req.body.scaglioni);
+    if (sc.errori.length) return res.redirect(torna(`Scaglioni non salvati: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)));
+    const nuovo = await q1<{ id: number }>(`INSERT INTO prodotti (codice, descrizione, cliente_id, prezzo_vendita, prezzo_fonte, prezzo_data, prezzo_nota)
       VALUES ($1,$2,$3,$4::numeric, CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'manuale' END, CASE WHEN $4::numeric IS NULL THEN NULL ELSE current_date END,
-        CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END)`, [codice, descrizione, cliente, prezzo]);
+        CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END) RETURNING id`, [codice, descrizione, cliente, prezzo]);
+    if (sc.scaglioni.length) await salvaScaglioni(nuovo!.id, sc.scaglioni);
     res.redirect(torna(`${codice} aggiunto.`, '/prodotti', dopoProdotto(req.body, cliente)));
   });
   r.post('/prodotti/:id', async (req, res) => {
@@ -320,12 +331,15 @@ export function rotteAnagrafiche() {
     if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
     const prezzo = leggiPrezzo(req.body.prezzo);
     if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
+    const sc = leggiScaglioni(req.body.scaglioni);
+    if (sc.errori.length) return res.redirect(torna(`${codice} non salvato: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)));
     await q(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = $4 WHERE id = $1`, [id, codice, descrizione, cliente]);
     // prezzo cambiato a mano: da qui in poi vale quello (il caricamento da FIC non lo tocca più); casella vuotata = di nuovo senza prezzo
     if (req.body.prezzo !== undefined) await q(`UPDATE prodotti SET prezzo_vendita = $2::numeric,
         prezzo_fonte = CASE WHEN $2::numeric IS NULL THEN NULL ELSE 'manuale' END, prezzo_data = CASE WHEN $2::numeric IS NULL THEN NULL ELSE current_date END,
         prezzo_nota = CASE WHEN $2::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END
       WHERE id = $1 AND prezzo_vendita IS DISTINCT FROM $2::numeric`, [id, prezzo]);
+    if (req.body.scaglioni !== undefined) await salvaScaglioni(id, sc.scaglioni);
     await q(`UPDATE preventivi v SET intestazione = v.intestazione || jsonb_build_object('codice', $2::text, 'descrizione', $3::text)
       FROM prodotti_revisioni r WHERE r.id = v.revisione_id AND r.prodotto_id = $1`, [id, codice, descrizione]);
     res.redirect(torna(`${codice} salvato.`, '/prodotti', dopoProdotto(req.body, cliente)));
