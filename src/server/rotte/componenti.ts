@@ -271,6 +271,7 @@ function paginaAnalisi(a: any): Raw {
     <div class="azioni">
       ${!inCorso && daSalvare ? html`<form method="post" action="/quotazioni/bom/${a.id}/salva" class="inline"><button class="primario" title="Mette nell'archivio i codici nuovi completi">Salva ${daSalvare} codici nell'archivio</button></form>` : ''}
       ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel">Scarica Excel</a>` : ''}
+      ${!inCorso && rp?.perQuantita.some(x => x.totale > 0) ? html`<a class="bottone" href="/ordini/fornitori/bom/${a.id}" title="Prepara gli ordini a fornitore, uno per distributore">Ordina i componenti</a>` : ''}
       ${!inCorso ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>` : ''}
       <form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>

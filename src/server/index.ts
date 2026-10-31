@@ -24,6 +24,7 @@ import { rotteComponenti } from './rotte/componenti.js';
 import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
 import { rotteAcquisizioni } from './rotte/acquisizioni.js';
+import { rotteOrdiniFornitore } from './rotte/ordini-fornitore.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
@@ -128,6 +129,7 @@ app.use('/preventivi', soloUfficio, rottePreventivi());
 app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());
 app.use('/ordini/acquisire', soloUfficio, rotteAcquisizioni());
+app.use('/ordini/fornitori', soloUfficio, rotteOrdiniFornitore());
 app.use('/ordini', soloUfficio, rotteOrdini());
 // Quotazioni (fino al 28/10/2026 "Componenti"): i vecchi indirizzi /componenti/... portano qui (307 = anche i moduli inviati)
 app.use('/quotazioni', soloUfficio, rotteComponenti());
