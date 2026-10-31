@@ -3,9 +3,10 @@
  * prezzo di acquisto dei componenti. Il file lo prepara Claude con tools/prezzi-da-fic.ts. Prima un riepilogo, poi la conferma;
  * si può ricaricare: i prezzi scritti a mano dall'ufficio (fonte 'manuale') non si toccano.
  */
-import { q, transazione } from './db.js';
+import { q, q1, transazione } from './db.js';
 import { abbinaProdotti, abbinaComponenti, chiave, type FilePrezzi } from '../engine/prezzi-fic.js';
-import { prezzoPerQuantita, type Scaglione } from '../engine/listino.js';
+import { prezzoPerQuantita, cosaAggiornare, testoScaglione, type Scaglione } from '../engine/listino.js';
+import { pnKey } from '../engine/codifica/bom.js';
 
 export async function caricaPrezzi(f: FilePrezzi, opz: { anteprima: boolean }) {
   const [prodotti, clienti, aliasClienti, aliasProdotti, componenti] = await Promise.all([
@@ -97,7 +98,19 @@ export async function prezzoListino(clienteId: number | null, rif: { prodottoId?
  */
 export async function completaDaListino(clienteId: number | null, righe: any): Promise<any> {
   const elenco = Array.isArray(righe) ? righe : Object.values(righe ?? {});
+  for (const r of elenco as any[]) if (r && !/^\d+$/.test(String(r.prodotto_id ?? ''))) r.prodotto_id = '';   // "+ Nuovo prodotto…" non salvato
   if (!clienteId) return elenco;
+  // prodotto scelto dal menu: codice dall'anagrafica, solo se è del cliente del documento (regola codice-cliente)
+  const ids = (elenco as any[]).map(r => Number(r?.prodotto_id)).filter(Boolean);
+  const delCliente = new Map((ids.length ? await q<{ id: number; codice: string; descrizione: string | null }>(
+    `SELECT id, codice, descrizione FROM prodotti WHERE id = ANY($1) AND cliente_id = $2`, [ids, clienteId]) : []).map(p => [p.id, p]));
+  for (const r of elenco as any[]) {
+    if (!r || !Number(r.prodotto_id)) continue;
+    const p = delCliente.get(Number(r.prodotto_id));
+    if (!p) { r.prodotto_id = ''; continue; }
+    r.codice = p.codice;
+    if (!String(r.descrizione ?? '').trim()) r.descrizione = p.descrizione ?? '';
+  }
   for (const r of elenco as any[]) {
     if (!r || ['on', '1', true].includes(r.solo_descrizione)) continue;
     if (String(r.prezzo ?? '').trim() || !(String(r.codice ?? '').trim() || Number(r.prodotto_id))) continue;
@@ -109,4 +122,78 @@ export async function completaDaListino(clienteId: number | null, righe: any): P
     if (!String(r.descrizione ?? '').trim()) r.descrizione = l.descrizione ?? '';
   }
   return elenco;
+}
+
+// ── Prezzo cambiato a mano in un documento → "aggiorno l'anagrafica?" (Adriano 31/10/2026) ──
+
+/** Listino di un prodotto per una quantità e, se si passa il prezzo scritto, la domanda da fare all'ufficio. */
+export async function listinoProdotto(id: number, quantita: number, prezzoScritto?: number | null) {
+  const p = await q1<{ id: number; codice: string; descrizione: string | null; prezzo: number | null }>(
+    `SELECT id, codice, descrizione, prezzo_vendita::float AS prezzo FROM prodotti WHERE id = $1`, [id]);
+  if (!p) return null;
+  const sc = (await scaglioniDi([id])).get(id) ?? [];
+  const l = prezzoPerQuantita(p.prezzo, sc, quantita);
+  const euro = (n: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 5 }).format(n) + ' €';
+  let domanda: string | null = null;
+  if (prezzoScritto != null && Number.isFinite(prezzoScritto)) {
+    const c = cosaAggiornare(p.prezzo, sc, quantita, prezzoScritto);
+    if (c) domanda = c.voce === 'scaglione'
+      ? `${p.codice}: in anagrafica lo scaglione ${testoScaglione(c.scaglione)} costa ${euro(c.attuale)}, qui hai scritto ${euro(prezzoScritto)}. Aggiorno lo scaglione ${testoScaglione(c.scaglione)} a ${euro(prezzoScritto)}?`
+      : c.attuale == null ? `${p.codice} non ha ancora un prezzo in anagrafica. Salvo ${euro(prezzoScritto)} come prezzo del prodotto?`
+      : `${p.codice}: in anagrafica costa ${euro(c.attuale)}, qui hai scritto ${euro(prezzoScritto)}. Aggiorno il prezzo del prodotto a ${euro(prezzoScritto)}?`;
+  }
+  return { prodotto_id: p.id, codice: p.codice, descrizione: p.descrizione, prezzo: l.prezzo, scaglione: l.scaglione ? testoScaglione(l.scaglione) : null, domanda };
+}
+
+/** L'ufficio ha detto sì: si aggiorna lo scaglione di quella quantità, altrimenti il prezzo unico (fonte 'manuale'). */
+export async function aggiornaPrezzoDaDocumento(id: number, quantita: number, prezzo: number, documento: string): Promise<string> {
+  const p = await q1<{ codice: string; prezzo: number | null }>(`SELECT codice, prezzo_vendita::float AS prezzo FROM prodotti WHERE id = $1`, [id]);
+  if (!p) throw new Error('Prodotto non trovato.');
+  const sc = (await scaglioniDi([id])).get(id) ?? [];
+  const c = cosaAggiornare(p.prezzo, sc, quantita, prezzo);
+  if (!c) return `${p.codice}: il prezzo in anagrafica è già questo.`;
+  if (c.voce === 'scaglione') {
+    await q(`UPDATE prodotti_scaglioni SET prezzo = $3 WHERE prodotto_id = $1 AND da = $2`, [id, c.scaglione.da, prezzo]);
+    return `${p.codice}: scaglione ${testoScaglione(c.scaglione)} aggiornato in anagrafica.`;
+  }
+  await q(`UPDATE prodotti SET prezzo_vendita = $2, prezzo_fonte = 'manuale', prezzo_data = current_date, prezzo_nota = $3 WHERE id = $1`,
+    [id, prezzo, `Aggiornato da ${documento || 'un documento'}`.slice(0, 200)]);
+  return `${p.codice}: prezzo aggiornato in anagrafica.`;
+}
+
+// ── Ordini a fornitore: componenti dall'archivio (Anagrafiche → Componenti) ──
+
+/** Componenti che somigliano a quello che si scrive (P/N, codice gestionale o di produzione, descrizione). */
+export async function cercaComponentiPerOrdine(testo: string) {
+  const t = testo.trim();
+  if (t.length < 2) return [];
+  const k = pnKey(t) ?? '';
+  return q<{ pn: string | null; codice_gestionale: string | null; descrizione: string | null; prezzo: number | null; fornitore: string | null }>(
+    `SELECT pn, codice_gestionale, descrizione, prezzo_acquisto::float AS prezzo, prezzo_fornitore AS fornitore FROM componenti
+     WHERE ($2 <> '' AND pn_key LIKE $2 || '%') OR codice_gestionale ILIKE $1 || '%' OR codice_produzione ILIKE $1 || '%' OR descrizione ILIKE '%' || $1 || '%'
+     ORDER BY (pn_key = $2) DESC, pn LIMIT 20`, [t.replace(/[%_]/g, ''), k]);
+}
+
+/** Componente della riga dell'ordine: per P/N o codice gestionale / di produzione uguale. */
+async function componenteDaCodice(codice: string) {
+  return q1<{ id: number; pn: string | null; prezzo: number | null }>(
+    `SELECT id, pn, prezzo_acquisto::float AS prezzo FROM componenti WHERE pn_key = $1 OR upper(codice_gestionale) = upper($2) OR upper(codice_produzione) = upper($2)
+     ORDER BY (pn_key = $1) DESC LIMIT 1`, [pnKey(codice) ?? '', codice.trim()]);
+}
+
+/** Domanda per il prezzo scritto in un ordine a fornitore: null se il componente non è in archivio o il prezzo è uguale. */
+export async function domandaPrezzoComponente(codice: string, prezzo: number): Promise<string | null> {
+  const c = await componenteDaCodice(codice);
+  if (!c || !Number.isFinite(prezzo) || (c.prezzo != null && Math.abs(c.prezzo - prezzo) < 0.0000005)) return null;
+  const euro = (n: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 6 }).format(n) + ' €';
+  return c.prezzo == null ? `${c.pn ?? codice} non ha ancora un prezzo d'acquisto in anagrafica. Lo salvo a ${euro(prezzo)}?`
+    : `${c.pn ?? codice}: l'ultimo acquisto in anagrafica è ${euro(c.prezzo)}, qui hai scritto ${euro(prezzo)}. Aggiorno l'ultimo acquisto?`;
+}
+
+export async function aggiornaAcquistoDaOrdine(codice: string, prezzo: number, quantita: number | null, fornitore: string | null, documento: string): Promise<string> {
+  const c = await componenteDaCodice(codice);
+  if (!c) throw new Error('Componente non trovato in anagrafica.');
+  await q(`UPDATE componenti SET prezzo_acquisto = $2, prezzo_fornitore = coalesce($3, prezzo_fornitore), prezzo_quantita = $4, prezzo_fonte = 'manuale',
+      prezzo_data = current_date, prezzo_nota = $5 WHERE id = $1`, [c.id, prezzo, fornitore || null, quantita || null, `Aggiornato da ${documento || 'un ordine a fornitore'}`.slice(0, 200)]);
+  return `${c.pn ?? codice}: ultimo acquisto aggiornato in anagrafica.`;
 }

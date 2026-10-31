@@ -33,6 +33,8 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('prezzo di vendita del prodotto', 2).includes('prezzi-anagrafiche'));
   assert.ok(primi('ultimo prezzo di acquisto componente', 2).includes('prezzi-anagrafiche'));
   assert.ok(primi('prezzo a scaglioni di quantità', 2).includes('prezzi-anagrafiche'));
+  assert.ok(primi('codice dal menu nella fattura', 3).includes('nuova-fattura'));
+  assert.ok(primi('aggiornare il prezzo in anagrafica', 3).includes('prezzi-anagrafiche'));
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
   assert.ok(primi('fattura INFN split payment', 2).includes('pubblica-amministrazione'));
   assert.ok(primi('codice ufficio CIG pubblica amministrazione', 2).includes('pubblica-amministrazione'));

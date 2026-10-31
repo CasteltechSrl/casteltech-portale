@@ -5,6 +5,7 @@
  */
 import { Router } from 'express';
 import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
+import { riquadriSceltaProdotto } from '../views/scelta-prodotto.js';
 import {
   anteprimaOrdiniDaBom, collegaFattura, commessePerOrdini, creaOrdineFornitore, csvOrdine, duplicaOrdineFornitore, elencoOrdiniFornitore, eliminaOAnnullaOrdine,
   emettiOrdineFornitore, fattureCollegabili, fornitoriPerOrdini, inviaOrdineFornitore, leggiOrdineFornitore, ordiniDaBom, pdfOrdineFornitore, propostaEmailOrdine,
@@ -154,7 +155,8 @@ export function rotteOrdiniFornitore() {
     const avviso = emesso ? null : avvisoNumerazione(d.anno, ultimo);
     const base = `/ordini/fornitori/${d.id}`;
     const rigaModulo = (x: any, i: number) => html`<tr>
-      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo"></td>
+      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo cerca-componente" list="componenti-trovati" autocomplete="off"
+        title="Scrivi il P/N o il codice: il menu propone i componenti dell'archivio (Anagrafiche → Componenti)"></td>
       <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo"></td>
       <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
@@ -193,8 +195,11 @@ export function rotteOrdiniFornitore() {
           <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>Prezzo €</th><th>Consegna</th><th class="n">Importo</th><th title="Togli la riga">Togli</th></tr></thead>
           <tbody>${[...righe, {}].map(rigaModulo)}</tbody>
         </table></div>
+        <datalist id="componenti-trovati"></datalist>
+        ${riquadriSceltaProdotto(null)}
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
-          <span class="nota">Codice: il codice del fornitore o il P/N. La consegna richiesta non è obbligatoria.</span>
+          <span class="nota">Codice: scrivi il P/N e scegli il componente dal menu (archivio di Anagrafiche → Componenti: descrizione e ultimo prezzo arrivano da soli),
+            oppure il codice del fornitore. La consegna richiesta non è obbligatoria.</span>
           <button class="primario">Salva</button></div>
       </form>
       <div class="blocco">

@@ -12,6 +12,8 @@ import {
 import { controlliEmissione, importoRigaConferma, totaleConferma } from '../../engine/conferme-ordine.js';
 import { pagina } from './ordini.js';
 import { html, data, euro, raw } from '../views/html.js';
+import { prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 
 export const STATI_CONFERMA: Record<string, [string, string]> = {
   bozza: ['bozza', ''], emesso: ['emessa', 'accettato'], inviato: ['inviata', 'inviato'], annullato: ['annullata', 'rifiutato'],
@@ -41,10 +43,11 @@ export function rotteConferme() {
     const emessa = !!d.numero, annullata = d.stato === 'annullato';
     const errori = emessa ? [] : controlliEmissione(righe);
     const base = indirizzo(o.id, d.id);
+    // codice solo dall'anagrafica del cliente (Adriano 31/10/2026)
+    const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
     const rigaModulo = (x: any, i: number) => html`<tr>
-      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo">
-        <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"><input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
-      <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo"></td>
+      <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+      <td class="largo">${cellaDescrizione(x, i, prodotti, 'maiuscolo')}</td>
       <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
       <td><input type="date" name="righe[${i}][consegna]" value="${x.consegna ?? ''}"></td>
@@ -71,6 +74,7 @@ export function rotteConferme() {
           <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>Prezzo €</th><th>Consegna</th><th class="n">Importo</th><th title="Togli la riga">Togli</th></tr></thead>
           <tbody>${[...righe, {}].map(rigaModulo)}</tbody>
         </table></div>
+        ${riquadriSceltaProdotto(d.cliente_id)}
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
           <span class="nota">Righe e date vengono dall'ordine: si cambiano qui senza toccare l'ordine. Una riga per ogni consegna.</span>
           <button class="primario">Salva</button></div>

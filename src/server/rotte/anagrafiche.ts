@@ -15,7 +15,8 @@ import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafi
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
-import { caricaPrezzi, scaglioniDi, salvaScaglioni } from '../prezzi-servizio.js';
+import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPrezzoDaDocumento, cercaComponentiPerOrdine, domandaPrezzoComponente,
+  aggiornaAcquistoDaOrdine } from '../prezzi-servizio.js';
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 
@@ -112,6 +113,33 @@ export function rotteAnagrafiche() {
                 data-conferma="${`Eliminare il cliente ${c.ragione_sociale} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
       ${caricaFile}`, msg(req)));
+  });
+
+  // ── Righe dei documenti (fattura, nota di credito, DDT, conferma d'ordine, ordine a fornitore; Adriano 31/10/2026) ──
+  const numeroQs = (x: unknown) => leggiPrezzo(x) ?? NaN;   // virgola o punto, come nelle caselle
+  // prezzo di listino per la quantità e, con ?prezzo=, la domanda "aggiorno l'anagrafica?"
+  r.get('/prodotti/:id/listino', async (req, res) => {
+    const prezzo = req.query.prezzo != null && String(req.query.prezzo).trim() ? numeroQs(req.query.prezzo) : null;
+    const l = await listinoProdotto(Number(req.params.id), numeroQs(req.query.quantita) || 1, prezzo);
+    res.status(l ? 200 : 404).json(l ?? {});
+  });
+  r.post('/prodotti/:id/prezzo-da-documento', async (req, res) => {
+    const prezzo = numeroQs(req.body?.prezzo);
+    if (!(prezzo >= 0)) return res.status(400).json({ errore: 'Prezzo non valido.' });
+    try {
+      res.json({ messaggio: await aggiornaPrezzoDaDocumento(Number(req.params.id), numeroQs(req.body?.quantita) || 1, prezzo, String(req.body?.documento ?? '')) });
+    } catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
+  });
+  r.get('/componenti-cerca', async (req, res) => res.json(await cercaComponentiPerOrdine(String(req.query.q ?? ''))));
+  r.get('/componenti-prezzo', async (req, res) =>
+    res.json({ domanda: await domandaPrezzoComponente(String(req.query.codice ?? ''), numeroQs(req.query.prezzo)) }));
+  r.post('/componenti-prezzo', async (req, res) => {
+    const prezzo = numeroQs(req.body?.prezzo);
+    if (!(prezzo >= 0)) return res.status(400).json({ errore: 'Prezzo non valido.' });
+    try {
+      res.json({ messaggio: await aggiornaAcquistoDaOrdine(String(req.body?.codice ?? ''), prezzo, numeroQs(req.body?.quantita) || null,
+        String(req.body?.fornitore ?? '').trim() || null, String(req.body?.documento ?? '')) });
+    } catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
   });
 
   // ── Prodotti ──

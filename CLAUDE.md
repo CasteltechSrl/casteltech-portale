@@ -41,7 +41,13 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   = fonte 'manuale', il caricamento non lo tocca. Il prezzo va solo sul codice del cliente giusto (cliente non riconosciuto: solo se il codice è unico).
   Scaglioni di quantità (Adriano 31/10/2026; migrazione 052 `prodotti_scaglioni`, `engine/listino.ts`, test in `tests/listino.test.ts`): facoltativi, casella
   "1-5=10; 6-20=8; 21+=7" nel prodotto; senza scaglioni vale il prezzo unico. Fattura / NC / DDT: codice + quantità senza prezzo → prezzo dello scaglione
-  (`completaDaListino` in `salvaBozza`, e mentre si scrive con `public/documenti.js` → GET `/amministrazione/documenti/:id/prezzo`); prezzo scritto a mano resta.
+  (`completaDaListino` in `salvaBozza` e `salvaConferma`, e mentre si scrive con `public/documenti.js` → GET `/anagrafiche/prodotti/:id/listino`); prezzo scritto a mano resta.
+  Codice delle righe SOLO dall'anagrafica (Adriano 31/10/2026, "vale per tutti i documenti"; `views/scelta-prodotto.ts`, test in `tests/documenti-anagrafica.test.ts`):
+  fattura / NC / ND, DDT, conferma d'ordine = menu con i soli prodotti del cliente + "+ Nuovo prodotto…" (POST `/preventivi/prodotti`) + "— senza codice —" per servizi;
+  descrizione dal prodotto (sola lettura); codici vecchi non in anagrafica restano "(non in anagrafica)"; al salvataggio il codice viene dal prodotto del cliente.
+  Prezzo scritto a mano diverso dal listino → "Aggiorno l'anagrafica?" (`cosaAggiornare`: lo scaglione di quella quantità, altrimenti il prezzo unico, fonte 'manuale').
+  Ordine a fornitore: P/N proposti dall'archivio Componenti mentre si scrive (`/anagrafiche/componenti-cerca`), stessa domanda per l'ultimo acquisto. Preventivi e
+  Da acquisire avevano già il menu; autofatture escluse (righe del fornitore estero).
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).

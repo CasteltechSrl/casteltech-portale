@@ -208,7 +208,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'In Anagrafiche → Componenti, cercando un componente, si vede l\'ultimo prezzo d\'acquisto con fornitore, data e pezzi ordinati: viene dall\'ultimo ordine a fornitore con quel P/N o quel codice. Anche l\'Excel dell\'archivio ha queste colonne.',
       'Un prezzo si corregge scrivendolo nella casella e premendo Salva: da quel momento vale quello e un nuovo caricamento da Fatture in Cloud non lo cambia. Vuotando la casella il prodotto torna senza prezzo.',
       'Prezzi a scaglioni di quantità (facoltativi): nella casella "Scaglioni di quantità" del prodotto scrivi ad esempio 1-5=10; 6-20=8; 21+=7 (da 1 a 5 pezzi 10 €, da 6 a 20 pezzi 8 €, da 21 in su 7 €) e premi Salva. Senza scaglioni vale il Prezzo € per tutte le quantità.',
-      'In una fattura, nota di credito o DDT basta scrivere codice e quantità: il prezzo dello scaglione giusto si mette da solo (e la descrizione, se manca). Se cambi la quantità il prezzo si aggiorna; un prezzo scritto a mano resta quello.',
+      'In una fattura, nota di credito, DDT o conferma d\'ordine scegli il codice dal menu e scrivi la quantità: il prezzo dello scaglione giusto si mette da solo. Se cambi la quantità il prezzo si aggiorna; un prezzo scritto a mano resta quello.',
+      'Se nel documento scrivi a mano un prezzo diverso da quello dell\'anagrafica, sotto le righe il portale chiede "Aggiorno l\'anagrafica?": Sì cambia lo scaglione di quella quantità (o il prezzo unico, se il prodotto non ha scaglioni); No lo lascia solo in quel documento. Nell\'ordine a fornitore la stessa domanda aggiorna l\'ultimo acquisto del componente.',
     ],
     passi: ['Anagrafiche → Prodotti (scegli il cliente per vedere solo i suoi).', 'Correggi il prezzo nella casella Prezzo € (e, se servono, gli scaglioni) e premi Salva.', 'Per ricaricare i prezzi: in fondo alla pagina "Carica i prezzi da Fatture in Cloud", scegli quello preparato da Claude, "Controlla", poi "Conferma e carica".'],
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti'], ['/anagrafiche/componenti', 'Anagrafiche → Componenti']],
@@ -371,7 +372,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'fornitore fornitori compera comprare comprato ordinare pcb componenti distributore mouser digikey farnell tme carrello arrivo arrivata arrivati merce',
     testo: [
       'Gli ordini che Casteltech fa ai fornitori stanno in Acquisti → Ordini a fornitore (prima si facevano in Fatture in Cloud). Il fornitore si sceglie solo dall\'anagrafica: se manca si aggiunge in Anagrafiche → Fornitori.',
-      '"+ Nuovo ordine" crea una bozza: si scrivono le righe (codice del fornitore o P/N, descrizione, quantità, prezzo, consegna richiesta), la vostra offerta, il pagamento e la commessa per cui si compra. Emetti dà il numero (numerazione degli ordini a fornitore) e conserva il PDF; un ordine emesso si corregge ancora (il PDF si rifà con lo stesso numero), ma il fornitore non si cambia più.',
+      '"+ Nuovo ordine" crea una bozza: si scrivono le righe (codice del fornitore o P/N, descrizione, quantità, prezzo, consegna richiesta), la vostra offerta, il pagamento e la commessa per cui si compra. Scrivendo il P/N il menu propone i componenti dell\'archivio (Anagrafiche → Componenti): scegliendone uno arrivano descrizione e ultimo prezzo d\'acquisto. Emetti dà il numero (numerazione degli ordini a fornitore) e conserva il PDF; un ordine emesso si corregge ancora (il PDF si rifà con lo stesso numero), ma il fornitore non si cambia più.',
       'Dalla BOM quotata (Quotazioni → apri la BOM → "Ordina i componenti") il portale prepara una bozza per ogni distributore scelto (DigiKey, Mouser, Farnell, TME) con le quantità già comprensive dello scarto. Il pulsante del carrello scarica codice e quantità da usare sul sito del distributore.',
       'Quando arriva la merce si scrivono i pezzi arrivati riga per riga ("Tutto arrivato" se è completo): l\'ordine risulta da ricevere, arrivato in parte o arrivato. Quando arriva la fattura dallo SdI la si collega all\'ordine nel riquadro "Fattura del fornitore" (se il totale è diverso dall\'ordine il portale lo dice).',
       'L\'elenco mostra gli ordini da completare (bozze, merce da ricevere, fattura da collegare); "Tutti" mostra anche quelli finiti. Con le spunte: Duplica (stesse righe, nuova bozza) ed Elimina (le bozze spariscono, gli ordini emessi restano come annullati e il numero non si riusa).',
@@ -553,10 +554,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Amministrazione ──
   {
     id: 'nuova-fattura', area: 'amministrazione', titolo: 'Fare una fattura',
-    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa',
+    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa codice menu tendina riga righe',
     testo: [
       'Il PDF per il cliente: "PDF di cortesia" sulla fattura o nota di credito emessa (in bozza "Anteprima di stampa", con la scritta BOZZA) apre la copia da stampare o salvare in PDF con "Stampa / salva PDF". La fattura valida resta l\'XML mandato allo SdI: lo dice il piede del PDF.',
       'La fattura nasce come bozza: cliente dall\'anagrafica, righe, e i DDT ancora da fatturare di quel cliente si aggiungono con un clic. L\'IVA predefinita è quella del cliente (lettera d\'intento, estero…) o il 22%.',
+      'Nelle righe il Codice si sceglie dal menu, che mostra solo i prodotti di quel cliente in anagrafica: la descrizione e il prezzo per la quantità arrivano da soli. Se il prodotto non c\'è, scegli "+ Nuovo prodotto…" in fondo al menu: scrivi codice e descrizione e va subito in anagrafica. Per una riga senza codice (trasporto, servizi) scegli "— senza codice —" e scrivi la descrizione. Vale anche per note di credito e di debito, DDT e conferme d\'ordine.',
       'Con "Emetti" il portale assegna il numero, calcola la scadenza dalla condizione di pagamento, prepara l\'XML della fattura elettronica e segna i DDT come fatturati. Se ci sono errori non si emette e il numero non si consuma.',
       'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. Il PDF della fattura è in preparazione.',
     ],
