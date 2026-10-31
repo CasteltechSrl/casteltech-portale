@@ -6,6 +6,26 @@ export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).sl
 
 export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
 
+/**
+ * Menu in alto a gruppi (Adriano 31/10/2026): ogni gruppo ha una tendina con le sue pagine, così la barra resta corta
+ * quando arriveranno Qualità e Sicurezza e ambiente. Ordini dei clienti nel Commerciale (vendite), ordini a fornitore
+ * negli Acquisti, soldi e documenti fiscali in Amministrazione. Impostazioni, Suggerimenti e Guida a destra.
+ * Gli indirizzi delle pagine non cambiano. Un gruppo nuovo si aggiunge qui (test in tests/menu.test.ts).
+ */
+export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
+  { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti']] },
+  { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni', '/quotazioni'], ['Preventivi', '/preventivi'], ['Preventivi dai documenti del cliente', '/preventivi/documenti'], ['Ordini clienti', '/ordini/cruscotto'], ['Ordini da acquisire', '/ordini/acquisire']] },
+  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
+  { chiave: 'produzione', nome: 'Produzione', voci: [['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt']] },
+  { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti']] },
+];
+/** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
+const GRUPPO_DI: Record<string, string> = {
+  crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
+  acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione',
+};
+export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
+
 export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string | string[]; avviso?: string; largo?: boolean }) {
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
@@ -22,17 +42,14 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
-  <nav><!-- ordine del menu deciso da Adriano (28/10/2026) -->
-    ${opz.utente.ruolo === 'ufficio' ? html`
-      ${voce('/crm', 'CRM', 'crm')}
-      ${voce('/anagrafiche', 'Anagrafiche', 'anagrafiche')}
-      ${voce('/quotazioni', 'Quotazioni', 'quotazioni')}
-      ${voce('/preventivi', 'Preventivi', 'preventivi')}
-      ${voce('/ordini/cruscotto', 'Ordini', 'ordini')}
-      ${voce('/commesse', 'Commesse', 'commesse')}
-      ${voce('/amministrazione', 'Amministrazione', 'amministrazione')}
-      ${voce('/impostazioni', 'Impostazioni', 'impostazioni')}
-      ${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
+  <nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
+    ${opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI.map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
+      <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
+      <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
+    </div>`) : ''}
+  </nav>
+  <nav class="menu-destra">
+    ${opz.utente.ruolo === 'ufficio' ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
     ${voce('/guida', 'Guida', 'guida')}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>

@@ -58,6 +58,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche', 'Anagrafiche'], ['/quotazioni', 'Quotazioni'], ['/preventivi', 'Preventivi'], ['/ordini', 'Ordini'], ['/commesse', 'Commesse'], ['/amministrazione', 'Amministrazione']],
   },
   {
+    id: 'menu-gruppi', area: 'inizio', titolo: 'Il menu in alto: gruppi e tendine',
+    parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata',
+    testo: [
+      'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
+      'Anagrafiche: clienti, fornitori, prodotti, componenti. Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti. Acquisti: ordini a fornitore e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, fatture dei fornitori.',
+      'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
+      'Più avanti arriveranno anche i gruppi Qualità e Sicurezza e ambiente.',
+    ],
+    pagine: [['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
+  },
+  {
     id: 'dove-file', area: 'inizio', titolo: 'Dove metto i file? (ordini, schede, documenti, BOM)',
     parole: 'file documenti pdf allegati salvo salvare carico caricare caricamento metto cartella drive google upload dove scansione foto email excel zip',
     testo: [

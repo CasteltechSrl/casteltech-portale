@@ -1,18 +1,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layout } from '../src/server/views/layout.js';
+import { layout, gruppoAttivo, MENU_GRUPPI } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
-const voci = (ruolo: 'ufficio' | 'produzione') => [...String(layout({ titolo: 'Prova', utente: { id: 1, nome: 'Prova', ruolo }, contenuto: html`` }))
-  .split('<nav>')[1].split('</nav>')[0].matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map(m => [m[2], m[1]]);
+const pagina = (ruolo: 'ufficio' | 'produzione', attiva?: string) => String(layout({ titolo: 'Prova', utente: { id: 1, nome: 'Prova', ruolo }, attiva, contenuto: html`` }));
+const link = (pezzo: string) => [...pezzo.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map(m => [m[2], m[1]]);
+const menu = (ruolo: 'ufficio' | 'produzione') => pagina(ruolo).split('<nav class="menu">')[1].split('</nav>')[0];
+const destra = (ruolo: 'ufficio' | 'produzione') => link(pagina(ruolo).split('<nav class="menu-destra">')[1].split('</nav>')[0]).map(v => v[0]);
+const gruppi = (ruolo: 'ufficio' | 'produzione') => [...menu(ruolo).matchAll(/class="titolo-gruppo[^"]*"[^>]*>([^<]+)</g)].map(m => m[1]);
 
-test('menu in alto: ordine deciso da Adriano (28/10/2026), Componenti diventa Quotazioni', () => {
-  assert.deepEqual(voci('ufficio').map(v => v[0]),
-    ['CRM', 'Anagrafiche', 'Quotazioni', 'Preventivi', 'Ordini', 'Commesse', 'Amministrazione', 'Impostazioni', 'Suggerimenti', 'Guida']);
-  assert.deepEqual(voci('ufficio').find(v => v[0] === 'Quotazioni'), ['Quotazioni', '/quotazioni']);
-  assert.deepEqual(voci('produzione').map(v => v[0]), ['Guida']);
+test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acquisti, Produzione, Amministrazione; a destra Impostazioni, Suggerimenti, Guida', () => {
+  assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione']);
+  assert.deepEqual(destra('ufficio'), ['Impostazioni', 'Suggerimenti', 'Guida']);
+  const voci = link(menu('ufficio'));
+  assert.ok(voci.some(v => v[0] === 'Quotazioni' && v[1] === '/quotazioni'));
+  assert.ok(voci.some(v => v[0] === 'Ordini a fornitore' && v[1] === '/ordini/fornitori'));
+  assert.ok(voci.some(v => v[0] === 'Commesse' && v[1] === '/commesse'));
+  // la produzione vede solo la Guida
+  assert.deepEqual(gruppi('produzione'), []);
+  assert.deepEqual(destra('produzione'), ['Guida']);
+});
+
+test('menu a gruppi: la sezione della pagina accende il suo gruppo', () => {
+  assert.equal(gruppoAttivo('quotazioni'), 'commerciale');
+  assert.equal(gruppoAttivo('ordini'), 'commerciale');
+  assert.equal(gruppoAttivo('acquisti'), 'acquisti');
+  assert.equal(gruppoAttivo('commesse'), 'produzione');
+  assert.match(pagina('ufficio', 'acquisti'), /class="titolo-gruppo attiva"[^>]*>Acquisti</);
+  assert.equal(MENU_GRUPPI.every(g => g.voci.length > 0), true);
 });
 
 test('Quotazioni: i vecchi indirizzi /componenti restano validi', () => {
@@ -29,4 +46,9 @@ test('guida: "quotazioni" porta alla quotazione delle BOM', () => {
 test('guida: miglior prezzo di un P/N tra gli shop', () => {
   for (const q of ['miglior prezzo di un componente', 'confrontare i prezzi degli shop'])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === 'miglior-prezzo'), q);
+});
+
+test('guida: dove trovo le voci del menu a gruppi', () => {
+  for (const q of ['menu a tendina', 'dove sono finiti gli ordini a fornitore nel menu'])
+    assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === 'menu-gruppi'), q);
 });

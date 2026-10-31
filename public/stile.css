@@ -25,13 +25,24 @@ h2 { font-size: 1.1rem; margin: 1.6rem 0 .5rem; font-weight: 650; display: flex;
 
 /* testata */
 .testata { display: flex; align-items: center; gap: 2rem; padding: .6rem 1.5rem; background: var(--carta); border-bottom: 1px solid var(--bordo); position: sticky; top: 0; z-index: 5; }
-.marchio { display: flex; align-items: center; gap: .5rem; font-weight: 700; color: var(--testo); text-decoration: none; }
+.marchio { display: flex; align-items: center; gap: .5rem; white-space: nowrap; font-weight: 700; color: var(--testo); text-decoration: none; }
 .marchio small { font-weight: 400; color: var(--tenue); }
 .marchio.grande { font-size: 1.4rem; justify-content: center; margin-bottom: 1rem; }
 .logo { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 6px; background: var(--accento); color: #fff; font-weight: 800; }
 .testata nav { display: flex; gap: .3rem; flex: 1; }
 .testata nav a { padding: .45rem .8rem; border-radius: 6px; text-decoration: none; color: var(--tenue); font-weight: 550; }
 .testata nav a.attiva, .testata nav a:hover { background: var(--accento-chiaro); color: var(--accento); }
+/* menu a gruppi con tendina (31/10/2026): si apre passando sopra o con il tasto Tab (focus) */
+.testata nav.menu-destra { flex: 0 0 auto; }
+.testata nav.menu-destra a { font-size: .92rem; padding: .4rem .6rem; }
+.testata .gruppo { position: relative; }
+.testata .gruppo .tendina { display: none; position: absolute; top: 100%; left: 0; min-width: 15rem; padding: .35rem; margin-top: 2px;
+  background: var(--carta); border: 1px solid var(--bordo); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 20; }
+.testata .gruppo:hover .tendina, .testata .gruppo:focus-within .tendina { display: block; }
+.testata .gruppo .tendina a { display: block; padding: .5rem .7rem; color: var(--testo); font-weight: 500; white-space: nowrap; }
+.testata .gruppo .tendina a:hover { background: var(--accento-chiaro); color: var(--accento); }
+.testata .gruppo .titolo-gruppo { display: inline-block; white-space: nowrap; }
+.testata .gruppo .titolo-gruppo::after { content: ' ▾'; font-size: .75em; opacity: .6; }
 .utente { color: var(--tenue); font-size: .9rem; white-space: nowrap; }
 
 main { max-width: 1500px; margin: 0 auto; padding: 1.5rem; }
@@ -163,6 +174,9 @@ table.editor tr.nuova-riga td { background: #fafbfa; }
 @media (max-width: 640px) {
   main { padding: 1rem; }
   .testata { gap: .8rem; padding: .5rem 1rem; flex-wrap: wrap; }
+  .testata nav.menu { flex-wrap: wrap; flex-basis: 100%; }
+  .testata nav a, .testata .gruppo .titolo-gruppo { padding: .4rem .55rem; }
+  .testata .gruppo .tendina { min-width: 13rem; }
   .totale.principale { grid-column: auto; }
 }
 
