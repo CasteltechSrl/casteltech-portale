@@ -590,6 +590,26 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/registri', 'Registri IVA']],
   },
   {
+    id: 'accesso-contabilita', area: 'amministrazione', titolo: 'Accesso del commercialista (sola lettura)',
+    parole: 'commercialista contabilita contabile consulente sonia hts utente accesso password sola lettura profilo vedere consultare',
+    testo: [
+      'Il commercialista e chi aiuta con la contabilità (es. Sonia di HTS) possono entrare nel portale con il profilo "Contabilità (sola lettura)": vedono tutta l\'Amministrazione (cruscotto, documenti emessi, fatture fornitori, acquisti del mese, registri IVA, controllo VIES), scaricano Excel, file XML e stampe, leggono la Guida.',
+      'Non possono modificare nulla: niente bozze, emissioni, invii allo SdI, pagamenti segnati. I pulsanti che modificano non compaiono e il portale rifiuta comunque ogni modifica. Le altre sezioni (preventivi, commesse, ordini, impostazioni…) non le vedono.',
+      'L\'utente lo crea l\'ufficio in Impostazioni → Utenti: nome, email, profilo "Contabilità (sola lettura)" e una password di almeno 10 caratteri da comunicare alla persona. Per bloccare l\'accesso si toglie la spunta Attivo.',
+    ],
+    passi: ['Impostazioni → Utenti.', 'Nell\'ultima riga scrivi nome ed email, scegli "Contabilità (sola lettura)" e una password.', 'Premi Aggiungi e manda indirizzo del portale, email e password alla persona.'],
+    pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
+  },
+  {
+    id: 'acquisti-mese', area: 'amministrazione', titolo: 'Acquisti per fornitore e mese (cosa ho comprato)',
+    parole: 'acquisti comprato comprati spesa spese mese mensile fornitore fornitori mouser digikey anthropic online traccia riepilogo',
+    testo: [
+      'In Acquisti → Acquisti per fornitore e mese (o dal link in Fatture fornitori) c\'è una tabella con i fornitori sulle righe e i mesi sulle colonne: l\'imponibile delle fatture ricevute, note di credito in negativo, fornitori dal più grande.',
+      'Cliccando un importo si vedono le fatture di quel fornitore in quel mese con la descrizione; per i fornitori esteri (Mouser, DigiKey, Anthropic…) anche gli articoli scritti nell\'autofattura, e l\'ordine a fornitore collegato se c\'è. Non serve più fare l\'ordine dopo la fattura solo per tenerne traccia, come si faceva in Fatture in Cloud.',
+    ],
+    pagine: [['/amministrazione/ricevuti/mesi', 'Acquisti per fornitore e mese']],
+  },
+  {
     id: 'vies', area: 'amministrazione', titolo: 'Controllo VIES delle partite IVA europee',
     parole: 'vies partita iva europea estera ue comunitaria intracomunitaria cliente estero controllo verifica valida non imponibile art 41 consultazione',
     testo: [

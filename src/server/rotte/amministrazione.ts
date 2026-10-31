@@ -10,6 +10,7 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
+import { acquistiPerFornitore } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
@@ -525,7 +526,7 @@ export function rotteAmministrazione() {
         <select name="anno" ${daPagare ? raw('disabled') : ''}>${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
         <input name="q" value="${cerca}" placeholder="Fornitore o numero">
         <label class="riga-spunta"><input type="checkbox" name="da_pagare" value="1" ${daPagare ? raw('checked') : ''}> solo da pagare (tutti gli anni)</label>
-        <button>Cerca</button>
+        <button>Cerca</button> <a href="/amministrazione/ricevuti/mesi?anno=${anno}">Acquisti per fornitore e mese →</a>
       </form>
       <p class="nota">${righe.length} documenti${daPagare ? html` · da pagare ${euro(totaleDaPagare)}` : html` · imponibile ${euro(totale)}`}.
         Le fatture elettroniche arrivano da sole dallo SdI (Invoicetronic); lo storico viene da Fatture in Cloud.</p>
@@ -539,6 +540,59 @@ export function rotteAmministrazione() {
           <td><span class="nota taglia">${d.descrizione ?? ''}</span></td>
           <td class="num">${euro(Number(d.imponibile))}</td><td class="num">${euro(Number(d.totale))}</td>
           <td class="num">${d.da_pagare ? euro(d.da_pagare) : ''}</td><td>${d.prossima ? data(d.prossima) : ''}</td></tr>`)}</tbody></table></div>`, msg(req)));
+  });
+
+  // Acquisti per fornitore e mese (Adriano 31/10/2026): cosa si è comprato in un mese, al posto degli ordini "di traccia" di FIC
+  r.get('/ricevuti/mesi', async (req, res) => {
+    const anno = Number(req.query.anno) || Number(oggiRoma().slice(0, 4));
+    const mese = Math.min(12, Math.max(0, Number(req.query.mese) || 0));
+    const fornitore = String(req.query.fornitore ?? '');
+    const docs = await q(`SELECT d.id, d.fornitore_id, d.tipo, d.numero, d.data, d.imponibile, d.totale, d.descrizione,
+        coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '') AS nome
+      FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+      WHERE extract(year FROM d.data)::int = $1 ORDER BY d.data, d.id`, [anno]);
+    const { righe, mesi, totale } = acquistiPerFornitore(docs);
+    const anni = (await q<{ anno: number }>(`SELECT DISTINCT extract(year FROM data)::int AS anno FROM documenti_ricevuti ORDER BY 1 DESC`)).map(a => a.anno);
+    if (!anni.includes(anno)) anni.unshift(anno);
+    const chiave = (d: any) => (d.fornitore_id ? `f${d.fornitore_id}` : `n${(d.nome || '?').toUpperCase()}`);
+    const dettaglio = mese ? docs.filter(d => Number(d.data.slice(5, 7)) === mese && (!fornitore || chiave(d) === fornitore)) : [];
+    // cosa c'era dentro: righe dell'autofattura (fornitori esteri) e ordini a fornitore collegati
+    const ids = dettaglio.map(d => d.id);
+    const collegati = ids.length ? await q(`SELECT d.ricevuto_id, d.id, d.tipo, d.numero, d.sezionale,
+        (SELECT string_agg(r.descrizione, ' · ' ORDER BY r.posizione) FROM documenti_righe r WHERE r.documento_id = d.id AND NOT r.solo_descrizione) AS righe
+      FROM documenti d WHERE d.ricevuto_id = ANY($1) AND d.tipo IN ('autofattura', 'ordine_fornitore')`, [ids]) : [];
+    const perRicevuto = new Map<number, any[]>();
+    for (const c of collegati) perRicevuto.set(c.ricevuto_id, [...(perRicevuto.get(c.ricevuto_id) ?? []), c]);
+    const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+    const NOMI_MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+    const link = (m: number, f = '') => `/amministrazione/ricevuti/mesi?anno=${anno}&mese=${m}${f ? `&fornitore=${encodeURIComponent(f)}` : ''}#dettaglio`;
+    const nomeFornitore = fornitore ? righe.find(r => r.chiave === fornitore)?.nome : null;
+    res.send(pagina(req, `Acquisti per mese ${anno}`, html`
+      <div class="intestazione-pagina"><h1>Acquisti per fornitore e mese · ${anno}</h1></div>
+      ${menuAmministrazione('ricevuti')}
+      <form class="cerca" method="get">
+        <select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
+        <button>Mostra</button> <a href="/amministrazione/ricevuti?anno=${anno}">Elenco delle fatture fornitori →</a>
+      </form>
+      <p class="nota">Imponibile delle fatture dei fornitori (note di credito in negativo). Clicca un importo per vedere cosa c'era in quelle fatture.</p>
+      ${righe.length ? html`<div class="tabella-scorre limitata"><table class="elenco compatta">
+        <thead><tr><th>Fornitore</th>${MESI.map((m, i) => html`<th class="num"><a href="${link(i + 1)}">${m}</a></th>`)}<th class="num">Totale</th></tr></thead>
+        <tbody>${righe.map(r => html`<tr><td>${r.fornitoreId ? html`<a href="/anagrafiche/fornitori/${r.fornitoreId}">${r.nome}</a>` : r.nome}</td>
+            ${r.mesi.map((v, i) => html`<td class="num">${v ? html`<a href="${link(i + 1, r.chiave)}">${euro(v)}</a>` : ''}</td>`)}
+            <td class="num"><strong>${euro(r.totale)}</strong></td></tr>`)}
+          <tr class="totale-riga"><td><strong>Totale</strong></td>${mesi.map((v, i) => html`<td class="num"><a href="${link(i + 1)}"><strong>${v ? euro(v) : ''}</strong></a></td>`)}
+            <td class="num"><strong>${euro(totale)}</strong></td></tr>
+        </tbody></table></div>` : html`<p class="vuoto">Nessuna fattura fornitore nel ${anno}.</p>`}
+      ${mese ? html`<h2 id="dettaglio">${NOMI_MESI[mese - 1]} ${anno}${nomeFornitore ? html` · ${nomeFornitore}` : ''} · ${dettaglio.length} documenti
+          ${fornitore ? html` <a class="nota" href="${link(mese)}">tutti i fornitori del mese</a>` : ''}</h2>
+        ${dettaglio.length ? html`<div class="tabella-scorre"><table class="elenco">
+          <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Cosa</th><th class="num">Imponibile</th></tr></thead>
+          <tbody>${dettaglio.map(d => html`<tr><td>${data(d.data)}</td><td>${d.nome}</td>
+            <td><a href="/amministrazione/ricevuti/${d.id}">${d.tipo === 'nota_credito' ? html`<span class="etichetta">NC</span> ` : ''}${d.numero || 'senza n.'}</a></td>
+            <td>${d.descrizione ?? ''}${(perRicevuto.get(d.id) ?? []).map((c, i) => html`${d.descrizione || i ? html`<br>` : ''}<span class="nota">${c.tipo === 'autofattura' ? 'autofattura' : 'ordine'}
+              <a href="${c.tipo === 'autofattura' ? `/amministrazione/documenti/${c.id}` : `/ordini/fornitori/${c.id}`}">${c.numero == null ? 'bozza' : numeroCompleto(c.numero, c.sezionale)}</a>${c.righe ? `: ${c.righe}` : ''}</span>`)}</td>
+            <td class="num">${euro((d.tipo === 'nota_credito' ? -1 : 1) * Number(d.imponibile))}</td></tr>`)}</tbody></table></div>`
+          : html`<p class="vuoto">Nessun documento.</p>`}` : ''}`, msg(req)));
   });
 
   r.get('/ricevuti/:id', async (req, res) => {

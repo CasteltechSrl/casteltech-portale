@@ -26,6 +26,7 @@ import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
 import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
 import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
 import { rotteServizi } from './servizi.js';
+import { DESCRIZIONI_RUOLI, NOMI_RUOLI, RUOLI, ruoloDaModulo } from '../../engine/ruoli.js';
 
 /** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
 const CODICI_INIZIALI: Record<TabellaCatalogo, Set<string>> = {
@@ -479,13 +480,14 @@ export function rotteImpostazioni() {
   r.get('/utenti', async (req, res) => {
     const utenti = await q(`SELECT id, nome, email, ruolo, attivo, pin_hash IS NOT NULL AS ha_pin FROM utenti ORDER BY ruolo, nome`);
     res.send(pag(req, 'Utenti', html`
-      <p class="nota">Ufficio: accesso completo. Produzione: solo inserimento tempi e note sulle schede (accesso con email e password; il PIN servirà per tablet e telefono).</p>
+      <p class="nota">${RUOLI.map((x, i) => html`${i ? ' · ' : ''}<strong>${NOMI_RUOLI[x]}</strong>: ${DESCRIZIONI_RUOLI[x]}`)}.
+        La produzione entra anche da telefono con sigla e PIN (Impostazioni → Operatori).</p>
       <table class="editor">
         <thead><tr><th>Nome</th><th>Email</th><th>Ruolo</th><th>Attivo</th><th>Nuova password</th><th></th></tr></thead>
         <tbody>${utenti.map(u => html`<tr>
           <td><input name="nome" value="${u.nome}" form="u-${u.id}"></td>
           <td><input name="email" value="${u.email ?? ''}" form="u-${u.id}" type="email"></td>
-          <td><select name="ruolo" form="u-${u.id}">${['ufficio', 'produzione'].map(x => html`<option ${x === u.ruolo ? raw('selected') : ''}>${x}</option>`)}</select></td>
+          <td><select name="ruolo" form="u-${u.id}">${RUOLI.map(x => html`<option value="${x}" ${x === u.ruolo ? raw('selected') : ''}>${NOMI_RUOLI[x]}</option>`)}</select></td>
           <td><input type="checkbox" name="attivo" form="u-${u.id}" ${u.attivo ? raw('checked') : ''}></td>
           <td><input name="password" type="password" form="u-${u.id}" placeholder="lascia vuoto per non cambiarla" autocomplete="new-password"></td>
           <td class="nowrap"><form method="post" action="/impostazioni/utenti/${u.id}" id="u-${u.id}"><button>Salva</button></form>
@@ -494,7 +496,7 @@ export function rotteImpostazioni() {
           <tr class="nuova-riga">
             <td><input name="nome" form="u-nuovo" required placeholder="Nome e cognome"></td>
             <td><input name="email" form="u-nuovo" type="email" required></td>
-            <td><select name="ruolo" form="u-nuovo"><option>produzione</option><option>ufficio</option></select></td>
+            <td><select name="ruolo" form="u-nuovo">${RUOLI.map(x => html`<option value="${x}" ${x === 'produzione' ? raw('selected') : ''}>${NOMI_RUOLI[x]}</option>`)}</select></td>
             <td></td>
             <td><input name="password" type="password" form="u-nuovo" required minlength="10" autocomplete="new-password" placeholder="almeno 10 caratteri"></td>
             <td><form method="post" action="/impostazioni/utenti" id="u-nuovo"><button class="primario">Aggiungi</button></form></td>
@@ -506,7 +508,7 @@ export function rotteImpostazioni() {
     if (pwd.length < 10) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'));
     try {
       await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, $4)`,
-        [String(req.body.nome).trim(), String(req.body.email).trim(), await bcrypt.hash(pwd, 12), req.body.ruolo === 'ufficio' ? 'ufficio' : 'produzione']);
+        [String(req.body.nome).trim(), String(req.body.email).trim(), await bcrypt.hash(pwd, 12), ruoloDaModulo(req.body.ruolo)]);
     } catch { return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Email già presente.')); }
     res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente aggiunto.'));
   });
@@ -528,7 +530,7 @@ export function rotteImpostazioni() {
 
   r.post('/utenti/:id', async (req, res) => {
     const id = Number(req.params.id);
-    const ruolo = req.body.ruolo === 'ufficio' ? 'ufficio' : 'produzione';
+    const ruolo = ruoloDaModulo(req.body.ruolo);
     const attivo = req.body.attivo === 'on';
     if (id === req.session.utente!.id && (!attivo || ruolo !== 'ufficio'))
       return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Non puoi disattivare o declassare te stesso.'));

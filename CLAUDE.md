@@ -320,5 +320,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    vincono i totali (segnalato). Liquidazione indicativa, "Da controllare" (numeri mancanti, scartate, bozze nel periodo). Excel e zip per il commercialista
    (Excel + XML, scritto a pezzi da 20). Controllo VIES (REST della Commissione, con la nostra P.IVA → numero di consultazione, `controlli_vies`; valido 90 gg;
    errori del servizio = "non verificabile", non "non valida"): pagina Amministrazione → Controllo VIES e riquadro nella bozza di fattura a cliente UE.
+   ✅ Profilo Contabilità in sola lettura (Adriano 31/10/2026: il commercialista e Sonia di HTS; `engine/ruoli.ts`, migrazione 049, test in `tests/ruoli.test.ts`):
+   ruolo 'contabilita' = solo GET sotto /amministrazione (`contabilitaPuo`, middleware `amministrazioneOContabilita` in `index.ts`) + Guida; menu con il solo
+   gruppo Amministrazione, `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
+   ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
+   dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
    (conferme d'ordine: vedi 4c)
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).
