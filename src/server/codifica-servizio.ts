@@ -107,7 +107,9 @@ export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: 
 
 // ───────────────────────────── archivio componenti ─────────────────────────────
 interface Componente { id: number; pn: string | null; pn_key: string | null; famiglia: string | null; codice_produzione: string | null; codice_gestionale: string | null;
-  descrizione: string | null; attributi: Attributi; fonte: string | null; note: string | null; produttore: string | null; stato: string | null }
+  descrizione: string | null; attributi: Attributi; fonte: string | null; note: string | null; produttore: string | null; stato: string | null;
+  // ultimo acquisto (migrazione 051, ordini a fornitore di FIC)
+  prezzo_acquisto?: number | null; prezzo_fornitore?: string | null; prezzo_quantita?: number | null; prezzo_data?: string | null; prezzo_nota?: string | null; prezzo_fonte?: string | null }
 
 const perPn = async (chiavi: string[]) => chiavi.length ? q<Componente>(`SELECT * FROM componenti WHERE pn_key = ANY($1) ORDER BY id`, [chiavi]) : [];
 const perProduzione = async (codici: string[]) => codici.length ? q<Componente>(`SELECT * FROM componenti WHERE upper(codice_produzione) = ANY($1) ORDER BY id`, [codici.map(c => c.toUpperCase())]) : [];

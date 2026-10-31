@@ -163,6 +163,7 @@ table.editor select { min-width: 7.5rem; }
 table.editor td.largo { min-width: 16rem; }
 table.editor input.corto { width: 5rem; }
 table.editor input.codice { width: 9rem; }
+table.editor input.prezzo { width: 6.5rem; text-align: right; }
 table.editor input.formula { font-family: var(--mono); font-size: .82rem; }
 table.editor tr.nuova-riga td { background: #fafbfa; }
 .stretto-form { max-width: 460px; display: grid; gap: .9rem; }

@@ -15,6 +15,8 @@ import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafi
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
+import { caricaPrezzi } from '../prezzi-servizio.js';
+import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti']];
@@ -69,6 +71,21 @@ export function rotteAnagrafiche() {
       </div>
     </details>`;
 
+  // prezzi da Fatture in Cloud (Adriano 31/10/2026): stesso riquadro in Prodotti e Componenti
+  const caricaPrezziFic = html`
+    <details class="blocco">
+      <summary>Carica i prezzi da Fatture in Cloud (file preparato da Claude)</summary>
+      <div class="stretto-form dentro-blocco">
+        <p class="nota">Prodotti: il prezzo di vendita più recente tra l'anagrafica prodotti di FIC e l'ultima fattura emessa al cliente.
+          Componenti: il prezzo dell'ultimo ordine a fornitore con quel P/N o codice. I prezzi scritti a mano qui nel portale non vengono toccati.
+          Prima mostra un riepilogo e chiede conferma; si può ricaricare.</p>
+        <label>File <input type="file" id="file-prezzi" accept=".gz,.json"></label>
+        <button class="primario" type="button" id="carica-prezzi">Controlla il file</button>
+        <output id="esito-prezzi"></output>
+        <button class="primario" type="button" id="conferma-prezzi" hidden>Conferma e carica</button>
+      </div>
+    </details>`;
+
   // ── Clienti ──
   r.get('/clienti', async (req, res) => {
     const clienti = await elencoClienti();
@@ -100,7 +117,7 @@ export function rotteAnagrafiche() {
   r.get('/prodotti', async (req, res) => {
     const filtro = Number(req.query.cliente) || 0;
     const clienti = await elencoClienti();
-    const prodotti = await q(`SELECT p.id, p.codice, p.descrizione, p.cliente_id,
+    const prodotti = await q(`SELECT p.id, p.codice, p.descrizione, p.cliente_id, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_nota, p.prezzo_data::text AS prezzo_data,
         (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi,
         (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
           + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id) AS altri
@@ -124,24 +141,28 @@ export function rotteAnagrafiche() {
       </form>
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length)}
       <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
-        <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n">Preventivi</th><th></th></tr></thead>
+        <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
           <tr class="nuova-riga">
             <td><input name="codice" form="p-nuovo" class="maiuscolo" required placeholder="NUOVO CODICE"></td>
             <td class="largo"><input name="descrizione" form="p-nuovo" class="maiuscolo" required></td>
-            <td><select name="cliente_id" form="p-nuovo" required>${opzClienti(filtro > 0 ? filtro : null)}</select></td><td></td>
+            <td><select name="cliente_id" form="p-nuovo" required>${opzClienti(filtro > 0 ? filtro : null)}</select></td>
+            <td><input name="prezzo" form="p-nuovo" class="prezzo" inputmode="decimal"></td><td></td>
             <td><form method="post" action="/anagrafiche/prodotti" id="p-nuovo"><input type="hidden" name="filtro" value="${filtro}"><button class="primario">Aggiungi</button></form></td>
           </tr>
           ${prodotti.map(p => html`<tr class="${p.cliente_id === null ? 'senza-cliente' : ''}" title="${p.cliente_id === null ? 'Codice senza cliente: assegnalo a un cliente o eliminalo' : ''}">
             <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo"></td>
             <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
-            <td><select name="cliente_id" form="p-${p.id}" required>${opzClienti(p.cliente_id)}</select></td><td class="n">${p.preventivi}</td>
+            <td><select name="cliente_id" form="p-${p.id}" required>${opzClienti(p.cliente_id)}</select></td>
+            <td><input name="prezzo" form="p-${p.id}" class="prezzo" inputmode="decimal" value="${p.prezzo == null ? '' : num(p.prezzo, 5)}"
+              title="${testoPrezzo(p)}"></td><td class="n">${p.preventivi}</td>
             <td class="nowrap"><form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
       ${prodotti.length === 2000 ? html`<p class="nota">Mostrati i primi 2.000: scegli un cliente per vedere gli altri.</p>` : ''}
-      ${caricaFile}`, msg(req)));
+      <p class="nota">Prezzo: di vendita a scheda, IVA esclusa. Passa sopra la casella per vedere da dove arriva (fattura, anagrafica di Fatture in Cloud o scritto a mano).</p>
+      ${caricaFile}${caricaPrezziFic}`, msg(req)));
   });
 
   // ── Componenti: l'archivio della codifica (tanti: la ricerca si fa nel database, con Invio) ──
@@ -157,14 +178,17 @@ export function rotteAnagrafiche() {
       <form class="ricerca-veloce" method="get"><input type="search" name="q" value="${testo}" placeholder="Cerca P/N, codice di produzione o gestionale, descrizione… e premi Invio" autofocus>
         <button class="primario">Cerca</button></form>
       ${testo ? (righe.length ? html`<div class="tabella-scorre"><table class="componenti"><thead><tr><th>P/N</th><th>Fam.</th><th>Codice produzione</th>
-        <th>Codice gestionale</th><th>Descrizione</th><th>Stato</th><th>Fonte</th><th>Note</th><th></th></tr></thead><tbody>
+        <th>Codice gestionale</th><th>Descrizione</th><th class="n" title="Prezzo dell'ultimo ordine a fornitore">Ultimo acquisto €</th><th>Fornitore</th><th>Stato</th><th>Fonte</th><th>Note</th><th></th></tr></thead><tbody>
         ${righe.map(c => html`<tr><td>${c.pn}</td><td>${c.famiglia}</td><td class="codice">${c.codice_produzione}</td><td class="codice">${c.codice_gestionale}</td>
-          <td class="taglia">${c.descrizione}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
+          <td class="taglia">${c.descrizione}</td>
+          <td class="n" title="${testoAcquisto(c)}">${c.prezzo_acquisto == null ? '' : num(Number(c.prezzo_acquisto), 5)}</td>
+          <td class="taglia" title="${testoAcquisto(c)}">${c.prezzo_fornitore ?? ''}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
           <td><form method="post" action="/anagrafiche/componenti/${c.id}/elimina?q=${encodeURIComponent(testo)}" class="inline"
             data-conferma="${`Eliminare dall'archivio ${c.codice_gestionale || c.codice_produzione || c.pn}?` + (c.codice_gestionale ? `\n\nSe il codice ${c.codice_gestionale} è già stato creato in Moka, non eliminarlo: il suo numero verrebbe riassegnato al prossimo componente nuovo.` : '')}">
             <button class="link negativo">Elimina</button></form></td></tr>`)}
         </tbody></table></div>${righe.length === 200 ? html`<p class="nota">Mostrati i primi 200: scrivi qualcosa in più per restringere.</p>` : ''}`
-        : html`<p class="vuoto">Nessun componente trovato.</p>`) : html`<p class="vuoto">Scrivi cosa cerchi e premi Invio.</p>`}`, msg(req)));
+        : html`<p class="vuoto">Nessun componente trovato.</p>`) : html`<p class="vuoto">Scrivi cosa cerchi e premi Invio.</p>`}
+      ${caricaPrezziFic}`, msg(req), 'anagrafiche.js'));
   });
   // componente codificato per errore
   r.post('/componenti/:id/elimina', async (req, res) => {
@@ -172,13 +196,16 @@ export function rotteAnagrafiche() {
     res.redirect(`/anagrafiche/componenti?q=${encodeURIComponent(String(req.query.q ?? ''))}&msg=${encodeURIComponent('Componente eliminato dall\'archivio.')}`);
   });
   r.get('/componenti.xlsx', async (_req, res) => {
-    const righe = await q<any>(`SELECT pn, produttore, famiglia, codice_produzione, codice_gestionale, descrizione, stato, fonte, note, attributi FROM componenti ORDER BY codice_gestionale NULLS LAST, id`);
+    const righe = await q<any>(`SELECT pn, produttore, famiglia, codice_produzione, codice_gestionale, descrizione, stato, fonte, note, attributi,
+      prezzo_acquisto::float AS prezzo_acquisto, prezzo_fornitore, prezzo_data::text AS prezzo_data, prezzo_quantita::float AS prezzo_quantita
+      FROM componenti ORDER BY codice_gestionale NULLS LAST, id`);
     const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Componenti');
-    ws.columns = [['P/N', 24], ['Produttore', 16], ['Famiglia', 8], ['Codice produzione', 32], ['Codice gestionale', 22], ['Descrizione', 40], ['Stato', 14], ['Fonte', 22], ['Note', 50], ['Attributi', 40]]
+    ws.columns = [['P/N', 24], ['Produttore', 16], ['Famiglia', 8], ['Codice produzione', 32], ['Codice gestionale', 22], ['Descrizione', 40], ['Stato', 14], ['Fonte', 22], ['Note', 50], ['Attributi', 40],
+      ['Ultimo acquisto €', 14], ['Fornitore', 28], ['Data acquisto', 12], ['Quantità ordinata', 10]]
       .map(([header, width]) => ({ header: header as string, width: width as number }));
     ws.getRow(1).font = { bold: true };
     for (const c of righe) ws.addRow([c.pn, c.produttore, c.famiglia, c.codice_produzione, c.codice_gestionale, c.descrizione, c.stato, c.fonte, c.note,
-      Object.entries(c.attributi ?? {}).map(([k, v]) => `${k}=${v}`).join('; ')]);
+      Object.entries(c.attributi ?? {}).map(([k, v]) => `${k}=${v}`).join('; '), c.prezzo_acquisto, c.prezzo_fornitore, dataIt(c.prezzo_data), c.prezzo_quantita]);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="archivio_componenti_${new Date().toISOString().slice(0, 10)}.xlsx"`);
     res.send(Buffer.from(await wb.xlsx.writeBuffer()));
@@ -193,6 +220,17 @@ export function rotteAnagrafiche() {
       if (!Array.isArray(f.clienti) || !Array.isArray(f.prodotti)) throw new Error();
     } catch { return res.status(400).json({ errore: 'File non valido: serve anagrafiche_casteltech.json.gz' }); }
     res.json(await caricaAnagrafiche(f, { togli: req.query.togli === '1', anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/prezzi', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+    let f: any;
+    try {
+      let b = req.body as Buffer;
+      if (b[0] === 0x1f && b[1] === 0x8b) b = gunzipSync(b);
+      f = JSON.parse(b.toString('utf8'));
+      if (!Array.isArray(f.prodotti) || !Array.isArray(f.componenti)) throw new Error();
+    } catch { return res.status(400).json({ errore: 'File non valido: serve prezzi_fic.json.gz' }); }
+    res.json(await caricaPrezzi(f, { anteprima: req.query.conferma !== '1' }));
   });
 
   const duplicatoCliente = async (nome: string, escludi = 0) =>
@@ -266,7 +304,11 @@ export function rotteAnagrafiche() {
     const senza = erroreClienteProdotto(cliente);
     if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
     if (await duplicatoProdotto(codice, cliente)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
-    await q(`INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1,$2,$3)`, [codice, descrizione, cliente]);
+    const prezzo = leggiPrezzo(req.body.prezzo);
+    if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
+    await q(`INSERT INTO prodotti (codice, descrizione, cliente_id, prezzo_vendita, prezzo_fonte, prezzo_data, prezzo_nota)
+      VALUES ($1,$2,$3,$4::numeric, CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'manuale' END, CASE WHEN $4::numeric IS NULL THEN NULL ELSE current_date END,
+        CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END)`, [codice, descrizione, cliente, prezzo]);
     res.redirect(torna(`${codice} aggiunto.`, '/prodotti', dopoProdotto(req.body, cliente)));
   });
   r.post('/prodotti/:id', async (req, res) => {
@@ -276,7 +318,14 @@ export function rotteAnagrafiche() {
     const senza = erroreClienteProdotto(cliente);
     if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
     if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
+    const prezzo = leggiPrezzo(req.body.prezzo);
+    if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
     await q(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = $4 WHERE id = $1`, [id, codice, descrizione, cliente]);
+    // prezzo cambiato a mano: da qui in poi vale quello (il caricamento da FIC non lo tocca più); casella vuotata = di nuovo senza prezzo
+    if (req.body.prezzo !== undefined) await q(`UPDATE prodotti SET prezzo_vendita = $2::numeric,
+        prezzo_fonte = CASE WHEN $2::numeric IS NULL THEN NULL ELSE 'manuale' END, prezzo_data = CASE WHEN $2::numeric IS NULL THEN NULL ELSE current_date END,
+        prezzo_nota = CASE WHEN $2::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END
+      WHERE id = $1 AND prezzo_vendita IS DISTINCT FROM $2::numeric`, [id, prezzo]);
     await q(`UPDATE preventivi v SET intestazione = v.intestazione || jsonb_build_object('codice', $2::text, 'descrizione', $3::text)
       FROM prodotti_revisioni r WHERE r.id = v.revisione_id AND r.prodotto_id = $1`, [id, codice, descrizione]);
     res.redirect(torna(`${codice} salvato.`, '/prodotti', dopoProdotto(req.body, cliente)));
@@ -329,3 +378,10 @@ export function rotteAnagrafiche() {
 
 /** Il tasto Elimina compare solo se il cliente / prodotto non è mai stato usato. */
 const eliminabile = (x: { preventivi: number; altri: number; prodotti?: number }) => !x.preventivi && !x.altri && !x.prodotti;
+
+/** Da dove arriva il prezzo del prodotto (testo del suggerimento sulla casella). */
+const testoPrezzo = (p: { prezzo: number | null; prezzo_nota: string | null; prezzo_data: string | null }) =>
+  p.prezzo == null ? 'Nessun prezzo: scrivilo e premi Salva' : [p.prezzo_nota, p.prezzo_data && !String(p.prezzo_nota ?? '').includes(dataIt(p.prezzo_data)) ? `(${dataIt(p.prezzo_data)})` : ''].filter(Boolean).join(' ');
+/** Ultimo acquisto del componente: fornitore, data, quantità e ordine. */
+const testoAcquisto = (c: any) => c.prezzo_acquisto == null ? 'Nessun ordine a fornitore trovato'
+  : `${c.prezzo_fornitore ?? ''}, ${dataIt(c.prezzo_data instanceof Date ? c.prezzo_data.toISOString() : c.prezzo_data)}, ${num(Number(c.prezzo_quantita), 0)} pz. ${c.prezzo_nota ?? ''}`.trim();
