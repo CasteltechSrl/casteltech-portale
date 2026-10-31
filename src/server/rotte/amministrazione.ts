@@ -26,6 +26,9 @@ import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDif
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
+import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
+import { controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
+import { documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, scriviXml, segnaIncassate } from '../azioni-documenti-servizio.js';
 
 const NOMI: Record<string, { uno: string; tanti: string }> = {
   fattura: { uno: 'Fattura', tanti: 'Fatture' }, nota_credito: { uno: 'Nota di credito', tanti: 'Note di credito' },
@@ -165,7 +168,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
 
 export function rotteAmministrazione() {
   const r = Router();
-  const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) =>
+  const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string | string[]) =>
     String(layout({ titolo, utente: req.session.utente, attiva: 'amministrazione', contenuto, avviso, script, largo: true }));
   const msg = (req: Request) => (req.query.msg ? String(req.query.msg) : undefined);
 
@@ -191,6 +194,12 @@ export function rotteAmministrazione() {
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti ORDER BY anno DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
     const totale = righe.filter(d => d.stato !== 'bozza' && d.stato !== 'annullato').reduce((s, d) => s + Number(d.imponibile), 0);
+    // spunte e pulsanti in alto a destra (Adriano 31/10/2026); il profilo Contabilità (sola lettura) vede l'elenco senza
+    const spunte = req.session.utente?.ruolo !== 'contabilita' && tipo in NOMI;
+    const modulo = spunte ? moduloAzioni({
+      azione: '/amministrazione/documenti/azioni', nome: { singolare: 'documento', plurale: 'documenti' }, pulsanti: pulsantiDocumenti(tipo),
+      extra: html`<input type="hidden" name="tipo" value="${tipo}"><input type="hidden" name="torna" value="${req.originalUrl}">`,
+    }) : { apri: html``, chiudi: html`` };
     res.send(pagina(req, NOMI[tipo]?.tanti ?? 'Documenti', html`
       <div class="intestazione-pagina"><h1>Amministrazione</h1>
         <div class="azioni">
@@ -208,16 +217,111 @@ export function rotteAmministrazione() {
       </form>
       ${tipo === 'autofattura' ? await riquadroFattureEstere() : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
-      ${righe.length ? html`<div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
+      ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
+        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(d => html`<tr>
+          ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
             ${d.origine === 'fic' ? html` <span class="etichetta">FIC</span>` : ''}</td>
           <td>${data(d.data)}</td><td>${d.intestatario ?? ''}</td>
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
-        </tr>`)}</tbody></table></div>` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req), tipo === 'autofattura' ? 'acquisizioni.js' : undefined));
+        </tr>`)}</tbody></table></div>${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
+      [...(tipo === 'autofattura' ? ['acquisizioni.js'] : []), ...(spunte ? ['elenco.js'] : [])]));
+  });
+
+  // pulsanti in alto a destra dell'elenco (righe spuntate): regole in engine/azioni-documenti.ts
+  r.post('/documenti/azioni', async (req, res) => {
+    const tipo = String(req.body?.tipo ?? '');
+    const indietro = /^\/amministrazione\/documenti(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : `/amministrazione/documenti?tipo=${encodeURIComponent(tipo)}`;
+    const torna = (t: string) => res.redirect(conMessaggio(indietro, t));
+    const azione = String(req.body?.azione ?? '') as AzioneDocumenti;
+    if (!pulsantiDocumenti(tipo).some(p => p.azione === azione)) return torna('Azione non riconosciuta.');
+    const docs = await documentiSpuntati(idsSpuntati(req.body), tipo);
+    if (!docs.length) return torna('Seleziona almeno un documento.');
+    const { si, no } = dividiPerAzione(azione, docs);
+    const esclusi = frasiEscluse(no);
+    const utente = req.session.utente?.id ?? null;
+    if (!si.length) return torna(`Nessun documento adatto. ${esclusi}`);
+    const vaiA = (indirizzo: string, t: string) => res.redirect(`${indirizzo}?msg=${encodeURIComponent(t)}`);
+    try {
+      switch (azione) {
+        case 'stampa': return res.redirect(`/amministrazione/documenti/${si[0].id}/stampa`);
+        case 'xml': return await scriviXml(res, si, tipo);
+        case 'excel': {
+          const file = await excelDocumenti(si, tipo);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', `attachment; filename="${NOMI[tipo].tanti.replace(/ /g, '_')}_${si.length}.xlsx"`);
+          return res.send(file);
+        }
+        case 'elimina': {
+          const n = await eliminaBozze(si.map(d => d.id));
+          return torna(`${n === 1 ? '1 bozza eliminata' : `${n} bozze eliminate`}. ${esclusi}`.trim());
+        }
+        case 'annulla': {
+          let n = 0; const errori: string[] = [];
+          for (const d of si) { const e = await annullaDdt(d.id); if (e) errori.push(`${d.etichetta}: ${e}`); else n++; }
+          return torna(`${n === 1 ? '1 DDT annullato' : `${n} DDT annullati`} (il numero resta usato). ${[esclusi, ...errori].filter(Boolean).join(' ')}`.trim());
+        }
+        case 'duplica': {
+          const id = await duplicaFattura(si[0].id, utente);
+          return id ? vaiA(`/amministrazione/documenti/${id}`, 'Copia creata come bozza con la data di oggi: controlla righe, prezzi e pagamento, poi Emetti.') : torna('Fattura non trovata.');
+        }
+        case 'nota_credito': {
+          const id = await creaNotaCredito(si[0].id, utente);
+          return vaiA(`/amministrazione/documenti/${id}`, 'Nota di credito creata come bozza: controlla righe e importi (per uno storno parziale togli o cambia le righe).');
+        }
+        case 'fattura_ddt': {
+          const diversi = controlloDdtStessoCliente(si);
+          if (diversi) return torna(diversi);
+          const fattura = await creaBozza('fattura', si[0].cliente_id!, utente);
+          const n = await aggiungiDdt(fattura, si.map(d => d.id));
+          return vaiA(`/amministrazione/documenti/${fattura}`, `Fattura preparata con ${n === 1 ? 'le righe del DDT' : `le righe di ${n} DDT`}: controlla prezzi e pagamento, poi Emetti. ${esclusi}`.trim());
+        }
+        case 'incassa': {
+          const rate = await rateAperte(si.map(d => d.id));
+          if (!rate.length) return torna(`Le fatture spuntate non hanno rate da incassare. ${esclusi}`.trim());
+          const perDoc = new Map(si.map(d => [d.id, d]));
+          const conti = await contiUsati();
+          return res.send(pagina(req, 'Segna incassate', html`
+            <p><a href="${indietro}">← ${NOMI[tipo].tanti}</a></p>
+            <h1>Segna incassate</h1>
+            ${esclusi ? html`<p class="nota">${esclusi}</p>` : ''}
+            <form method="post" action="/amministrazione/documenti/incassa" class="blocco">
+              <input type="hidden" name="torna" value="${indietro}">
+              <div class="tabella-scorre"><table class="elenco">
+                <thead><tr><th></th><th>Fattura</th><th>Cliente</th><th>Scadenza</th><th class="num">Importo</th></tr></thead>
+                <tbody>${rate.map(s => html`<tr><td class="selezione"><input type="checkbox" name="rate" value="${s.id}" checked aria-label="Rata da segnare"></td>
+                  <td><a href="/amministrazione/documenti/${s.documento_id}">${perDoc.get(s.documento_id)?.etichetta}</a></td><td>${perDoc.get(s.documento_id)?.intestatario ?? ''}</td>
+                  <td>${data(s.data)}</td><td class="num">${euro(s.importo)}</td></tr>`)}</tbody>
+                <tfoot><tr><td></td><td colspan="3"><strong>Totale</strong></td><td class="num"><strong>${euro(rate.reduce((t, s) => t + s.importo, 0))}</strong></td></tr></tfoot>
+              </table></div>
+              <datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
+              <div class="riga-campi">
+                <label class="stretto">Incassate il <input type="date" name="pagata_il" value="${oggiRoma()}" required></label>
+                <label>Modo di pagamento <select name="modo" required><option value="">Scegli…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select></label>
+                <label>Banca o conto (facoltativo) <input name="conto" list="conti" placeholder="es. Bper"></label>
+              </div>
+              <div class="barra-azioni"><span class="nota">Togli la spunta alle rate non ancora incassate. Si annulla dalla pagina della fattura.</span>
+                <button class="primario">Segna incassate</button></div>
+            </form>`));
+        }
+      }
+    } catch (e: any) {
+      return torna(e.message);
+    }
+    torna('Azione non riconosciuta.');
+  });
+
+  r.post('/documenti/incassa', async (req, res) => {
+    const indietro = /^\/amministrazione\/documenti(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : '/amministrazione/documenti';
+    const giorno = String(req.body?.pagata_il ?? '');
+    const rate = [...new Set([req.body?.rate ?? []].flat().map(Number).filter(n => Number.isInteger(n) && n > 0))];
+    const modo = modoPagamento(req.body?.modo);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(giorno) || !modo) return res.redirect(conMessaggio(indietro, 'Servono la data e il modo di pagamento.'));
+    const n = await segnaIncassate(rate, giorno, modo, String(req.body?.conto ?? '').trim() || null);
+    res.redirect(conMessaggio(indietro, n ? `${n === 1 ? '1 rata segnata incassata' : `${n} rate segnate incassate`} il ${data(giorno)}.` : 'Nessuna rata segnata.'));
   });
 
   r.get('/documenti/nuovo', async (req, res) => {
