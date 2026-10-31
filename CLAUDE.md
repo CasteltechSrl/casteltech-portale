@@ -294,5 +294,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    "Crea DDT" nella pagina dell'ordine (schede ancora da spedire, `riga_ordine_id` collegata: l'evasione la conta) o "+ Nuovo DDT"; trasporto in `dati_trasporto`
    (causale, a_cura, trasportatore, porto, colli, peso, aspetto, destinazione, inizio) proposto dall'ultimo DDT del cliente; prezzo non stampato (serve alla fattura).
    Emetti = numero in transazione (`controlliDdt`); "Annulla DDT" se la merce non parte (numero usato, stato annullato; non se è in una fattura); "Fattura questo DDT".
-   ⬜ PDF della fattura (conferme d'ordine: vedi 4c),
+   ✅ PDF di cortesia di fattura e nota di credito (Adriano 31/10/2026; `stampaFattura` in `views/stampa-documento.ts`, stessa pagina `/documenti/:id/stampa`
+   dei DDT, salvato in PDF dal browser): dati dell'azienda, cliente (fotografia dell'emissione), righe con IVA, riepilogo per aliquota/natura, bollo,
+   lettera d'intento, pagamento con scadenze e IBAN; piede "copia di cortesia, il documento fiscale è l'XML". In bozza scritta BOZZA. Autofatture escluse.
+   (conferme d'ordine: vedi 4c)
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

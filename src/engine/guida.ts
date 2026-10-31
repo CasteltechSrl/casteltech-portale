@@ -500,8 +500,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Amministrazione ──
   {
     id: 'nuova-fattura', area: 'amministrazione', titolo: 'Fare una fattura',
-    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva',
+    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa',
     testo: [
+      'Il PDF per il cliente: "PDF di cortesia" sulla fattura o nota di credito emessa (in bozza "Anteprima di stampa", con la scritta BOZZA) apre la copia da stampare o salvare in PDF con "Stampa / salva PDF". La fattura valida resta l\'XML mandato allo SdI: lo dice il piede del PDF.',
       'La fattura nasce come bozza: cliente dall\'anagrafica, righe, e i DDT ancora da fatturare di quel cliente si aggiungono con un clic. L\'IVA predefinita è quella del cliente (lettera d\'intento, estero…) o il 22%.',
       'Con "Emetti" il portale assegna il numero, calcola la scadenza dalla condizione di pagamento, prepara l\'XML della fattura elettronica e segna i DDT come fatturati. Se ci sono errori non si emette e il numero non si consuma.',
       'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. Il PDF della fattura è in preparazione.',

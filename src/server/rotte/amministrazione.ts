@@ -20,7 +20,8 @@ import {
   emettiDocumento, riapriScartato, salvaBozza, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
-import { stampaDdt } from '../views/stampa-documento.js';
+import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { calcolaTotali } from '../../engine/amministrazione.js';
 
 const NOMI: Record<string, { uno: string; tanti: string }> = {
   fattura: { uno: 'Fattura', tanti: 'Fatture' }, nota_credito: { uno: 'Nota di credito', tanti: 'Note di credito' },
@@ -248,10 +249,23 @@ export function rotteAmministrazione() {
     const id = Number(req.params.id);
     const d = await q1(`SELECT d.*, c.ragione_sociale AS c_ragione_sociale, c.partita_iva AS c_partita_iva, c.indirizzo AS c_indirizzo, c.cap AS c_cap,
         c.comune AS c_comune, c.provincia AS c_provincia, c.nazione AS c_nazione
-      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id WHERE d.id = $1 AND d.tipo = 'ddt'`, [id]);
-    if (!d) return res.status(404).send('Stampa disponibile per i DDT');
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id WHERE d.id = $1 AND d.tipo IN ('ddt', 'fattura', 'nota_credito')`, [id]);
+    if (!d) return res.status(404).send('Stampa disponibile per DDT, fatture e note di credito');
     const righe = await q(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
     const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
+    if (d.tipo !== 'ddt') {
+      // copia di cortesia: cliente come all'emissione (fotografia), in bozza i dati attuali; totali dalle righe con l'IVA predefinita del cliente
+      const attuale = d.cliente_id ? await q1(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
+      const cliente = d.intestatario && d.numero != null ? d.intestatario : attuale ?? {};
+      const conIva = righe.map(r => ({ ...r, aliquota_iva: r.solo_descrizione ? null : r.aliquota_iva || attuale?.aliquota_iva || 'IVA22' }));
+      const totali = calcolaTotali(conIva, await caricaAliquote());
+      const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
+      const pagamento = d.condizione_pagamento ? await q1(`SELECT * FROM condizioni_pagamento WHERE codice = $1`, [d.condizione_pagamento]) : null;
+      const intento = totali.riepilogo.some(g => g.natura === 'N3.5') ? await q1(d.dichiarazione_intento_id
+        ? `SELECT * FROM dichiarazioni_intento WHERE id = $1` : `SELECT * FROM dichiarazioni_intento WHERE cliente_id = $1 ORDER BY data_protocollo DESC LIMIT 1`,
+        [d.dichiarazione_intento_id ?? d.cliente_id]) : null;
+      return res.send(String(stampaFattura(d, conIva, azienda, cliente, totali, scadenze, intento, pagamento)));
+    }
     // destinatario: la fotografia fatta all'emissione; in bozza i dati attuali dell'anagrafica
     const dest = d.intestatario && d.numero != null ? d.intestatario : Object.fromEntries(Object.entries(d).filter(([k]) => k.startsWith('c_')).map(([k, v]) => [k.slice(2), v]));
     res.send(String(stampaDdt(d, righe, azienda, dest)));
@@ -315,7 +329,8 @@ export function rotteAmministrazione() {
         ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
-          ${d.tipo === 'ddt' ? html`<a class="bottone primario" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener">Stampa / PDF</a>` : ''}
+          ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
+            title="${d.tipo === 'ddt' ? '' : 'Copia di cortesia per il cliente (il documento fiscale è l\'XML)'}">${d.tipo === 'ddt' ? 'Stampa / PDF' : 'PDF di cortesia'}</a>` : ''}
           ${d.tipo === 'ddt' && d.origine === 'portale' && d.stato === 'emesso' && !d.fattura_id ? html`
             <form method="post" action="/amministrazione/documenti/${id}/fattura" class="inline"><button>Fattura questo DDT</button></form>
             <form method="post" action="/amministrazione/documenti/${id}/annulla" class="inline"
@@ -380,6 +395,7 @@ export function rotteAmministrazione() {
           <form method="post" action="/amministrazione/documenti/${id}/emetti" class="inline"
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
+          ${d.tipo !== 'autofattura' ? html`<a class="bottone" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>` : ''}
           ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
           ${d.numero == null ? html`<form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
             <button class="pericolo">Elimina bozza</button></form>` : ''}
