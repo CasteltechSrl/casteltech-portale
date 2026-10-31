@@ -458,6 +458,15 @@ export function rotteAmministrazione() {
       ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), 'documenti.js'));
   });
 
+  // prezzo di listino per codice e quantità (scaglioni, Adriano 31/10/2026): lo chiede la pagina della bozza mentre si scrive
+  r.get('/documenti/:id/prezzo', async (req, res) => {
+    const d = await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM documenti WHERE id = $1`, [Number(req.params.id)]);
+    const l = await prezzoListino(d?.cliente_id ?? null, { prodottoId: Number(req.query.prodotto_id) || null, codice: String(req.query.codice ?? '') },
+      Number(String(req.query.quantita ?? '').replace(',', '.')) || 1);
+    res.json(l && l.prezzo != null ? { prezzo: l.prezzo, prodotto_id: l.prodotto_id, descrizione: l.descrizione,
+      scaglione: l.scaglione ? `${l.scaglione.da}${l.scaglione.a == null ? '+' : l.scaglione.a === l.scaglione.da ? '' : '-' + l.scaglione.a} pz` : null } : {});
+  });
+
   r.post('/documenti/:id', async (req, res) => {
     const id = Number(req.params.id);
     const errori = await salvaBozza(id, req.body);
