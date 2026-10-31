@@ -5,7 +5,7 @@
 import { gunzipSync } from 'node:zlib';
 import { q, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
-import { abbinaSpedizioni, dateRiga, eServizio, residuo, statoRiga, type Abbinamento, type RigaOrdine, type RigaSpedita, type StatoRiga } from '../engine/ordini.js';
+import { abbinaSpedizioni, consegneDaFare, dateRiga, eServizio, pianifica, residuo, statoRiga, type Abbinamento, type Barra, type DaPianificare, type RigaOrdine, type RigaSpedita, type StatoRiga } from '../engine/ordini.js';
 
 /**
  * File di import: un anno di ordini con le loro righe, più DDT e fatture dello stesso anno.
@@ -222,4 +222,27 @@ export async function caricaOreGiorno(): Promise<number> {
   const v = (await q(`SELECT valore FROM impostazioni WHERE chiave = 'pianificazione'`))[0]?.valore;
   const n = Number(v?.oreGiorno);
   return n > 0 && n <= 24 ? n : 8;
+}
+
+/**
+ * Lavorazioni da fare per il Gantt (e per il carico delle settimane nel cruscotto generale): una barra per ogni consegna ancora da fare
+ * delle righe-scheda aperte, durata = ore ciclo dell'ultimo preventivo del prodotto × quantità ÷ ore al giorno.
+ * `righe` si può passare se già lette (il cruscotto generale le usa anche per altro).
+ */
+export async function pianificaProduzione(oggi: string, righe?: RigaElenco[]) {
+  const [oreGiorno, tempi, tutte] = await Promise.all([caricaOreGiorno(), secondiPerSchedaProdotti(), righe ? Promise.resolve(righe) : righeOrdini()]);
+  const aperte = tutte.filter(x => x.tipo === 'scheda' && x.residuoQuantita > 0);
+  const daFare: DaPianificare[] = [];
+  const perId = new Map<number, RigaElenco>();
+  let progressivo = 0;
+  for (const x of aperte) {
+    for (const k of consegneDaFare(x, x.stato)) {
+      const id = ++progressivo;
+      perId.set(id, x);
+      daFare.push({ id, etichetta: `${x.cliente} · ${x.codice ?? x.descrizione ?? ''}`, quantita: k.quantita, consegna: k.data,
+        lavorazione: k.data === x.consegna ? x.lavorazione : null, secondiPerScheda: x.prodottoId ? tempi.get(x.prodottoId) : null });
+    }
+  }
+  const barre: Barra[] = pianifica(daFare, oggi, oreGiorno);
+  return { oreGiorno, righe: aperte, daFare, perId, barre };
 }

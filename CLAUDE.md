@@ -276,6 +276,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Contatori in memoria, salvati tutti insieme 15 s dopo l'ultima chiamata (`consumi_servizi`), errori in `eventi_servizi` (stesso errore al massimo ogni 6 ore).
    Credito Anthropic prepagato scritto dall'ufficio (l'API non lo dà); avviso giallo/rosso in cima alle pagine dell'ufficio dall'80% (`avvisoServizi`, niente query).
    Facoltativi su Render: ANTHROPIC_ADMIN_KEY (costo ufficiale del mese), NEON_API_KEY + NEON_PROJECT_ID (ore di calcolo), RENDER_MEMORIA_MB, NEON_SPAZIO_MB.
+4i. ✅ Cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026; `/cruscotto`, `rotte/cruscotto-generale.ts`, letture in `cruscotto-generale-servizio.ts`,
+   conti in `engine/cruscotto-generale.ts`, test in `tests/cruscotto-generale.test.ts`; `paginaIniziale('ufficio')`): "Da fare oggi" (pulsanti rosso/giallo/verde con il numero,
+   solo voci non a zero, una sola cosa = link diretto: `cosaDaFare`), sei numeri chiave, un riquadro per area (Commerciale, Ordini clienti, Produzione con il carico
+   di 4 settimane dal Gantt = `pianificaProduzione` + `caricoSettimane`, Acquisti, Amministrazione con lo SdI, Promemoria e sistema: scadenze del 15/16, servizi, backup).
+   Letture una volta sola all'apertura, niente aggiornamenti automatici (Neon). Contabilità resta su /amministrazione, reparto su /r. Una voce nuova = una riga in `cosaDaFare`.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

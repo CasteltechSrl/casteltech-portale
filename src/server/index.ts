@@ -27,6 +27,7 @@ import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteOrdiniFornitore } from './rotte/ordini-fornitore.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
+import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { rotteGmail } from './rotte/gmail.js';
@@ -138,6 +139,8 @@ app.get('/produzione', (_req, res) => res.redirect('/r'));
 // controllo di Render: NON interroga il database, così Neon (piano gratuito) può spegnersi quando nessuno lavora
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
+// cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026)
+app.use('/cruscotto', soloUfficio, rotteCruscottoGenerale());
 app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());
 app.use('/preventivi/documenti', soloUfficio, rotteSchedeCliente());
 app.use('/preventivi', soloUfficio, rottePreventivi());

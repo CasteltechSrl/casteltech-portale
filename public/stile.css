@@ -666,3 +666,45 @@ body.sola-lettura .menu-destra .etichetta { align-self: center; }
 .riquadro-scadute.tutto-ok { background: var(--accento-chiaro); border-color: #b7dcd4; border-left-color: var(--accento); }
 .riquadro-scadute.tutto-ok h2 { color: var(--accento); display: inline; margin-right: .6rem; }
 .riquadro-scadute.tutto-ok p { display: inline; }
+
+/* cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026) */
+.saluto { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: .3rem 1rem; }
+.saluto h1 { margin: 0; }
+.saluto .nota { margin: 0; }
+.oggi { background: var(--carta); border: 1px solid var(--bordo); border-left: 5px solid var(--accento); border-radius: var(--raggio); padding: .8rem 1rem; margin: .8rem 0 1rem; }
+.oggi h3 { margin: 0 0 .5rem; font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; color: var(--tenue); }
+.oggi .nota { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.chip { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .75rem; border-radius: 99px; background: var(--accento-chiaro); color: var(--accento); text-decoration: none; font-weight: 600; font-size: .9rem; }
+.chip b { background: var(--accento); color: #fff; border-radius: 99px; padding: 0 .5rem; font-size: .82rem; }
+.chip:hover { filter: brightness(.96); }
+.chip.urgente { background: #fbe5e3; color: var(--negativo); } .chip.urgente b { background: var(--negativo); }
+.chip.controllare { background: #fff4d6; color: #7a5a00; } .chip.controllare b { background: #c99a10; }
+.cifre.cifre-sei { grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); margin: .5rem 0 1.2rem; }
+.cifre-sei .cifra b { font-size: 1.35rem; }
+.aree { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+@media (max-width: 1200px) { .aree { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px) { .aree { grid-template-columns: 1fr; } }
+.area { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .9rem 1rem; display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.area header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.area h2 { margin: 0; font-size: 1.05rem; }
+.area header a { font-size: .85rem; }
+.area .mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+.area .mini div { background: var(--sfondo); border-radius: 6px; padding: .4rem .5rem; min-width: 0; }
+.area .mini span { display: block; font-size: .7rem; color: var(--tenue); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+.area .mini b { font-size: 1.1rem; }
+.area ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
+.area li { display: flex; justify-content: space-between; gap: .6rem; padding: .32rem 0; border-top: 1px solid #eef0ee; }
+.area li > a, .area li > span:first-child { color: var(--testo); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.area li > a:hover { color: var(--accento); text-decoration: underline; }
+.area li span.d { color: var(--tenue); white-space: nowrap; }
+.area li.ritardo span.d { color: var(--negativo); font-weight: 600; }
+.area .tit { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--tenue); font-weight: 650; margin-top: .3rem; }
+.area .nota { margin: 0; }
+.area .nota.piccola { font-size: .78rem; }
+.settimane { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; font-size: .75rem; text-align: center; }
+.settimane a { background: var(--sfondo); border-radius: 6px; padding: .35rem .2rem; color: var(--tenue); text-decoration: none; }
+.settimane a:hover { outline: 1px solid var(--accento); }
+.settimane b { display: block; font-size: .95rem; color: var(--testo); }
+.settimane a.piena b { color: var(--negativo); }
+.nota.piede { margin-top: 1rem; }
