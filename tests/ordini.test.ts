@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaSpedizioni, caricoGiornaliero, consegneDaFare, cruscotto, dateRiga, eServizio, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
+import { abbinaSpedizioni, barreNelPeriodo, caricoGiornaliero, periodoGantt, consegneDaFare, cruscotto, dateRiga, eServizio, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
 
 const riga = (x: Partial<RigaOrdine>): RigaOrdine => ({ id: 1, ordineId: 1, tipo: 'scheda', quantita: 100, prezzo: 10, quantitaSpedita: 0, importoFatturato: 0, ...x });
 
@@ -131,4 +131,30 @@ test('ordini: i DDT del portale evadono le righe aperte dello stesso cliente e c
   // abbinata a mano: vale la riga scelta
   const m = abbinaSpedizioni(aperte, [{ chiave: 'X', documento: 'DDT 9', clienteId: 1, data: '2026-10-01', codice: 'ALTRO', descrizione: '', quantita: 2, rigaOrdineId: 4 }]);
   assert.deepEqual(m.map(x => [x.rigaId, x.quantita]), [[4, 2]]);
+});
+
+test('ordini: Gantt a giorni, 1 mese standard, in alternativa settimana o 3 mesi (Adriano, 28/10/2026)', () => {
+  // mercoledì 28/10/2026: il periodo parte dal lunedì 26/10
+  const m = periodoGantt(undefined, '2026-10-28');
+  assert.equal(m.vista, 'mese');
+  assert.equal(m.da, '2026-10-26');
+  assert.equal(m.a, '2026-11-29');
+  assert.equal(m.contieneOggi, true);
+  const s = periodoGantt('settimana', '2026-10-28');
+  assert.deepEqual([s.da, s.a, s.precedente, s.successivo], ['2026-10-26', '2026-11-01', '2026-10-19', '2026-11-02']);
+  assert.equal(periodoGantt('trimestre', '2026-10-28').giorni, 91);
+  // nient'altro: viste sconosciute → 1 mese; data scritta male → oggi
+  assert.equal(periodoGantt('anno', '2026-10-28').vista, 'mese');
+  assert.equal(periodoGantt('mese', '2026-10-28', 'xx').da, '2026-10-26');
+  const avanti = periodoGantt('settimana', '2026-10-28', '2026-11-04');
+  assert.equal(avanti.da, '2026-11-02');
+  assert.equal(avanti.contieneOggi, false);
+  // nel periodo: barre che lo toccano + quelle in ritardo già finite prima (solo se il periodo contiene oggi)
+  const barre = pianifica([
+    { id: 1, etichetta: 'dentro', quantita: 10, consegna: '2026-10-30' },
+    { id: 2, etichetta: 'ritardo', quantita: 10, consegna: '2026-10-10' },
+    { id: 3, etichetta: 'dopo', quantita: 10, consegna: '2026-12-20' },
+  ], '2026-10-28');
+  assert.deepEqual(barreNelPeriodo(barre, s).map(b => b.etichetta), ['ritardo', 'dentro']);
+  assert.deepEqual(barreNelPeriodo(barre, avanti).map(b => b.etichetta), []);
 });

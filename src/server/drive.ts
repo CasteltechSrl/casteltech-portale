@@ -9,6 +9,7 @@ import { createSign } from 'node:crypto';
 import { aggiungiFile, elabora } from './acquisizioni-servizio.js';
 import { fileDaAcquisire, idCartellaDa, orarioDrive } from '../engine/acquisizioni.js';
 import { partiRoma } from '../engine/promemoria.js';
+import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const CARTELLA = 'application/vnd.google-apps.folder';
@@ -23,6 +24,8 @@ function chiave(): Chiave | null {
   } catch { return null; }
 }
 export const driveConfigurato = () => !!chiave();
+/** La stessa chiave serve anche a Gmail (invio delle conferme d'ordine con la delega del dominio). */
+export const chiaveAccountServizio = chiave;
 export const emailAccountDrive = () => chiave()?.client_email ?? null;
 
 // ── accesso (token di un'ora, firmato con la chiave dell'account di servizio) ──
@@ -100,8 +103,12 @@ export function controllaDrive(): Promise<EsitoDrive> {
         esito.letti.push(f.name);
       } catch (e: any) { esito.errori.push(`${f.name}: ${e?.message ?? e}`); }
     }
+    // consumi (Impostazioni → Servizi): nel database solo se c'erano file, il controllo a vuoto resta in memoria
+    if (esito.letti.length) conta('drive', 'file', { chiamate: esito.letti.length });
+    if (esito.errori.length) erroreServizio('drive', 'altro', esito.errori.join('; '));
+    else riuscito('drive');
     return esito;
-  })().finally(() => { inCorso = null; });
+  })().catch(e => { erroreServizio('drive', 'altro', String(e?.message ?? e)); throw e; }).finally(() => { inCorso = null; });
   return inCorso;
 }
 

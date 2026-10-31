@@ -18,7 +18,9 @@ async function invia(definitivo) {
   const j = await res.json().catch(() => ({}));
   controlla.disabled = conferma.disabled = false;
   if (!res.ok) { out.textContent = j.errore || 'Errore'; conferma.hidden = true; return; }
-  const testo = `${j.clientiNuovi} clienti nuovi, ${j.prodottiNuovi} prodotti nuovi, ${j.descrizioniCambiate} descrizioni che cambiano, ` +
+  const testo = `${j.clientiNuovi} clienti nuovi, ${j.prodottiNuovi} prodotti nuovi, ` +
+    (j.prodottiSenzaCliente ? `${j.prodottiSenzaCliente} prodotti senza cliente NON caricati (ogni codice deve avere il suo cliente), ` : '') +
+    `${j.descrizioniCambiate} descrizioni che cambiano, ` +
     `${j.clientiTolti} clienti e ${j.prodottiTolti} prodotti tolti. Preventivi collegati a un cliente: ${j.preventivi.collegati} di ${j.preventivi.totale}.`;
   if (j.anteprima) { out.textContent = 'Se confermi: ' + testo; conferma.hidden = false; }
   else { out.textContent = 'Fatto: ' + testo + ' Ricarica la pagina per vedere gli elenchi.'; conferma.hidden = true; }

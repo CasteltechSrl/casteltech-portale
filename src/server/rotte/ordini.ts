@@ -7,11 +7,14 @@ import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
 import { caricaOreGiorno, righeOrdini, secondiPerSchedaProdotti, type RigaElenco } from '../ordini-servizio.js';
 import {
-  STATI_ORDINE, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, pianifica, piuGiorni, statoOrdine,
-  type Barra, type DaPianificare,
+  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, periodoGantt, pianifica, piuGiorni, statoOrdine,
+  type Barra, type DaPianificare, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
+import { confermeDellOrdine, creaConferma } from '../conferme-ordine-servizio.js';
+import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
+import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import type { Utente } from '../views/layout.js';
 
@@ -24,7 +27,7 @@ function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
-export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string } = {}) =>
+export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string | string[] } = {}) =>
   String(layout({ titolo, utente, attiva: 'ordini', largo: true, script: opz.script ?? 'elenco.js', avviso: opz.avviso,
     contenuto: html`<div class="intestazione-pagina"><h1>Ordini clienti</h1></div>${schede(attiva)}${contenuto}` }));
 
@@ -46,16 +49,32 @@ export function rotteOrdini() {
       : righe.sort((a, b) => b.anno - a.anno || b.numero - a.numero);
     const totale = righe.reduce((a, x) => a + x.residuoValore, 0);
     const oggi = oggiRoma();
+    const modulo = moduloAzioni({
+      azione: '/ordini/azioni', nome: { singolare: 'riga', plurale: 'righe', femminile: true }, gruppi: { singolare: 'ordine', plurale: 'ordini' },
+      extra: html`<input type="hidden" name="torna" value="${req.originalUrl}">`,
+      pulsanti: [
+        { azione: 'conferma', testo: "Conferma d'ordine", serve: '1', titolo: "Prepara la conferma d'ordine dell'ordine selezionato (righe di un solo ordine)" },
+        { azione: 'evase', testo: 'Segna evase', serve: '1+', titolo: 'Segna come evase le righe spuntate (consegne non riconosciute dai DDT)',
+          chiedi: 'Segnare come evas{a|e} {n} rig{a|he}? Lo stato si può cambiare di nuovo dalla pagina dell\'ordine o con «Stato dai DDT».' },
+        { azione: 'automatico', testo: 'Stato dai DDT', serve: '1+', titolo: 'Toglie lo stato scritto a mano: la riga torna da evadere, parziale o evasa secondo i DDT' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Elimina gli ordini delle righe spuntate (tutto l\'ordine, con tutte le sue righe)',
+          chiedi: 'Ordini da eliminare: {g}, con TUTTE le loro righe (non solo quelle spuntate). I DDT e le fatture collegate restano, tra le fatture senza ordine.\n\n'
+            + 'Un ordine che viene dal file di Impostazioni → Ordini torna se ricarichi lo stesso file; uno letto dall\'IA torna in Da acquisire.\n\n'
+            + 'Non si può annullare (prima viene salvato un backup).' },
+      ],
+    });
     res.send(pagina(req.session.utente, 'Ordini', vista, html`
       <form class="cerca" method="get">${vista !== 'aperti' ? html`<input type="hidden" name="vista" value="${vista}">` : ''}
         <input name="q" value="${req.query.q ?? ''}" placeholder="Cerca cliente, codice, n° ordine, rif. cliente…" type="search"><button>Cerca</button></form>
       ${tutte.length ? '' : html`<p class="vuoto">Nessun ordine nel portale. Si caricano da <a href="/impostazioni/ordini">Impostazioni → Ordini</a>.</p>`}
+      ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco ordini">
-        <thead><tr><th>Ordine</th><th>Data</th><th>Cliente</th><th>Rif. cliente</th><th>Codice</th><th>Descrizione</th>
+        <thead><tr>${casellaTutti()}<th>Ordine</th><th>Data</th><th>Cliente</th><th>Rif. cliente</th><th>Codice</th><th>Descrizione</th>
           <th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Da fare</th><th class="n">Prezzo</th><th class="n">Valore da evadere</th>
           <th>Arrivo mat.</th><th>Consegna richiesta</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(x => html`
           <tr class="cliccabile ${x.tipo === 'servizio' ? 'servizio' : ''} ${x.consegna && x.consegna < oggi && x.residuoQuantita > 0 ? 'scaduta' : ''}" data-href="/ordini/${x.ordineId}">
+            ${casella(x.id, `${x.numero}/${x.anno} ${x.codice ?? x.descrizione ?? ''}`, x.ordineId)}
             <td class="nowrap"><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a></td><td>${data(x.dataOrdine)}</td>
             <td class="taglia">${x.cliente}</td><td>${x.rifCliente}</td><td class="nowrap">${x.codice}</td><td class="taglia">${x.descrizione}</td>
             <td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
@@ -65,8 +84,9 @@ export function rotteOrdini() {
             <td>${data(x.prevista)}</td><td>${ritardo(x.ritardo)}</td>
             <td><span class="stato ${x.stato}">${STATI_ORDINE[x.stato]}</span></td>
           </tr>`)}</tbody>
-        ${righe.length ? html`<tfoot><tr><td colspan="10">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
+        ${righe.length ? html`<tfoot><tr><td colspan="11">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
       </table></div>
+      ${modulo.chiudi}
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
         I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.
         Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum, trasporto) non sono da evadere da sole:
@@ -125,21 +145,26 @@ export function rotteOrdini() {
           lavorazione: k.data === x.consegna ? x.lavorazione : null, secondiPerScheda: x.prodottoId ? tempi.get(x.prodottoId) : null });
       }
     }
-    const mesi = Math.min(18, Math.max(1, Number(req.query.mesi) || 3));
-    const fineVista = piuGiorni(oggi, mesi * 31);
-    const barre = pianifica(daFare, oggi, oreGiorno).filter(b => b.inizio <= fineVista);
+    const p = periodoGantt(req.query.vista, oggi, req.query.da);
+    const tutte = pianifica(daFare, oggi, oreGiorno);
+    const barre = barreNelPeriodo(tutte, p);
     const senzaData = righe.filter(x => !x.consegna).length;
-    const carico = caricoGiornaliero(barre);
-    const sovraccarichi = Object.entries(carico).filter(([d, o]) => d >= oggi && o > oreGiorno).length;
+    const carico = caricoGiornaliero(tutte);
+    const sovraccarichi = Object.entries(carico).filter(([d, o]) => d >= oggi && d >= p.da && d <= p.a && o > oreGiorno).length;
+    const link = (vista: string, da?: string) => `/ordini/gantt?vista=${vista}${da ? `&da=${da}` : ''}`;
     res.send(pagina(req.session.utente, 'Gantt produzione', 'gantt', html`
-      <form class="cerca" method="get"><label>Mostra <select name="mesi">${[1, 3, 6, 12, 18].map(m => html`<option value="${m}" ${m === mesi ? raw('selected') : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`)}</select></label><button>Aggiorna</button></form>
+      <div class="comandi-gantt">
+        <nav class="scelta-vista">${Object.entries(VISTE_GANTT).map(([k, v]) => html`<a href="${link(k, p.contieneOggi ? undefined : p.da)}" class="${k === p.vista ? 'attiva' : ''}">${v.nome}</a>`)}</nav>
+        <nav class="sposta"><a href="${link(p.vista, p.precedente)}" title="Periodo precedente">‹</a><a href="${link(p.vista)}" class="${p.contieneOggi ? 'attiva' : ''}">Oggi</a><a href="${link(p.vista, p.successivo)}" title="Periodo successivo">›</a></nav>
+        <b>${data(p.da)} – ${data(p.a)}</b>
+      </div>
       <p class="nota">Ogni barra è una consegna ancora da fare: finisce il giorno lavorativo prima della consegna (o parte dalla data di lavorazione = arrivo materiale + 3 gg)
         e dura le ore ciclo del preventivo × quantità ÷ ${num(oreGiorno)} ore al giorno (<a href="/impostazioni/ordini">Impostazioni → Ordini</a>).
         Barre tratteggiate: prodotto senza preventivo, durata di un giorno. ${senzaData ? html`<b>${senzaData} righe senza data di consegna</b> non sono nel Gantt.` : ''}
         ${sovraccarichi ? html`<b class="ritardo">${sovraccarichi} giorni con più ore di lavoro che ore disponibili.</b>` : ''}</p>
       <div class="legenda"><span class="campione barra"></span> lavorazione <span class="campione barra-ritardo"></span> in ritardo (doveva già iniziare) <span class="campione barra-stimata"></span> durata stimata
         <span class="campione consegna"></span> consegna</div>
-      <div class="tabella-scorre grafico">${barre.length ? graficoGantt(barre, oggi, fineVista, carico, oreGiorno) : html`<p class="vuoto">Nessuna lavorazione da pianificare.</p>`}</div>
+      <div class="tabella-scorre grafico">${barre.length ? graficoGantt(barre, p, oggi, carico, oreGiorno, id => perId.get(id)!.ordineId) : html`<p class="vuoto">Nessuna lavorazione in questo periodo.</p>`}</div>
       <h2>Elenco</h2>
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Ordine</th><th>Cliente · codice</th><th class="n">Q.tà</th><th class="n">Ore ciclo</th><th>Inizio</th><th>Fine</th><th>Consegna</th><th></th></tr></thead>
@@ -176,6 +201,7 @@ export function rotteOrdini() {
     const ddt = await q(`SELECT d.*, r.chiave FROM ddt_righe d JOIN ordini_righe r ON r.id = d.riga_id WHERE r.ordine_id = $1 ORDER BY d.data, d.numero`, [o.id]);
     const fatture = await q(`SELECT f.*, r.chiave FROM fatture_righe f JOIN ordini_righe r ON r.id = f.riga_id WHERE r.ordine_id = $1 ORDER BY f.data, f.numero`, [o.id]);
     const commesse = await q(`SELECT id, numero FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
+    const conferme = await confermeDellOrdine(o.id);
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
@@ -184,6 +210,9 @@ export function rotteOrdini() {
       WHERE d.tipo = 'ddt' AND d.stato <> 'annullato' AND (d.ordine_id = $1 OR y.ordine_id = $1) ORDER BY d.data, d.numero`, [o.id]);
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
       <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
+        <form method="post" action="/ordini/${o.id}/conferme" class="inline">
+          <button class="primario" title="Conferma d'ordine per il cliente con le righe e le date di consegna dell'ordine (modificabili)">${conferme.some(k => k.stato === 'bozza')
+            ? "Riprendi la conferma d'ordine" : conferme.some(k => k.stato !== 'annullato') ? "Nuova conferma d'ordine" : "Conferma d'ordine"}</button></form>
         <form method="post" action="/ordini/${o.id}/elimina" class="inline"
           data-conferma="${confermaEliminaOrdine({ numero: o.numero, anno: o.anno, origine: o.origine, righe: righe.length, conDocumenti: ddt.length + fatture.length > 0 })}">
           <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form>
@@ -199,6 +228,8 @@ export function rotteOrdini() {
         <dt>Ordine del cliente</dt><dd>${o.rif_cliente}${o.data_ordine_cliente ? html` del ${data(o.data_ordine_cliente)}` : ''}${o.file ? html` <small class="nota">(${o.file})</small>` : ''}</dd>
         <dt>Origine</dt><dd>${({ fic: 'Fatture in Cloud', ordine_cliente: 'ordine del cliente (non in Fatture in Cloud)', foglio: 'foglio Schedulazione', manuale: 'inserito a mano', email: 'email' } as Record<string, string>)[o.origine] ?? o.origine}</dd>
         ${o.note ? html`<dt>Note</dt><dd>${o.note}</dd>` : ''}
+        ${conferme.length ? html`<dt>Conferme d'ordine</dt><dd>${conferme.map((k, i) => html`${i ? ' · ' : ''}<a href="/ordini/${o.id}/conferme/${k.id}">${k.numero ? `n. ${k.numero}/${k.anno}` : 'bozza'}</a>
+          del ${data(k.data)} ${statoConferma(k.stato)}${k.email_inviata_il ? html` <small class="nota">a ${k.email_a}</small>` : ''}`)}</dd>` : ''}
       </dl>
       <form method="post" action="/ordini/${o.id}">
       <div class="tabella-scorre"><table class="elenco righe-ordine">
@@ -238,6 +269,37 @@ export function rotteOrdini() {
       </div>`, { avviso: req.query.salvato ? 'Salvato' : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
+  // ── Azioni dall'elenco sulle righe spuntate ──
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    const indietro = /^\/ordini(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : '/ordini';
+    const torna = (msg: string) => res.redirect(conMessaggio(indietro, msg));
+    if (!ids.length) return torna('Seleziona almeno una riga.');
+    const righe = await q<{ id: number; ordine_id: number }>(`SELECT id, ordine_id FROM ordini_righe WHERE id = ANY($1)`, [ids]);
+    const ordini = [...new Set(righe.map(x => x.ordine_id))];
+    if (!righe.length) return torna('Righe non trovate.');
+    const azione = String(req.body?.azione ?? '');
+    if (azione === 'conferma') {
+      if (ordini.length !== 1) return torna("La conferma d'ordine si prepara per un ordine alla volta: spunta righe di un solo ordine.");
+      try {
+        const cid = await creaConferma(ordini[0], req.session.utente?.id ?? null);
+        return res.redirect(`/ordini/${ordini[0]}/conferme/${cid}?msg=${encodeURIComponent('Conferma preparata con le righe e le date dell\'ordine: controlla, correggi e poi Emetti.')}`);
+      } catch (e: any) { return torna(e?.message ?? String(e)); }
+    }
+    if (azione === 'evase' || azione === 'automatico') {
+      await q(`UPDATE ordini_righe SET stato_manuale = $2 WHERE id = ANY($1)`, [righe.map(x => x.id), azione === 'evase' ? 'evaso' : null]);
+      await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = ANY($1)`, [ordini]);
+      return torna(azione === 'evase' ? `${righe.length === 1 ? '1 riga segnata come evasa' : `${righe.length} righe segnate come evase`}.`
+        : `${righe.length === 1 ? '1 riga torna' : `${righe.length} righe tornano`} allo stato calcolato dai DDT.`);
+    }
+    if (azione === 'elimina') {
+      const nomi: string[] = [];
+      for (const id of ordini) { const o = await eliminaOrdine(id); if (o) nomi.push(`${o.numero}/${o.anno}`); }
+      return torna(nomi.length === 1 ? `Ordine ${nomi[0]} eliminato.` : `Eliminati ${nomi.length} ordini: ${nomi.join(', ')}.`);
+    }
+    torna('Azione non riconosciuta.');
+  });
+
   r.post('/:id', async (req, res) => {
     const id = Number(req.params.id);
     const dataO = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
@@ -268,15 +330,8 @@ export function rotteOrdini() {
 
   // ── Elimina (righe inserite per errore) ──
   r.post('/:id/elimina', async (req, res) => {
-    const id = Number(req.params.id);
-    const o = await q1(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
+    const o = await eliminaOrdine(Number(req.params.id));
     if (!o) return res.redirect('/ordini?vista=tutti');
-    await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
-    await transazione(async c => {
-      // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
-      await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);
-      await c.query(`DELETE FROM ordini WHERE id = $1`, [id]);   // righe e consegne vanno via con l'ordine; DDT e fatture restano senza ordine
-    });
     res.redirect(`/ordini?vista=tutti&msg=${encodeURIComponent(`Ordine ${o.numero}/${o.anno} eliminato.`)}`);
   });
 
@@ -287,7 +342,21 @@ export function rotteOrdini() {
     res.redirect(`/ordini/${id}?msg=${encodeURIComponent(x ? `Riga ${x.nome} eliminata.` : 'Riga non trovata.')}`);
   });
 
+  r.use(rotteConferme());
   return r;
+}
+
+/** Elimina un ordine con righe e consegne (DDT e fatture restano, senza ordine). Prima un backup. */
+async function eliminaOrdine(id: number): Promise<{ numero: number; anno: number } | null> {
+  const o = await q1<{ numero: number; anno: number }>(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
+  if (!o) return null;
+  await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
+  await transazione(async c => {
+    // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
+    await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);
+    await c.query(`DELETE FROM ordini WHERE id = $1`, [id]);   // righe e consegne vanno via con l'ordine; DDT e fatture restano senza ordine
+  });
+  return o;
 }
 
 /** Le date scritte a mano (non quelle calcolate) della riga. */
@@ -323,34 +392,61 @@ function gradini(max: number) {
   return [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= max) ?? max;
 }
 
-function graficoGantt(barre: Barra[], oggi: string, fineVista: string, carico: Record<string, number>, oreGiorno: number): Raw {
-  // si parte dalla prima barra (al massimo un mese indietro: le lavorazioni in ritardo si vedono comunque)
-  const prima = [oggi, ...barre.map(b => b.inizio)].sort()[0];
-  const da = piuGiorni(prima < piuGiorni(oggi, -30) ? piuGiorni(oggi, -30) : prima, -2);
-  const giorni = differenzaGiorni(fineVista, da) + 1;
-  const G = 10, ET = 300, RIGA = 20, TESTA = 44;
-  const W = ET + giorni * G + 10, H = TESTA + (barre.length + 1) * RIGA + 10;
-  const x = (d: string) => ET + Math.max(0, Math.min(giorni, differenzaGiorni(d, da))) * G;
-  const elencoGiorni = Array.from({ length: giorni }, (_, i) => piuGiorni(da, i));
-  const taglia = (s: string) => (s.length > 44 ? s.slice(0, 43) + '…' : s);
-  return html`<svg class="gantt" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Gantt della produzione">
-    ${elencoGiorni.map(d => html`
-      ${lavorativo(d) ? '' : html`<rect class="festivo" x="${x(d)}" y="${TESTA - 14}" width="${G}" height="${H - TESTA + 14}"/>`}
-      ${d.endsWith('-01') ? html`<text class="asse mese" x="${x(d) + 2}" y="12">${nomeMese(d.slice(0, 7))}</text><line class="griglia" x1="${x(d)}" x2="${x(d)}" y1="0" y2="${H}"/>` : ''}
-      ${new Date(d + 'T12:00:00Z').getUTCDay() === 1 ? html`<text class="asse" x="${x(d) + 1}" y="26">${Number(d.slice(8))}</text>` : ''}`)}
-    <text class="asse" x="4" y="${TESTA + RIGA - 6}">Carico (ore/giorno, max ${num(oreGiorno)})</text>
-    ${elencoGiorni.filter(d => carico[d]).map(d => html`<rect class="carico ${carico[d] > oreGiorno ? 'oltre' : ''}" x="${x(d) + 1}" y="${TESTA + RIGA - 2 - Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 4)}"
-      width="${G - 2}" height="${Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 4)}"><title>${data(d)}: ${num(carico[d], 1)} ore</title></rect>`)}
-    ${barre.map((b, i) => {
-      const yy = TESTA + (i + 1) * RIGA;
-      const x1 = x(b.inizio), x2 = x(piuGiorni(b.fine, 1));
-      return html`<g><title>${b.etichetta}: ${data(b.inizio)} → ${data(b.fine)}${b.ore == null ? ' (senza preventivo)' : `, ${num(b.ore, 1)} ore`}, consegna ${data(b.consegna)}</title>
-        <line class="riga" x1="0" x2="${W}" y1="${yy + RIGA}" y2="${yy + RIGA}"/>
-        <text class="etichetta" x="4" y="${yy + 14}">${taglia(b.etichetta)}</text>
-        <rect class="barra ${b.inRitardo ? 'ritardo' : ''} ${b.stimata ? 'stimata' : ''}" x="${x1}" y="${yy + 4}" width="${Math.max(3, x2 - x1 - 1)}" height="${RIGA - 8}" rx="3"/>
-        ${b.consegna && b.consegna <= fineVista ? html`<path class="consegna" d="M${x(b.consegna) + G / 2} ${yy + 3} l4 7 l-4 7 l-4 -7 z"/>` : ''}</g>`;
-    })}
-    <line class="oggi" x1="${x(oggi) + G / 2}" x2="${x(oggi) + G / 2}" y1="${TESTA - 14}" y2="${H}"/>
-    <text class="asse oggi" x="${x(oggi) + G / 2 + 3}" y="${TESTA - 4}">oggi</text>
-  </svg>`;
+const GIORNI_SETTIMANA = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+
+/**
+ * Gantt a giorni su tutta la larghezza dello schermo: nomi a sinistra (HTML), giorni a destra in un SVG largo 100%
+ * con posizioni in percentuale (niente stili in linea: li blocca la Content-Security-Policy).
+ */
+function graficoGantt(barre: Barra[], p: { vista: VistaGantt; da: string; a: string; giorni: number }, oggi: string,
+  carico: Record<string, number>, oreGiorno: number, ordineDi: (id: number) => number): Raw {
+  const RIGA = 22, TESTA = 46;
+  const H = TESTA + (barre.length + 1) * RIGA + 4;
+  const pc = (n: number) => `${Math.round(n * 10000) / 10000}%`;
+  const col = 100 / p.giorni;
+  const indice = (d: string) => Math.max(0, Math.min(p.giorni, differenzaGiorni(d, p.da)));
+  const x = (d: string) => pc(indice(d) * col);
+  const elencoGiorni = Array.from({ length: p.giorni }, (_, i) => piuGiorni(p.da, i));
+  const etichettaGiorno = (d: string, i: number) => {
+    const g = new Date(d + 'T12:00:00Z').getUTCDay(), n = Number(d.slice(8));
+    if (p.vista === 'settimana') return html`<text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 8}" text-anchor="middle">${GIORNI_SETTIMANA[g]} ${n}/${Number(d.slice(5, 7))}</text>`;
+    if (p.vista === 'mese') return html`<text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 20}" text-anchor="middle">${GIORNI_SETTIMANA[g].slice(0, 1).toUpperCase()}</text>
+      <text class="asse giorno" x="${pc((i + .5) * col)}" y="${TESTA - 6}" text-anchor="middle">${n}</text>`;
+    return g === 1 ? html`<text class="asse giorno" x="${pc(i * col)}" dx="2" y="${TESTA - 6}">${n}</text>` : '';
+  };
+  const mostraMese = (d: string, i: number) => p.vista !== 'settimana' && (d.endsWith('-01') || i === 0);
+  return html`<div class="gantt vista-${p.vista}">
+    <div class="nomi">
+      <div class="testa"></div>
+      <div class="nome tenue">Carico (max ${num(oreGiorno)} ore)</div>
+      ${barre.map(b => html`<a class="nome" href="/ordini/${ordineDi(b.id)}" title="${b.etichetta}">${b.etichetta}</a>`)}
+    </div>
+    <svg class="tempo" width="100%" height="${H}" role="img" aria-label="Gantt della produzione">
+      ${elencoGiorni.map(d => html`
+        ${lavorativo(d) ? '' : html`<rect class="festivo" x="${x(d)}" y="0" width="${pc(col)}" height="${H}"/>`}
+        ${d === oggi ? html`<rect class="oggi-sfondo" x="${x(d)}" y="0" width="${pc(col)}" height="${H}"/>` : ''}`)}
+      ${elencoGiorni.map((d, i) => html`
+        ${i > 0 && (p.vista !== 'trimestre' || new Date(d + 'T12:00:00Z').getUTCDay() === 1) ? html`<line class="griglia" x1="${x(d)}" x2="${x(d)}" y1="${TESTA - 4}" y2="${H}"/>` : ''}
+        ${mostraMese(d, i) ? html`<text class="asse mese" x="${x(d)}" dx="2" y="11">${nomeMese(d.slice(0, 7))}</text><line class="griglia mese" x1="${x(d)}" x2="${x(d)}" y1="0" y2="${H}"/>` : ''}
+        ${etichettaGiorno(d, i)}`)}
+      ${elencoGiorni.filter(d => carico[d]).map(d => {
+        const h = Math.min(1, carico[d] / (oreGiorno * 1.5)) * (RIGA - 6);
+        return html`<rect class="carico ${carico[d] > oreGiorno ? 'oltre' : ''}" x="${pc(indice(d) * col + col * .1)}" y="${TESTA + RIGA - 3 - h}" width="${pc(col * .8)}" height="${h}"><title>${data(d)}: ${num(carico[d], 1)} ore</title></rect>`;
+      })}
+      <line class="riga" x1="0" x2="100%" y1="${TESTA + RIGA}" y2="${TESTA + RIGA}"/>
+      ${barre.map((b, i) => {
+        const yy = TESTA + (i + 1) * RIGA;
+        const prima = b.fine < p.da, tagliataSx = b.inizio < p.da, tagliataDx = b.fine > p.a;
+        const i1 = indice(b.inizio), i2 = prima ? 0 : indice(piuGiorni(b.fine, 1));
+        const larghezza = prima ? col * .35 : Math.max(col * .35, (i2 - i1) * col - col * .08);
+        const cons = b.consegna && b.consegna >= p.da && b.consegna <= p.a ? indice(b.consegna) : null;
+        return html`<a href="/ordini/${ordineDi(b.id)}"><g><title>${b.etichetta}: ${data(b.inizio)} → ${data(b.fine)}${b.ore == null ? ' (senza preventivo)' : `, ${num(b.ore, 1)} ore`}, consegna ${data(b.consegna)}</title>
+          <rect class="fondo-riga" x="0" y="${yy}" width="100%" height="${RIGA}"/>
+          <line class="riga" x1="0" x2="100%" y1="${yy + RIGA}" y2="${yy + RIGA}"/>
+          <rect class="barra ${b.inRitardo ? 'ritardo' : ''} ${b.stimata ? 'stimata' : ''}" x="${pc(i1 * col + (tagliataSx ? 0 : col * .04))}" y="${yy + 5}" width="${pc(larghezza)}" height="${RIGA - 10}" rx="${tagliataSx || tagliataDx ? 0 : 3}"/>
+          ${cons != null ? html`<svg x="${pc((cons + .5) * col)}" y="${yy + 3}" width="1" height="1" overflow="visible"><path class="consegna" d="M0 0 l5 8 l-5 8 l-5 -8 z"/></svg>` : ''}</g></a>`;
+      })}
+      ${oggi >= p.da && oggi <= p.a ? html`<line class="oggi" x1="${pc((indice(oggi) + .5) * col)}" x2="${pc((indice(oggi) + .5) * col)}" y1="${TESTA - 2}" y2="${H}"/>` : ''}
+    </svg>
+  </div>`;
 }

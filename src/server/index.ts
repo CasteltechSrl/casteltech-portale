@@ -19,6 +19,7 @@ import { avviaBackupNotturno } from './backup.js';
 import { rotteReparto } from './rotte/reparto.js';
 import { avviaPromemoria } from './promemoria.js';
 import { avviaControlloDrive } from './drive.js';
+import { avviaConsumiServizi } from './consumi-servizi.js';
 import { rotteComponenti } from './rotte/componenti.js';
 import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
@@ -27,6 +28,7 @@ import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
+import { rotteGmail } from './rotte/gmail.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
 
@@ -45,6 +47,8 @@ app.post('/sdi/webhook', express.raw({ type: '*/*', limit: '1mb' }), async (req,
     res.json({ ok: true, esito });
   } catch (e) { console.error('webhook Invoicetronic', e); res.status(500).json({ errore: 'interno' }); }
 });
+// pulsante "Portale Casteltech" dentro Gmail: entra con la sua chiave, senza sessione, e manda file più grandi dei moduli (prima dei lettori da 2 MB)
+app.use('/api/gmail', rotteGmail());
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 
@@ -152,6 +156,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 await applicaMigrazioni();
 await primoAvvio();
+await avviaConsumiServizi();
 avviaBackupNotturno();
 avviaPromemoria();
 avviaControlloDrive();

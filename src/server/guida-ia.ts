@@ -4,7 +4,7 @@
  * Nessuna lettura del database: la guida intera va all'IA a ogni domanda (è piccola).
  */
 import { AREE_GUIDA, ARGOMENTI_GUIDA, testoArgomento } from '../engine/guida.js';
-import { iaConfigurata } from './lettura-ia.js';
+import { chiediTestoIa, iaConfigurata } from './ia.js';
 
 export { iaConfigurata };
 
@@ -36,16 +36,5 @@ export function leggiRispostaGuida(testo: string): RispostaGuida {
 }
 
 export async function chiediAllaGuida(domanda: string): Promise<RispostaGuida> {
-  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 45_000);
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', signal: ctrl.signal,
-      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5-5', max_tokens: 1000, system: ISTRUZIONI,
-        messages: [{ role: 'user', content: domanda }] }),
-    });
-    const corpo: any = await r.json().catch(() => null);
-    if (!r.ok) throw new Error(corpo?.error?.message ?? `errore ${r.status}`);
-    return leggiRispostaGuida((corpo?.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join(''));
-  } finally { clearTimeout(t); }
+  return leggiRispostaGuida(await chiediTestoIa('guida', { max_tokens: 1000, system: ISTRUZIONI, messages: [{ role: 'user', content: domanda }] }, 45_000));
 }

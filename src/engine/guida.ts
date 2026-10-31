@@ -32,7 +32,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'commesse', nome: 'Commesse e schede di produzione', descrizione: 'Creare la commessa, stampare la scheda con il QR, rientro della scheda compilata.' },
   { id: 'reparto', nome: 'Tempi e reparto', descrizione: 'Tempi dal telefono con il QR, tempi scritti a mano, schede scansionate, promemoria.' },
   { id: 'amministrazione', nome: 'Amministrazione', descrizione: 'Fatture, note di credito, DDT, incassi e pagamenti, fatture dei fornitori.' },
-  { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza.' },
+  { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza, consumi dei servizi.' },
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
 ];
 
@@ -72,14 +72,48 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire'], ['/preventivi/documenti', 'Preventivi → Da documenti del cliente'], ['/quotazioni', 'Quotazioni'], ['/commesse', 'Commesse (schede scansionate)']],
   },
   {
+    id: 'pulsante-gmail', area: 'inizio', titolo: 'Mandare una mail al portale con il pulsante di Gmail',
+    parole: 'gmail mail email posta pulsante tasto pannello inoltrare mandare portale preventivo ordine fattura estera allegati richiesta offerta cliente versioni versione varianti dividere quantità eml aggiungere file mancanti dopo bom pth',
+    testo: [
+      'Quando arriva una mail con una richiesta d\'offerta, un ordine o una fattura di un fornitore estero, non serve scaricare gli allegati: aprila in Gmail e usa il pannello "Portale Casteltech" a destra (sul telefono è in fondo alla mail).',
+      'Preventivo: il testo della mail e gli allegati utili (BOM, pick and place, Gerber, zip) vanno in Preventivi → Documenti del cliente e l\'analisi parte da sola. Il cliente si riconosce dall\'email del mittente se è sicuro, altrimenti lo scegli tu. Il testo della mail si legge in cima alla pagina e finisce nelle note del preventivo da validare.',
+      'Ordine: la mail intera va in Ordini → Da acquisire, l\'IA la legge e prepara la proposta da confermare. Fattura estera: va in Amministrazione → Autofatture. La stessa mail mandata due volte non entra due volte.',
+      'PDF, modelli 3D e immagini restano solo nell\'elenco dei file, come quando carichi una cartella (le BOM in PDF non si leggono: chiedi al cliente Excel, CSV o testo). Gli allegati che Gmail mostra come link a Google Drive (file molto grandi) non arrivano: caricali dal portale.',
+      'Nel pannello ci sono le ultime mail con allegati e la casella Cerca: tocca la mail e compaiono i tasti.',
+      'File arrivati con una mail successiva (es. la BOM in testo): nella mail nuova premi "Aggiungi a documenti già caricati" e scegli il pacchetto, oppure nella pagina dei documenti apri "Aggiungi file a questo pacchetto". Il pacchetto si rianalizza da solo.',
+      'Se la mail chiede più versioni della stessa scheda con le quantità (es. "167pz M0929-C versione HELIOS, 90pz versione CRONOS"), nella pagina dei documenti compare "Dividi per versione": nasce un pacchetto per versione con i file comuni (Gerber, lamine) e quelli con il nome della versione, e il numero di schede già scritto per il preventivo.',
+      'Il numero di schede da quotare si legge dal testo della mail (es. "167pz", "5 pcb"); se nel testo non c\'è, dall\'oggetto (es. "Ordine 5 PCB MULTI"). Se non si trova la proposta è 100: correggila in "Schede da quotare" prima di premere "Crea il preventivo da validare".',
+      'Caricando una cartella dal portale, la mail del cliente salvata come file .eml (in Gmail: ⋮ → Scarica il messaggio) messa insieme agli altri file vale come quella mandata dal pannello di Gmail: testo in cima alla pagina, quantità e versioni lette dal testo, "Dividi per versione". Gli allegati della mail non si leggono: mettili nella cartella.',
+      'Se la mail chiede più codici diversi (es. "Primo odp 43pz … 20149766 PCA …" e "Primo odp 131pz … 1022303 PCA …"), il portale li riconosce quando il codice è anche nell\'oggetto o nel nome di un allegato: compare "Dividi per codice", un pacchetto per codice con i file che hanno il codice nel nome (es. lo zip 20149766-1596216), la sua quantità, le previsioni (Forecast) e i cicli di lavorazione. Nel preventivo il codice e la descrizione sono quelli della mail.',
+      'Dopo "Dividi per versione" ogni versione conta solo i componenti della sua BOM: quelli dell\'altra versione sono segnalati come non montati. Si leggono anche le BOM in testo a colonne e il pick and place "centri" in pollici; se le coordinate hanno un\'altra origine rispetto ai Gerber il portale le sposta da solo e lo scrive tra gli avvisi.',
+      'Una BOM divisa in due file (SMD e PTH) si unisce da sola; due BOM con gli stessi riferimenti sono versioni diverse e se ne usa una sola.',
+    ],
+    passi: ['Nel pannello "Portale Casteltech" di Gmail tocca la mail (o cercala).', 'Premi Preventivo, Ordine o Fattura estera (o "Aggiungi a documenti già caricati").', 'Premi "Apri nel portale" e controlla quello che ha letto; con più versioni premi "Dividi per versione".'],
+    pagine: [['/preventivi/documenti', 'Documenti del cliente'], ['/ordini/acquisire', 'Ordini → Da acquisire'], ['/amministrazione/fatture-estere', 'Autofatture']],
+  },
+  {
     id: 'eliminare', area: 'inizio', titolo: 'Cosa si può eliminare e cosa no',
     parole: 'elimina cancella cancellare togliere errore sbagliato rimuovere annullare disattiva',
     testo: [
-      'In tutte le sezioni c\'è il tasto Elimina per le righe inserite per errore. Prima di eliminare il portale chiede conferma.',
+      'In tutte le sezioni c\'è il tasto Elimina per le righe inserite per errore. Prima di eliminare il portale chiede conferma. Negli elenchi si possono spuntare più righe ed eliminarle insieme (vedi "Fare un\'operazione su più righe insieme").',
       'Quello che è già usato non si elimina, per non rovinare lo storico: un preventivo con commessa, un cliente o un prodotto usato in preventivi o ordini, le fasi e i parametri del catalogo di partenza, gli utenti che hanno lavorato. In questi casi si toglie la spunta "Attiva" (o "Attivo"): non compaiono più nelle scelte ma lo storico resta.',
       'Le fatture e le note di credito emesse non si eliminano: una fattura sbagliata si storna con una nota di credito. Si elimina solo una bozza.',
     ],
     pagine: [],
+  },
+  {
+    id: 'azioni-elenchi', area: 'inizio', titolo: 'Fare un\'operazione su più righe insieme (caselle di spunta)',
+    parole: 'spunta spuntare casella caselle selezionare selezione seleziona tutti più righe insieme elenco pulsanti azioni multiple elimina duplica senza entrare',
+    testo: [
+      'Negli elenchi di Preventivi, Commesse, Ordini, BOM di Quotazioni, Documenti del cliente, Da acquisire e Suggerimenti ogni riga ha una casella a sinistra: spunti le righe e premi il pulsante in alto a destra, senza aprirle una per una. La casella nell\'intestazione spunta tutto l\'elenco.',
+      'I pulsanti si accendono solo quando servono: quelli che valgono per una riga sola (es. Crea commessa, Stampa scheda, Rientro, Duplica di una commessa, Conferma d\'ordine) restano spenti se ne spunti più di una.',
+      'Commesse: Stampa scheda, Rientro, Duplica (nuova commessa dallo stesso preventivo con quantità, referente e scheda tecnica copiati: numero, ordine e date si scrivono e poi si salva), Elimina. Dall\'elenco si eliminano solo le commesse ancora aperte e senza tempi registrati; le altre si eliminano dalla loro pagina, dove il portale dice quanti tempi si perdono.',
+      'Ordini: l\'elenco mostra le righe degli ordini. Conferma d\'ordine (righe di un solo ordine), Segna evase (consegne che i DDT non riconoscono), Stato dai DDT (toglie lo stato scritto a mano), Elimina: elimina gli ordini interi delle righe spuntate, con tutte le loro righe. Gli ordini non si duplicano: un ordine nuovo arriva sempre dal documento del cliente (Da acquisire).',
+      'BOM: Excel, Elimina. Documenti del cliente: Elimina. Da acquisire: Scarta (i file già diventati ordine, DDT o fattura non hanno la casella). Suggerimenti: Segna fatto, Scarta, Elimina.',
+      'Prima di eliminare o scartare il portale chiede conferma e dice quante righe sono spuntate.',
+    ],
+    passi: ['Apri l\'elenco (es. Commesse).', 'Spunta le righe (o tutte con la casella in alto).', 'Premi il pulsante in alto a destra e conferma.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse'], ['/ordini', 'Ordini'], ['/quotazioni/bom', 'Quotazioni → BOM'], ['/suggerimenti', 'Suggerimenti']],
   },
   {
     id: 'accesso', area: 'inizio', titolo: 'Accesso, ufficio e produzione',
@@ -114,13 +148,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'prodotti', area: 'anagrafiche', titolo: 'Aggiungere un prodotto (codice della scheda)',
-    parole: 'prodotto prodotti codice scheda articolo descrizione revisione nuovo',
+    parole: 'prodotto prodotti codice scheda articolo descrizione revisione nuovo senza cliente non assegnato assegnare',
     testo: [
-      'Ogni prodotto appartiene a un cliente. Nei preventivi codice e descrizione si scelgono solo da qui.',
+      'Ogni prodotto appartiene a un cliente: è una regola, un codice senza cliente non si salva. Nei preventivi codice e descrizione si scelgono solo da qui.',
+      'I codici rimasti senza cliente (vecchi caricamenti) sono in cima all\'elenco, in giallo, e il tasto Prodotti dice quanti sono: assegna a ognuno il suo cliente e premi Salva, oppure eliminalo se è stato inserito per errore. Finché non hanno un cliente non compaiono nei preventivi.',
       'Dall\'elenco dei clienti, il numero dei prodotti porta ai prodotti di quel cliente.',
       'Se stai facendo un preventivo e il codice non c\'è, non serve uscire: nel preventivo premi "+ Nuovo prodotto" (vedi "Prodotto nuovo dal preventivo").',
     ],
-    passi: ['Anagrafiche → Prodotti.', 'Scegli il cliente, scrivi codice e descrizione nella riga in alto e premi Aggiungi.'],
+    passi: ['Anagrafiche → Prodotti.', 'Scegli il cliente, scrivi codice e descrizione nella riga in alto e premi Aggiungi.', 'Codici senza cliente: "Mostra solo i codici senza cliente", scegli il cliente di ognuno e premi Salva (o Elimina).'],
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
   },
   {
@@ -146,13 +181,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Preventivi ──
   {
     id: 'nuovo-preventivo', area: 'preventivi', titolo: 'Fare un nuovo preventivo',
-    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina aoi visivo controllo ispezione pre-produzione minuti',
+    parole: 'preventivo offerta prezzo calcolo nuovo costo fasi ricarico spunte informazioni generali top bot tht lamina aoi visivo controllo ispezione pre-produzione minuti smd a mano giostra campionatura',
     testo: [
       'Il prezzo si calcola mentre compili. In alto scegli cliente e prodotto dall\'anagrafica, schede, schede per pannello e pannelli.',
       'Le spunte delle INFORMAZIONI GENERALI (1ª produzione, TOP, TOP+BOT, THT a onda o a mano, componenti, PCB, lamina, etichette, pulizia, lavaggio) mostrano solo le sezioni che servono e attivano fasi e costi. Le programmazioni ci sono solo con la 1ª produzione.',
       'Il riquadro dei totali mostra prezzo a scheda, costi una tantum (solo nel primo lotto), margini e ore ciclo/uomo.',
       'Un preventivo salvato conserva le tariffe e le fasi del giorno in cui è stato fatto: se poi cambi le tariffe in Impostazioni, i preventivi vecchi non cambiano.',
       'Montaggio → AOI: TOP è spuntato con il TOP, BOT solo se c\'è anche quel lato. "Visivo" toglie l\'AOI (né ispezione né programmazione) e mette il controllo visivo, 60 secondi a scheda: si usa per campionature di pochi pezzi o schede con pochissimi componenti.',
+      'Montaggio → SMD → "A mano" (campionature di pochi pezzi): gli SMD si montano a mano in giostra insieme ai THT, 15 secondi a componente SMD. Nel gruppo SMD resta solo l\'attrezzaggio serigrafia (45 minuti): niente programmazioni del pick and place, attrezzaggio, avvio, serigrafia a pannello e pick and place. Il forno resta, con tempi, energia e pasta. AOI o Visivo si scelgono come sempre.',
       'Pre-produzione: ogni voce ha 5 minuti di standard, tranne "Disegno e stampa 3D" (0). Acquisto componenti e acquisto PCB contano solo se sono spuntati in Acquisti.',
     ],
     passi: ['Preventivi → + Nuovo preventivo.', 'Cliente, prodotto e revisione (se non è indicata scrivi 0), quantità.', 'Spunte delle informazioni generali.', 'Controlla fasi, materiali e altri costi.', 'Salva.'],
@@ -162,7 +198,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'prodotto-nuovo-preventivo', area: 'preventivi', titolo: 'Prodotto nuovo dal preventivo (codice non in anagrafica)',
     parole: 'prodotto nuovo codice manca non trovo elenco aggiungere anagrafica revisione zero descrizione scheda nuova inserire manualmente',
     testo: [
-      'Se il prodotto è nuovo e il codice non è nell\'elenco del cliente, lo aggiungi all\'anagrafica direttamente dal preventivo, senza chiuderlo.',
+      'Scelto il cliente, il menu Codice mostra solo i codici di quel cliente.',
+      'Se il prodotto è nuovo e il codice non è nell\'elenco del cliente, lo aggiungi all\'anagrafica direttamente dal preventivo, senza chiuderlo: entra in anagrafica già con il suo cliente.',
       'Servono tre cose, senza non si prosegue: codice, descrizione e revisione. Se il cliente non indica la revisione scrivi 0. Tutto viene salvato in MAIUSCOLO.',
       'Se il codice c\'è già per quel cliente (anche scritto con trattini o spazi diversi) il portale non fa un doppione: sceglie quello dell\'elenco.',
       'Nel preventivo compilato dai documenti del cliente codice, descrizione e revisione sono già proposti, letti dai file (righe in alto nella BOM, Gerber, GenCAD, nome della cartella come "EA1002-0"): sono da convalidare, controllali prima di premere "Aggiungi in anagrafica".',
@@ -173,12 +210,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'documenti-cliente', area: 'preventivi', titolo: 'Preventivo dai documenti del cliente (BOM, pick and place, Gerber)',
-    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare',
+    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare alternative pref alt llc elemaster dissipatore viti post wave dopo onda',
     testo: [
       'Quando il cliente manda il pacchetto della scheda, caricalo tutto insieme: il portale legge BOM, pick and place, Gerber, forature e GenCAD e li incrocia.',
       'Il risultato: componenti SMD per lato, THT, feeder, refori, misure, disegno della scheda, consumi stimati (pasta, stagno, filo) e le segnalazioni da controllare (valori diversi tra BOM e pick and place, riferimenti mancanti, lati, sovrapposizioni, componenti da non montare).',
-      'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate. PDF, 3D e immagini restano sul Drive.',
+      'Le cartelle chiamate OLD, VECCHI, ARCHIVIO o BACKUP vengono ignorate.',
+      'Se scegli una cartella intera non serve togliere niente: il portale guarda prima i nomi e le dimensioni e carica solo i file utili. PDF, modelli 3D (STEP, anche da 80 MB), immagini, ODB++, documenti Word e file oltre 25 MB restano sul Drive: nell\'elenco dei file compare solo il nome con il motivo. Così non esce più l\'errore "file troppo grande".',
+      'Anche dentro uno zip il portale apre solo i file utili: PDF, 3D e immagini restano chiusi. Se qualcun altro sta caricando o analizzando documenti nello stesso momento, il caricamento aspetta il suo turno qualche secondo: è normale, serve a non riempire la memoria del server.',
+      'Non entrano nemmeno i file di lavoro di Casteltech finiti nella cartella del cliente: le cartelle Armadi e Topografico e i pick and place o le BOM con i nostri codici di produzione (es. CC-0402-100NF-10-X7R-50V). Si legge solo quello che ha mandato il cliente.',
       '"Codifica la BOM" porta i componenti nella sezione Quotazioni per i codici e i prezzi.',
+      'SMD o THT: decide prima il CAD (fori dell\'impronta), poi il pick and place, poi la BOM. Se la BOM non ha la colonna del montaggio ma molte descrizioni cominciano per "SMD" (es. "SMD RES. 4,7KOHM 0805"), le righe che non cominciano per SMD sono THT. Senza pick and place e CAD i lati non si conoscono: gli SMD vanno tutti sul TOP.',
+      'Nelle BOM con le alternative del cliente (colonna Pref/Alt o livelli LLC 1 e 2) le righe alternative non sono altri componenti: si conta solo il componente, con il codice della preferita, e le alternative finiscono nella colonna "Alternative del cliente" anche in Quotazioni. Dissipatori, viti, dadi, rondelle, grasso, silicone, fascette, etichette, buste, specifiche e topografici non sono componenti da montare. Le righe "POST WAVE ASSEMBLY" sono pezzi montati dopo l\'onda: tra le segnalazioni, da stimare a mano.',
       'Se una segnalazione è stata controllata e va bene così (es. un simbolo scritto in modo diverso, componente giusto), premi "Va bene": non conta più tra gli errori, non va nel preventivo da validare e i componenti non sono più rossi nelle stampe. Resta anche dopo Rianalizza; "annulla" la riapre.',
     ],
     passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Crea il preventivo da validare (vedi sotto).'],
@@ -186,11 +228,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'preventivo-da-validare', area: 'preventivi', titolo: 'Preventivo "da validare" compilato dai documenti',
-    parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc',
+    parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc cicli lavorazione ciclo mail onda aoi etichette',
     testo: [
       'Nella pagina dei documenti della scheda, "Crea il preventivo da validare" (scrivi quante schede) prepara il preventivo con le tariffe di oggi e i numeri letti: SMD e feeder per lato, lamine, THT a onda o a mano, stagno, pasta, item.',
       'Il preventivo resta "da validare": in alto c\'è l\'elenco delle cose da controllare (segnalazioni, lamine del cliente, THT da preparare). Quando l\'hai controllato, il primo Salva lo porta a bozza.',
       'Se il prodotto non è ancora in anagrafica, codice, descrizione e revisione letti dai file sono già scritti nel riquadro "Nuovo prodotto": controllali e premi "Aggiungi in anagrafica".',
+      'Se la mail del cliente elenca i cicli di lavorazione sotto il codice (es. "SALD ONDA THT", "MTG/SALD MANUALE COMP. THT", "ISP. VISIVA AOI SMT", "APPLICAZIONE ETICHETTE"), il preventivo accende le spunte onda, THT a mano, AOI, etichette, pulizia e lavaggio; le altre lavorazioni (preformatura, colla, cablaggi, parti meccaniche, rasatura) sono in "Da controllare" da stimare a mano.',
       'Il portale controlla anche le piazzole dei componenti chip sul Gerber con la norma IPC-7351: se la BOM dice 0603 ma le piazzole sono da 0805 (o il contrario) lo segnala come errore, prima di andare in macchina.',
     ],
     passi: ['Apri i documenti della scheda.', 'Scrivi il numero di schede e premi "Crea il preventivo da validare".', 'Controlla l\'elenco giallo, correggi, Salva.'],
@@ -209,10 +252,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'stampa-preventivo', area: 'preventivi', titolo: 'Stampare o mandare il preventivo al cliente',
-    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf macro aree dettaglio fasi',
+    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali sconto note riga aggiungere ritocchi modificare',
     testo: [
-      'Dal preventivo salvato, "Stampa / salva PDF" apre la pagina per il cliente con i soli prezzi. Si può scegliere il dettaglio per fasi o solo le macro aree. Dalla finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
+      'Dal preventivo salvato, "Stampa" apre la pagina per il cliente con i soli prezzi, impaginata come i preventivi di Fatture in Cloud: dati di Casteltech, destinatario con i dati fiscali, riquadro verde con i prezzi, tabella, pagamento e totale.',
+      'A sinistra, nel riquadro "Cosa stampare", scegli la versione: Essenziale (codice, quantità e prezzo a scheda, senza dettaglio; se ci sono costi una tantum sono compresi nel prezzo a scheda e sotto la descrizione c\'è solo "Comprensivo dei costi una tantum"), Essenziale con dettaglio (componenti, PCB, SMD, THT, materiale di consumo e spedizione, ognuno con il prezzo), Macro aree o Dettaglio per fasi.',
+      'Nella versione con dettaglio gestione materiale e imballaggio non si vedono: sono già dentro SMD e THT, 70% su SMD e 30% su THT, pesati sul valore delle due aree (con SMD 10 € e THT 90 € all\'SMD va circa il 21%).',
+      'Le condizioni generali di fornitura sono sulla seconda pagina, con lo spazio per la firma del cliente per accettazione (senza condizioni la firma va in fondo alla prima pagina): si tolgono con le spunte del riquadro. Il modo di pagamento è quello del cliente in anagrafica.',
+      'Le note del preventivo sono interne (mail del cliente, cose da controllare, appunti dell\'ufficio): non si stampano, salvo la spunta "Stampa anche le note interne".',
+      'Sotto, nel riquadro "Ritocchi per il cliente", puoi scrivere le note per il cliente, uno sconto (in % su tutto, oppure in € tolto dal totale del lotto) e righe in più con descrizione, quantità e prezzo (es. collaudo, trasporto). Premi "Aggiorna la stampa": restano salvati sul preventivo. Valgono solo nella stampa, il calcolo del preventivo non cambia. Per togliere una riga cancella la descrizione.',
+      'Premi "Stampa / salva PDF" e nella finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
     ],
+    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Se serve: note per il cliente, sconto, righe in più → Aggiorna la stampa.', 'Stampa / salva PDF.'],
     pagine: [['/preventivi', 'Elenco preventivi']],
   },
   {
@@ -265,6 +315,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/ordini', 'Ordini']],
   },
   {
+    id: 'conferma-ordine', area: 'ordini', titolo: 'Conferma d\'ordine al cliente (PDF e email)',
+    parole: 'conferma confermare conferme ordine pdf email gmail rispondere risposta inviare mandare cliente date consegna righe accettazione',
+    testo: [
+      'Dall\'ordine caricato nel portale si prepara la conferma per il cliente: il pulsante "Conferma d\'ordine" in alto nella pagina dell\'ordine copia tutte le righe con quantità, prezzi e date di consegna.',
+      'Righe e date si cambiano liberamente nella conferma (non toccano l\'ordine): si aggiungono righe con "+ Riga", si tolgono con la spunta "Togli". Le consegne a programma diventano una riga per ogni consegna.',
+      'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (numerazione propria delle conferme) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
+      'Invio: se l\'ordine è arrivato per email, "Invia con Gmail" risponde a quell\'email (stessa conversazione) da info@casteltech.net con il PDF allegato; destinatario, oggetto e testo si possono cambiare. Finché la delega di Gmail non è attiva il pulsante è spento: scarica il PDF con "Apri il PDF" e mandalo dalla posta.',
+      'Non si può preparare la conferma se il cliente dell\'ordine non è in anagrafica. Una bozza si elimina; una conferma emessa si annulla (resta nell\'elenco e il numero non si riusa).',
+    ],
+    passi: ['Apri l\'ordine (Ordini → Da evadere, clic sulla riga).', 'Premi "Conferma d\'ordine".', 'Controlla righe, prezzi e date di consegna, correggi e Salva.',
+      'Premi Emetti.', 'Controlla destinatario e testo, poi "Invia con Gmail" (oppure "Apri il PDF" e mandalo a mano).'],
+    pagine: [['/ordini', 'Ordini da evadere']],
+  },
+  {
     id: 'ddt-acquisiti', area: 'ordini', titolo: 'DDT spediti: segnare la merce consegnata',
     parole: 'ddt spedizione spedito consegnato evaso parziale bolla documento trasporto',
     testo: [
@@ -287,10 +351,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'cruscotto-ordini', area: 'ordini', titolo: 'Cruscotto ordini, previsione e Gantt',
-    parole: 'cruscotto fatturato previsione anno mese gantt pianificazione produzione carico lavoro fatture senza ordine',
+    parole: 'cruscotto fatturato previsione anno mese gantt pianificazione produzione carico lavoro fatture senza ordine giornaliero settimana settimanale trimestre calendario',
     testo: [
       'Il cruscotto mostra fatturato, media dei mesi chiusi, ordini da evadere per mese e previsione dell\'anno.',
       'Il Gantt parte dalla data di consegna e va all\'indietro: ogni barra è una consegna da fare, lunga quanto le ore ciclo dell\'ultimo preventivo del prodotto diviso le ore al giorno (Impostazioni → Ordini).',
+      'Il Gantt è a giorni e occupa tutta la larghezza dello schermo. In alto si sceglie il periodo: 1 mese (5 settimane, quello standard), Settimana o 3 mesi; parte sempre dal lunedì della settimana in corso. Le frecce ‹ › spostano avanti o indietro di un periodo, "Oggi" riporta alla settimana attuale.',
+      'Cliccando una barra o un nome si apre l\'ordine. Le lavorazioni in ritardo già finite prima del periodo restano visibili come un piccolo segno rosso sul bordo sinistro.',
       '"Fatture senza ordine" elenca le fatture in cui nessuna riga è collegata a un ordine.',
     ],
     pagine: [['/ordini/cruscotto', 'Cruscotto'], ['/ordini/gantt', 'Gantt'], ['/ordini/fatture', 'Fatture senza ordine']],
@@ -382,9 +448,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'alternative-componenti', area: 'componenti', titolo: 'Componente non trovato: alternative e reperibilità',
-    parole: 'alternativa alternative equivalente sostituto prezzo a mano manuale scrivere prezzo p/n non trovato introvabile critico reperibilità disponibile negozi distributori obsoleto',
+    parole: 'alternativa alternative equivalente sostituto prezzo a mano manuale scrivere prezzo p/n non trovato introvabile critico reperibilità disponibile negozi distributori obsoleto due codici diversi valore descrizione kicad equivalenti',
     testo: [
       'Ogni P/N si cerca presso TUTTI i distributori collegati (DigiKey, Mouser, Farnell, TME). Se uno non lo ha ma un altro sì, va bene: nessuna segnalazione, si compra da chi lo ha al prezzo migliore.',
+      'Prima si cerca chi ha tutti i pezzi che servono, poi il prezzo: un componente disponibile costa anche di più, ma si compra quello.',
+      'BOM senza colonna P/N (es. KiCad): il codice si cerca nelle colonne Valore e Descrizione ("1N5819S4/SOD123" → 1N5819S4). Se nella riga ci sono due codici diversi si cercano tutti e due e si compra quello che si trova. La nota della riga dice se sono lo stesso codice (BAT54C e BAT54C,215), lo stesso componente di produttori diversi (1N5819S4 e 1N5819HW-7-F: equivalenti) oppure due componenti diversi da controllare ("codice da validare").',
+      'Il portale confronta anche quello che è scritto nella BOM con quello che dice il codice: valore, case e tensione diversi (es. BOM 168K, codice RC0805FR-07162KL = 162K; BOM 1nF 630V 1206, codice da 4,7 µF 50V 1210) rendono la riga "codice da validare". Tensione più alta o tolleranza più stretta nel codice vanno bene. Le righe DNP o "Excluded from BOM" non si comprano.',
       '"Critico" solo se il componente non è disponibile da nessuna parte (non trovato o pezzi insufficienti sommando tutti). "Attenzione" solo se la quantità c\'è ma va divisa tra più distributori, o se un distributore non ha risposto (premi "Aggiorna prezzi"). Fine vita, scorte basse e simili restano come note nella riga, senza segnalazione.',
       'Per un P/N che non si trova il portale cerca da solo le alternative: varianti dello stesso P/N (confezione o suffisso diverso) e componenti con le stesse caratteristiche, cioè con lo stesso codice di produzione (es. stessa resistenza 2K2 1% 0603 100 mW di un altro produttore). Ognuna è prezzata presso tutti i distributori.',
       'La scelta è dell\'operatore: nella riga della BOM, riquadro "Alternative", "Usa questa" la fa diventare il componente da comprare (prezzo e reperibilità si ricalcolano). Nel campo "Alternativa scritta a mano" puoi scrivere un P/N tuo: si cerca presso tutti i distributori e, se si trova, si usa. "Torna al P/N della BOM" annulla la scelta.',
@@ -511,6 +580,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'chiave api render ia anthropic digikey mouser tme farnell google drive account servizio configurare',
     testo: ['Le chiavi dei servizi esterni (IA, distributori, Google Drive, SdI) si inseriscono solo su Render (servizio casteltech-portale → Environment), mai nel portale né in chat. Dopo averle salvate Render riavvia il portale. In Impostazioni → Componenti si può provare se funzionano.'],
     pagine: [['/impostazioni/componenti', 'Impostazioni → Componenti']],
+  },
+  {
+    id: 'servizi', area: 'impostazioni', titolo: 'Consumi e limiti dei servizi (credito IA, memoria, database)',
+    parole: 'consumi limiti token credito esaurito finito ricarica anthropic spesa costo dollari render memoria riavvio neon database spazio ore calcolo distributori richieste giorno gmail avviso servizi',
+    testo: [
+      'In Impostazioni → Servizi c\'è il riquadro con quanto il portale usa dei servizi esterni e quanto manca ai limiti: IA di Anthropic (letture, token e costo del giorno e del mese, credito rimasto), Render (memoria del server e riavvii), Neon (spazio del database e ore di calcolo), DigiKey, Mouser, Farnell e TME (richieste del giorno), Google Drive, Gmail e Invoicetronic.',
+      'Anthropic è prepagato e non dice quanto credito resta: scrivi nel riquadro "Credito dell\'IA" l\'importo caricato e da quale giorno, e aggiornalo dopo ogni ricarica. Il portale conta i token di ogni lettura, stima la spesa con il listino e avvisa quando ne resta meno del 20%.',
+      'Quando un servizio supera l\'80% del limite, o si ferma (credito finito, tetto di spesa raggiunto, chiave non valida, il portale riavviato da Render per memoria esaurita), tutti gli utenti dell\'ufficio vedono un avviso giallo o rosso in cima alle pagine con il link al riquadro.',
+      'Se un documento non viene letto per credito finito, nell\'acquisizione c\'è scritto il motivo: ricarica il credito su console.anthropic.com → Billing e premi "Rileggi con l\'IA".',
+      'Facoltativo: con ANTHROPIC_ADMIN_KEY su Render il costo del mese diventa quello ufficiale di Anthropic; con NEON_API_KEY e NEON_PROJECT_ID si vedono le ore di calcolo del database.',
+    ],
+    pagine: [['/impostazioni/servizi', 'Impostazioni → Servizi']],
   },
 
   // ── Suggerimenti ──

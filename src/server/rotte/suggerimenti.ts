@@ -5,6 +5,7 @@
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
+import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, raw, type Raw } from '../views/html.js';
 import {
   AREE_SUGGERIMENTI, PRIORITA_SUGGERIMENTI, STATI_SUGGERIMENTI, chiuso, ordinaSuggerimenti, preparaSuggerimento,
@@ -22,7 +23,7 @@ const prioritaBadge = (p: string) => html`<span class="etichetta prio-${p}">${PR
 export function rotteSuggerimenti() {
   const r = Router();
   const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'suggerimenti', contenuto, avviso }));
+    String(layout({ titolo, utente: req.session.utente, attiva: 'suggerimenti', contenuto, avviso, script: 'elenco.js' }));
   const torna = (msg: string, dove = '') => `/suggerimenti${dove}?msg=${encodeURIComponent(msg)}`;
 
   const modulo = (s: Partial<Suggerimento>, azione: string, pulsante: string) => html`
@@ -50,6 +51,15 @@ export function rotteSuggerimenti() {
     const aperti = righe.filter(s => !chiuso(s.stato));
     const chiusi = righe.length - aperti.length;
     const mostrati = tutti ? righe : aperti;
+    const azioni = moduloAzioni({
+      azione: '/suggerimenti/azioni', nome: { singolare: 'suggerimento', plurale: 'suggerimenti' },
+      extra: html`<input type="hidden" name="torna" value="${req.originalUrl}">`,
+      pulsanti: [
+        { azione: 'fatto', testo: 'Segna fatto', serve: '1+', titolo: 'Stato "Fatto": spariscono dagli aperti (restano in "mostra tutti")' },
+        { azione: 'scartato', testo: 'Scarta', serve: '1+', titolo: 'Stato "Scartato": spariscono dagli aperti (restano in "mostra tutti")' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, chiedi: 'Eliminare {n} suggeriment{o|i}? Non si può annullare.' },
+      ],
+    });
     res.send(pagina(req, 'Suggerimenti', html`
       <div class="intestazione-pagina"><h1>Suggerimenti</h1>
         <div class="azioni"><a href="/suggerimenti/nuovo" class="bottone primario">+ Nuovo suggerimento</a></div></div>
@@ -60,17 +70,36 @@ export function rotteSuggerimenti() {
         <button>Filtra</button>
       </form>
       <h2>${tutti ? 'Tutti' : 'Aperti'} <span class="nota">(${mostrati.length})</span></h2>
-      ${mostrati.length ? html`<div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Suggerimento</th><th>Area</th><th>Proposto da</th><th>Data</th><th>Priorità</th><th>Stato</th></tr></thead>
+      ${mostrati.length ? html`${azioni.apri}<div class="tabella-scorre"><table class="elenco">
+        <thead><tr>${casellaTutti()}<th>Suggerimento</th><th>Area</th><th>Proposto da</th><th>Data</th><th>Priorità</th><th>Stato</th></tr></thead>
         <tbody>${mostrati.map(s => html`<tr>
+          ${casella(s.id, s.titolo)}
           <td><a href="/suggerimenti/${s.id}"><strong>${s.titolo}</strong></a>${s.descrizione ? html`<div class="nota taglia">${s.descrizione}</div>` : ''}</td>
           <td>${AREE_SUGGERIMENTI[s.area as keyof typeof AREE_SUGGERIMENTI] ?? s.area}</td><td>${s.proposto_da ?? ''}</td>
           <td>${data(s.proposto_il)}</td><td>${prioritaBadge(s.priorita)}</td><td>${statoBadge(s.stato)}</td></tr>`)}
-        </tbody></table></div>` : html`<p class="vuoto">Nessun suggerimento${area ? ' in quest\'area' : ''}.</p>`}
+        </tbody></table></div>${azioni.chiudi}` : html`<p class="vuoto">Nessun suggerimento${area ? ' in quest\'area' : ''}.</p>`}
       ${chiusi ? html`<p class="nota">${tutti
         ? html`<a href="/suggerimenti${area ? `?area=${encodeURIComponent(area)}` : ''}">Mostra solo gli aperti</a>`
         : html`Ci sono anche ${chiusi} suggeriment${chiusi === 1 ? 'o fatto o scartato' : 'i fatti o scartati'}: <a href="/suggerimenti?tutti=1${area ? `&area=${encodeURIComponent(area)}` : ''}">mostra tutti</a>.`}</p>` : ''}`,
       req.query.msg ? String(req.query.msg) : undefined));
+  });
+
+  // azioni dall'elenco sui suggerimenti spuntati
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    const indietro = /^\/suggerimenti(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : '/suggerimenti';
+    const torna = (msg: string) => res.redirect(conMessaggio(indietro, msg));
+    if (!ids.length) return torna('Seleziona almeno un suggerimento.');
+    const azione = String(req.body?.azione ?? '');
+    if (azione === 'fatto' || azione === 'scartato') {
+      const n = (await q(`UPDATE suggerimenti SET stato = $2, aggiornato_il = now() WHERE id = ANY($1) RETURNING id`, [ids, azione])).length;
+      return torna(`${n === 1 ? '1 suggerimento segnato' : `${n} suggerimenti segnati`} come ${STATI_SUGGERIMENTI[azione].toLowerCase()}.`);
+    }
+    if (azione === 'elimina') {
+      const n = (await q(`DELETE FROM suggerimenti WHERE id = ANY($1) RETURNING id`, [ids])).length;
+      return torna(n === 1 ? 'Suggerimento eliminato.' : `Eliminati ${n} suggerimenti.`);
+    }
+    torna('Azione non riconosciuta.');
   });
 
   r.get('/nuovo', (req, res) => res.send(pagina(req, 'Nuovo suggerimento', html`

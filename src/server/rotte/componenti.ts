@@ -5,11 +5,13 @@
 import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
   creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
+import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
@@ -26,7 +28,7 @@ const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+
 export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? 'componenti.js', contenuto: html`
+    String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js'], contenuto: html`
       <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N']]
         .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
@@ -38,6 +40,14 @@ export function rotteComponenti() {
     const elenco = await q<any>(`SELECT b.id, b.nome, b.file_nome, b.quantita, b.stato, b.riepilogo, b.creato_il,
         (SELECT count(*)::int FROM preventivi p WHERE p.bom_id = b.id) AS preventivi FROM bom_analisi b
       WHERE b.file_nome IS DISTINCT FROM $1 ORDER BY b.creato_il DESC LIMIT 100`, [FILE_SINGOLA]);
+    const modulo = moduloAzioni({
+      azione: '/quotazioni/bom/azioni', nome: { singolare: 'BOM', plurale: 'BOM', femminile: true },
+      pulsanti: [
+        { azione: 'excel', testo: 'Excel', serve: '1', titolo: 'Scarica l\'Excel con codifica e acquisti della BOM selezionata' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+          chiedi: 'Eliminare {n} BOM e il loro risultato? L\'archivio componenti non cambia.\n\nNei preventivi collegati il costo componenti già scritto resta, ma non si aggiornerà più dalla BOM.' },
+      ],
+    });
     res.send(pag(req, 'BOM', 'bom', html`
       ${statoCollegamenti()}
       <section class="blocco stretto-form" id="carica-bom">
@@ -52,15 +62,15 @@ export function rotteComponenti() {
         <output id="esito-bom" class="nota"></output>
       </section>
       <h2>BOM caricate</h2>
-      ${elenco.length ? html`<div class="tabella-scorre"><table><thead><tr><th>Nome</th><th>File</th><th>Caricata</th><th class="n">Righe</th>
-        <th class="n">Schede</th><th class="n">Materiali a scheda</th><th>Reperibilità</th><th>Stato</th><th class="n" title="Preventivi che prendono da questa BOM il costo componenti">Preventivi</th><th></th></tr></thead><tbody>
-        ${elenco.map(a => { const rp: Riepilogo = a.riepilogo ?? {}; const p = rp.perQuantita?.[0]; return html`<tr>
+      ${elenco.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Nome</th><th>File</th><th>Caricata</th><th class="n">Righe</th>
+        <th class="n">Schede</th><th class="n">Materiali a scheda</th><th>Reperibilità</th><th>Stato</th><th class="n" title="Preventivi che prendono da questa BOM il costo componenti">Preventivi</th></tr></thead><tbody>
+        ${elenco.map(a => { const rp: Riepilogo = a.riepilogo ?? {}; const p = rp.perQuantita?.[0]; return html`<tr class="cliccabile" data-href="/quotazioni/bom/${a.id}">
+          ${casella(a.id, a.nome)}
           <td><a href="/quotazioni/bom/${a.id}">${a.nome}</a></td><td class="taglia">${a.file_nome}</td><td>${new Date(a.creato_il).toLocaleDateString('it-IT')}</td>
           <td class="n">${rp.righe ?? ''}</td><td class="n">${(a.quantita ?? []).join(', ')}</td><td class="n">${p ? euro2(p.aScheda) : ''}</td>
           <td>${rp.critici ? html`<span class="livello critico">${rp.critici} critici</span> ` : ''}${rp.attenzione ? html`<span class="livello attenzione">${rp.attenzione} attenzione</span>` : ''}</td>
-          <td>${a.stato === 'pronta' ? '' : a.stato.replace('_', ' ')}</td><td class="n">${a.preventivi || ''}</td>
-          <td><form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina" data-preventivi="${a.preventivi}"><button class="link negativo">Elimina</button></form></td></tr>`; })}
-        </tbody></table></div>` : html`<p class="vuoto">Nessuna BOM caricata.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
+          <td>${a.stato === 'pronta' ? '' : a.stato.replace('_', ' ')}</td><td class="n">${a.preventivi || ''}</td></tr>`; })}
+        </tbody></table></div>${modulo.chiudi}` : html`<p class="vuoto">Nessuna BOM caricata.</p>`}`, req.query.errore ? String(req.query.errore) : undefined));
   });
 
   r.post('/bom', express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
@@ -68,7 +78,7 @@ export function rotteComponenti() {
     const quantita = leggiQuantita(req.query.quantita);
     if (!quantita.length) return res.status(400).json({ errore: 'Scrivi quante schede (es. 100 oppure 100, 250).' });
     try {
-      const righe = await leggiFileBom(fileNome, req.body as Buffer);
+      const righe = unisciAlternative(await leggiFileBom(fileNome, req.body as Buffer)); // alternative del cliente in una colonna
       if (righe.length < 2) return res.status(400).json({ errore: 'Il file non contiene righe.' });
       const id = await creaAnalisi({ nome: String(req.query.nome ?? '').trim() || fileNome.replace(/\.[^.]+$/, ''), fileNome, righe, quantita, utenteId: req.session.utente!.id });
       avviaElaborazione(id);
@@ -113,6 +123,15 @@ export function rotteComponenti() {
   r.post('/bom/:id/salva', async (req, res) => {
     const x = await salvaInArchivio(Number(req.params.id), req.session.utente!.nome);
     res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent(`Archivio aggiornato: ${x.nuovi} componenti nuovi, ${x.aggiornati} completati.`)}`);
+  });
+  // azioni dall'elenco sulle BOM spuntate
+  r.post('/bom/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    if (!ids.length) return res.redirect('/quotazioni/bom');
+    const azione = String(req.body?.azione ?? '');
+    if (azione === 'excel' && ids.length === 1) return res.redirect(`/quotazioni/bom/${ids[0]}/excel`);
+    if (azione === 'elimina') await q(`DELETE FROM bom_analisi WHERE id = ANY($1)`, [ids]);
+    res.redirect('/quotazioni/bom');
   });
   r.post('/bom/:id/elimina', async (req, res) => {
     await q(`DELETE FROM bom_analisi WHERE id = $1`, [req.params.id]);

@@ -37,10 +37,22 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('fare un ddt', 1), ['ddt-emessi']);
   assert.ok(primi('stampare la bolla', 3).includes('ddt-emessi'));
   assert.deepEqual(primi('stampare la scheda di produzione'), ['crea-commessa']);
+  assert.deepEqual(primi('preventivo essenziale'), ['stampa-preventivo']);
+  assert.ok(primi('sconto sul preventivo', 2).includes('stampa-preventivo'));
+  assert.ok(primi('firma del cliente sul preventivo', 2).includes('stampa-preventivo'));
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);
+  assert.ok(primi('due codici diversi nella bom', 2).includes('alternative-componenti'));
+  assert.ok(primi('mail con due codici e forecast', 2).includes('pulsante-gmail'));
+  assert.ok(primi('cicli di lavorazione della mail', 2).includes('preventivo-da-validare'));
+  assert.ok(primi('bom con alternative pref alt', 2).includes('documenti-cliente'));
   assert.deepEqual(primi('BOLLA spedita'), ['ddt-acquisiti']);
+  assert.deepEqual(primi("conferma d'ordine"), ['conferma-ordine']);
+  assert.ok(primi('mandare la conferma al cliente con gmail', 2).includes('conferma-ordine'));
   assert.deepEqual(primi('backup'), ['backup']);
+  assert.deepEqual(primi('credito anthropic finito', 1), ['servizi']);
+  assert.deepEqual(primi('quanti token sto usando', 1), ['servizi']);
+  assert.ok(primi('memoria di render', 2).includes('servizi'));
   assert.deepEqual(primi('PIN operatori', 1), ['operatori']);
   assert.ok(primi('cancellare un cliente', 3).includes('eliminare'));
 });
@@ -66,12 +78,15 @@ test('guida: preventivo da validare e stampe di montaggio si trovano', () => {
 
 test('guida: segnalazione che va bene', () => {
   assert.ok(primi('segnalazione va bene', 2).includes('documenti-cliente'));
+  assert.ok(primi('cartella troppo grande', 2).includes('documenti-cliente'));
 });
 
 test('guida: prodotto nuovo dal preventivo si trova', () => {
   assert.ok(primi('prodotto nuovo nel preventivo', 2).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('non trovo il codice nell\'elenco', 3).includes('prodotto-nuovo-preventivo'));
   assert.ok(primi('revisione 0', 3).includes('prodotto-nuovo-preventivo'));
+  assert.ok(primi('codici senza cliente', 2).includes('prodotti'));
+  assert.ok(primi('codice non assegnato', 3).includes('prodotti'));
 });
 
 test('guida: AOI visivo e BOM quotata', () => {
@@ -80,4 +95,28 @@ test('guida: AOI visivo e BOM quotata', () => {
   assert.ok(primi('componente non trovato alternativa', 3).includes('alternative-componenti'));
   assert.ok(primi('perché è critico', 3).includes('alternative-componenti'));
   assert.ok(primi('scrivere il prezzo a mano di un componente', 3).includes('alternative-componenti'));
+});
+
+test('guida: spunte e pulsanti negli elenchi (Adriano 29/10/2026)', () => {
+  assert.ok(primi('eliminare più commesse insieme', 3).includes('azioni-elenchi'));
+  assert.ok(primi('spuntare più righe', 2).includes('azioni-elenchi'));
+});
+
+test('guida: pulsante di Gmail si trova', () => {
+  assert.ok(primi('mandare una mail al portale', 2).includes('pulsante-gmail'));
+  assert.ok(primi('pulsante gmail preventivo', 2).includes('pulsante-gmail'));
+  assert.ok(primi('richiesta offerta arrivata per email con allegati', 3).includes('pulsante-gmail'));
+});
+
+test('guida: versioni della stessa scheda e file aggiunti dopo', () => {
+  assert.ok(primi('dividi per versione', 3).includes('pulsante-gmail'));
+  assert.ok(primi('aggiungere file mancanti', 3).includes('pulsante-gmail'));
+});
+
+test('guida: SMD montati a mano', () => {
+  assert.ok(primi('smd a mano giostra', 3).includes('nuovo-preventivo'));
+});
+
+test('guida: mail .eml nella cartella', () => {
+  assert.ok(primi('mail eml', 3).includes('pulsante-gmail'));
 });

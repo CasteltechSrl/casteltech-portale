@@ -97,6 +97,8 @@ details.blocco { padding: 0; }
 details.blocco > summary { padding: .8rem 1rem; cursor: pointer; font-weight: 650; list-style: none; display: flex; align-items: center; gap: .6rem; }
 details.blocco > summary::before { content: "▸"; color: var(--tenue); transition: transform .15s; }
 details.blocco[open] > summary::before { transform: rotate(90deg); }
+details.email-richiesta { margin-bottom: 1rem; }
+.testo-email { white-space: pre-wrap; font: inherit; margin: 0; padding: 0 1rem 1rem; max-height: 22rem; overflow: auto; }
 details.blocco > summary .conta { font-size: .72rem; background: var(--accento-chiaro); color: var(--accento); padding: .05rem .45rem; border-radius: 99px; }
 .campi-parametri { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .8rem; padding: 0 1rem 1rem; }
 .riga-campi { display: flex; gap: .7rem; flex-wrap: wrap; }
@@ -149,6 +151,7 @@ table.editor td:has(> input[type=checkbox]) { min-width: 0; text-align: center; 
 table.editor select { min-width: 7.5rem; }
 table.editor td.largo { min-width: 16rem; }
 table.editor input.corto { width: 5rem; }
+table.editor input.codice { width: 9rem; }
 table.editor input.formula { font-family: var(--mono); font-size: .82rem; }
 table.editor tr.nuova-riga td { background: #fafbfa; }
 .stretto-form { max-width: 460px; display: grid; gap: .9rem; }
@@ -220,7 +223,7 @@ ul.controlli { padding-left: 1.1rem; margin: .3rem 0 .8rem; font-size: .88rem; }
 ul.controlli.errori li { color: #b3261e; } ul.controlli.avvisi li { color: #8a5a00; }
 table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }
 
-.spunte-generali { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: .4rem 0 .2rem; }
+.spunte-generali { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .6rem; margin: .4rem 0 .2rem; }
 @media (max-width: 700px) { .spunte-generali { grid-template-columns: 1fr; } }
 .gruppo-spunte { --tinta: #e8f3f0; --bordo-tinta: #8cc5b7; background: var(--tinta); border-left: 4px solid var(--bordo-tinta);
   border-radius: 8px; padding: .55rem .7rem .6rem; display: grid; gap: .4rem; align-content: start; }
@@ -232,11 +235,12 @@ table.rientro select[name$="[tipo]"] { min-width: 3.6rem; width: 3.8rem; }
 .titolo-spunte small { font-weight: 400; color: var(--tenue); margin-left: .3rem; }
 .riga-spunte { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .nome-riga { font-size: .75rem; font-weight: 600; color: var(--tenue); min-width: 3.4rem; letter-spacing: .02em; }
-.riga-spunte { flex-wrap: nowrap; } .gruppo-spunte.lavorazioni .riga-spunte, .gruppo-spunte.produzione .riga-spunte { flex-wrap: wrap; }
-/* Montaggio: tre voci per riga (AOI: TOP, BOT, Visivo) sulla stessa riga (vanno a capo solo se lo schermo è stretto) */
-.gruppo-spunte.montaggio .riga-spunte { gap: .25rem; flex-wrap: wrap; }
-.gruppo-spunte.montaggio .nome-riga { min-width: 2.6rem; }
-.gruppo-spunte.montaggio label.chip { padding: .2rem .45rem .2rem .35rem; gap: .25rem; font-size: .8rem; white-space: nowrap; }
+.riga-spunte { flex-wrap: nowrap; }
+/* ogni riga di spunte su una riga sola (Adriano 29/10/2026): voci compatte, casella piccola */
+.spunte-generali label.chip { padding: .18rem .45rem .18rem .35rem; gap: .25rem; font-size: .8rem; white-space: nowrap; }
+.spunte-generali label.chip input { width: .8rem; height: .8rem; }
+.gruppo-spunte .riga-spunte { gap: .25rem; flex-wrap: wrap; } /* a capo solo se lo schermo è davvero stretto */
+.gruppo-spunte.montaggio .nome-riga { min-width: 2.3rem; }
 label.chip { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem .25rem .45rem; border-radius: 999px;
   background: #fff; border: 1px solid var(--bordo-tinta); font-size: .85rem; cursor: pointer; user-select: none; width: auto; margin: 0; }
 label.chip input { width: auto; margin: 0; accent-color: var(--accento); }
@@ -334,19 +338,37 @@ svg .base { stroke: #b9c0bc; stroke-width: 1; }
 .grafico-mesi .mese:hover .sfondo { fill: #f1f3f1; }
 .grafico-mesi .fatturato { fill: var(--serie-fatturato); }
 .grafico-mesi .da-evadere { fill: var(--serie-da-evadere); }
+.gantt { display: flex; align-items: flex-start; min-width: 100%; }
+.gantt .nomi { flex: 0 0 17rem; width: 17rem; border-right: 1px solid var(--bordo); }
+.gantt .nomi .testa { height: 46px; }
+.gantt .nomi .nome { display: block; height: 22px; line-height: 22px; padding: 0 .5rem 0 .2rem; font-size: 12px; color: var(--testo);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid #f0f2f0; text-decoration: none; }
+.gantt .nomi a.nome:hover { background: var(--accento-chiaro); }
+.gantt .nomi .tenue { color: var(--tenue); font-size: 11px; }
+.gantt .tempo { flex: 1 1 auto; display: block; }
+.gantt.vista-mese .tempo { min-width: 36rem; }
+.gantt.vista-trimestre .tempo { min-width: 50rem; }
 .gantt .festivo { fill: #f4f5f3; }
+.gantt .oggi-sfondo { fill: #fdecea; opacity: .6; }
+.gantt .griglia.mese { stroke: #cfd5d1; }
 .gantt .riga { stroke: #f0f2f0; }
-.gantt .etichetta { font-size: 11.5px; fill: var(--testo); }
+.gantt .fondo-riga { fill: transparent; }
+.gantt a:hover .fondo-riga { fill: var(--accento-chiaro); opacity: .5; }
+.gantt .asse.mese { font-weight: 600; fill: var(--testo); }
 .gantt .barra { fill: var(--accento); }
 .gantt .barra.stimata { fill: #9cc9bf; stroke: var(--accento); stroke-dasharray: 3 2; }
 .gantt .barra.ritardo { fill: var(--negativo); }
 .gantt .barra.ritardo.stimata { fill: #e9a7a2; stroke: var(--negativo); }
-.gantt g:hover .barra { opacity: .8; }
+.gantt a:hover .barra { opacity: .8; }
 .gantt .consegna { fill: #1d2421; }
 .gantt .carico { fill: #9cc9bf; }
 .gantt .carico.oltre { fill: var(--negativo); }
 .gantt .oggi { stroke: var(--negativo); stroke-width: 1.5; }
-.gantt text.oggi { fill: var(--negativo); stroke: none; font-weight: 600; }
+.comandi-gantt { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.comandi-gantt nav { display: inline-flex; border: 1px solid var(--bordo); border-radius: var(--raggio); overflow: hidden; background: var(--carta); }
+.comandi-gantt nav a { padding: .35rem .8rem; text-decoration: none; color: var(--testo); border-right: 1px solid var(--bordo); }
+.comandi-gantt nav a:last-child { border-right: 0; }
+.comandi-gantt nav a.attiva { background: var(--accento); color: #fff; }
 
 /* Ordini → Da acquisire */
 .stato.acq-nuovo { background: #eef0ee; color: var(--tenue); }
@@ -573,3 +595,18 @@ button.link:disabled { color: var(--tenue); cursor: default; }
 .nuovo-prodotto .nota { margin: 0; }
 .nuovo-prodotto .azioni-riga { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .rimando-preventivo { display: flex; gap: .8rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* Anagrafiche → Prodotti: codici senza cliente da assegnare o eliminare (regola codice-cliente) */
+table.editor tr.senza-cliente td { background: #fff4c2; }
+table.editor tr.senza-cliente select { border-color: #e0b100; }
+nav.tasti-anagrafiche a .conta.da-assegnare { background: #fff4c2; color: #8a6100; }
+
+/* ── Impostazioni → Servizi: consumi e limiti (29/10/2026) ── */
+.tabella-scorre { overflow-x: auto; }
+table.servizi td { vertical-align: top; }
+table.servizi td.numero { text-align: right; white-space: nowrap; }
+table.servizi tr.servizio-critico { background: #fdf0ee; }
+table.servizi tr.servizio-attenzione { background: #fffaea; }
+table.servizi meter { width: 5rem; vertical-align: middle; }
+.avviso.servizi-critico { background: #fbe2e0; border-color: #e7a9a3; }
+.avviso.servizi ul { margin: .3rem 0 0; padding-left: 1.2rem; }

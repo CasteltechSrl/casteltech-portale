@@ -8,6 +8,7 @@ import { contaRefori, leggiForatura, sembraForatura } from '../src/engine/scheda
 import { leggiGenCad } from '../src/engine/scheda/gencad.js';
 import { analizzaScheda, CONSUMI, leggiBomScheda, numeroPassivo, stessoComponente } from '../src/engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile } from '../src/engine/scheda/classifica.js';
+import { CARTELLA_CASTELTECH, lavoratoDaCasteltech, MAX_FILE, scegliFile, sceltaFile, TROPPO_GRANDE, VERSIONI_VECCHIE } from '../src/engine/scheda/scelta-file.js';
 import { parametriDaAnalisi } from '../src/engine/scheda/preventivo.js';
 import { controllaPiazzole, misuraPiazzole, PIAZZOLE_IPC } from '../src/engine/scheda/piazzole.js';
 import { latoFoglio, righeFoglio } from '../src/engine/scheda/documentazione.js';
@@ -160,6 +161,10 @@ test('riconoscimento dei file e degli strati', () => {
   assert.deepEqual(ruoloStrato('scheda.gtl'), { ruolo: 'rame', lato: 'TOP' });
   assert.deepEqual(ruoloStrato('scheda.gbs'), { ruolo: 'maschera', lato: 'BOT' });
   assert.equal(ruoloStrato('scheda_GND_Negative.GP1').ruolo, 'interno');
+  // nomi senza estensione con il numero del lato (RFQ M0929-C, 29/10/2026)
+  assert.deepEqual(ruoloStrato('gerber/m0929c_pa1'), { ruolo: 'pasta', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('gerber/m0929c_so1'), { ruolo: 'maschera', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('gerber/m0929c_cu2'), { ruolo: 'rame', lato: 'BOT' });
   assert.deepEqual(ruoloStrato('x.art', '%TF.FileFunction,Paste,Bot*%'), { ruolo: 'pasta', lato: 'BOT' });
   assert.equal(ruoloStrato('SCHEDA_OUTLINE.art').ruolo, 'contorno');
 });
@@ -404,4 +409,106 @@ test('BOM quotata per il preventivo: problemi da risolvere prima della quota', a
   const p = problemiBom([riga(ESITI.INC), riga(ESITI.NUOVO_VER), riga(ESITI.DB, { reperibilita: { livello: 'critico' } }), riga(ESITI.INC, { clienteFornisce: true })],
     { senzaPrezzo: 2, nonDisponibili: 1 });
   assert.deepEqual(p, ['1 riga da completare', '1 codice da validare', '2 righe senza prezzo', '1 componente non disponibile', '1 componente con reperibilità critica']);
+});
+
+test('cartella del cliente: si caricano solo i file utili, il resto resta sul Drive con il solo nome', () => {
+  const MB = 1024 * 1024;
+  const { carica, soloElenco } = scegliFile([
+    { nome: '3D/scheda.step', byte: 83 * MB },          // il file che dava "troppo grande"
+    { nome: '3D/scheda.pdf', byte: 10 * MB },
+    { nome: 'PDF/foto.tif', byte: MB },
+    { nome: 'ODBpp/scheda.tgz', byte: 2 * MB },
+    { nome: 'DOC/legenda.doc', byte: 20000 },
+    { nome: 'Gerber/template.dsn', byte: 1500 },
+    { nome: 'desktop.ini', byte: 352 },
+    { nome: 'Gerber/OLD/L1_TOP.gdo', byte: 1000 },
+    { nome: 'odb/matrix/matrix', byte: 500 }, { nome: 'odb/steps/pcb/layers/top/features', byte: 9000 },
+    { nome: 'EC/BOM.xlsx', byte: 100000 },
+    { nome: 'GenCAD/gencad.cad', byte: 2.5 * MB },
+    { nome: 'Gerber/L1_TOP.gdo', byte: 160000 },
+    { nome: 'gerber/lcz', byte: 800000 },                 // senza estensione: si capisce dal contenuto
+    { nome: 'P&P/vb_ais.txt', byte: 38000 },
+    { nome: 'tutto.zip', byte: 40 * MB },
+    { nome: 'enorme.zip', byte: 90 * MB },
+    { nome: 'enorme.gbr', byte: MAX_FILE + 1 },
+  ]);
+  assert.deepEqual(carica, ['EC/BOM.xlsx', 'GenCAD/gencad.cad', 'Gerber/L1_TOP.gdo', 'gerber/lcz', 'P&P/vb_ais.txt', 'tutto.zip']);
+  assert.ok(!soloElenco.some(f => f.nome === 'desktop.ini'), 'i file di sistema non compaiono');
+  assert.equal(soloElenco.find(f => f.nome === '3D/scheda.step')?.byte, 83 * MB);
+  assert.equal(soloElenco.find(f => f.nome === 'enorme.zip')?.motivo, TROPPO_GRANDE);
+  assert.equal(soloElenco.find(f => f.nome === 'enorme.gbr')?.motivo, TROPPO_GRANDE);
+  assert.equal(soloElenco.find(f => f.nome === 'Gerber/OLD/L1_TOP.gdo')?.motivo, VERSIONI_VECCHIE);
+  assert.ok(soloElenco.some(f => f.nome === 'odb/steps/pcb/layers/top/features'));
+  assert.equal(sceltaFile('archivio.rar', 1000).carica, false);
+  assert.deepEqual(sceltaFile('Armadi/Armadi_1001_1_TOP.txt', 400), { carica: false, motivo: CARTELLA_CASTELTECH });
+  assert.equal(sceltaFile('Topografico/1001_TOP.af', 800000).carica, false);
+});
+
+test('file già lavorati da Casteltech (codici di produzione) non sono del cliente', () => {
+  const nostro = ['Colonna1;Colonna2;Colonna3;Colonna4;Colonna5;Colonna8',
+    ...Array.from({ length: 8 }, (_, i) => `C${i + 1};C_100N_50V_X7R_0402_10TOL;180;${10 + i}.5;20.1;CC-0402-100NF-10-X7R-50V`)].join('\n');
+  assert.ok(lavoratoDaCasteltech(nostro));
+  const cliente = ['Designator;Comment;X;Y;Rotation', ...Array.from({ length: 8 }, (_, i) => `R${i + 1};10K;${i}.0;5.0;0`)].join('\n');
+  assert.ok(!lavoratoDaCasteltech(cliente));
+});
+
+test('strati PADS: L1_TOP e L4_BOTTOM sono rame esterno, L2 interno', () => {
+  assert.deepEqual(ruoloStrato('Gerber/L1_TOP.gdo'), { ruolo: 'rame', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('Gerber/L4_BOTTOM.gdo'), { ruolo: 'rame', lato: 'BOT' });
+  assert.equal(ruoloStrato('Gerber/L2.gdo').ruolo, 'interno');
+});
+
+test('zip del cliente: si aprono solo i file utili, PDF e 3D restano chiusi con nome e dimensione (memoria del server)', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { espandiArchivi } = await import('../src/server/schede-cliente-servizio.js');
+  const { zipSync } = await import('fflate');
+  const testo = (s: string) => new TextEncoder().encode(s);
+  const interno = zipSync({ 'dentro/scheda.drl': testo('M48\nT1C0.8\n%\nT1\nX1Y1\nM30\n') });
+  const zip = Buffer.from(zipSync({
+    'gerber/top.gbr': testo('G04 prova*\n%FSLAX46Y46*%\nM02*\n'),
+    'bom.csv': testo('Ref;Valore\nR1;10K\n'),
+    'disegni/assieme.pdf': new Uint8Array(5000),
+    '3d/scheda.step': new Uint8Array(3000),
+    'OLD/bom.csv': testo('vecchia'),
+    'odb/matrix/matrix': testo('STEP {}'),
+    'odb/steps/pcb/profile': testo('x'),
+    'interno.zip': interno,
+  }));
+  const file = espandiArchivi([{ nome: 'pacchetto.zip', dati: zip }]);
+  const aperti = file.filter(f => f.conservato !== false).map(f => f.nome).sort();
+  assert.deepEqual(aperti, ['pacchetto/bom.csv', 'pacchetto/gerber/top.gbr', 'pacchetto/interno/dentro/scheda.drl']);
+  const chiusi = Object.fromEntries(file.filter(f => f.conservato === false).map(f => [f.nome, f.byte]));
+  assert.equal(chiusi['pacchetto/disegni/assieme.pdf'], 5000, 'PDF: solo nome e dimensione');
+  assert.equal(chiusi['pacchetto/3d/scheda.step'], 3000);
+  assert.ok('pacchetto/OLD/bom.csv' in chiusi, 'cartella vecchia non aperta');
+  assert.ok('pacchetto/odb/matrix/matrix' in chiusi && 'pacchetto/odb/steps/pcb/profile' in chiusi, 'ODB++ non aperto');
+});
+
+test('M0929-C (Control Systems, 29/10/2026): centri in pollici, BOM a colonne fisse, pick and place con un\'altra origine', async () => {
+  const { allineaAlRame } = await import('../src/engine/scheda/allinea.js');
+  const { leggiBomColonneFisse } = await import('../src/engine/codifica/bom.js');
+  // centri: X Y lato rotazione unità, poi le coordinate in centomillesimi di mm
+  const pp = leggiPickPlace('centri.txt', ' U23 0.7875 0.625 1 270 IN 2000250 1587500 \r\n R74 3.05 1.475 1 90 IN 7747000 3746500 \r\n C1 5.5 1.3 2 0 IN 13970000 3302000 \r\n');
+  assert.equal(pp.unita, 'inch');
+  assert.deepEqual(pp.posizioni.map(p => [p.ref, Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, p.rot, p.lato]),
+    [['U23', 20, 15.88, 270, 'TOP'], ['R74', 77.47, 37.47, 90, 'TOP'], ['C1', 139.7, 33.02, 0, 'BOT']]);
+  // BOM stampata a colonne fisse con i puntini e le righe di pagina
+  const bom = leggiBomColonneFisse([
+    '          CONTROL SYSTEMS SRL                                   29.10.2026',
+    '         Reference        NxU.M.    Componente                           Costruttore              Descrizione componente',
+    '',
+    '         C1                         C0402C220J5GAC.....................  Kemet................... Condensatore smd (0402) 22pF 50V 5%',
+    '         JSER1                      LU003505-R.........................  ADIMPEX................. Connettore subminiatura D, 9 poli',
+    '                                                                                                    Pag.  di ',
+  ].join('\n'))!;
+  assert.deepEqual(bom.slice(1), [['C1', '', 'C0402C220J5GAC', 'Kemet', 'Condensatore smd (0402) 22pF 50V 5%'],
+    ['JSER1', '', 'LU003505-R', 'ADIMPEX', 'Connettore subminiatura D, 9 poli']]);
+  assert.equal(leggiBomColonneFisse('Reference;Value;Footprint\nR1;10k;0603\n'), null);
+  // allineamento: chip 0402 (piazzole a ±0,5 mm) su una scheda spostata di 101,6 / 203,2 mm, con le piazzole dei vicini a 1,27 mm
+  const comp = Array.from({ length: 30 }, (_, i) => ({ x: 5 + (i % 10) * 6, y: 5 + Math.floor(i / 10) * 2.54 }));
+  const piazzole = comp.flatMap(c => [-0.53, 0.53].map(d => ({ x: c.x + 101.6 + d, y: c.y + 203.2, w: 0.56, h: 0.76 })));
+  const s = allineaAlRame(comp, piazzole)!;
+  assert.deepEqual([s.dx, s.dy], [101.6, 203.2]);
+  // già allineati: niente spostamento
+  assert.equal(allineaAlRame(comp.map(c => ({ x: c.x + 101.6, y: c.y + 203.2 })), piazzole), null);
 });

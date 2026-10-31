@@ -13,6 +13,7 @@ import { leggiPrezzo, type Fornitore, type Offerta } from '../engine/acquisti.js
 import { pnKey } from '../engine/codifica/bom.js';
 import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
 import { elementiTme, offerteTme } from '../engine/tme.js';
+import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
 const ORE_CACHE = 24;
 const TIMEOUT = 20_000;
@@ -31,18 +32,19 @@ export function fornitoriConfigurati(): Record<Fornitore, boolean> {
 
 async function http(url: string, opz: RequestInit & { nome: string }): Promise<any> {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), TIMEOUT);
+  // ogni richiesta conta per il limite giornaliero del distributore (Impostazioni → Servizi)
+  const servizio = opz.nome.toLowerCase();
+  const fallita = (tipo: string, msg: string) => { conta(servizio, 'prezzi', { chiamate: 1, errori: 1 }); erroreServizio(servizio, tipo, msg); return new ErroreFornitore(msg); };
   try {
-    const r = await fetch(url, { ...opz, signal: ctrl.signal });
-    const testo = await r.text();
+    let r: Response, testo: string;
+    try { r = await fetch(url, { ...opz, signal: ctrl.signal }); testo = await r.text(); }
+    catch (e: any) { throw fallita('rete', `${opz.nome} non raggiungibile: ${e?.name === 'AbortError' ? 'tempo scaduto' : e?.message ?? e}`); }
     let corpo: any = null; try { corpo = testo ? JSON.parse(testo) : null; } catch { corpo = null; }
-    if (r.status === 404) return null;
-    if (r.status === 429) throw new ErroreFornitore(`${opz.nome}: limite di richieste raggiunto, riprova più tardi`);
-    if (r.status === 401 || r.status === 403) throw new ErroreFornitore(`${opz.nome}: accesso negato (${r.status}), controlla le chiavi su Render`);
-    if (!r.ok) throw new ErroreFornitore(`${opz.nome}: errore ${r.status} ${testo.slice(0, 200)}`);
-    return corpo;
-  } catch (e: any) {
-    if (e instanceof ErroreFornitore) throw e;
-    throw new ErroreFornitore(`${opz.nome} non raggiungibile: ${e?.name === 'AbortError' ? 'tempo scaduto' : e?.message ?? e}`);
+    if (r.status === 429) throw fallita('limite', `${opz.nome}: limite di richieste raggiunto, riprova più tardi`);
+    if (r.status === 401 || r.status === 403) throw fallita('chiave', `${opz.nome}: accesso negato (${r.status}), controlla le chiavi su Render`);
+    if (!r.ok && r.status !== 404) throw fallita('altro', `${opz.nome}: errore ${r.status} ${testo.slice(0, 200)}`);
+    conta(servizio, 'prezzi', { chiamate: 1 }); riuscito(servizio);
+    return r.status === 404 ? null : corpo;
   } finally { clearTimeout(t); }
 }
 

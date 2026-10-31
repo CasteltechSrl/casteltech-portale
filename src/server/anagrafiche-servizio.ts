@@ -83,7 +83,7 @@ export async function caricaAnagrafiche(f: FileAnagrafiche, opz: { togli?: boole
 
 async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean) {
   {
-    let clientiNuovi = 0, prodottiNuovi = 0, descrizioniCambiate = 0;
+    let clientiNuovi = 0, prodottiNuovi = 0, descrizioniCambiate = 0, prodottiSenzaCliente = 0;
     const idCliente = new Map<string, number>();
     for (const nome of f.clienti.map(maiuscolo)) {
       const e = (await c.query(`SELECT id FROM clienti WHERE upper(ragione_sociale) = $1 ORDER BY id LIMIT 1`, [nome])).rows[0];
@@ -101,6 +101,8 @@ async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean
         `SELECT id, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1
            AND (cliente_id IS NOT DISTINCT FROM $2 OR cliente_id IS NULL OR $2::int IS NULL)
          ORDER BY (cliente_id IS NOT DISTINCT FROM $2) DESC, id LIMIT 1`, [k, cl])).rows[0];
+      // regola codice-cliente: un prodotto nuovo senza cliente nel file non entra in anagrafica
+      if (!e && !cl) { prodottiSenzaCliente++; continue; }
       if (!e) prodottiNuovi++;
       else if (maiuscolo(e.descrizione) !== maiuscolo(p.descrizione)) descrizioniCambiate++;
       const id = e ? e.id
@@ -126,7 +128,7 @@ async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean
       aliasProdotti++;
     }
     const preventivi = await riallineaPreventivi(c);
-    if (!togli) return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti: 0, prodottiTolti: 0 };
+    if (!togli) return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, prodottiSenzaCliente, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti: 0, prodottiTolti: 0 };
     // via dalle anagrafiche ciò che non è nell'elenco ufficiale (e non è usato)
     const tieniClienti = [...idCliente.values()], tieniProdotti = [...idProdotti];
     await c.query(`DELETE FROM prodotti_revisioni r WHERE NOT (r.prodotto_id = ANY($1))
@@ -136,7 +138,7 @@ async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean
     const clientiTolti = (await c.query(`DELETE FROM clienti k WHERE NOT (k.id = ANY($1))
       AND NOT EXISTS (SELECT 1 FROM prodotti p WHERE p.cliente_id = k.id) AND NOT EXISTS (SELECT 1 FROM preventivi p WHERE p.cliente_id = k.id)
       AND NOT EXISTS (SELECT 1 FROM commesse m WHERE m.cliente_id = k.id)`, [tieniClienti])).rowCount;
-    return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti, prodottiTolti };
+    return { clienti: idCliente.size, prodotti: idProdotti.size, clientiNuovi, prodottiNuovi, prodottiSenzaCliente, descrizioniCambiate, aliasProdotti, preventivi, clientiTolti, prodottiTolti };
   }
 }
 
@@ -167,7 +169,6 @@ export async function riallineaPreventivi(c: Db) {
   return { totale: righe.length, collegati, prodottiCollegati };
 }
 
-/** Prodotti selezionabili per un cliente: i suoi + quelli non ancora assegnati. */
+/** Prodotti selezionabili per un cliente: SOLO i suoi (Adriano 29/10/2026: ogni codice ha il suo cliente, vedi engine/anagrafiche.ts). */
 export const prodottiPerCliente = (clienteId: number) => q(
-  `SELECT id, codice, descrizione, cliente_id IS NULL AS da_assegnare FROM prodotti
-   WHERE cliente_id = $1 OR cliente_id IS NULL ORDER BY cliente_id NULLS LAST, codice`, [clienteId]);
+  `SELECT id, codice, descrizione, cliente_id FROM prodotti WHERE cliente_id = $1 ORDER BY codice`, [clienteId]);

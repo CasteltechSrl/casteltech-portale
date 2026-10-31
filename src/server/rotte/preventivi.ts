@@ -16,6 +16,10 @@ import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
+import { caricaAzienda } from '../amministrazione-servizio.js';
+import { stampaPreventivo, type ClienteStampa } from '../views/stampa-preventivo.js';
+import { leggiRitocchi, versioneStampa } from '../../engine/stampa-preventivo.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -39,6 +43,15 @@ export function rottePreventivi() {
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
       ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
     const msg = String(req.query.msg ?? '');
+    const modulo = moduloAzioni({
+      azione: '/preventivi/azioni', nome: { singolare: 'preventivo', plurale: 'preventivi' },
+      pulsanti: [
+        { azione: 'commessa', testo: 'Crea commessa', serve: '1', titolo: 'Crea la commessa dal preventivo selezionato (uno alla volta)' },
+        { azione: 'duplica', testo: 'Duplica', serve: '1+', titolo: 'Nuovo preventivo con fasi, tariffe e prezzi attuali' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Elimina i preventivi selezionati (non quelli già diventati commessa)',
+          chiedi: 'Eliminare {n} preventiv{o|i}? L\'operazione non si può annullare (prima viene salvato un backup).' },
+      ],
+    });
     res.send(String(layout({
       titolo: 'Preventivi', utente: req.session.utente, attiva: 'preventivi', largo: true, avviso: msg || undefined,
       contenuto: html`
@@ -48,20 +61,14 @@ export function rottePreventivi() {
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
-      <form method="post" action="/preventivi/azioni" id="azioni-elenco">
-      <div class="barra-azioni">
-        <span id="n-selezionati" class="nota">Nessun preventivo selezionato</span>
-        <button name="azione" value="commessa" data-serve="1" disabled title="Crea la commessa dal preventivo selezionato (uno alla volta)">Crea commessa</button>
-        <button name="azione" value="duplica" data-serve="1+" disabled title="Nuovo preventivo con fasi, tariffe e prezzi attuali">Duplica</button>
-        <button name="azione" value="elimina" data-serve="1+" disabled class="pericolo" title="Elimina i preventivi selezionati (non quelli già diventati commessa)">Elimina</button>
-      </div>
+      ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco preventivi">
-        <thead><tr><th class="selezione"><input type="checkbox" id="seleziona-tutti" title="Seleziona tutti" aria-label="Seleziona tutti"></th><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
+        <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
           <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
           <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
-            <td class="selezione"><input type="checkbox" name="ids" value="${p.id}" aria-label="Seleziona ${p.numero}"></td>
+            ${casella(p.id, p.numero)}
             <td class="nowrap"><a href="/preventivi/${p.id}">${p.numero}</a>${p.origine === 'vecchio_portale' ? html` <span class="etichetta" title="Importato dal vecchio portale">V</span>` : ''}${p.stato === 'da_validare' ? html` <span class="stato da_validare" title="Compilato dai documenti del cliente: da controllare e salvare">da validare</span>` : ''}</td>
             <td>${data(p.creato_il)}</td><td>${p.intestazione?.cliente}</td><td>${p.intestazione?.codice}</td><td>${p.intestazione?.revisione}</td>
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
@@ -69,7 +76,7 @@ export function rottePreventivi() {
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
           </tr>`)}
         </tbody></table></div>
-      </form>
+      ${modulo.chiudi}
       ${righe.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
       script: 'elenco.js',
     })));
@@ -98,11 +105,14 @@ export function rottePreventivi() {
     if (!cliente) return res.status(400).json({ errore: 'Scegli prima il cliente dall\'elenco.' });
     const { valori, errore } = controllaProdottoNuovo(req.body ?? {});
     if (errore) return res.status(400).json({ errore });
-    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente): si usa quello
+    // stesso codice già in anagrafica per questo cliente (o ancora senza cliente: gli si assegna questo cliente): si usa quello
     const esistente = await q1<{ id: number; codice: string; descrizione: string | null }>(
       `SELECT id, codice, descrizione FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND (cliente_id = $2 OR cliente_id IS NULL)
        ORDER BY cliente_id NULLS LAST, id LIMIT 1`, [chiaveCodice(valori.codice), clienteId]);
-    if (esistente) return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    if (esistente) {
+      await q(`UPDATE prodotti SET cliente_id = $2 WHERE id = $1 AND cliente_id IS NULL`, [esistente.id, clienteId]);
+      return res.json({ ...esistente, revisione: valori.revisione, esisteva: true });
+    }
     const nuovo = await q1<{ id: number; codice: string; descrizione: string }>(
       `INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1, $2, $3) RETURNING id, codice, descrizione`, [valori.codice, valori.descrizione, clienteId]);
     res.json({ ...nuovo, revisione: valori.revisione, esisteva: false });
@@ -138,14 +148,34 @@ export function rottePreventivi() {
       await elencoBom(dati.bomId), req.query.msg ? String(req.query.msg) : undefined));
   });
 
-  // ── Anteprima di stampa (per il cliente: solo prezzi) ──
+  // ── Anteprima di stampa (per il cliente: solo prezzi). Versioni e aggiunte nel pannello a sinistra (Adriano, 28/10/2026) ──
   r.get('/:id/stampa', async (req, res) => {
     const p = await leggiPreventivo(Number(req.params.id));
     if (!p) return res.status(404).send('Preventivo non trovato');
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
-    const vista = req.query.vista === 'macro' ? 'macro' : 'fasi';
-    res.send(String(stampaPreventivo(p, cat, dati, calcola(cat, dati), vista)));
+    const v = (cod: string) => dati.parametri[cod] ?? cat.parametri.find(x => x.codice === cod)?.default;
+    const doppia = !!v('doppiaFaccia');
+    const cliente = p.cliente_id ? await q1<ClienteStampa>(
+      `SELECT c.ragione_sociale, c.partita_iva, c.codice_fiscale, c.indirizzo, c.cap, c.comune, c.provincia, c.nazione, c.codice_sdi, c.pec,
+              cp.descrizione AS pagamento
+         FROM clienti c LEFT JOIN condizioni_pagamento cp ON cp.codice = c.condizione_pagamento WHERE c.id = $1`, [p.cliente_id]) : undefined;
+    res.send(String(stampaPreventivo({
+      p, d: dati, ris: calcola(cat, dati), doppia,
+      nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
+      nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
+      azienda: await caricaAzienda(), cliente: cliente ?? null,
+      opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
+      rit: leggiRitocchi(p.stampa),
+    })));
+  });
+
+  // ── Ritocchi della stampa (note per il cliente, sconto, righe in più): solo nella stampa (Adriano, 29/10/2026) ──
+  r.post('/:id/stampa', async (req, res) => {
+    const id = Number(req.params.id);
+    await q(`UPDATE preventivi SET stampa = $2 WHERE id = $1`, [id, JSON.stringify(leggiRitocchi(req.body))]);
+    const torna = String(req.body.torna ?? '');
+    res.redirect(`/preventivi/${id}/stampa${/^\?[\w=&%.-]*$/.test(torna) ? torna : ''}`);
   });
 
   // ── Calcolo in tempo reale (non salva) ──
@@ -165,7 +195,7 @@ export function rottePreventivi() {
     const cliente = dati.clienteId ? await q1<{ ragione_sociale: string }>(`SELECT ragione_sociale FROM clienti WHERE id = $1`, [dati.clienteId]) : undefined;
     if (!cliente) return res.status(400).json({ errore: 'Scegli il cliente dall\'elenco' });
     const prodotto = dati.prodottoId ? await q1<{ codice: string; descrizione: string }>(
-      `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [dati.prodottoId, dati.clienteId]) : undefined;
+      `SELECT codice, descrizione FROM prodotti WHERE id = $1 AND cliente_id = $2`, [dati.prodottoId, dati.clienteId]) : undefined;
     if (!prodotto) return res.status(400).json({ errore: 'Scegli il codice prodotto dall\'elenco del cliente (o aggiungilo con «Nuovo prodotto»)' });
     if (!dati.revisione) return res.status(400).json({ errore: 'Scrivi la revisione del prodotto (se il cliente non la indica metti 0)' });
     Object.assign(dati, { cliente: maiuscolo(cliente.ragione_sociale), codice: maiuscolo(prodotto.codice), descrizione: maiuscolo(prodotto.descrizione) });
@@ -192,7 +222,7 @@ export function rottePreventivi() {
 
   // azioni dall'elenco su uno o più preventivi spuntati
   r.post('/azioni', async (req, res) => {
-    const ids = [...new Set(([] as unknown[]).concat(req.body?.ids ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0))];
+    const ids = idsSpuntati(req.body);
     const torna = (msg: string) => res.redirect(`/preventivi?msg=${encodeURIComponent(msg)}`);
     if (!ids.length) return torna('Seleziona almeno un preventivo.');
     const azione = String(req.body?.azione ?? '');
@@ -226,16 +256,16 @@ export function rottePreventivi() {
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
 /** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
-  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'variazioneQuantita'] }, { nome: '', codici: ['campionatura'] }] },
+  { titolo: 'Produzione', classe: 'produzione', sotto: 'tipo di preventivo', righe: [{ nome: '', codici: ['primaProduzione', 'campionatura'] }, { nome: '', codici: ['variazioneQuantita'] }] },
   { titolo: 'Montaggio', classe: 'montaggio', sotto: 'lati e saldatura', righe: [
-    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
+    { nome: 'SMD', codici: ['presenteSmd', 'doppiaFaccia', 'smdAMano'] }, { nome: 'THT', codici: ['usaOnda', 'presenteTht'] },
     { nome: 'AOI', codici: ['aoiTop', 'aoiBot', 'controlloVisivo'] }] },
   { titolo: 'Acquisti', classe: 'acquisti', sotto: 'a carico nostro', righe: [
     { nome: '', codici: ['acquistoComponenti', 'acquistoPcb'] }, { nome: 'Lamina', codici: ['acquistoLamina', 'laminaTrattamenti'] }] },
-  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'puliziaSaldature', 'lavaggioSchede', 'usaSplicing'] }] },
+  { titolo: 'Lavorazioni', classe: 'lavorazioni', sotto: 'in più', righe: [{ nome: '', codici: ['etichette', 'usaSplicing'] }, { nome: '', codici: ['puliziaSaldature', 'lavaggioSchede'] }] },
 ];
 const NOME_SPUNTA: Record<string, string> = {
-  doppiaFaccia: 'BOT', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata',
+  doppiaFaccia: 'BOT', smdAMano: 'A mano', aoiTop: 'TOP', aoiBot: 'BOT', controlloVisivo: 'Visivo', usaOnda: 'Ad onda', presenteTht: 'A mano', acquistoLamina: 'Standard', laminaTrattamenti: 'Trattata', puliziaSaldature: 'Pulizia saldature', lavaggioSchede: 'Lavaggio',
 };
 
 function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) => boolean): Raw {
@@ -331,6 +361,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     oreAcquistoComponenti: 'acquistoComponenti', costoComponentiScheda: 'acquistoComponenti',
     oreProgArmadi: SMD, oreFilePeP: SMD, oreProgPeP: SMD, oreProgSerigrafia: SMD, oreProgAOI: `${SMD} aoiTop|aoiBot`,
     tempoRevisioneAoi: 'aoiTop', tempoRevisioneAoiLatoB: 'aoiBot', tempoControlloVisivo: 'controlloVisivo',
+    tempoAttrezSerigrafiaMano: `${SMD} smdAMano`, tempoMontaggioSmdMano: `${SMD} smdAMano`,
     preriscaldamentoForno: SMD, potenzaFornoKw: SMD, crema: SMD,
     oreProgOnda: ONDA, tempoTransitoOnda: ONDA, cadenzaOnda: ONDA, minPrepCarrelli: ONDA, preriscaldamentoOnda: ONDA,
     potenzaOndaKw: ONDA, stagno: ONDA, stagnoPerSaldature: ONDA, scorieSaldatrice: ONDA,
@@ -339,7 +370,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     tempoLavaggio: 'lavaggioSchede', costoLiquidoLavaggio: 'lavaggioSchede', costoAvvioLavaggio: 'lavaggioSchede',
   };
   const GRUPPO_DIPENDE: Record<string, string> = {
-    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
+    PROGRAMMAZIONI: 'primaProduzione', THT: 'presenteTht|usaOnda|smdAMano', 'SMD TOP': SMD, 'SMD BOT': SMD, FORNO: SMD, AOI: 'presenteSmd|controlloVisivo',
   };
   const esiste = (flag: string) => generali.some(p => p.codice === flag);
   // tiene solo le spunte presenti nel catalogo del preventivo (i preventivi vecchi non le hanno)
@@ -424,7 +455,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
           <label>Codice
             <select data-id="prodottoId" id="sel-prodotto" required>
               <option value="">${d.clienteId ? '— scegli il codice —' : '— prima scegli il cliente —'}</option>
-              ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}${x.da_assegnare ? ' (non assegnato)' : ''}</option>`)}
+              ${prodotti.map(x => html`<option value="${x.id}" data-descrizione="${x.descrizione}" ${x.id === d.prodottoId ? raw('selected') : ''}>${x.codice}</option>`)}
             </select></label>
           <label class="stretto">Rev. <input data-campo="revisione" id="revisione" value="${d.revisione}" class="maiuscolo" maxlength="20" required
             placeholder="0" title="Revisione del prodotto: se il cliente non la indica scrivi 0"></label>
@@ -476,8 +507,9 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       </details>
 
       <fieldset class="blocco">
-        <legend>Note</legend>
+        <legend>Note interne</legend>
         <textarea data-campo="note" rows="3">${d.note}</textarea>
+        <small class="aiuto">Non vanno nella stampa per il cliente: lì ci sono "Note per il cliente", sconto e righe in più.</small>
       </fieldset>
     </section>
 
@@ -552,89 +584,4 @@ export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
       <small>${euro(r.prezzoOraCiclo)}/h ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
     <div class="totale"><span title="Ore uomo del lotto, senza una tantum">Ore uomo</span><strong>${ore(r.oreUomoSec)}</strong>
       <small>${euro(r.prezzoOraUomo)}/h uomo</small><small>1° lotto: ${ore(r.oreUomoPrimoLottoSec)}</small></div>`;
-}
-
-// ───────────────────────────── stampa del preventivo (per il cliente) ─────────────────────────────
-
-function stampaPreventivo(p: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, vista: 'fasi' | 'macro'): Raw {
-  const r = riepilogo(ris);
-  const i = p.intestazione ?? {};
-  const somma = (xs: { prezzo: number }[]) => xs.reduce((a, x) => a + x.prezzo, 0);
-  const v = (cod: string) => d.parametri[cod] ?? cat.parametri.find(x => x.codice === cod)?.default;
-  const scelte = cat.parametri.filter(x => x.gruppo === 'INFORMAZIONI GENERALI' && v(x.codice)).map(x => x.etichetta);
-  const doppia = !!v('doppiaFaccia');
-  const fasiRic = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0);
-  // energia insieme al materiale di consumo
-  const vociRic = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => (x.gruppo === 'ENERGIA' ? { ...x, gruppo: 'MATERIALE DI CONSUMO' } : x));
-  // una tantum per il cliente: documentazione, programmazione attrezzature (tutto il resto delle fasi una tantum),
-  // lamine, attrezzaggio PCB; con il BOT si dice che sono raddoppiati
-  const fasiUTtutte = ris.fasi.filter(f => f.unaTantum && f.prezzo > 0);
-  const doc = fasiUTtutte.filter(f => f.codice === 'prepDocumentazione');
-  const altre = fasiUTtutte.filter(f => f.codice !== 'prepDocumentazione');
-  const perLato = doppia ? ' — TOP e BOT (×2)' : '';
-  const nLamine = Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1);
-  const righeUT: { nome: string; prezzo: number }[] = [
-    ...(doc.length ? [{ nome: `Preparazione documentazione${perLato}`, prezzo: somma(doc) }] : []),
-    ...(altre.length ? [{ nome: `Programmazione attrezzature di produzione${perLato}`, prezzo: somma(altre) }] : []),
-    ...ris.voci.filter(x => x.unaTantum && x.prezzo > 0).map(x => ({
-      nome: x.codice === 'laminaSerigrafica' ? (nLamine > 1 ? `Lamine serigrafiche (${nLamine}${doppia && nLamine === 2 ? ': TOP e BOT' : ''})` : 'Lamina serigrafica')
-        : x.codice === 'attrezzaggioPCB' ? 'Attrezzaggio PCB' : x.nome,
-      prezzo: x.prezzo })),
-  ];
-  const gruppiDi = <T extends { gruppo: string }>(xs: T[]) => [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) }));
-  const SIGLE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
-  const nomeGruppo = (g: string) => SIGLE[g] ?? (g.charAt(0) + g.slice(1).toLowerCase()).replace(/\b(smd|tht|aoi|pcb|bot|top)\b/gi, x => x.toUpperCase());
-  const tabella = (titolo: string, fasi: typeof fasiRic, voci: typeof vociRic, totale: number) => html`
-    <h3>${titolo}</h3>
-    <table class="prezzi">
-      <thead><tr><th>${vista === 'fasi' ? 'Lavorazione' : 'Area'}</th><th class="n">Prezzo</th></tr></thead>
-      <tbody>
-      ${vista === 'fasi'
-        ? [...gruppiDi(fasi), ...gruppiDi(voci)].map(({ g, righe }) => html`
-          <tr class="gruppo"><td>${nomeGruppo(g)}</td><td class="n">${euro(somma(righe))}</td></tr>
-          ${righe.map(x => html`<tr><td class="rientro">${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}`)
-        : [...gruppiDi(fasi), ...gruppiDi(voci)].map(({ g, righe }) => html`<tr><td>${nomeGruppo(g)}</td><td class="n">${euro(somma(righe))}</td></tr>`)}
-      </tbody>
-      <tfoot><tr><td>Totale</td><td class="n">${euro(totale)}</td></tr></tfoot>
-    </table>`;
-  return html`<!doctype html>
-<html lang="it"><head><meta charset="utf-8"><title>Preventivo ${p.numero} · ${i.codice}</title>
-<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
-<body>
-<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
-  <a href="?vista=fasi" class="${vista === 'fasi' ? 'attiva' : ''}">Dettaglio per fasi</a>
-  <a href="?vista=macro" class="${vista === 'macro' ? 'attiva' : ''}">Solo macro aree</a>
-  <a href="/preventivi/${p.id}">← torna al preventivo</a></div>
-<section class="pagina preventivo-stampa">
-  <div class="testata-stampa">
-    <img src="/static/logo-casteltech.png" alt="Casteltech" class="logo">
-    <div class="titolo-stampa">PREVENTIVO<br><span>${p.numero} del ${data(p.creato_il)}</span></div>
-    <div class="qr"></div>
-  </div>
-  <table class="griglia"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
-    <tr><td><div class="etic">CLIENTE</div><div class="val">${i.cliente}</div></td><td><div class="etic">DESCRIZIONE</div><div class="val">${i.descrizione}</div></td>
-      <td><div class="etic">CODICE / REV.</div><div class="val">${i.codice}${i.revisione ? ` rev. ${i.revisione}` : ''}</div></td>
-      <td><div class="etic">QUANTITÀ</div><div class="val">${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? ` (${num(nPannelli(d.nSchede, d.nSchedeInPCB), 0)} pannelli)` : ''}</div></td></tr>
-  </table>
-  ${scelte.length ? html`<p class="scelte">${scelte.join(' · ')}</p>` : ''}
-
-  <div class="riepilogo-stampa">
-    <div><span>Prezzo a scheda</span><strong>${euro(r.prezzoScheda)}</strong></div>
-    ${r.unaTantum > 0 ? html`<div><span>Prezzo a scheda con una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong></div>` : ''}
-  </div>
-
-  ${tabella(`Produzione: lotto di ${num(d.nSchede, 0)} schede`, fasiRic, vociRic, r.prezzoLotto)}
-  ${r.unaTantum > 0 ? html`
-    <h3>Costi una tantum (solo primo lotto)</h3>
-    <table class="prezzi">
-      <thead><tr><th>Voce</th><th class="n">Prezzo</th></tr></thead>
-      <tbody>${righeUT.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</tbody>
-      <tfoot><tr><td>Totale una tantum</td><td class="n">${euro(r.unaTantum)}</td></tr></tfoot>
-    </table>
-    <table class="prezzi totale-generale"><tr><td>Totale (produzione + una tantum)</td><td class="n">${euro(r.prezzoLottoConUnaTantum)}</td></tr></table>` : ''}
-  ${d.note ? html`<h3>Note</h3><p class="note-stampa">${d.note}</p>` : ''}
-  <p class="piede">Prezzi IVA esclusa.</p>
-</section>
-<script src="/static/stampa.js?v=${VERSIONE}" defer></script>
-</body></html>`;
 }

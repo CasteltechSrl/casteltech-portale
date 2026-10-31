@@ -6,7 +6,7 @@ import { Router, type Request } from 'express';
 import QRCode from 'qrcode';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
-import { confermaEliminaCommessa } from '../../engine/eliminazioni.js';
+import { commesseEliminabiliDallElenco, confermaEliminaCommessa } from '../../engine/eliminazioni.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
@@ -20,6 +20,7 @@ import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
+import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
 import { partiRoma } from '../../engine/promemoria.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
@@ -41,6 +42,19 @@ export function rotteCommesse() {
     // schede scansionate arrivate dalla cartella Drive (o caricate in Ordini → Da acquisire) ancora da portare nel rientro
     const scansioni = await q(`SELECT a.id, a.nome_file, a.stato, a.errore, a.creato_il, a.proposta FROM acquisizioni a
       WHERE a.tipo = 'scheda_produzione' AND a.stato IN ('da_confermare', 'errore') ORDER BY a.creato_il DESC LIMIT 50`);
+    const modulo = moduloAzioni({
+      azione: '/commesse/azioni', nome: { singolare: 'commessa', plurale: 'commesse', femminile: true },
+      pulsanti: [
+        { azione: 'stampa', testo: 'Stampa scheda', serve: '1', nuovaScheda: true, titolo: 'Scheda di produzione da stampare (si apre in una scheda nuova)' },
+        { azione: 'rientro', testo: 'Rientro', serve: '1', titolo: 'Inserisci o correggi il rientro della commessa' },
+        { azione: 'duplica', testo: 'Duplica', serve: '1', titolo: 'Nuova commessa dallo stesso preventivo, con quantità, referente e scheda tecnica copiati: numero nuovo, ordine e date da scrivere' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+          titolo: 'Elimina le commesse create per errore (quelle con tempi registrati o già avanzate si eliminano una per volta dalla loro pagina)',
+          chiedi: 'Eliminare {n} commess{a|e}? Spariscono anche le fasi e le segnalazioni scritte su ' + '{questa|queste} commess{a|e}; il preventivo resta.\n\n'
+            + 'Le commesse con tempi già registrati o non più aperte non vengono toccate (si eliminano una per volta dalla loro pagina).\n\n'
+            + 'Non si può annullare (prima viene salvato un backup).' },
+      ],
+    });
     res.send(String(layout({
       titolo: 'Commesse', utente: req.session.utente, attiva: 'commesse', largo: true, script: 'elenco.js', avviso: req.query.msg ? String(req.query.msg) : undefined,
       contenuto: html`
@@ -59,17 +73,20 @@ export function rotteCommesse() {
           : html`<p class="nota">Nessuna scheda scansionata da portare nel rientro.</p>`}
       </section>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button></form>
+      ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
+        <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
           <th>Ordine cliente</th><th>Consegna</th><th>Preventivo</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(c => html`
           <tr class="cliccabile" data-href="/commesse/${c.id}">
+            ${casella(c.id, c.numero)}
             <td class="nowrap"><a href="/commesse/${c.id}">${c.numero}</a></td><td>${data(c.creato_il)}</td>
             <td>${c.intestazione?.cliente}</td><td>${c.intestazione?.codice}</td><td>${c.intestazione?.revisione}</td>
             <td class="taglia">${c.intestazione?.descrizione}</td><td class="n">${num(c.quantita, 0)}</td>
             <td>${c.ordine_cliente}</td><td>${data(c.data_consegna)}</td><td>${c.preventivo}</td>
             <td><span class="stato ${c.stato}">${STATI_TESTO[c.stato] ?? c.stato}</span></td>
           </tr>`)}</tbody></table></div>
+      ${modulo.chiudi}
       ${righe.length ? '' : html`<p class="vuoto">Nessuna commessa${cerca ? ' trovata' : ''}.</p>`}`,
     })));
   });
@@ -78,12 +95,15 @@ export function rotteCommesse() {
   r.get('/nuova', async (req, res) => {
     const prev = await leggiPreventivo(Number(req.query.preventivo) || 0);
     if (!prev) return res.status(404).send('Preventivo non trovato');
+    // Duplica dall'elenco: si riprendono quantità, referente e scheda tecnica della commessa copiata (stesso preventivo)
+    const copia = Number(req.query.copia) ? await leggiCommessa(Number(req.query.copia)) : undefined;
+    const daCopiare = copia && copia.preventivo_id === prev.id ? copia : undefined;
     const dati: DatiCommessa = {
-      numero: await proponiNumero(), ordineCliente: '', referenteCliente: '', dataOrdine: null, dataConsegna: null,
-      quantita: prev.n_schede,
+      numero: await proponiNumero(), ordineCliente: '', referenteCliente: daCopiare?.referente_cliente ?? '', dataOrdine: null, dataConsegna: null,
+      quantita: daCopiare?.quantita ?? prev.n_schede,
       // primo lotto: il preventivo è una prima produzione e il prodotto non ha ancora avuto commesse
       primoLotto: prev.parametri?.primaProduzione !== 0 && (prev.prodotto_id ? !(await haCommessePrecedenti(prev.prodotto_id)) : true),
-      segnalazioni: '', scheda: await schedaTecnicaDaProporre(prev.revisione_id, prev.prodotto_id),
+      segnalazioni: '', scheda: daCopiare ? schedaTecnica(daCopiare.scheda_tecnica) : await schedaTecnicaDaProporre(prev.revisione_id, prev.prodotto_id),
     };
     res.send(await paginaCommessa(req, prev, dati));
   });
@@ -216,25 +236,56 @@ export function rotteCommesse() {
     res.redirect(`/commesse/${c.id}/rientro?ok=${conferma ? 'conferma' : '1'}`);
   });
 
+  // ── Azioni dall'elenco su una o più commesse spuntate ──
+  r.post('/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body);
+    const torna = (msg: string) => res.redirect(`/commesse?msg=${encodeURIComponent(msg)}`);
+    if (!ids.length) return torna('Seleziona almeno una commessa.');
+    const azione = String(req.body?.azione ?? '');
+    if (['stampa', 'rientro', 'duplica'].includes(azione)) {
+      if (ids.length !== 1) return torna('Questa azione vale per una commessa alla volta: selezionane una sola.');
+      const c = await q1<{ preventivo_id: number }>(`SELECT preventivo_id FROM commesse WHERE id = $1`, [ids[0]]);
+      if (!c) return torna('Commessa non trovata.');
+      if (azione === 'stampa') return res.redirect(`/commesse/${ids[0]}/scheda`);
+      if (azione === 'rientro') return res.redirect(`/commesse/${ids[0]}/rientro`);
+      return res.redirect(`/commesse/nuova?preventivo=${c.preventivo_id}&copia=${ids[0]}`);
+    }
+    if (azione === 'elimina') {
+      // dall'elenco solo le commesse ancora aperte e senza tempi: le altre si eliminano dalla loro pagina, con l'avviso dei tempi
+      const righe = await q<{ id: number; numero: string; stato: string; tempi: number }>(`SELECT c.id, c.numero, c.stato,
+          (SELECT count(*)::int FROM rilevazioni r WHERE r.commessa_id = c.id) AS tempi FROM commesse c WHERE c.id = ANY($1) ORDER BY c.numero`, [ids]);
+      const { si, no } = commesseEliminabiliDallElenco(righe);
+      if (si.length) await eliminaCommesse(si.map(c => c.id));
+      return torna(`${si.length === 1 ? `Commessa ${si[0].numero} eliminata.` : `Eliminate ${si.length} commesse.`}`
+        + (no.length ? ` Non eliminate dall'elenco perché hanno tempi registrati o non sono più aperte: ${no.map(c => c.numero).join(', ')} (si eliminano una per volta dalla loro pagina).` : ''));
+    }
+    torna('Azione non riconosciuta.');
+  });
+
   // ── Elimina (commessa creata per errore) ──
   r.post('/:id/elimina', async (req, res) => {
     const id = Number(req.params.id);
     const c = await q1(`SELECT numero FROM commesse WHERE id = $1`, [id]);
     if (!c) return res.redirect('/commesse');
-    await salvaBackupSuDisco('prima-di-eliminare-commessa').catch(() => null);
-    await transazione(async t => {
-      // tempi (anche dal telefono), scansioni, segnalazioni e analisi di questa commessa; le righe d'ordine restano, scollegate
-      await t.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [id]);
-      await t.query(`DELETE FROM scansioni WHERE commessa_id = $1`, [id]);
-      await t.query(`DELETE FROM segnalazioni WHERE commessa_id = $1`, [id]);
-      await t.query(`DELETE FROM analisi_commesse WHERE commessa_id = $1`, [id]);
-      await t.query(`DELETE FROM commesse WHERE id = $1`, [id]);
-    });
-    void ricaricaPromemoria().catch(e => console.error(e)); // niente promemoria per le fasi aperte della commessa eliminata
+    await eliminaCommesse([id]);
     res.redirect(`/commesse?msg=${encodeURIComponent(`Commessa ${c.numero} eliminata.`)}`);
   });
 
   return r;
+}
+
+/** Elimina le commesse con tempi, scansioni, segnalazioni e analisi (le righe d'ordine restano, scollegate). Prima un backup. */
+async function eliminaCommesse(ids: number[]) {
+  if (!ids.length) return;
+  await salvaBackupSuDisco('prima-di-eliminare-commessa').catch(() => null);
+  await transazione(async t => {
+    await t.query(`DELETE FROM rilevazioni WHERE commessa_id = ANY($1)`, [ids]);
+    await t.query(`DELETE FROM scansioni WHERE commessa_id = ANY($1)`, [ids]);
+    await t.query(`DELETE FROM segnalazioni WHERE commessa_id = ANY($1)`, [ids]);
+    await t.query(`DELETE FROM analisi_commesse WHERE commessa_id = ANY($1)`, [ids]);
+    await t.query(`DELETE FROM commesse WHERE id = ANY($1)`, [ids]);
+  });
+  void ricaricaPromemoria().catch(e => console.error(e)); // niente promemoria per le fasi aperte delle commesse eliminate
 }
 
 /** Indirizzo aperto dal QR: porta alla commessa (anche da telefono o tablet). */

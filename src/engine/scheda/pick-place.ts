@@ -203,6 +203,19 @@ export function leggiPickPlace(nomeFile: string, testoGrezzo: string): LetturaPi
     return separaFiducial({ formato, unita, posizioni: posizioni.map(p => ({ ...p, lato: p.lato ?? daNome.lato ?? 'TOP' })), fiducial: [], avvisi });
   }
 
+  // ── file "centri" con lato e unità su ogni riga: "U23 0.7875 0.625 1 270 IN 2000250 1587500" (Control Systems, M0929-C 29/10/2026):
+  //    X, Y, lato (1 = TOP, 2 = BOT), rotazione, unità (IN, MM, MIL), poi le stesse coordinate in centomillesimi di mm ──
+  const RE_CENTRI = /^\s*([A-Z]{1,6}_?\d+[A-Z]?)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+([12])\s+(-?[\d.]+)\s+(IN|INCH|MM|MIL|MILS)\b/i;
+  const centri = righe.map(r => RE_CENTRI.exec(r)).filter((m): m is RegExpExecArray => !!m);
+  if (centri.length >= 2 && centri.length * 3 >= righe.filter(r => r.trim()).length * 2) {
+    const u = centri[0][6].toUpperCase();
+    const unitaC: 'mm' | 'mil' | 'inch' = u.startsWith('IN') ? 'inch' : u.startsWith('MIL') ? 'mil' : 'mm';
+    const fc = FATTORE[unitaC];
+    return separaFiducial({ formato: 'Centri (riferimento, X, Y, lato, rotazione, unità)', unita: unitaC, fiducial: [], avvisi,
+      posizioni: centri.map(m => ({ ref: m[1].toUpperCase(), valore: '', footprint: '', x: num(m[2]) * fc, y: num(m[3]) * fc, rot: normRot(num(m[5])),
+        lato: m[4] === '2' ? 'BOT' as const : 'TOP' as const, ...(daNome.tht ? { tht: true } : {}) })) });
+  }
+
   // ── senza intestazione: "REF; testo; X; Y; ROT; [codice]" (es. Selea) ──
   const posizioni: Posizione[] = [];
   for (const r of righe) {

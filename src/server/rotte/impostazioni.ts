@@ -25,6 +25,7 @@ import { join, basename } from 'node:path';
 import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
 import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
 import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
+import { rotteServizi } from './servizi.js';
 
 /** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
 const CODICI_INIZIALI: Record<TabellaCatalogo, Set<string>> = {
@@ -89,6 +90,8 @@ export function rotteImpostazioni() {
   r.get(['/fornitori', '/fornitori/*resto'], (req, res) => res.redirect('/anagrafiche' + req.path));
   // dati dell'azienda, numerazioni, aliquote IVA, condizioni di pagamento (fatture e DDT dal portale)
   r.use('/amministrazione', rotteImpostazioniAmministrazione(pag));
+  // consumi e limiti dei servizi esterni (IA, Render, Neon, distributori, Google, Invoicetronic)
+  r.use('/servizi', rotteServizi(pag));
 
   // ── Tariffe ──
   r.get('/tariffe', async (req, res) => {
@@ -543,7 +546,7 @@ export function rotteImpostazioni() {
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['amministrazione', 'Amministrazione'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup']];
+  const voci = [['tariffe', 'Tariffe'], ['amministrazione', 'Amministrazione'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup'], ['servizi', 'Servizi']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 

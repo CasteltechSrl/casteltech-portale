@@ -19,6 +19,10 @@ const est = (nome: string) => (/\.([^./\\]+)$/.exec(nome)?.[1] ?? '').toLowerCas
 const ESTENSIONI_GERBER = new Set(['gbr', 'ger', 'gtl', 'gbl', 'gto', 'gbo', 'gtp', 'gbp', 'gts', 'gbs', 'gko', 'gm1', 'gm2', 'gm3', 'gm4', 'gm5',
   'gm6', 'gm7', 'gm13', 'gm14', 'gm15', 'g1', 'g2', 'g3', 'g4', 'gp1', 'gp2', 'gp3', 'gp4', 'gd1', 'gg1', 'art', 'gdo', 'pho', '274x', 'gbx', 'cmp', 'sol', 'stc', 'sts', 'plc', 'pls', 'crc', 'crs']);
 
+/** Estensioni di file che il portale non legge (rapporti e impostazioni dei CAD, documenti Word, vecchi Excel). */
+export const ESTENSIONI_NON_LETTE = new Set(['xls', 'doc', 'docx', 'ini', 'log', 'rep', 'drr', 'ldp', 'apr', 'rul', 'extrep', 'jrl', 'dsn', 'gpf', 'gbrjob', 'cam', 'rou']);
+export const estensione = est;
+
 /** Tipo del file dal nome e (se serve) dal testo. Il testo può mancare per i file binari. */
 export function tipoFile(nome: string, testo: string | null): TipoFile {
   const e = est(nome), n = nome.toLowerCase();
@@ -28,7 +32,7 @@ export function tipoFile(nome: string, testo: string | null): TipoFile {
   if (['zip', '7z', 'rar'].includes(e)) return 'archivio';
   if (['tgz'].includes(e) || /odb/.test(n) && ['tgz', 'gz', 'tar'].includes(e)) return 'odb';
   if (['xlsx', 'xlsm'].includes(e)) return /pick|place|p&p|pnp|posiz|centroid|xy/i.test(nome) ? 'pick-place' : 'bom';
-  if (['xls', 'doc', 'docx', 'ini', 'log', 'rep', 'drr', 'ldp', 'apr', 'rul', 'extrep', 'jrl', 'dsn', 'gpf', 'gbrjob', 'cam', 'rou'].includes(e)) return 'altro';
+  if (ESTENSIONI_NON_LETTE.has(e)) return 'altro';
   if (testo == null) return 'altro';
   if (sembraGenCad(testo)) return 'gencad';
   if (sembraGerber(testo)) return 'gerber';
@@ -60,6 +64,12 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
     cmp: ['rame', 'TOP'], sol: ['rame', 'BOT'], plc: ['serigrafia', 'TOP'], pls: ['serigrafia', 'BOT'], stc: ['maschera', 'TOP'], sts: ['maschera', 'BOT'], crc: ['pasta', 'TOP'], crs: ['pasta', 'BOT'],
   };
   if (perEst[e]) return { ruolo: perEst[e][0], lato: perEst[e][1] };
+  // nomi senza estensione con il numero del lato (RFQ M0929-C, 29/10/2026: m0929c_cu1 rame, _so1 maschera, _pa1 pasta): 1 = TOP, 2 = BOT
+  const numerato = /[_-](CU|SO|SM|PA|SP|SI|SK)([12])$/.exec(n);
+  if (numerato) {
+    const ruolo: RuoloStrato = numerato[1] === 'CU' ? 'rame' : ['SO', 'SM'].includes(numerato[1]) ? 'maschera' : ['PA', 'SP'].includes(numerato[1]) ? 'pasta' : 'serigrafia';
+    return { ruolo, lato: numerato[2] === '1' ? 'TOP' : 'BOT' };
+  }
   const lato: Lato | null = /(^|[^A-Z])(TOP|F)([^A-Z]|$)|_TOP|TOP_|^T[A-Z]{1,2}$|[_-]F[_.]|^F_|SST|SMT|SPT|PASTA_TOP|LATO_?A/.test(n) || /^[A-Z]{0,3}CP?Z$/.test(n) ? 'TOP'
     : /(^|[^A-Z])(BOT|BOTTOM|B)([^A-Z]|$)|_BOT|BOTTOM|[_-]B[_.]|^B_|SSB|SMB|SPB|PASTA_BOT|LATO_?B/.test(n) || /^[A-Z]{0,3}SP?Z$/.test(n) ? 'BOT' : null;
   // (file dei fornitori italiani: lcz/lsz rame lato componenti/saldature, mcz/msz maschere, palcz/palsz pasta, scz/ssz serigrafie)
@@ -68,6 +78,8 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
   if (/PASTE|PASTA|SOLDERPASTE|SP[TB]$|^SP[TB]|CREAM|STENCIL|LAMINA|PAL[CS]Z/.test(n)) return { ruolo: 'pasta', lato };
   if (/MASK|SOLDER|MASCHERA|^SM[TB]$|SM[TB]$|^M[CS]Z$/.test(n)) return { ruolo: 'maschera', lato };
   if (/SILK|SERIGRAF|OVERLAY|LEGEND|^SS[TB]$|SS[TB]$|^S[CS]Z$|ASSEMBLY/.test(n)) return { ruolo: 'serigrafia', lato };
+  // PADS numera gli strati: L1_TOP e L4_BOTTOM sono i rami esterni, L2, L3 gli interni
+  if (/^L\d+[_-]?(TOP|BOT|BOTTOM)$/.test(n)) return { ruolo: 'rame', lato };
   if (/INNER|INTERN|NEGATIVE|PLANE|^L\d+|IN\d|_L[2-9]|^L[2-9]PZ/.test(n)) return { ruolo: 'interno', lato: null };
   if (/COPPER|RAME|ETCH|SIGNAL|^TOP$|^BOTTOM$|_TOP$|_BOTTOM$|_TOP_|_BOTTOM_|F_CU|B_CU|^L[CS]Z$/.test(n)) return { ruolo: 'rame', lato };
   return { ruolo: 'altro', lato };

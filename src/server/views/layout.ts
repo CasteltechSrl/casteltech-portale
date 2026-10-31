@@ -1,4 +1,5 @@
 import { html, raw, type Raw } from './html.js';
+import { avvisoServizi } from '../stato-servizi.js';
 
 /** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
 export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
@@ -37,6 +38,7 @@ ${opz.utente ? html`
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}
 <main class="${opz.utente ? (opz.largo ? 'largo' : '') : 'centrato'}">
+${opz.utente?.ruolo === 'ufficio' ? avvisoDeiServizi() : ''}
 ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>
@@ -45,4 +47,12 @@ ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></scri
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>
 </html>`;
+}
+
+/** Servizi vicini al limite o fermi (credito dell'IA, memoria, database…): avviso a tutto l'ufficio, dai dati in memoria. */
+function avvisoDeiServizi() {
+  const a = avvisoServizi();
+  if (!a) return '';
+  return html`<div class="avviso servizi ${a.livello === 'critico' ? 'servizi-critico' : ''}"><b>${a.livello === 'critico' ? 'Servizio fermo o al limite' : 'Servizi vicini al limite'}:</b>
+    <ul>${a.testi.map(t => html`<li>${t}</li>`)}</ul><a href="/impostazioni/servizi">Vedi consumi e limiti</a></div>`;
 }
