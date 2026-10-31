@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  aliquotaDedotta, controlliRegistro, liquidazione, numeriMancanti, periodoDa, protocolla, riepilogoDaXml, riepilogoDocumento, riepilogoRegistro, type RigaRegistro,
+  aliquotaDedotta, codiceTributoIva, controlliRegistro, liquidazione, liquidazioniMensili, meseDaLiquidare, scadenzaVersamentoIva, numeriMancanti, periodoDa, protocolla, riepilogoDaXml, riepilogoDocumento, riepilogoRegistro, type RigaRegistro,
 } from '../src/engine/registri-iva.js';
 import { cercaGuida } from '../src/engine/guida.js';
 import { esitoVies, partitaIvaPerVies, statoControllo } from '../src/engine/vies.js';
@@ -16,8 +16,12 @@ test('registri IVA: periodo da mese, trimestre o anno (febbraio bisestile, trime
   assert.deepEqual(periodoDa(2028, 'M02'), { codice: 'M02', tipo: 'mese', anno: 2028, dal: '2028-02-01', al: '2028-02-29', nome: 'febbraio 2028' });
   assert.equal(periodoDa(2026, 'T4').al, '2026-12-31');
   assert.equal(periodoDa(2026, 'A').dal, '2026-01-01');
-  assert.equal(periodoDa(2026, undefined, '2026-10-31').codice, 'T4');
+  assert.equal(periodoDa(2026, undefined, '2026-10-31').codice, 'M10');
+  assert.equal(periodoDa(2026, undefined, '2026-11-10').codice, 'M10');
+  assert.equal(periodoDa(2025, undefined, '2026-01-10').codice, 'M12');
   assert.equal(periodoDa(2025, 'boh', '2026-10-31').codice, 'T1');
+  assert.deepEqual(meseDaLiquidare('2026-01-16'), { anno: 2025, codice: 'M12' });
+  assert.deepEqual(meseDaLiquidare('2026-01-17'), { anno: 2026, codice: 'M01' });
 });
 
 test('registri IVA: riepilogo dal file FatturaPA (anche con più aliquote e nature), vince sulle righe', () => {
@@ -105,7 +109,7 @@ test('VIES: esito della risposta (valida con numero di consultazione, non valida
 
 test('guida: registri IVA e controllo VIES', () => {
   for (const [q, id] of [['registro iva', 'registri-iva'], ['quanta iva devo versare', 'registri-iva'], ['file per il commercialista', 'registri-iva'],
-    ['controllare partita iva europea', 'vies'], ['vies', 'vies']])
+    ['controllare partita iva europea', 'vies'], ['vies', 'vies'], ['scadenza f24 iva', 'registri-iva'], ['codice tributo iva mensile', 'registri-iva']])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === id), q);
 });
 
@@ -119,4 +123,23 @@ test('registri IVA: split payment (fatture alla PA) nel registro ma non a debito
   assert.equal(l.splitPayment, 220);
   assert.equal(l.debitoVendite, 220);
   assert.equal(riepilogoRegistro([riga({ voci: daXml.voci })]).voci[0].codice, '22% split payment');
+});
+
+test('liquidazione IVA mensile (Adriano 31/10/2026): credito riportato, sotto 25,82 € rinviata, 16 del mese dopo con il codice tributo', () => {
+  assert.equal(scadenzaVersamentoIva(2026, 10), '2026-11-16');
+  assert.equal(scadenzaVersamentoIva(2026, 7), '2026-08-20');
+  assert.equal(scadenzaVersamentoIva(2026, 12), '2027-01-18'); // il 16/1/2027 è sabato
+  assert.equal(codiceTributoIva(1), '6001');
+  assert.equal(codiceTributoIva(12), '6012');
+  const v = (mese: string, imposta: number) => riga({ data: `2026-${mese}-10`, imposta, voci: [] });
+  const a = (mese: string, imposta: number) => riga({ registro: 'acquisti', data: `2026-${mese}-12`, imposta, voci: [] });
+  const m = liquidazioniMensili(2026, 4, [v('01', 100), v('02', 300), v('03', 20), v('04', 500)], [a('01', 250), a('03', 0)], [], 30);
+  assert.deepEqual(m.map(x => [x.mese, x.riporto, x.risultato, x.daVersare, x.creditoRiportato, x.rinviata]), [
+    [1, -30, -180, 0, 180, 0],     // credito dell'anno prima 30 + credito del mese 150
+    [2, -180, 120, 120, 0, 0],     // 300 - 180 di credito = 120 da versare
+    [3, 0, 20, 0, 0, 20],          // 20 €: sotto il minimo, rinviata
+    [4, 20, 520, 520, 0, 0],       // 500 + 20 rinviati
+  ]);
+  assert.equal(m[1].codiceTributo, '6002');
+  assert.equal(m[1].scadenza, '2026-03-16');
 });
