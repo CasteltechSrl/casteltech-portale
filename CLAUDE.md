@@ -317,7 +317,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `server/vies.ts`, migrazione 048): Amministrazione → Registri IVA per mese/trimestre/anno: vendite (fatture + NC in negativo, anche storico FIC),
    acquisti (protocollo calcolato in ordine di data nell'anno), autofatture (IVA a debito e a credito); fuori bozze, annullati, scartati. Riepilogo IVA del
    documento dal file XML (solo i blocchi DatiRiepilogo estratti da PostgreSQL: gli XML dei fornitori hanno allegati), altrimenti dalle righe, se non torna
-   vincono i totali (segnalato). Liquidazione indicativa, "Da controllare" (numeri mancanti, scartate, bozze nel periodo). Excel e zip per il commercialista
+   vincono i totali (segnalato). Split payment (EsigibilitaIVA S dall'XML, o `clienti.split_payment` senza XML) nel registro ma non a debito. Liquidazione indicativa, "Da controllare" (numeri mancanti, scartate, bozze nel periodo). Excel e zip per il commercialista
    (Excel + XML, scritto a pezzi da 20). Controllo VIES (REST della Commissione, con la nostra P.IVA → numero di consultazione, `controlli_vies`; valido 90 gg;
    errori del servizio = "non verificabile", non "non valida"): pagina Amministrazione → Controllo VIES e riquadro nella bozza di fattura a cliente UE.
    ✅ Profilo Contabilità in sola lettura (Adriano 31/10/2026: il commercialista e Sonia di HTS; `engine/ruoli.ts`, migrazione 049, test in `tests/ruoli.test.ts`):

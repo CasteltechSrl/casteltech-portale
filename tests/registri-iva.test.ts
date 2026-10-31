@@ -62,7 +62,7 @@ test('registri IVA: note di credito in negativo, riepilogo per aliquota e liquid
   const acquisti = [riga({ registro: 'acquisti', imponibile: 400, imposta: 88, voci: [] })];
   const autofatture = [riga({ registro: 'autofatture', tipo: 'autofattura', imponibile: 300, imposta: 66, voci: [] })];
   assert.deepEqual(liquidazione(vendite, acquisti, autofatture),
-    { debitoVendite: 198, debitoAutofatture: 66, creditoAcquisti: 88, creditoAutofatture: 66, debito: 264, credito: 154, saldo: 110 });
+    { splitPayment: 0, debitoVendite: 198, debitoAutofatture: 66, creditoAcquisti: 88, creditoAutofatture: 66, debito: 264, credito: 154, saldo: 110 });
 });
 
 test('registri IVA: protocollo degli acquisti in ordine di data, numeri mancanti nella serie e segnalazioni', () => {
@@ -107,4 +107,16 @@ test('guida: registri IVA e controllo VIES', () => {
   for (const [q, id] of [['registro iva', 'registri-iva'], ['quanta iva devo versare', 'registri-iva'], ['file per il commercialista', 'registri-iva'],
     ['controllare partita iva europea', 'vies'], ['vies', 'vies']])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === id), q);
+});
+
+test('registri IVA: split payment (fatture alla PA) nel registro ma non a debito nella liquidazione', () => {
+  const xml = '<DatiRiepilogo><AliquotaIVA>22.00</AliquotaIVA><ImponibileImporto>1000.00</ImponibileImporto><Imposta>220.00</Imposta><EsigibilitaIVA>S</EsigibilitaIVA></DatiRiepilogo>';
+  const daXml = riepilogoDocumento({ imponibile: 1000, imposta: 220, xml }, ALIQUOTE);
+  assert.deepEqual(daXml.voci, [{ codice: '22% split payment', percentuale: 22, natura: null, imponibile: 1000, imposta: 220, splitPayment: true }]);
+  const daRighe = riepilogoDocumento({ imponibile: 100, imposta: 22, righe: [{ quantita: 1, prezzo: 100 }], splitPayment: true }, ALIQUOTE);
+  assert.equal(daRighe.voci[0].splitPayment, true);
+  const l = liquidazione([riga({}), riga({ id: 2, voci: daXml.voci, imposta: 220 })], [], []);
+  assert.equal(l.splitPayment, 220);
+  assert.equal(l.debitoVendite, 220);
+  assert.equal(riepilogoRegistro([riga({ voci: daXml.voci })]).voci[0].codice, '22% split payment');
 });

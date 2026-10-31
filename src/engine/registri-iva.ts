@@ -41,7 +41,7 @@ export const CODICI_PERIODO: [string, string][] = [
 // ───────────────────────────── riepilogo IVA del documento ─────────────────────────────
 
 /** Voce del riepilogo IVA di un documento: aliquota (o natura se 0 %), imponibile e imposta. */
-export interface VoceIva { codice: string; percentuale: number; natura: string | null; imponibile: number; imposta: number }
+export interface VoceIva { codice: string; percentuale: number; natura: string | null; imponibile: number; imposta: number; splitPayment?: boolean }
 
 const numeroXml = (s: string | undefined) => Number(String(s ?? '').trim()) || 0;
 const tag = (blocco: string, nome: string) => new RegExp(`<(?:\\w+:)?${nome}>([^<]*)</(?:\\w+:)?${nome}>`).exec(blocco)?.[1];
@@ -56,8 +56,10 @@ export function riepilogoDaXml(xml: string | null | undefined): VoceIva[] {
   for (const m of String(xml).matchAll(/<(?:\w+:)?DatiRiepilogo>([\s\S]*?)<\/(?:\w+:)?DatiRiepilogo>/g)) {
     const percentuale = numeroXml(tag(m[1], 'AliquotaIVA'));
     const natura = tag(m[1], 'Natura')?.trim() || null;
-    const codice = percentuale > 0 ? `${percentuale}%` : (natura ?? '0%');
-    const v = voci.get(codice) ?? { codice, percentuale, natura: percentuale > 0 ? null : natura, imponibile: 0, imposta: 0 };
+    // split payment (PA): EsigibilitaIVA S, l'IVA la versa il cliente e non va a debito nella nostra liquidazione
+    const split = percentuale > 0 && tag(m[1], 'EsigibilitaIVA')?.trim() === 'S';
+    const codice = percentuale > 0 ? `${percentuale}%${split ? ' split payment' : ''}` : (natura ?? '0%');
+    const v = voci.get(codice) ?? { codice, percentuale, natura: percentuale > 0 ? null : natura, imponibile: 0, imposta: 0, ...(split ? { splitPayment: true } : {}) };
     v.imponibile = arrotonda2(v.imponibile + numeroXml(tag(m[1], 'ImponibileImporto')));
     v.imposta = arrotonda2(v.imposta + numeroXml(tag(m[1], 'Imposta')));
     voci.set(codice, v);
@@ -79,7 +81,7 @@ export function aliquotaDedotta(imponibile: number, imposta: number): number | n
   return null;
 }
 
-export interface DatiDocumentoIva { imponibile: number; imposta: number; xml?: string | null; righe?: RigaDocumento[]; aliquotaPredefinita?: string | null }
+export interface DatiDocumentoIva { imponibile: number; imposta: number; xml?: string | null; righe?: RigaDocumento[]; aliquotaPredefinita?: string | null; splitPayment?: boolean }
 
 /**
  * Riepilogo IVA di un documento: dal file XML se c'è, altrimenti dalle righe (aliquota predefinita del cliente per quelle senza),
@@ -91,11 +93,14 @@ export function riepilogoDocumento(d: DatiDocumentoIva, aliquote: Aliquota[]): {
   if (!voci.length && d.righe?.some(r => !r.solo_descrizione)) {
     const t = calcolaTotali(d.righe, aliquote, d.aliquotaPredefinita || 'IVA22');
     if (!t.errori.length) voci = t.riepilogo.map(daVoceRiepilogo);
+    if (d.splitPayment) voci = voci.map(v => (v.percentuale > 0 ? { ...v, codice: `${v.codice} split payment`, splitPayment: true } : v));
   }
   const somma = (k: 'imponibile' | 'imposta') => arrotonda2(voci.reduce((s, v) => s + v[k], 0));
   if (voci.length && Math.abs(somma('imponibile') - imponibile) <= 0.02 && Math.abs(somma('imposta') - imposta) <= 0.02) return { voci, differenza: false };
   const p = aliquotaDedotta(imponibile, imposta);
-  const voce: VoceIva = { codice: p == null ? 'mista' : p > 0 ? `${p}%` : '0%', percentuale: p ?? 0, natura: null, imponibile, imposta };
+  const split = !!d.splitPayment && imposta !== 0;
+  const voce: VoceIva = { codice: (p == null ? 'mista' : p > 0 ? `${p}%` : '0%') + (split ? ' split payment' : ''), percentuale: p ?? 0, natura: null, imponibile, imposta,
+    ...(split ? { splitPayment: true } : {}) };
   return { voci: [voce], differenza: voci.length > 0 };
 }
 
@@ -127,7 +132,7 @@ export function protocolla<T extends { data: string; id: number }>(docs: T[]): (
   return [...docs].sort((a, b) => a.data.localeCompare(b.data) || a.id - b.id).map((d, i) => ({ ...d, protocollo: i + 1 }));
 }
 
-export interface TotaleVoce { codice: string; percentuale: number; natura: string | null; imponibile: number; imposta: number; documenti: number }
+export interface TotaleVoce { codice: string; percentuale: number; natura: string | null; imponibile: number; imposta: number; documenti: number; splitPayment?: boolean }
 
 /** Riepilogo del registro per aliquota/natura (con il segno delle note di credito), aliquote dalla più alta. */
 export function riepilogoRegistro(righe: RigaRegistro[]): { voci: TotaleVoce[]; imponibile: number; imposta: number; totale: number; documenti: number } {
@@ -137,7 +142,7 @@ export function riepilogoRegistro(righe: RigaRegistro[]): { voci: TotaleVoce[]; 
     const s = segno(r.tipo);
     totale = arrotonda2(totale + s * r.totale);
     for (const v of r.voci) {
-      const t = voci.get(v.codice) ?? { codice: v.codice, percentuale: v.percentuale, natura: v.natura, imponibile: 0, imposta: 0, documenti: 0 };
+      const t = voci.get(v.codice) ?? { codice: v.codice, percentuale: v.percentuale, natura: v.natura, imponibile: 0, imposta: 0, documenti: 0, ...(v.splitPayment ? { splitPayment: true } : {}) };
       t.imponibile = arrotonda2(t.imponibile + s * v.imponibile);
       t.imposta = arrotonda2(t.imposta + s * v.imposta);
       t.documenti++;
@@ -151,18 +156,21 @@ export function riepilogoRegistro(righe: RigaRegistro[]): { voci: TotaleVoce[]; 
   };
 }
 
-export interface Liquidazione { debitoVendite: number; debitoAutofatture: number; creditoAcquisti: number; creditoAutofatture: number; debito: number; credito: number; saldo: number }
+export interface Liquidazione { splitPayment: number; debitoVendite: number; debitoAutofatture: number; creditoAcquisti: number; creditoAutofatture: number; debito: number; credito: number; saldo: number }
 
 /**
  * Liquidazione indicativa del periodo. L'IVA delle autofatture va sia a debito sia a credito (si annulla, se detraibile).
+ * L'IVA delle fatture in split payment (PA) non va a debito: la versa il cliente.
  * Saldo positivo = IVA da versare, negativo = a credito. Non tiene conto di credito del periodo prima, acconto di dicembre,
  * IVA indetraibile (auto, telefoni, omaggi), split payment, interessi trimestrali dell'1%: li aggiunge il commercialista.
  */
 export function liquidazione(vendite: RigaRegistro[], acquisti: RigaRegistro[], autofatture: RigaRegistro[]): Liquidazione {
   const iva = (rr: RigaRegistro[]) => arrotonda2(rr.reduce((s, r) => s + segno(r.tipo) * r.imposta, 0));
-  const debitoVendite = iva(vendite), debitoAutofatture = iva(autofatture), creditoAcquisti = iva(acquisti), creditoAutofatture = debitoAutofatture;
+  // split payment (fatture alla PA): l'IVA è nel registro ma la versa il cliente, quindi non è a debito
+  const splitPayment = arrotonda2(vendite.reduce((s, r) => s + segno(r.tipo) * r.voci.filter(v => v.splitPayment).reduce((t, v) => t + v.imposta, 0), 0));
+  const debitoVendite = arrotonda2(iva(vendite) - splitPayment), debitoAutofatture = iva(autofatture), creditoAcquisti = iva(acquisti), creditoAutofatture = debitoAutofatture;
   const debito = arrotonda2(debitoVendite + debitoAutofatture), credito = arrotonda2(creditoAcquisti + creditoAutofatture);
-  return { debitoVendite, debitoAutofatture, creditoAcquisti, creditoAutofatture, debito, credito, saldo: arrotonda2(debito - credito) };
+  return { splitPayment, debitoVendite, debitoAutofatture, creditoAcquisti, creditoAutofatture, debito, credito, saldo: arrotonda2(debito - credito) };
 }
 
 // ───────────────────────────── controlli ─────────────────────────────

@@ -67,7 +67,7 @@ export function rotteRegistriIva() {
       <p class="nota">Dal ${data(p.dal)} al ${data(p.al)}. Entrano le fatture e le note di credito emesse (anche lo storico di Fatture in Cloud), le autofatture
         e le fatture dei fornitori con data nel periodo. Bozze, documenti annullati e scartati dallo SdI non entrano. Note di credito in negativo.</p>
       <div class="cifre">
-        <div class="cifra"><span>IVA a debito</span><b>${euro(l.debito)}</b><small>vendite ${euro(l.debitoVendite)} · autofatture ${euro(l.debitoAutofatture)}</small></div>
+        <div class="cifra"><span>IVA a debito</span><b>${euro(l.debito)}</b><small>vendite ${euro(l.debitoVendite)} · autofatture ${euro(l.debitoAutofatture)}${l.splitPayment ? html` · split payment ${euro(l.splitPayment)} non a debito` : ''}</small></div>
         <div class="cifra"><span>IVA a credito</span><b>${euro(l.credito)}</b><small>acquisti ${euro(l.creditoAcquisti)} · autofatture ${euro(l.creditoAutofatture)}</small></div>
         <div class="cifra"><span>${l.saldo >= 0 ? 'IVA da versare (indicativa)' : 'IVA a credito (indicativa)'}</span><b class="${l.saldo > 0 ? 'negativo' : ''}">${euro(Math.abs(l.saldo))}</b>
           <small>senza credito precedente, acconto, IVA indetraibile e interessi</small></div>

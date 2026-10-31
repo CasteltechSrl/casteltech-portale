@@ -30,7 +30,7 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
         coalesce(d.intestatario->>'ragione_sociale', d.intestatario->>'nome', c.ragione_sociale, fa.ragione_sociale, '') AS nome,
         coalesce(nullif(d.intestatario->>'partita_iva', ''), c.partita_iva, fa.partita_iva, '') AS partita_iva,
         coalesce(nullif(d.intestatario->>'nazione', ''), c.nazione, fa.paese, 'IT') AS paese,
-        c.aliquota_iva AS aliquota_cliente, ${RIEPILOGO_XML('d.xml')} AS riepilogo_xml
+        c.aliquota_iva AS aliquota_cliente, coalesce(c.split_payment, false) AS split_payment, ${RIEPILOGO_XML('d.xml')} AS riepilogo_xml
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       WHERE d.tipo IN ('fattura', 'nota_credito', 'autofattura') AND d.numero IS NOT NULL AND d.stato <> ALL($3)
         AND d.data BETWEEN $1 AND $2
@@ -55,7 +55,7 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
   for (const r of righe) righePer.set(r.documento_id, [...(righePer.get(r.documento_id) ?? []), r]);
 
   const daEmesso = (d: any): RigaRegistro => {
-    const { voci, differenza } = riepilogoDocumento({ imponibile: d.imponibile, imposta: d.imposta, xml: d.riepilogo_xml, righe: righePer.get(d.id), aliquotaPredefinita: d.aliquota_cliente }, aliquote);
+    const { voci, differenza } = riepilogoDocumento({ imponibile: d.imponibile, imposta: d.imposta, xml: d.riepilogo_xml, righe: righePer.get(d.id), aliquotaPredefinita: d.aliquota_cliente, splitPayment: d.tipo !== 'autofattura' && d.split_payment }, aliquote);
     return {
       id: d.id, registro: d.tipo === 'autofattura' ? 'autofatture' : 'vendite', protocollo: null, tipo: d.tipo, tipoSdi: d.tipo_sdi,
       numero: numeroRegistro(d.numero, d.sezionale), data: d.data, nome: d.nome, partitaIva: d.partita_iva ?? '', paese: siglaNazione(d.paese) ?? d.paese ?? '',
@@ -133,7 +133,7 @@ export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?
   }
   const l = d.liquidazione;
   ws.addRow(['Liquidazione indicativa', '', '', 'Euro']).font = { bold: true };
-  for (const [nome, valore] of [['IVA a debito sulle vendite', l.debitoVendite], ['IVA a debito sulle autofatture', l.debitoAutofatture],
+  for (const [nome, valore] of [...(l.splitPayment ? [['IVA in split payment (la versa la PA, non a debito)', l.splitPayment] as [string, number]] : []), ['IVA a debito sulle vendite', l.debitoVendite], ['IVA a debito sulle autofatture', l.debitoAutofatture],
     ['IVA a credito sugli acquisti', l.creditoAcquisti], ['IVA a credito sulle autofatture', l.creditoAutofatture],
     [l.saldo >= 0 ? 'IVA da versare' : 'IVA a credito', Math.abs(l.saldo)]] as [string, number][]) ws.addRow([nome, '', '', valore]);
   ws.addRow(['Indicativa: non comprende credito del periodo precedente, acconto, IVA indetraibile, interessi trimestrali. La liquidazione la fa il commercialista.']);
