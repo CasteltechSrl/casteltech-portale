@@ -14,6 +14,7 @@ import { cercaComponenti, conteggiComponenti } from '../codifica-servizio.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
+import { sezioneLettereIntento } from './fiscale.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPrezzoDaDocumento, cercaComponentiPerOrdine, domandaPrezzoComponente,
   aggiornaAcquistoDaOrdine } from '../prezzi-servizio.js';
@@ -305,7 +306,8 @@ export function rotteAnagrafiche() {
         <label class="spunta"><input type="checkbox" name="split_payment" ${c.split_payment ? raw('checked') : ''}>
           Split payment: il cliente paga solo imponibile e bollo, l'IVA la versa lui (art. 17-ter)</label>
         <div class="barra-azioni"><button class="primario">Salva</button></div>
-      </form>`, msg(req)));
+      </form>
+      ${await sezioneLettereIntento(c.id)}`, msg(req)));
   });
   r.post('/clienti/:id/fiscali', async (req, res) => {
     const id = Number(req.params.id);

@@ -357,6 +357,11 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che
    pesano di più, dipendenza, clienti fermi/nuovi, ritardi d'incasso, scaduto > 60 gg, prezzi sotto preventivo, margine < 10 %); tabelle mesi, clienti (margine stimato
    = fatturato × margine dell'ultimo preventivo del codice, giorni di incasso), prodotti, acquisti per categoria FIC e fornitori. Non è il bilancio.
+   ✅ Spese, bollo, lettere d'intento (Adriano 31/10/2026, fase 1; `engine/fiscale.ts`, `rotte/fiscale.ts`, test `tests/fiscale.test.ts`): spese senza fattura elettronica
+   (`/amministrazione/spese`: scontrini, affitto, polizze…, in `documenti_ricevuti` con elettronica=false, origine 'manuale', categoria = tipo; fuori dal registro IVA se
+   senza IVA; si eliminano solo le manuali); bollo virtuale per trimestre (`/amministrazione/bollo`, `bolloPerTrimestre`: codici 2521–2524, 31/5, 30/9, 30/11, fine
+   febbraio; 1° trimestre sotto 5.000 € con il 2°, 1°+2° sotto 5.000 € al 30/11); plafond delle lettere d'intento (Anagrafiche → Clienti → Dati fiscali → Lettere
+   d'intento, `/amministrazione/lettere-intento`, avviso nella bozza `riquadroPlafond`: fatture N3.5 dell'anno dalla data della prima lettera, giallo dall'80 %).
    ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
    dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
    ✅ Altri tipi di fattura e PA (Adriano 31/10/2026; `engine/tipi-fattura.ts`, migrazione 050): TD24 differita scelta da sola se la fattura cita DDT con
