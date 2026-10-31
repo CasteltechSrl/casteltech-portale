@@ -58,3 +58,22 @@ export function prezzoPerQuantita(prezzoUnico: number | null, scaglioni: Scaglio
   if (prezzoUnico != null) return { prezzo: prezzoUnico, scaglione: null };
   return ordinati.length ? { prezzo: ordinati[0].prezzo, scaglione: ordinati[0] } : { prezzo: null, scaglione: null };
 }
+
+/**
+ * Prezzo cambiato a mano in un documento (Adriano 31/10/2026): cosa si aggiorna in anagrafica se l'ufficio dice di sì.
+ * Si cambia la stessa voce da cui il portale avrebbe preso il prezzo per quella quantità: lo scaglione, altrimenti il prezzo unico.
+ * null = il prezzo è già quello dell'anagrafica, non serve chiedere.
+ */
+export function cosaAggiornare(prezzoUnico: number | null, scaglioni: Scaglione[], quantita: number, prezzo: number):
+  { voce: 'scaglione'; scaglione: Scaglione; attuale: number } | { voce: 'unico'; attuale: number | null } | null {
+  if (!Number.isFinite(prezzo) || prezzo < 0) return null;
+  const ordinati = [...scaglioni].sort((x, y) => x.da - y.da);
+  const q = Number(quantita) > 0 ? Number(quantita) : 1;
+  const sc = ordinati.find(s => q >= s.da && (s.a == null || q <= s.a)) ?? ordinati.filter(s => s.da <= q).pop();
+  const attuale = sc ? sc.prezzo : prezzoUnico;
+  if (attuale != null && Math.abs(attuale - prezzo) < 0.000005) return null;
+  return sc ? { voce: 'scaglione', scaglione: sc, attuale: sc.prezzo } : { voce: 'unico', attuale: prezzoUnico };
+}
+
+/** Scaglione in parole: "6-20 pz", "21 pz e oltre", "10 pz". */
+export const testoScaglione = (s: Scaglione) => s.a == null ? `${s.da} pz e oltre` : s.a === s.da ? `${s.da} pz` : `${s.da}-${s.a} pz`;

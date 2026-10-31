@@ -4,6 +4,7 @@
  * PDF salvato nel documento → Invia: con Gmail, in risposta all'email da cui è arrivato l'ordine (se c'è).
  * Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero (non è un documento fiscale).
  */
+import { completaDaListino } from './prezzi-servizio.js';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAzienda } from './amministrazione-servizio.js';
 import { righeOrdini } from './ordini-servizio.js';
@@ -71,7 +72,9 @@ export async function leggiConferma(id: number) {
 
 /** Salva intestazione e righe. Se la conferma è già emessa il PDF si rifà subito (stesso numero). */
 export async function salvaConferma(id: number, b: any): Promise<string[]> {
-  const { righe, errori } = righeConfermaDaModulo(b.righe ?? []);
+  // codice dal prodotto scelto (solo del cliente) e, se manca il prezzo, quello del listino per la quantità (Adriano 31/10/2026)
+  const cliente = (await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM documenti WHERE id = $1`, [id]))?.cliente_id ?? null;
+  const { righe, errori } = righeConfermaDaModulo(await completaDaListino(cliente, b.righe ?? []));
   const data = String(b.data ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errori.push('Data della conferma non valida.');
   const dataRif = String(b.data_riferimento ?? '');

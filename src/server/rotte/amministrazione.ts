@@ -4,7 +4,8 @@
  * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
  * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
-import { prezzoListino } from '../prezzi-servizio.js';
+import { prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -110,10 +111,11 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
     ${vuota ? html`<option value=""></option>` : ''}${[...new Set([...valori, ...(attuale ? [attuale] : [])])].map(v =>
       html`<option ${v === attuale ? raw('selected') : ''}>${v}</option>`)}</select>`;
   const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
+  // codice solo dall'anagrafica del cliente (Adriano 31/10/2026)
+  const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
-    <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
-      <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"><input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
-    <td><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo">${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
+    <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+    <td>${cellaDescrizione(x, i, prodotti, 'maiuscolo')}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
     <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo maiuscolo"></td>
     <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
@@ -144,6 +146,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th></tr></thead>
         <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
       </table></div>
+      ${riquadriSceltaProdotto(d.cliente_id)}
       <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
         <span class="nota">Il prezzo non si stampa sul DDT: passa nella fattura quando si fattura il DDT.</span>
         <button class="primario">Salva</button></div>
@@ -374,11 +377,15 @@ export function rotteAmministrazione() {
     const errori = [...esito.errori, ...erroriExtra];
     const t = esito.totali;
     const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
+    // fattura e note al cliente: codice solo dall'anagrafica del cliente (Adriano 31/10/2026); autofattura: righe del fornitore estero, libere
+    const conAnagrafica = d.tipo !== 'autofattura' && !!d.cliente_id;
+    const prodotti = conAnagrafica ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
     const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
-      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo"><input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
-        <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"><input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
+      <td>${conAnagrafica ? cellaCodice(x, i, prodotti) : html`<input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
+        <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}">`}<input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
+        <input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
         <input type="hidden" name="righe[${i}][acconto_id]" value="${x.acconto_id ?? ''}"></td>
-      <td><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
+      <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
       <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo"></td>
       <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
@@ -415,6 +422,7 @@ export function rotteAmministrazione() {
           <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th>Prezzo €</th><th>Sconto %</th><th>IVA</th><th title="Solo testo">Testo</th></tr></thead>
           <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
         </table></div>
+        ${conAnagrafica ? riquadriSceltaProdotto(d.cliente_id) : ''}
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
           <span class="nota">${d.tipo === 'autofattura' ? 'Autofattura: IVA italiana (di solito 22 %) sulle righe della fattura estera, in euro.'
             : 'IVA "predefinita" = quella del cliente (lettera d\'intento, estero…) o 22 %.'}</span>
@@ -448,15 +456,6 @@ export function rotteAmministrazione() {
         </div>
       </div>
       ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), 'documenti.js'));
-  });
-
-  // prezzo di listino per codice e quantità (scaglioni, Adriano 31/10/2026): lo chiede la pagina della bozza mentre si scrive
-  r.get('/documenti/:id/prezzo', async (req, res) => {
-    const d = await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM documenti WHERE id = $1`, [Number(req.params.id)]);
-    const l = await prezzoListino(d?.cliente_id ?? null, { prodottoId: Number(req.query.prodotto_id) || null, codice: String(req.query.codice ?? '') },
-      Number(String(req.query.quantita ?? '').replace(',', '.')) || 1);
-    res.json(l && l.prezzo != null ? { prezzo: l.prezzo, prodotto_id: l.prodotto_id, descrizione: l.descrizione,
-      scaglione: l.scaglione ? `${l.scaglione.da}${l.scaglione.a == null ? '+' : l.scaglione.a === l.scaglione.da ? '' : '-' + l.scaglione.a} pz` : null } : {});
   });
 
   r.post('/documenti/:id', async (req, res) => {
