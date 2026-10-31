@@ -639,3 +639,30 @@ body.sola-lettura main form[method="post"], body.sola-lettura main a[href*="/nuo
 /* collegamenti a sezioni che il profilo non vede: restano come testo */
 body.sola-lettura main a[href^="/anagrafiche"], body.sola-lettura main a[href^="/ordini"], body.sola-lettura main a[href^="/commesse"] { pointer-events: none; color: inherit; text-decoration: none; }
 body.sola-lettura .menu-destra .etichetta { align-self: center; }
+
+/* filtro di un elenco con etichette sopra i campi (Fatture fornitori, Adriano 31/10/2026) */
+.barra-filtro { display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; align-items: flex-end; justify-content: space-between;
+  background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .8rem 1rem; margin: .8rem 0 1rem; }
+.filtro-elenco { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: flex-end; margin: 0; flex: 1 1 36rem; }
+.filtro-elenco > label { display: flex; flex-direction: column; gap: .2rem; font-size: .8rem; font-weight: 600; color: var(--tenue); }
+.filtro-elenco > label select { width: auto; min-width: 6.5rem; }
+.filtro-elenco > label.largo { flex: 1 1 16rem; max-width: 26rem; }
+.filtro-elenco > label.spunta { flex-direction: row; align-items: center; gap: .45rem; font-size: .95rem; font-weight: 500; color: var(--testo);
+  white-space: nowrap; padding-bottom: .5rem; cursor: pointer; }
+.filtro-elenco > label.spunta input { width: auto; margin: 0; }
+.filtro-elenco > label.spunta small { color: var(--tenue); }
+.filtro-elenco > a { padding-bottom: .5rem; font-size: .9rem; }
+.barra-filtro .collegamenti { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; }
+.barra-filtro .collegamenti a { white-space: nowrap; }
+
+/* riquadro delle fatture fornitori scadute da pagare */
+.riquadro-scadute { background: #fdf1f0; border: 1px solid #efc4c0; border-left: 4px solid var(--negativo); border-radius: var(--raggio);
+  padding: .7rem 1rem .5rem; margin-bottom: 1rem; }
+.riquadro-scadute h2 { margin: 0 0 .5rem; font-size: 1.05rem; color: var(--negativo); }
+.riquadro-scadute h2 span { font-weight: 500; color: var(--testo); margin-left: .5rem; }
+.riquadro-scadute table.elenco { background: var(--carta); }
+.riquadro-scadute .tabella-scorre.corta { max-height: 16rem; overflow-y: auto; }
+.riquadro-scadute .tabella-scorre.corta thead th { position: sticky; top: 0; z-index: 1; }
+.riquadro-scadute.tutto-ok { background: var(--accento-chiaro); border-color: #b7dcd4; border-left-color: var(--accento); }
+.riquadro-scadute.tutto-ok h2 { color: var(--accento); display: inline; margin-right: .6rem; }
+.riquadro-scadute.tutto-ok p { display: inline; }

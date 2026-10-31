@@ -76,3 +76,30 @@ export function acquistiPerFornitore(docs: { fornitore_id: number | null; nome: 
   const righe = [...perFornitore.values()].sort((a, b) => b.totale - a.totale || a.nome.localeCompare(b.nome));
   return { righe, mesi, totale: arr(mesi.reduce((s, x) => s + x, 0)) };
 }
+
+/** Rata non pagata di una fattura fornitore (riquadro "Scadute da pagare" in Fatture fornitori). */
+export interface RataDaPagare { documento_id: number; nome: string; numero: string; tipo: string; scadenza: string; importo: number }
+export interface FatturaScaduta { documento_id: number; nome: string; numero: string; scadenza: string; giorni: number; importo: number; rate: number }
+
+/**
+ * Fatture fornitori scadute e non pagate (Adriano 31/10/2026: riquadro tra il filtro e l'elenco).
+ * Una riga per fattura con le sole rate già scadute (il giorno stesso non è ancora scaduta), la più vecchia in cima.
+ * Le note di credito non sono pagamenti da fare: restano fuori.
+ */
+export function fattureScadute(rate: RataDaPagare[], oggi: string): { fatture: FatturaScaduta[]; totale: number } {
+  const perDoc = new Map<number, FatturaScaduta>();
+  for (const r of rate) {
+    if (r.tipo === 'nota_credito' || !(r.importo > 0) || fasciaScadenza(r.scadenza, oggi) !== 'scaduta') continue;
+    const f = perDoc.get(r.documento_id);
+    if (f) {
+      f.importo = Math.round((f.importo + r.importo) * 100) / 100;
+      f.rate++;
+      if (r.scadenza < f.scadenza) { f.scadenza = r.scadenza; f.giorni = giorni(r.scadenza, oggi); }
+    } else {
+      perDoc.set(r.documento_id, { documento_id: r.documento_id, nome: r.nome, numero: r.numero, scadenza: r.scadenza,
+        giorni: giorni(r.scadenza, oggi), importo: Math.round(r.importo * 100) / 100, rate: 1 });
+    }
+  }
+  const fatture = [...perDoc.values()].sort((a, b) => a.scadenza.localeCompare(b.scadenza) || a.documento_id - b.documento_id);
+  return { fatture, totale: Math.round(fatture.reduce((t, f) => t + f.importo, 0) * 100) / 100 };
+}
