@@ -63,6 +63,7 @@ ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>
 ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
+<script src="/static/menu.js?v=${VERSIONE}" defer></script>
 <script src="/static/tempi.js?v=${VERSIONE}" defer></script>`) : ''}
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>

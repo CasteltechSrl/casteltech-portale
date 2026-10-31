@@ -26,6 +26,8 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Preventivi, Ordini clienti), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt; poi macchine e consumi),
   Amministrazione; ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti: Qualità,
   Sicurezza e ambiente. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
+  Tendine meno sensibili (Adriano 31/10/2026, `public/menu.js`): si chiudono 0,45 s dopo l'uscita del mouse, ponte invisibile tra nome e tendina,
+  cambio gruppo solo se il mouse si ferma 0,18 s, clic sul nome a tendina chiusa (tablet) la apre.
   "Quotazioni" è la ex sezione Componenti (BOM, codifica, prezzi): indirizzo `/quotazioni`, i vecchi `/componenti/...` portano lì (`index.ts`);
   "Componenti" resta il nome dell'archivio in Anagrafiche, di Impostazioni → Componenti e della spunta del preventivo.
 - Sezione Anagrafiche (menu in alto, `rotte/anagrafiche.ts`; Adriano 27/10/2026): TUTTE le anagrafiche stanno lì, non in Impostazioni.

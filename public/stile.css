@@ -36,9 +36,14 @@ h2 { font-size: 1.1rem; margin: 1.6rem 0 .5rem; font-weight: 650; display: flex;
 .testata nav.menu-destra { flex: 0 0 auto; }
 .testata nav.menu-destra a { font-size: .92rem; padding: .4rem .6rem; }
 .testata .gruppo { position: relative; }
-.testata .gruppo .tendina { display: none; position: absolute; top: 100%; left: 0; min-width: 15rem; padding: .35rem; margin-top: 2px;
+.testata .gruppo .tendina { display: none; position: absolute; top: 100%; left: 0; min-width: 15rem; padding: .35rem; margin-top: 4px;
   background: var(--carta); border: 1px solid var(--bordo); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 20; }
-.testata .gruppo:hover .tendina, .testata .gruppo:focus-within .tendina { display: block; }
+/* ponte invisibile sopra la tendina (Adriano 31/10/2026: i sottomenu sparivano troppo facilmente):
+   copre lo spazio tra il nome del gruppo e la tendina e un po' di margine ai lati, così passando col mouse non si chiude */
+.testata .gruppo .tendina::before { content: ''; position: absolute; left: -12px; right: -12px; top: -14px; height: 14px; }
+/* senza menu.js la tendina si apre col mouse sopra; con menu.js (classe menu-js) la apre e chiude lo script, con un ritardo */
+.testata:not(.menu-js) .gruppo:hover .tendina, .testata .gruppo.aperto .tendina,
+.testata:not(.menu-js) .gruppo:focus-within .tendina { display: block; }
 .testata .gruppo .tendina a { display: block; padding: .5rem .7rem; color: var(--testo); font-weight: 500; white-space: nowrap; }
 .testata .gruppo .tendina a:hover { background: var(--accento-chiaro); color: var(--accento); }
 .testata .gruppo .titolo-gruppo { display: inline-block; white-space: nowrap; }
