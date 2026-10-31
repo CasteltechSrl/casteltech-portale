@@ -130,7 +130,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `engine/codifica/alternative-bom.ts`, anche in Quotazioni): una riga per componente, codice dalla preferita, colonna "Alternative del cliente".
    SMD/THT senza colonna di montaggio: descrizione "SMD …" = SMD, le altre THT (se almeno 1/4 delle righe comincia per SMD); dissipatori, viti, grasso,
    etichette, specifiche… = `accessorio` (non contano); "POST WAVE ASSEMBLY" = `dopoOnda` (vince il pezzo saldato sullo stesso riferimento).
-   ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls.
+   LPS Zapper (30/10/2026): "Non Montare" nella colonna Note = non montato; con la BOM, i riferimenti solo nel pick and place non si contano
+   (restano nell'errore); vecchio Allegro senza "!" ("m" = BOT); strati CAM350 pastetop/maskbot/bot/int2; controllo piazzole muto se trovate per <30%.
+   ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),
    fogli tempi, QR → `/c/<codice>`. Stampa: max 2 pagine di scheda (fasi in un'unica tabella compatta) + 2 fogli tempi

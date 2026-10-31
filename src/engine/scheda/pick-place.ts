@@ -162,6 +162,20 @@ export function leggiPickPlace(nomeFile: string, testoGrezzo: string): LetturaPi
     return separaFiducial({ formato: 'Allegro', unita, posizioni, fiducial: [], avvisi });
   }
 
+  // ── Allegro vecchio, senza "!": "UUNITS = MILLIMETERS" poi "R1  -30.4083  -2.3717  180  m RES_0603" ("m" = mirror = BOT;
+  //    LPS VariBase Top P06, 30/10/2026) ──
+  if (/^\s*UUNITS\s*=/im.test(testo)) {
+    const RE_RIGA = /^\s*([A-Z][A-Z0-9_+\-]{0,15})\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(?:(m)\s+)?(\S+)\s*$/i;
+    const trovate = righe.map(r => RE_RIGA.exec(r)).filter((m): m is RegExpExecArray => !!m);
+    if (trovate.length >= 2 && trovate.length * 3 >= righe.filter(r => r.trim() && !/UUNITS/i.test(r)).length * 2) {
+      const unita = /UUNITS\s*=\s*(INCHES|INCH)/i.test(testo) ? 'inch' : /UUNITS\s*=\s*MILS/i.test(testo) ? 'mil' : 'mm';
+      const f = FATTORE[unita];
+      return separaFiducial({ formato: 'Allegro (senza separatori)', unita, fiducial: [], avvisi,
+        posizioni: trovate.map(m => ({ ref: m[1].toUpperCase(), valore: '', footprint: m[6], x: num(m[2]) * f, y: num(m[3]) * f, rot: normRot(num(m[4]) || 0),
+          lato: m[5] ? 'BOT' as const : 'TOP' as const })) });
+    }
+  }
+
   // ── con intestazione (Altium, KiCad, generici) ──
   const sepDi = (r: string): ',' | ';' | '\t' | ' ' => {
     const conta = (c: string) => dividiRiga(r, c as any).length;

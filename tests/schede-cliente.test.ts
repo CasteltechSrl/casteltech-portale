@@ -512,3 +512,50 @@ test('M0929-C (Control Systems, 29/10/2026): centri in pollici, BOM a colonne fi
   // già allineati: niente spostamento
   assert.equal(allineaAlRame(comp.map(c => ({ x: c.x + 101.6, y: c.y + 203.2 })), piazzole), null);
 });
+
+// ───────────── LPS Zapper (30/10/2026): esempi inventati con la stessa forma dei file ─────────────
+
+test('Allegro vecchio senza "!": "m" = mirror = lato BOT, unità da UUNITS', () => {
+  const t = `UUNITS = MILLIMETERS
+L2                   -16.8435      27.8210        0    ANTNFC2
+R1                   -30.4083      -2.3717      180  m RES_0603
+J2                   -47.8180      21.9065        0  m FPC_24
+SW1                  -48.9694      19.0187        0    TACTILEWURTH
+`;
+  const l = leggiPickPlace('place_txt.txt', t);
+  assert.equal(l.formato, 'Allegro (senza separatori)');
+  assert.deepEqual(l.posizioni.map(p => [p.ref, p.lato, p.footprint]), [['L2', 'TOP', 'ANTNFC2'], ['R1', 'BOT', 'RES_0603'], ['J2', 'BOT', 'FPC_24'], ['SW1', 'TOP', 'TACTILEWURTH']]);
+  assert.equal(l.posizioni[1].rot, 180);
+});
+
+test('strati CAM350 con nomi attaccati: pastetop, maskbot, bot, int2', () => {
+  assert.deepEqual(ruoloStrato('pastetop.gbr'), { ruolo: 'pasta', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('masktop.gbr'), { ruolo: 'maschera', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('maskbot.gbr'), { ruolo: 'maschera', lato: 'BOT' });
+  assert.deepEqual(ruoloStrato('silktop.gbr'), { ruolo: 'serigrafia', lato: 'TOP' });
+  assert.deepEqual(ruoloStrato('bot.gbr'), { ruolo: 'rame', lato: 'BOT' });
+  assert.deepEqual(ruoloStrato('int2.gbr'), { ruolo: 'interno', lato: null });
+});
+
+test('Gerber con molte macro prima delle aperture è comunque un Gerber', () => {
+  const macro = Array.from({ length: 800 }, (_, i) => `%AMDATA${i}*\n20,1,0.1000000,-2.4750000,0.1687500,-1.8750000,0.1687500,0.0000000*%`).join('\n');
+  const t = `G04 CAM350*\n%FSLAX33Y33*%\n%MOMM*%\n${macro}\n%ADD10C,0.100*%\nD10*\nX1000Y1000D03*\nM02*`;
+  assert.ok(t.indexOf('%ADD') > 20000);
+  assert.ok(sembraGerber(t));
+});
+
+test('BOM con "Non Montare" nella colonna Note e componenti solo nel pick and place: non si contano', () => {
+  const bom = leggiBomScheda([
+    ['#', 'Qty', 'Reference', 'Part', 'Package', 'Note'],
+    ['1', '1', 'C1', '10uF', 'cap_0603', ''],
+    ['2', '1', 'C2', '4u7F', 'res_0603', 'Non Montare'],
+    ['3', '2', 'R1,R2', '10K', 'res_0603', ''],
+  ]);
+  assert.deepEqual(bom.righe.map(r => r.montato), [true, false, true]);
+  const pos = (ref: string) => ({ ref, valore: '', footprint: 'RES_0603', x: 1, y: 1, rot: 0, lato: 'TOP' as const });
+  const a = analizzaScheda({ bom: { nome: 'bom.xlsx', righe: bom.righe },
+    pickPlace: [{ nome: 'place_txt.txt', lettura: { formato: 'x', unita: 'mm', posizioni: ['C1', 'C2', 'R1', 'R2', 'J1', 'TP1'].map(pos), fiducial: [], avvisi: [] } }] });
+  assert.equal(a.conteggi.smdTop, 3);   // C1, R1, R2: C2 non montato, J1 e TP1 non sono nella BOM
+  assert.ok(a.segnalazioni.some(s => s.livello === 'errore' && s.refs?.includes('J1')));
+  assert.ok(a.componenti.find(c => c.ref === 'J1')!.segnalazioni.some(s => s.includes('non è nella BOM')));
+});

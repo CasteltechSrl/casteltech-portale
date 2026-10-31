@@ -34,8 +34,9 @@ const poligono = (punti: [number, number][], clear: boolean) =>
 
 /** Il testo è un Gerber? (formato e almeno un'apertura o un comando di disegno). */
 export function sembraGerber(testo: string): boolean {
+  // le aperture possono arrivare dopo molte macro (CAM350, maschera LPS 30/10/2026: oltre 20.000 caratteri di %AM)
   const t = testo.slice(0, 20000);
-  return /%FS[LTD]?[AI]?X\d\dY\d\d/i.test(t) && (/%ADD\d+/.test(t) || /D0?[123]\*/.test(t));
+  return /%FS[LTD]?[AI]?X\d\dY\d\d/i.test(t) && (/%ADD\d+/.test(testo.slice(0, 1_000_000)) || /D0?[123]\*/.test(t));
 }
 
 /** Forma di una macro (%AM) con i parametri dell'apertura. */
