@@ -313,5 +313,12 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ✅ PDF di cortesia di fattura e nota di credito (Adriano 31/10/2026; `stampaFattura` in `views/stampa-documento.ts`, stessa pagina `/documenti/:id/stampa`
    dei DDT, salvato in PDF dal browser): dati dell'azienda, cliente (fotografia dell'emissione), righe con IVA, riepilogo per aliquota/natura, bollo,
    lettera d'intento, pagamento con scadenze e IBAN; piede "copia di cortesia, il documento fiscale è l'XML". In bozza scritta BOZZA. Autofatture escluse.
+   ✅ Registri IVA e controllo VIES (Adriano 31/10/2026; `engine/registri-iva.ts`, `registri-iva-servizio.ts`, `rotte/registri-iva.ts`, `engine/vies.ts`,
+   `server/vies.ts`, migrazione 048): Amministrazione → Registri IVA per mese/trimestre/anno: vendite (fatture + NC in negativo, anche storico FIC),
+   acquisti (protocollo calcolato in ordine di data nell'anno), autofatture (IVA a debito e a credito); fuori bozze, annullati, scartati. Riepilogo IVA del
+   documento dal file XML (solo i blocchi DatiRiepilogo estratti da PostgreSQL: gli XML dei fornitori hanno allegati), altrimenti dalle righe, se non torna
+   vincono i totali (segnalato). Liquidazione indicativa, "Da controllare" (numeri mancanti, scartate, bozze nel periodo). Excel e zip per il commercialista
+   (Excel + XML, scritto a pezzi da 20). Controllo VIES (REST della Commissione, con la nostra P.IVA → numero di consultazione, `controlli_vies`; valido 90 gg;
+   errori del servizio = "non verificabile", non "non valida"): pagina Amministrazione → Controllo VIES e riquadro nella bozza di fattura a cliente UE.
    (conferme d'ordine: vedi 4c)
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

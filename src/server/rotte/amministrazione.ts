@@ -10,6 +10,7 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
+import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -169,6 +170,8 @@ export function rotteAmministrazione() {
   });
 
   r.use('/fatture-estere', rotteAutofatture());
+  r.use('/registri', rotteRegistriIva());
+  r.use('/vies', rotteVies());
 
   r.get('/documenti', async (req, res) => {
     const tipo = String(req.query.tipo ?? 'fattura');
@@ -361,7 +364,10 @@ export function rotteAmministrazione() {
         html`<option value="${a.codice}" ${x.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></td>
       <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo, senza importo"></td>
     </tr>`;
+    // cliente di un altro paese UE: ultimo controllo VIES (serve per fatturare non imponibile art. 41 / 7-ter)
+    const clienteUe = d.tipo !== 'autofattura' && d.cliente_id ? await q1(`SELECT partita_iva, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
     res.send(pagina(req, titolo, html`${testa}
+      ${clienteUe ? await riquadroVies(clienteUe.partita_iva, clienteUe.nazione, `/amministrazione/documenti/${id}`) : ''}
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
