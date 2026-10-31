@@ -685,6 +685,39 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/ricevuti/mesi', 'Acquisti per fornitore e mese']],
   },
   {
+    id: 'spese-non-elettroniche', area: 'amministrazione', titolo: 'Spese senza fattura elettronica (scontrini, affitto, polizze)',
+    parole: 'spesa spese scontrino scontrini ricevuta affitto canone polizza assicurazione banca bancarie imposte tasse valori bollati francobolli fattura cartacea carta senza fattura elettronica non elettronica registrare',
+    testo: [
+      'Le spese che non arrivano dallo SdI si registrano in Amministrazione → Spese senza fattura elettronica (o da Fatture fornitori, "+ Spesa senza fattura elettronica"): data, tipo (scontrino, affitto, polizza, spese bancarie, imposte e tasse, valori bollati, fattura cartacea, altro), a chi, totale, descrizione, se è già pagata con data e conto.',
+      'Finiscono tra le fatture fornitori con la scritta "non elettronica": contano nello scadenzario, negli acquisti per mese e nell\'Analisi. Non entrano nel registro IVA: uno scontrino o un affitto da privato non danno IVA da detrarre. Solo per una "Fattura cartacea" con l\'IVA si scrive anche l\'IVA.',
+      'Una spesa scritta per errore si elimina dalla stessa pagina (Elimina) o dal suo dettaglio.',
+    ],
+    passi: ['Amministrazione → Spese senza fattura elettronica.', 'Compila data, tipo, a chi e totale.', 'Registra la spesa.'],
+    pagine: [['/amministrazione/spese', 'Spese senza fattura elettronica']],
+  },
+  {
+    id: 'bollo-virtuale', area: 'amministrazione', titolo: 'Bollo virtuale sulle fatture: importo e scadenze',
+    parole: 'bollo bolli virtuale 2 euro marca da bollo trimestre trimestrale f24 codice tributo 2521 2522 2523 2524 scadenza versare 77,47',
+    testo: [
+      'Sulle fatture senza IVA oltre 77,47 € (es. lettera d\'intento) c\'è il bollo da 2 €, che il portale mette da solo. Si versa con l\'F24 ogni trimestre.',
+      'Amministrazione → Bollo virtuale mostra per ogni trimestre quante fatture, l\'importo, il codice tributo (2521 primo trimestre, 2522, 2523, 2524) e la scadenza: 31 maggio, 30 settembre, 30 novembre e l\'ultimo giorno di febbraio dell\'anno dopo (sabato e domenica si passa al lunedì).',
+      'Se il primo trimestre è sotto 5.000 € si versa con il secondo (30 settembre); se primo e secondo insieme sono sotto 5.000 € tutti e due si versano entro il 30 novembre, ognuno con il suo codice. L\'Agenzia mette l\'importo già calcolato nel portale Fatture e corrispettivi: questa pagina serve a controllarlo.',
+    ],
+    passi: ['Amministrazione → Bollo virtuale.', 'Controlla l\'importo del trimestre con quello del portale dell\'Agenzia.', 'Versa con l\'F24 entro la data indicata.'],
+    pagine: [['/amministrazione/bollo', 'Bollo virtuale']],
+  },
+  {
+    id: 'lettere-intento', area: 'amministrazione', titolo: 'Lettere d\'intento e plafond',
+    parole: 'lettera lettere intento dichiarazione esportatore abituale plafond n3.5 senza iva limite massimo protocollo residuo superato integrativa',
+    testo: [
+      'Un cliente esportatore abituale manda la lettera d\'intento con il protocollo dell\'Agenzia e l\'importo massimo (plafond) che può comprare senza IVA. Si registra in Anagrafiche → Clienti → Dati fiscali, riquadro "Lettere d\'intento": protocollo, data e plafond; il plafond si può correggere dopo.',
+      'Il portale somma le fatture senza IVA per lettera d\'intento (natura N3.5) dell\'anno, dalla data della lettera, meno le note di credito. Nella bozza di fattura avvisa quanto resta con quella fattura; dall\'80 % in giallo, oltre il plafond in rosso: la parte oltre va con l\'IVA, salvo una nuova lettera.',
+      'Amministrazione → Lettere d\'intento elenca tutti i clienti con lettera dell\'anno, prima quelli oltre il plafond o vicini al limite. Una lettera già citata in fatture emesse non si elimina.',
+    ],
+    passi: ['Anagrafiche → Clienti → Dati fiscali del cliente.', 'In "Lettere d\'intento" scrivi protocollo, data e plafond e premi Aggiungi lettera.'],
+    pagine: [['/amministrazione/lettere-intento', 'Lettere d\'intento'], ['/anagrafiche/clienti', 'Clienti']],
+  },
+  {
     id: 'analisi', area: 'amministrazione', titolo: 'Analisi: andamento, clienti, prodotti e consigli',
     parole: 'analisi andamento trend fatturato calo crescita confronto anno prima margine margini cliente clienti prodotto prodotti concentrazione dipendenza incasso incassi giorni ritardo pagano consigli commenti previsione bilancio come sta andando azienda',
     testo: [

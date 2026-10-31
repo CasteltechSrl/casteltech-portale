@@ -15,6 +15,7 @@ import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministraz
 import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { rotteAnalisi } from './analisi.js';
+import { riquadroPlafond, rotteFiscale } from './fiscale.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -184,6 +185,7 @@ export function rotteAmministrazione() {
   r.use('/fatture-estere', rotteAutofatture());
   r.use('/registri', rotteRegistriIva());
   r.use('/analisi', rotteAnalisi());
+  r.use('/', rotteFiscale());
   r.use('/vies', rotteVies());
 
   r.get('/documenti', async (req, res) => {
@@ -504,6 +506,7 @@ export function rotteAmministrazione() {
     const clienteUe = d.tipo !== 'autofattura' && d.cliente_id ? await q1(`SELECT partita_iva, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
     res.send(pagina(req, titolo, html`${testa}
       ${clienteUe ? await riquadroVies(clienteUe.partita_iva, clienteUe.nazione, `/amministrazione/documenti/${id}`) : ''}
+      ${d.tipo === 'fattura' || d.tipo === 'nota_credito' ? await riquadroPlafond(d.cliente_id, String(d.data), (d.tipo === 'nota_credito' ? -1 : 1) * t.riepilogo.filter((g: any) => g.natura === 'N3.5').reduce((s: number, g: any) => s + Number(g.imponibile), 0)) : ''}
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
@@ -710,6 +713,7 @@ export function rotteAmministrazione() {
         </form>
         <div class="collegamenti">
           <a href="/amministrazione/ricevuti/mesi?anno=${anno}">Acquisti per fornitore e mese →</a>
+          <a href="/amministrazione/spese">+ Spesa senza fattura elettronica</a>
           ${ambienteAttuale() ? html`<form method="post" action="/amministrazione/ricevuti/scarica" class="inline"><button title="Se una fattura che aspetti non è ancora arrivata">Scarica dallo SdI</button></form>` : ''}
         </div>
       </div>
@@ -820,7 +824,8 @@ export function rotteAmministrazione() {
           + (tutte ? `entro il ${data(scadenzaF24(pagate[pagate.length - 1]))}.` : 'entro il 16 del mese dopo il pagamento.');
       })()}</p>` : ''}
       ${elencoScadenze(scadenze, 'ricevuti', await contiUsati())}
-      ${d.xml ? html`<p><a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : ''}`, msg(req)));
+      ${d.xml ? html`<p><a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : ''}
+      ${d.origine === 'manuale' && !d.elettronica ? html`<form method="post" action="/amministrazione/spese/${id}/elimina" data-conferma="Eliminare questa spesa?"><button class="pericolo">Elimina la spesa</button></form>` : ''}`, msg(req)));
   });
 
   r.get('/ricevuti/:id/xml', async (req, res) => {
