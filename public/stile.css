@@ -512,6 +512,8 @@ table.elenco tr.scaduta td:first-child { box-shadow: inset 4px 0 0 var(--negativ
 ul.scadenze { list-style: none; padding: 0; }
 ul.scadenze li { padding: .35rem 0; border-bottom: 1px solid var(--bordo); }
 ul.scadenze input[type=date] { width: 9.5rem; }
+ul.scadenze select { width: auto; }
+ul.scadenze input[name=conto] { width: 13rem; }
 
 /* Preventivi → Da documenti del cliente: dati per il preventivo, segnalazioni, disegno del Gerber */
 .griglia-scheda-cliente { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 1.5rem; align-items: start; }
