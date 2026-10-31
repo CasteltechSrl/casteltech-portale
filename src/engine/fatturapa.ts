@@ -1,17 +1,23 @@
 /**
- * File XML della fattura elettronica (FatturaPA 1.2.2, formato FPR12 tra privati) per fatture e note di credito.
+ * File XML della fattura elettronica (FatturaPA 1.2.2: FPR12 tra privati, FPA12 alla pubblica amministrazione) per fatture e note.
  * Niente database qui: riceve documento, cliente, dati dell'azienda e aliquote e restituisce l'XML con l'elenco
  * degli errori che lo SdI scarterebbe (se ce ne sono, il documento non si emette).
  *
  * Regole principali:
  * - righe con natura N3.5 (lettera d'intento): AltriDatiGestionali "INTENTO" con protocollo e data della lettera;
  * - bollo virtuale da 2 € (DatiBollo) se dovuto, compreso nel totale del documento;
- * - nota di credito (TD04): fattura collegata obbligatoria (DatiFattureCollegate);
+ * - nota di credito (TD04) e di debito (TD05): fattura collegata obbligatoria (DatiFattureCollegate);
+ * - tipo: TD24 se cita DDT con data precedente, TD02 acconto, TD26 beni ammortizzabili (src/engine/tipi-fattura.ts);
+ * - acconti scalati sul saldo: le fatture d'acconto in DatiFattureCollegate;
+ * - ordine del cliente: numero, data, CIG e CUP in DatiOrdineAcquisto;
+ * - pubblica amministrazione: FPA12, codice ufficio di 6 caratteri, CIG obbligatorio; split payment: EsigibilitaIVA S e
+ *   pagamento solo dell'imponibile (più bollo);
  * - DDT fatturati: DatiDDT con le righe che vengono da ciascun DDT; le righe di solo testo "DDT n. … del …" non si ripetono;
  * - cliente estero: codice destinatario XXXXXXX, P.IVA con il prefisso del paese, CAP 00000 se non italiano;
  * - testi solo con caratteri ammessi dallo SdI (latino di base e Latin-1): "€" → "EUR", apostrofi e trattini tipografici semplificati.
  */
 import { arrotonda2, calcolaTotali, numeroCompleto, preparaAzienda, type Aliquota, type DatiAzienda, type Totali } from './amministrazione.js';
+import { controlliOrdinePa, importoDaIncassare, tipoSdiEffettivo } from './tipi-fattura.js';
 
 export interface RigaXml {
   codice?: string | null; descrizione: string; quantita: number; um?: string | null; prezzo: number; sconto?: number;
@@ -24,11 +30,14 @@ export interface DocumentoXml {
   origine?: { numero: string; data: string } | null;          // fattura stornata dalla nota di credito
   intento?: { protocollo: string; data: string } | null;       // lettera d'intento del cliente
   aliquota_predefinita?: string;
+  tipo_sdi?: string | null;                                    // scelto sulla bozza: TD01 (o TD24 da solo), TD02, TD26, TD05
+  cig?: string | null; cup?: string | null; data_ordine?: string | null;
+  acconti?: { numero: string; data: string }[];                // fatture d'acconto scalate su questa
 }
 export interface ClienteXml {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null; indirizzo?: string | null; cap?: string | null;
   comune?: string | null; provincia?: string | null; nazione?: string | null; codice_sdi?: string | null; pec?: string | null;
-  pubblica_amministrazione?: boolean;
+  pubblica_amministrazione?: boolean; split_payment?: boolean;
 }
 
 const SOSTITUZIONI: [RegExp, string][] = [[/€/g, 'EUR'], [/[‘’‚′]/g, "'"], [/[“”„″]/g, '"'], [/[–—−]/g, '-'], [/…/g, '...'], [/[•·]/g, '-']];
@@ -68,7 +77,7 @@ function idFiscale(piva: string, nazione: string): { paese: string; codice: stri
 /** Progressivo d'invio (massimo 5 caratteri nel nome del file): l'id del documento in base 36. */
 export const progressivoInvio = (id: number) => id.toString(36).toUpperCase().padStart(5, '0').slice(-5);
 
-export interface EsitoXml { xml: string; nomeFile: string; totali: Totali; errori: string[] }
+export interface EsitoXml { xml: string; nomeFile: string; totali: Totali; errori: string[]; tipoSdi?: string; daIncassare?: number }
 
 export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, aziendaInput: DatiAzienda, aliquote: Aliquota[]): EsitoXml {
   const errori: string[] = [];
@@ -86,11 +95,14 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
   const totali = calcolaTotali(righe, aliquote, predefinita);
   errori.push(...totali.errori);
   if (doc.tipo === 'nota_credito' && !doc.origine) errori.push('La nota di credito deve indicare la fattura che corregge.');
+  if (doc.tipo === 'fattura' && doc.tipo_sdi === 'TD05' && !doc.origine) errori.push('La nota di debito deve indicare la fattura che corregge.');
+  const split = !!cliente.split_payment;
+  const daIncassare = importoDaIncassare(totali, split);
   if (doc.numero == null) errori.push('Il documento non ha ancora un numero.');
   const usaIntento = totali.riepilogo.some(g => g.natura === 'N3.5');
   if (usaIntento && !doc.intento) errori.push('Righe con lettera d\'intento ma il cliente non ha una lettera d\'intento per l\'anno del documento.');
-  if (Math.abs(arrotonda2(doc.scadenze.reduce((s, x) => s + x.importo, 0)) - totali.totale) > 0.005 && doc.scadenze.length)
-    errori.push(`Le scadenze (${importoXml(doc.scadenze.reduce((s, x) => s + x.importo, 0))}) non tornano con il totale (${importoXml(totali.totale)}).`);
+  if (Math.abs(arrotonda2(doc.scadenze.reduce((s, x) => s + x.importo, 0)) - daIncassare) > 0.005 && doc.scadenze.length)
+    errori.push(`Le scadenze (${importoXml(doc.scadenze.reduce((s, x) => s + x.importo, 0))}) non tornano con ${split ? 'il totale meno l\'IVA (split payment)' : 'il totale'} (${importoXml(daIncassare)}).`);
 
   // cliente
   const nazione = (cliente.nazione || 'IT').toUpperCase();
@@ -102,14 +114,16 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
   if (italiano && !/^\d{5}$/.test(cliente.cap ?? '')) errori.push(`Cliente ${cliente.ragione_sociale}: CAP mancante o non valido.`);
   if (italiano && !piva && !cf) errori.push(`Cliente ${cliente.ragione_sociale}: servono partita IVA o codice fiscale.`);
   if (italiano && piva && !/^(IT)?\d{11}$/i.test(piva.replace(/\s/g, ''))) errori.push(`Cliente ${cliente.ragione_sociale}: partita IVA "${piva}" non valida.`);
-  if (cliente.pubblica_amministrazione) errori.push('Fatture alla pubblica amministrazione (FPA12, split payment) non ancora previste dal portale.');
+  const pa = !!cliente.pubblica_amministrazione;
   const sdi = (cliente.codice_sdi ?? '').toUpperCase().trim();
-  if (sdi && !/^[A-Z0-9]{7}$/.test(sdi)) errori.push(`Cliente ${cliente.ragione_sociale}: codice destinatario "${sdi}" non valido (7 caratteri).`);
-  const codiceDestinatario = !italiano ? 'XXXXXXX' : sdi || '0000000';
-  const pecDestinatario = italiano && !sdi && cliente.pec ? cliente.pec.trim().toLowerCase() : '';
+  if (!pa && sdi && !/^[A-Z0-9]{7}$/.test(sdi)) errori.push(`Cliente ${cliente.ragione_sociale}: codice destinatario "${sdi}" non valido (7 caratteri).`);
+  errori.push(...controlliOrdinePa({ pubblica_amministrazione: pa, codice_sdi: sdi, riferimento_esterno: doc.riferimento_esterno, cig: doc.cig,
+    cup: doc.cup, data_ordine: doc.data_ordine, nome: cliente.ragione_sociale }));
+  const formato = pa ? 'FPA12' : 'FPR12';
+  const codiceDestinatario = pa ? sdi : !italiano ? 'XXXXXXX' : sdi || '0000000';
+  const pecDestinatario = !pa && italiano && !sdi && cliente.pec ? cliente.pec.trim().toLowerCase() : '';
 
   const numero = doc.numero == null ? '' : numeroCompleto(doc.numero, doc.sezionale);
-  const tipoSdi = doc.tipo === 'nota_credito' ? 'TD04' : 'TD01';
 
   const anagraficaCliente = (() => {
     let s = '';
@@ -165,17 +179,19 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
     const data = `${m[4]}-${m[3].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
     if (![...ddt.values()].some(d => d.numero === m[1] && d.data === data)) ddt.set(`${m[1]}|${data}`, { numero: m[1], data, linee: [] });
   }
+  const tipoSdi = tipoSdiEffettivo(doc.tipo, doc.tipo_sdi, doc.data, [...ddt.values()].map(d => d.data));
+  const esigibilita = `<EsigibilitaIVA>${split ? 'S' : 'I'}</EsigibilitaIVA>`;
 
   const riepilogo = totali.riepilogo.map(g =>
     `<DatiRiepilogo><AliquotaIVA>${importoXml(g.percentuale)}</AliquotaIVA>${el('Natura', g.natura)}`
     + `<ImponibileImporto>${importoXml(g.imponibile)}</ImponibileImporto><Imposta>${importoXml(g.imposta)}</Imposta>`
-    + (g.natura ? el('RiferimentoNormativo', testoXml(g.riferimento_normativo, 100)) : '<EsigibilitaIVA>I</EsigibilitaIVA>')
+    + (g.natura ? el('RiferimentoNormativo', testoXml(g.riferimento_normativo, 100)) : esigibilita)
     + `</DatiRiepilogo>`).join('');
   // un'aliquota usata solo da righe di testo deve comparire nel riepilogo (con importo 0)
   const aTesto = perCodice.get(aliquotaTesto);
   const testoSenzaRiepilogo = righe.some(r => r.solo_descrizione) && aTesto && !totali.riepilogo.some(g => g.aliquota === aliquotaTesto)
     ? `<DatiRiepilogo><AliquotaIVA>${importoXml(aTesto.percentuale)}</AliquotaIVA>${el('Natura', aTesto.natura)}<ImponibileImporto>0.00</ImponibileImporto><Imposta>0.00</Imposta>`
-      + (aTesto.natura ? el('RiferimentoNormativo', testoXml(aTesto.riferimento_normativo, 100)) : '<EsigibilitaIVA>I</EsigibilitaIVA>') + `</DatiRiepilogo>` : '';
+      + (aTesto.natura ? el('RiferimentoNormativo', testoXml(aTesto.riferimento_normativo, 100)) : esigibilita) + `</DatiRiepilogo>` : '';
 
   const causali = (pulisci(doc.causale).slice(0, 2000).match(/[\s\S]{1,200}/g) ?? []).map(c => `<Causale>${proteggi(c)}</Causale>`).join('');
   const pagamenti = doc.scadenze.length
@@ -187,12 +203,12 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
 
   const progressivo = progressivoInvio(doc.id);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n`
-    + `<p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" `
+    + `<p:FatturaElettronica versione="${formato}" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" `
     + `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2 `
     + `http://www.fatturapa.gov.it/export/fatturazione/sdi/fatturapa/v1.2/Schema_del_file_xml_FatturaPA_versione_1.2.xsd">`
     + `<FatturaElettronicaHeader>`
     + `<DatiTrasmissione><IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>${azienda.codice_fiscale || azienda.partita_iva}</IdCodice></IdTrasmittente>`
-    + `<ProgressivoInvio>${progressivo}</ProgressivoInvio><FormatoTrasmissione>FPR12</FormatoTrasmissione>`
+    + `<ProgressivoInvio>${progressivo}</ProgressivoInvio><FormatoTrasmissione>${formato}</FormatoTrasmissione>`
     + `<CodiceDestinatario>${codiceDestinatario}</CodiceDestinatario>${el('PECDestinatario', testoXml(pecDestinatario, 256))}</DatiTrasmissione>`
     + `<CedentePrestatore><DatiAnagrafici><IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>${azienda.partita_iva}</IdCodice></IdFiscaleIVA>`
     + `${el('CodiceFiscale', azienda.codice_fiscale)}<Anagrafica><Denominazione>${testoXml(azienda.ragione_sociale, 80)}</Denominazione></Anagrafica>`
@@ -205,13 +221,15 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
     + `<Data>${doc.data}</Data><Numero>${testoXml(numero, 20)}</Numero>`
     + (totali.bollo ? `<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>${importoXml(totali.bollo)}</ImportoBollo></DatiBollo>` : '')
     + `<ImportoTotaleDocumento>${importoXml(totali.totale)}</ImportoTotaleDocumento>${causali}</DatiGeneraliDocumento>`
-    + (doc.riferimento_esterno ? `<DatiOrdineAcquisto><IdDocumento>${testoXml(doc.riferimento_esterno, 20)}</IdDocumento></DatiOrdineAcquisto>` : '')
-    + (doc.origine ? `<DatiFattureCollegate><IdDocumento>${testoXml(doc.origine.numero, 20)}</IdDocumento><Data>${doc.origine.data}</Data></DatiFattureCollegate>` : '')
+    + (doc.riferimento_esterno ? `<DatiOrdineAcquisto><IdDocumento>${testoXml(doc.riferimento_esterno, 20)}</IdDocumento>${el('Data', doc.data_ordine)}`
+      + `${el('CodiceCUP', testoXml((doc.cup ?? '').toUpperCase(), 15))}${el('CodiceCIG', testoXml((doc.cig ?? '').toUpperCase(), 15))}</DatiOrdineAcquisto>` : '')
+    + [...(doc.origine ? [doc.origine] : []), ...(doc.acconti ?? [])].map(f =>
+      `<DatiFattureCollegate><IdDocumento>${testoXml(f.numero, 20)}</IdDocumento><Data>${f.data}</Data></DatiFattureCollegate>`).join('')
     + [...ddt.values()].map(d => `<DatiDDT><NumeroDDT>${testoXml(d.numero, 20)}</NumeroDDT><DataDDT>${d.data}</DataDDT>`
       + d.linee.map(l => `<RiferimentoNumeroLinea>${l}</RiferimentoNumeroLinea>`).join('') + `</DatiDDT>`).join('')
     + `</DatiGenerali><DatiBeniServizi>${linee}${riepilogo}${testoSenzaRiepilogo}</DatiBeniServizi>${pagamenti}`
     + `</FatturaElettronicaBody></p:FatturaElettronica>\n`;
-  return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali, errori };
+  return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali, errori, tipoSdi, daIncassare };
 }
 
 // ───────────────────────────── autofatture TD17 / TD18 / TD19 ─────────────────────────────

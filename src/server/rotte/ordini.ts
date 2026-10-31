@@ -223,7 +223,9 @@ export function rotteOrdini() {
           data-conferma="${`Segnare come evase tutte le righe ancora aperte dell'ordine ${o.numero}/${o.anno}? Usalo quando la merce è stata consegnata ma il DDT ha un codice diverso o manca. Si torna indietro scegliendo "automatico" nello stato delle righe.`}">
           <button title="Merce consegnata: tutte le righe aperte diventano evase">Segna tutto evaso</button></form>` : ''}
         ${['da_evadere', 'parziale'].includes(stato) && o.cliente_id ? html`<form method="post" action="/amministrazione/documenti/ddt-da-ordine/${o.id}" class="inline">
-          <button class="primario" title="DDT (bozza) con le schede ancora da spedire">Crea DDT</button></form>` : ''}</div>
+          <button class="primario" title="DDT (bozza) con le schede ancora da spedire">Crea DDT</button></form>` : ''}
+        ${['da_evadere', 'parziale'].includes(stato) && o.cliente_id ? html`<form method="post" action="/amministrazione/documenti/acconto-da-ordine/${o.id}" class="inline"
+          data-conferma="Preparare una fattura d'acconto (bozza) su questo ordine? Poi la scali sulla fattura di saldo."><button title="Anticipo chiesto al cliente prima della consegna (TD02)">Fattura d'acconto</button></form>` : ''}</div>
       ${ddtPortale.length ? html`<p class="nota">DDT del portale: ${ddtPortale.map((x, i) => html`${i ? ', ' : ''}<a href="/amministrazione/documenti/${x.id}">${x.numero == null ? 'bozza' : `n. ${x.numero}`} del ${data(x.data)}</a>`)}</p>` : ''}
       <dl class="dati-ordine">
         <dt>Cliente</dt><dd>${o.cliente_nome}${o.cliente_id ? '' : html` <span class="esito verifica">non in anagrafica</span>`}</dd>

@@ -325,5 +325,13 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    gruppo Amministrazione, `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
    ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
    dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
+   ✅ Altri tipi di fattura e PA (Adriano 31/10/2026; `engine/tipi-fattura.ts`, migrazione 050): TD24 differita scelta da sola se la fattura cita DDT con
+   data precedente (termine il 15 del mese dopo), TD02 acconto ("Fattura d'acconto" nella pagina dell'ordine; sul saldo "Scala gli acconti" = riga negativa per aliquota,
+   `documenti_righe.acconto_id`, DatiFattureCollegate), TD26 beni ammortizzabili (menu "Tipo di fattura"), TD05 nota di debito ("Crea nota di debito" dalla fattura
+   emessa, numerata con le fatture). Pubblica amministrazione (es. INFN): Anagrafiche → Clienti → "Dati fiscali" (PA, codice ufficio 6 caratteri, split payment);
+   XML FPA12, numero/data ordine + CIG obbligatori (CUP se c'è) in DatiOrdineAcquisto; split payment = EsigibilitaIVA S, scadenza e PDF sul totale meno IVA.
+   Fatture fornitori con ritenuta d'acconto / cassa (`datiFattureRicevute`): ritenuta, cassa, netto da pagare; F24 entro il 16 del mese dopo il pagamento.
+   Storico FIC completo dal 2019 (file storico_fic_completo.json.gz, stesso caricamento): DDT dello storico prima del 2025 non proposti "da fatturare"
+   (`INIZIO_DDT_DA_FATTURARE`). Archivio FIC (PDF emessi, XML/PDF fornitori, elenchi) in Project Files → archivio-fic, fuori dal repository.
    (conferme d'ordine: vedi 4c)
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).

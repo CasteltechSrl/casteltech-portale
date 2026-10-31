@@ -5,6 +5,7 @@
 import { q } from '../db.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
+import { INIZIO_DDT_DA_FATTURARE } from '../../engine/ddt.js';
 import { NOMI_FASCE, fasciaScadenza, imponibilePerMese, riepilogoScadenze, variazione, type Fascia } from '../../engine/cruscotto-amministrazione.js';
 
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
@@ -40,7 +41,8 @@ export async function contenutoCruscotto(): Promise<Raw> {
     q<{ nome: string; quanti: number; ultimo: string }>(`SELECT coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '?') AS nome,
         count(*)::int AS quanti, max(d.data) AS ultimo
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato') GROUP BY 1 ORDER BY 2 DESC, 1`),
+      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato')
+        AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') GROUP BY 1 ORDER BY 2 DESC, 1`),
     q(`SELECT d.id, d.tipo, d.data, coalesce(c.ragione_sociale, f.ragione_sociale, '') AS nome FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
       LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.stato = 'bozza' AND d.tipo <> 'conferma_ordine' ORDER BY d.creato_il DESC`),
   ]);

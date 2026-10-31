@@ -25,7 +25,8 @@ test('FatturaPA: fattura con DDT, sconto, lettera d\'intento e bollo', () => {
   assert.deepEqual(tag(xml, 'ImportoTotaleDocumento'), ['457.78']);
   assert.deepEqual(tag(xml, 'ImportoBollo'), ['2.00']);
   assert.deepEqual(tag(xml, 'CodiceDestinatario'), ['ABC1234']);
-  assert.deepEqual(tag(xml, 'TipoDocumento'), ['TD01']);
+  // cita un DDT del mese prima: fattura differita (TD24)
+  assert.deepEqual(tag(xml, 'TipoDocumento'), ['TD24']);
   // la riga di testo "DDT n. 195" non si ripete: diventa DatiDDT con la riga che viene da quel DDT
   assert.deepEqual(tag(xml, 'NumeroLinea'), ['1', '2', '3']);
   assert.match(xml, /<DatiDDT><NumeroDDT>195<\/NumeroDDT><DataDDT>2026-10-05<\/DataDDT><RiferimentoNumeroLinea>1<\/RiferimentoNumeroLinea><\/DatiDDT>/);

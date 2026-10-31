@@ -301,6 +301,7 @@ export interface RicevutoStorico {
   fic_id: number; tipo: 'fattura' | 'nota_credito'; numero: string; data: string; intestatario: Record<string, string>;
   partita_iva: string | null; descrizione: string | null; categoria: string | null;
   imponibile: number; imposta: number; totale: number; elettronica: boolean; scadenze: ScadenzaStorico[];
+  ritenuta: number; netto_a_pagare: number | null;
 }
 
 /** Controlla e normalizza un documento ricevuto da un fornitore (fattura d'acquisto o nota di credito). */
@@ -315,5 +316,8 @@ export function preparaRicevutoFic(x: any): { documento: RicevutoStorico | null;
     partita_iva: piva || null, descrizione: testo(x.descrizione), categoria: testo(x.categoria),
     imponibile: arrotonda2(numeroO0(x.imponibile)), imposta: arrotonda2(numeroO0(x.imposta)), totale: arrotonda2(numeroO0(x.totale)),
     elettronica: x.elettronica !== false, scadenze: scadenzeFic(x.scadenze),
+    // ritenuta d'acconto del professionista: il totale è prima della ritenuta, si paga il netto
+    ritenuta: arrotonda2(numeroO0(x.ritenuta)),
+    netto_a_pagare: x.netto_a_pagare == null ? null : arrotonda2(numeroO0(x.netto_a_pagare)),
   } };
 }

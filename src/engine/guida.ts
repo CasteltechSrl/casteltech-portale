@@ -558,6 +558,39 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/documenti', 'Documenti emessi']],
   },
   {
+    id: 'tipi-fattura', area: 'amministrazione', titolo: 'Fattura differita, acconto, nota di debito, beni ammortizzabili',
+    parole: 'td24 differita td02 acconto anticipo saldo scalare td05 nota debito aumentare td26 beni ammortizzabili macchinario usato cespite tipo documento',
+    testo: [
+      'Fattura differita (TD24): se la fattura contiene DDT con data precedente, il portale la manda da solo come differita. Va emessa entro il 15 del mese dopo il DDT: la data limite è scritta sotto il tipo di fattura.',
+      'Fattura d\'acconto (TD02): dalla pagina dell\'ordine "Fattura d\'acconto" prepara la bozza con il riferimento dell\'ordine; scrivi l\'importo dell\'anticipo ed emetti. Sulla fattura di saldo dello stesso cliente compare "Fatture d\'acconto da scalare": scegli l\'acconto e "Scala gli acconti" aggiunge la riga negativa e collega le fatture nell\'XML.',
+      'Nota di debito (TD05): per aumentare l\'importo di una fattura già emessa (costi dimenticati, adeguamenti) apri la fattura e premi "Crea nota di debito"; scrivi le righe in più ed emetti. Prende il numero delle fatture.',
+      'Cessione di beni ammortizzabili (TD26): quando vendi un macchinario o un\'attrezzatura dell\'azienda scegli questo tipo nel menu "Tipo di fattura" della bozza.',
+    ],
+    passi: ['Apri la bozza della fattura.', 'Controlla "Tipo di fattura" (TD24 è automatico).', 'Per acconto o nota di debito parti dall\'ordine o dalla fattura.', 'Emetti.'],
+    pagine: [['/amministrazione/documenti?tipo=fattura', 'Fatture'], ['/ordini', 'Ordini']],
+  },
+  {
+    id: 'pubblica-amministrazione', area: 'amministrazione', titolo: 'Fatture alla pubblica amministrazione (INFN, enti, split payment)',
+    parole: 'pubblica amministrazione pa ente infn universita comune fpa12 codice ufficio univoco ipa cig cup split payment scissione pagamenti 17-ter',
+    testo: [
+      'Prima una volta sola: Anagrafiche → Clienti → "Dati fiscali" del cliente. Spunta "Pubblica amministrazione", scrivi il codice univoco dell\'ufficio (6 caratteri, è sull\'ordine o su indicepa.gov.it) e il codice fiscale dell\'ente; spunta "Split payment" se l\'ordine lo dice (quasi sempre).',
+      'Nella fattura scrivi numero e data dell\'ordine e il CIG (10 caratteri, sull\'ordine); il CUP solo se c\'è. Senza CIG o numero d\'ordine il portale non la emette, perché la PA la rifiuterebbe.',
+      'Con lo split payment l\'IVA è in fattura ma non la paga a noi: il cliente versa all\'Erario l\'IVA e a noi paga solo imponibile e bollo. Scadenza e PDF di cortesia mostrano il "netto da pagare".',
+      'L\'XML parte nel formato FPA12; si manda allo SdI come le altre fatture.',
+    ],
+    passi: ['Dati fiscali del cliente: PA, codice ufficio, split payment.', 'Fattura: numero e data dell\'ordine, CIG.', 'Emetti e invia allo SdI.'],
+    pagine: [['/anagrafiche/clienti', 'Anagrafiche → Clienti'], ['/amministrazione/documenti?tipo=fattura', 'Fatture']],
+  },
+  {
+    id: 'ritenute-fornitori', area: 'amministrazione', titolo: 'Fatture di consulenti con ritenuta d\'acconto e cassa',
+    parole: 'ritenuta acconto professionista consulente commercialista avvocato notaio cassa previdenziale rivalsa inps f24 1040 netto',
+    testo: [
+      'Le fatture di professionisti e consulenti arrivano dallo SdI con la ritenuta d\'acconto e a volte la cassa previdenziale o la rivalsa INPS: il portale le legge da sole.',
+      'Nella fattura del fornitore vedi il totale, la ritenuta e il "netto da pagare": al fornitore si paga il netto; la ritenuta la versa Casteltech con F24 (codice tributo 1040 per i professionisti) entro il 16 del mese dopo il pagamento. Quando segni pagata la rata, il portale scrive la data dell\'F24.',
+    ],
+    pagine: [['/amministrazione/ricevuti', 'Fatture fornitori']],
+  },
+  {
     id: 'incassi-pagamenti', area: 'amministrazione', titolo: 'Incassi, pagamenti e fatture dei fornitori',
     parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare arrivate sdi scarica xml p7m',
     testo: [
@@ -571,6 +604,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'impostazioni-amministrazione', area: 'amministrazione', titolo: 'Numerazioni, IVA, pagamenti e dati fiscali dei clienti',
     parole: 'numerazione sezionale aliquote iva natura bollo condizioni pagamento giorni fine mese dati fiscali sdi pec lettera intento azienda',
     testo: [
+      'I dati fiscali di un cliente (indirizzo, P.IVA, codice SDI, PEC, pubblica amministrazione, split payment, IVA e pagamento predefiniti) si correggono da Anagrafiche → Clienti → "Dati fiscali".',
       'In Impostazioni → Amministrazione: dati dell\'azienda, ultimo numero usato per ogni serie (il numero si assegna solo all\'emissione), aliquote e nature IVA (bollo di 2 € oltre 77,47 €), condizioni di pagamento (es. 60 gg fine mese) e dati fiscali dei clienti con le lettere d\'intento.',
     ],
     pagine: [['/impostazioni/amministrazione', 'Impostazioni → Amministrazione']],

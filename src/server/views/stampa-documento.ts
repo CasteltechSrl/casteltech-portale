@@ -8,6 +8,7 @@ import { html, data, euro, num, type Raw } from './html.js';
 import { VERSIONE } from './layout.js';
 import { indirizzoSu } from '../../engine/ddt.js';
 import { importoRiga, numeroCompleto, type Totali } from '../../engine/amministrazione.js';
+import { importoDaIncassare, nomeTipoSdi } from '../../engine/tipi-fattura.js';
 
 const righeTesto = (s: string | null | undefined) => String(s ?? '').split('\n').filter(Boolean).map(r => html`${r}<br>`);
 
@@ -70,7 +71,8 @@ const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP
  * Il documento fiscale resta l'XML inviato allo SdI: lo dice il piede. In bozza la scritta BOZZA.
  */
 export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, totali: Totali, scadenze: any[], intento: any, pagamento: any): Raw {
-  const titolo = d.tipo === 'nota_credito' ? 'NOTA DI CREDITO' : 'FATTURA';
+  const titolo = d.tipo === 'nota_credito' ? 'NOTA DI CREDITO' : (nomeTipoSdi(d.tipo, d.tipo_sdi) ?? 'Fattura').toUpperCase();
+  const split = !!cliente.split_payment;
   const numero = d.numero == null ? 'BOZZA' : numeroCompleto(d.numero, d.sezionale);
   const mittente = [azienda.indirizzo, [azienda.cap, azienda.comune, azienda.provincia ? `(${azienda.provincia})` : ''].filter(Boolean).join(' ')].filter(Boolean).join(' - ');
   const rea = azienda.rea_numero ? `REA ${azienda.rea_ufficio ? `${azienda.rea_ufficio}-` : ''}${azienda.rea_numero}` : '';
@@ -96,7 +98,8 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
         <div class="indirizzo-stampa">${righeTesto(indirizzoSu(cliente))}${cliente.partita_iva ? html`P.IVA ${cliente.partita_iva}<br>` : ''}${cliente.codice_fiscale && cliente.codice_fiscale !== cliente.partita_iva ? html`C.F. ${cliente.codice_fiscale}` : ''}</div></td>
       <td><div class="etic">Recapito per la fattura elettronica</div>
         <div class="indirizzo-stampa">${cliente.codice_sdi ? html`Codice destinatario ${cliente.codice_sdi}<br>` : ''}${cliente.pec ? html`PEC ${cliente.pec}<br>` : ''}
-          ${d.riferimento_esterno ? html`<br>Rif.: ${d.riferimento_esterno}` : ''}</div></td></tr>
+          ${d.riferimento_esterno ? html`<br>Rif. ordine: ${d.riferimento_esterno}${d.data_ordine ? ` del ${data(String(d.data_ordine).slice(0, 10))}` : ''}` : ''}
+          ${d.cig ? html`<br>CIG ${d.cig}` : ''}${d.cup ? html` · CUP ${d.cup}` : ''}</div></td></tr>
   </table>
   ${d.causale ? html`<p class="causale-stampa">${d.causale}</p>` : ''}
   <table class="righe-ddt righe-fattura">
@@ -119,9 +122,12 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
       <tr><td>IVA</td><td class="q">${euro(totali.imposta)}</td></tr>
       ${totali.bollo ? html`<tr><td>Bollo virtuale</td><td class="q">${euro(totali.bollo)}</td></tr>` : ''}
       <tr class="totale"><td>Totale documento</td><td class="q">${euro(totali.totale)}</td></tr>
+      ${split ? html`<tr><td>IVA versata dal cliente (split payment)</td><td class="q">- ${euro(totali.imposta)}</td></tr>
+      <tr class="totale"><td>Netto da pagare</td><td class="q">${euro(importoDaIncassare(totali, true))}</td></tr>` : ''}
     </table>
   </div>
   ${intento ? html`<p class="nota-stampa">Operazione non imponibile art. 8 c. 1 lett. c D.P.R. 633/72: lettera d'intento prot. ${intento.protocollo} del ${data(intento.data_protocollo)}.</p>` : ''}
+  ${split ? html`<p class="nota-stampa">Scissione dei pagamenti (split payment) art. 17-ter D.P.R. 633/72: l'IVA è versata dal cliente all'Erario.</p>` : ''}
   ${totali.bollo ? html`<p class="nota-stampa">Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.</p>` : ''}
   ${d.tipo === 'fattura' ? html`<table class="griglia"><colgroup><col class="meta"><col class="meta"></colgroup>
     <tr><td><div class="etic">Pagamento</div><div class="val">${pagamento?.descrizione ?? ''}</div>
