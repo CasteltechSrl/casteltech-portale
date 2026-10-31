@@ -58,6 +58,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche', 'Anagrafiche'], ['/quotazioni', 'Quotazioni'], ['/preventivi', 'Preventivi'], ['/ordini', 'Ordini'], ['/commesse', 'Commesse'], ['/amministrazione', 'Amministrazione']],
   },
   {
+    id: 'cruscotto-generale', area: 'inizio', titolo: 'La prima pagina: il cruscotto generale',
+    parole: 'cruscotto generale homepage pagina iniziale home riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
+    testo: [
+      'Dal 31/10/2026, dopo l\'accesso, l\'ufficio arriva sul cruscotto generale. Si torna lì in ogni momento cliccando "Portale Casteltech" in alto a sinistra.',
+      'In alto c\'è "Da fare oggi": un pulsante per ogni cosa che aspetta qualcuno, con il numero. Rosso = urgente (fatture scartate dallo SdI, consegne in ritardo, incassi scaduti), giallo = da controllare (preventivi da validare, documenti da acquisire, pagamenti scaduti), verde = da fare (DDT da fatturare, bozze, tempi aperti dal reparto, azioni del CRM). Se la cosa è una sola, il pulsante porta direttamente lì.',
+      'Sotto ci sono sei numeri chiave (fatturato dell\'anno, ordini da evadere, preventivi aperti, commesse in corso, da incassare, da pagare) e un riquadro per area: Commerciale, Ordini clienti, Produzione (con il carico delle prossime 4 settimane dal Gantt), Acquisti, Amministrazione (con gli esiti dello SdI), Promemoria e sistema (scadenze del 15 e del 16, servizi, ultimo backup, suggerimenti).',
+      'I dati si leggono solo quando si apre la pagina: per vederli aggiornati basta ricaricarla. I cruscotti di dettaglio restano in Ordini clienti e in Amministrazione. Il profilo Contabilità continua ad aprirsi sul cruscotto dell\'Amministrazione, il reparto sulle pagine del telefono.',
+    ],
+    pagine: [['/cruscotto', 'Cruscotto generale'], ['/ordini/cruscotto', 'Cruscotto ordini'], ['/amministrazione', 'Cruscotto amministrazione']],
+  },
+  {
     id: 'menu-gruppi', area: 'inizio', titolo: 'Il menu in alto: gruppi e tendine',
     parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata',
     testo: [

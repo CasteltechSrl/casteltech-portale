@@ -19,8 +19,8 @@ export const DESCRIZIONI_RUOLI: Record<Ruolo, string> = {
 /** Profilo scritto nel modulo Utenti; un valore sconosciuto diventa "produzione" (il più ristretto tra quelli storici). */
 export const ruoloDaModulo = (x: unknown): Ruolo => (RUOLI as readonly string[]).includes(String(x)) ? String(x) as Ruolo : 'produzione';
 
-/** Pagina iniziale dopo l'accesso. */
-export const paginaIniziale = (ruolo: Ruolo) => (ruolo === 'ufficio' ? '/preventivi' : ruolo === 'contabilita' ? '/amministrazione' : '/r');
+/** Pagina iniziale dopo l'accesso: per l'ufficio il cruscotto generale (Adriano 31/10/2026). */
+export const paginaIniziale = (ruolo: Ruolo) => (ruolo === 'ufficio' ? '/cruscotto' : ruolo === 'contabilita' ? '/amministrazione' : '/r');
 
 /** La contabilità può solo leggere (GET/HEAD) le pagine dell'Amministrazione. */
 export const contabilitaPuo = (metodo: string, percorso: string) =>

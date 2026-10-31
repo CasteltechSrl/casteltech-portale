@@ -5,10 +5,10 @@
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
-import { caricaOreGiorno, righeOrdini, secondiPerSchedaProdotti, type RigaElenco } from '../ordini-servizio.js';
+import { pianificaProduzione, righeOrdini, type RigaElenco } from '../ordini-servizio.js';
 import {
-  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, consegneDaFare, cruscotto, differenzaGiorni, lavorativo, periodoGantt, pianifica, piuGiorni, statoOrdine,
-  type Barra, type DaPianificare, type VistaGantt,
+  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, cruscotto, differenzaGiorni, lavorativo, periodoGantt, piuGiorni, statoOrdine,
+  type Barra, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
 import { confermeDellOrdine, creaConferma } from '../conferme-ordine-servizio.js';
@@ -134,22 +134,8 @@ export function rotteOrdini() {
   // ── Gantt della produzione ──
   r.get('/gantt', async (req, res) => {
     const oggi = oggiRoma();
-    const oreGiorno = await caricaOreGiorno();
-    const tempi = await secondiPerSchedaProdotti();
-    const righe = (await righeOrdini()).filter(x => x.tipo === 'scheda' && x.residuoQuantita > 0);
-    const daFare: DaPianificare[] = [];
-    const perId = new Map<number, RigaElenco>();
-    let progressivo = 0;
-    for (const x of righe) {
-      for (const k of consegneDaFare(x, x.stato)) {
-        const id = ++progressivo;
-        perId.set(id, x);
-        daFare.push({ id, etichetta: `${x.cliente} · ${x.codice ?? x.descrizione ?? ''}`, quantita: k.quantita, consegna: k.data,
-          lavorazione: k.data === x.consegna ? x.lavorazione : null, secondiPerScheda: x.prodottoId ? tempi.get(x.prodottoId) : null });
-      }
-    }
+    const { oreGiorno, righe, daFare, perId, barre: tutte } = await pianificaProduzione(oggi);
     const p = periodoGantt(req.query.vista, oggi, req.query.da);
-    const tutte = pianifica(daFare, oggi, oreGiorno);
     const barre = barreNelPeriodo(tutte, p);
     const senzaData = righe.filter(x => !x.consegna).length;
     const carico = caricoGiornaliero(tutte);
