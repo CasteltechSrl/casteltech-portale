@@ -37,6 +37,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice
   (valuta estera → euro col cambio dell'ordine). Caricamento "Carica i prezzi da Fatture in Cloud" (anteprima → conferma, ricaricabile); prezzo scritto a mano
   = fonte 'manuale', il caricamento non lo tocca. Il prezzo va solo sul codice del cliente giusto (cliente non riconosciuto: solo se il codice è unico).
+  Scaglioni di quantità (Adriano 31/10/2026; migrazione 052 `prodotti_scaglioni`, `engine/listino.ts`, test in `tests/listino.test.ts`): facoltativi, casella
+  "1-5=10; 6-20=8; 21+=7" nel prodotto; senza scaglioni vale il prezzo unico. Fattura / NC / DDT: codice + quantità senza prezzo → prezzo dello scaglione
+  (`completaDaListino` in `salvaBozza`, e mentre si scrive con `public/documenti.js` → GET `/amministrazione/documenti/:id/prezzo`); prezzo scritto a mano resta.
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).

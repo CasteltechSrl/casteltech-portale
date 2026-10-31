@@ -9,6 +9,7 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
+import { completaDaListino } from './prezzi-servizio.js';
 import { INIZIO_DDT_DA_FATTURARE, controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
@@ -150,7 +151,9 @@ export async function scalaAcconti(id: number, accontoIds: number[]): Promise<nu
 
 /** Salva intestazione e righe di una bozza. */
 export async function salvaBozza(id: number, b: any): Promise<string[]> {
-  const { righe, errori } = righeDaModulo(b.righe ?? []);
+  // codice e quantità senza prezzo: prezzo dal listino del cliente (scaglioni di quantità, Adriano 31/10/2026)
+  const cliente = (await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM documenti WHERE id = $1`, [id]))?.cliente_id ?? null;
+  const { righe, errori } = righeDaModulo(await completaDaListino(cliente, b.righe ?? []));
   const data = String(b.data ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errori.push('Data non valida.');
   if (errori.length) return errori;
