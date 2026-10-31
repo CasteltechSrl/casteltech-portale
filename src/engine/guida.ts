@@ -575,7 +575,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   {
     id: 'backup', area: 'impostazioni', titolo: 'Copie di sicurezza (backup)',
     parole: 'backup copia sicurezza salvataggio dati scaricare ripristino',
-    testo: ['Dal lunedì al venerdì alle 20:30 il portale salva da solo una copia completa dei dati (tiene gli ultimi 30 giorni). In Impostazioni → Backup si può scaricare una copia in qualsiasi momento.'],
+    testo: ['Dal lunedì al venerdì alle 20:30 il portale salva da solo una copia completa dei dati (tiene gli ultimi 30 giorni). In Impostazioni → Backup si può scaricare una copia in qualsiasi momento.',
+      'Nella copia ci sono tutti i dati del portale: preventivi, commesse, anagrafiche, ordini, fatture, DDT e fatture dei fornitori, CRM, documenti dei clienti. Restano fuori solo gli accessi e la cache dei prezzi dei distributori.',
+      'Se le copie occupano più di 750 MB, il portale cancella da solo le più vecchie e ne tiene sempre almeno 5.'],
     pagine: [['/impostazioni/backup', 'Impostazioni → Backup']],
   },
   {

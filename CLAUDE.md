@@ -52,6 +52,10 @@ Il database si spegne dopo 5 minuti senza richieste e il piano ha 100 ore di cal
 niente controlli periodici che interrogano il database (il controllo di Render `/salute` non lo tocca),
 niente timer frequenti. Uso reale: lun–ven 8–20. Backup lun–ven alle 20:30 in `BACKUP_DIR` (disco Render)
 + pulsante in Impostazioni → Backup.
+Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in streaming, una sola transazione in lettura): mai tutto il
+database in memoria (30/10/2026 il backup costruito in un colpo solo faceva uscire il portale con stato 134).
+Nel backup TUTTE le tabelle (Adriano 31/10/2026) tranne `TABELLE_ESCLUSE` (sessioni, cache prezzi), in ordine di dipendenza
+(`ordinaPerDipendenze`); copie oltre 750 MB tolte dalle più vecchie (almeno 5). `tools/ripristina-backup.ts` segue l'ordine del file.
 
 ## Avvio in locale
 Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (crea il primo utente ufficio), `PORT`.
