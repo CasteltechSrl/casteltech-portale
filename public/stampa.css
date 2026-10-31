@@ -108,3 +108,32 @@ table.prezzi.totale-generale td { font-weight: 700; font-size: 11.5pt; backgroun
   .pagina.rilevazioni { width: auto; }
   thead { display: table-header-group; }
 }
+
+/* DDT (views/stampa-documento.ts) */
+.ddt-stampa { position: relative; }
+.ddt-stampa .griglia { margin-top: 2mm; }
+.griglia col.meta { width: 50%; }
+.mittente-stampa { display: flex; gap: 3mm; align-items: center; font-size: 8.5pt; line-height: 1.3; }
+.indirizzo-stampa { font-size: 9pt; line-height: 1.3; min-height: 12mm; }
+table.righe-ddt { margin-top: 2mm; }
+table.righe-ddt th { background: #e6e6e6; font-weight: 400; font-size: 7.5pt; border: 1px solid #000; padding: 1mm; text-align: left; }
+table.righe-ddt td { border: 1px solid #000; padding: 1mm 1.5mm; font-size: 9pt; vertical-align: top; }
+table.righe-ddt tr { break-inside: avoid; }
+table.righe-ddt .cod { width: 34mm; } table.righe-ddt .um { width: 12mm; text-align: center; } table.righe-ddt .q { width: 20mm; text-align: right; }
+.piede-ddt { break-inside: avoid; }
+.piede-ddt .firma { height: 12mm; }
+.timbro-stampa { position: absolute; top: 45%; left: 0; right: 0; text-align: center; font-size: 60pt; font-weight: 700; color: rgba(200, 0, 0, .15);
+  transform: rotate(-20deg); pointer-events: none; }
+
+/* Fattura / nota di credito: copia di cortesia (views/stampa-documento.ts) */
+.causale-stampa { margin: 2mm 0 0; font-size: 9pt; }
+table.righe-fattura td { font-size: 8.5pt; }
+table.righe-fattura .cod { width: 26mm; } table.righe-fattura .q { width: 21mm; }
+.totali-fattura { display: flex; gap: 6mm; justify-content: space-between; align-items: flex-start; margin-top: 3mm; break-inside: avoid; }
+.totali-fattura table { width: auto; }
+.riepilogo-iva { flex: 1; } .riepilogo-iva th { background: #e6e6e6; font-weight: 400; font-size: 7.5pt; border: 1px solid #000; padding: 1mm; text-align: left; }
+.riepilogo-iva td { border: 1px solid #000; padding: .8mm 1.5mm; font-size: 8.5pt; }
+.totali-fattura .q { text-align: right; }
+.somme { min-width: 62mm; } .somme td { padding: .8mm 1.5mm; font-size: 9pt; border-bottom: 1px solid #ccc; }
+.somme tr.totale td { font-weight: 700; font-size: 11pt; border-top: 2px solid #000; border-bottom: 0; }
+.nota-stampa { font-size: 8.5pt; margin: 2mm 0 0; }

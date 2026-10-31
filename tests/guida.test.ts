@@ -31,6 +31,12 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('Caricare un ordine'), ['carica-ordine']);
   assert.deepEqual(primi('nota di credito'), ['nota-credito']);
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
+  assert.deepEqual(primi('fattura scartata dallo SdI', 1), ['invio-sdi']);
+  assert.deepEqual(primi('inviare allo sdi', 1), ['invio-sdi']);
+  assert.ok(primi('fatture fornitori arrivate dallo sdi', 3).includes('incassi-pagamenti'));
+  assert.deepEqual(primi('fare un ddt', 1), ['ddt-emessi']);
+  assert.ok(primi('pdf della fattura per il cliente', 3).includes('nuova-fattura'));
+  assert.ok(primi('stampare la bolla', 3).includes('ddt-emessi'));
   assert.deepEqual(primi('stampare la scheda di produzione'), ['crea-commessa']);
   assert.deepEqual(primi('preventivo essenziale'), ['stampa-preventivo']);
   assert.ok(primi('sconto sul preventivo', 2).includes('stampa-preventivo'));

@@ -9,20 +9,57 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
+import { controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { righeOrdini } from './ordini-servizio.js';
 
-export const TIPI_EMISSIBILI = ['fattura', 'nota_credito'] as const;
+export const TIPI_EMISSIBILI = ['fattura', 'nota_credito', 'ddt'] as const;
 export type TipoEmissibile = typeof TIPI_EMISSIBILI[number];
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 
-/** Nuova bozza per un cliente in anagrafica, con condizione di pagamento del cliente. */
-export async function creaBozza(tipo: TipoEmissibile, clienteId: number, creatoDa: number | null, data = oggiRoma()): Promise<number> {
+/**
+ * Nuova bozza per un cliente in anagrafica, con condizione di pagamento del cliente.
+ * DDT: niente pagamento; trasporto proposto dall'ultimo DDT dello stesso cliente (causale, a cura, vettore, destinazione).
+ */
+export async function creaBozza(tipo: TipoEmissibile, clienteId: number, creatoDa: number | null, data = oggiRoma(),
+  extra: { ordine_id?: number; riferimento_esterno?: string | null } = {}): Promise<number> {
   const c = await q1(`SELECT id, condizione_pagamento FROM clienti WHERE id = $1`, [clienteId]);
   if (!c) throw new Error('Cliente non trovato');
-  const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, creato_da)
-    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [tipo, tipo === 'nota_credito' ? 'TD04' : 'TD01', Number(data.slice(0, 4)), data, clienteId, c.condizione_pagamento, creatoDa]);
+  const trasporto = tipo === 'ddt' ? await trasportoProposto(clienteId) : null;
+  const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, creato_da, dati_trasporto, ordine_id, riferimento_esterno)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    [tipo, tipo === 'ddt' ? null : tipo === 'nota_credito' ? 'TD04' : 'TD01', Number(data.slice(0, 4)), data, clienteId,
+     tipo === 'ddt' ? null : c.condizione_pagamento, creatoDa, trasporto && JSON.stringify(trasporto), extra.ordine_id ?? null, extra.riferimento_esterno ?? null]);
   return r!.id;
+}
+
+/** Trasporto dell'ultimo DDT emesso al cliente (anche dallo storico di FIC); il primo DDT parte da RESO LAVORATO a cura del mittente. */
+async function trasportoProposto(clienteId: number): Promise<DatiTrasporto> {
+  const u = await q1<{ t: any }>(`SELECT dati_trasporto AS t FROM documenti WHERE tipo = 'ddt' AND cliente_id = $1 AND numero IS NOT NULL
+    AND stato <> 'annullato' AND dati_trasporto IS NOT NULL ORDER BY data DESC, numero DESC LIMIT 1`, [clienteId]);
+  const prima = u?.t ?? {};
+  // lo storico di FIC scrive il corriere (o MITTENTE / DESTINATARIO) in "trasportatore"
+  return trasportoDaModulo({ causale_trasporto: prima.causale || 'RESO LAVORATO', a_cura: prima.a_cura || prima.trasportatore || 'MITTENTE',
+    trasportatore: prima.a_cura ? prima.trasportatore : '', porto: prima.porto, aspetto: prima.aspetto, destinazione: prima.destinazione });
+}
+
+/**
+ * DDT (bozza) dalle righe ancora da spedire di un ordine: quantità residua, prezzo dell'ordine (serve alla fattura, non si stampa),
+ * riga dell'ordine collegata (l'evasione la conta senza indovinare dal codice).
+ */
+export async function creaDdtDaOrdine(ordineId: number, creatoDa: number | null): Promise<number> {
+  const o = await q1(`SELECT id, cliente_id, rif_cliente, data_ordine_cliente FROM ordini WHERE id = $1`, [ordineId]);
+  if (!o) throw new Error('Ordine non trovato.');
+  if (!o.cliente_id) throw new Error('Il cliente dell\'ordine non è in anagrafica: collegalo prima di fare il DDT.');
+  const righe = righeDdtDaOrdine(await righeOrdini(ordineId));
+  if (!righe.length) throw new Error('L\'ordine non ha schede ancora da spedire.');
+  const rif = o.rif_cliente ? `VS. ORDINE ${o.rif_cliente}${o.data_ordine_cliente ? ` DEL ${String(o.data_ordine_cliente).split('-').reverse().join('/')}` : ''}` : null;
+  const id = await creaBozza('ddt', o.cliente_id, creatoDa, oggiRoma(), { ordine_id: o.id, riferimento_esterno: rif });
+  await q(`INSERT INTO documenti_righe (documento_id, posizione, prodotto_id, codice, descrizione, quantita, um, prezzo, riga_ordine_id)
+    SELECT $1, r.posizione, (SELECT id FROM prodotti WHERE id = r.prodotto_id), r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.riga_ordine_id
+    FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, prodotto_id int, codice text, descrizione text, quantita numeric, um text, prezzo numeric, riga_ordine_id int)`,
+    [id, JSON.stringify(righe)]);
+  return id;
 }
 
 /** Nota di credito (bozza) che storna una fattura emessa: stesse righe, collegata alla fattura. */
@@ -50,18 +87,22 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errori.push('Data non valida.');
   if (errori.length) return errori;
   await transazione(async c => {
-    const d = (await c.query(`SELECT stato FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    const d = (await c.query(`SELECT stato, tipo FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
-    await c.query(`UPDATE documenti SET data = $2, anno = $3, condizione_pagamento = $4, causale = $5, riferimento_esterno = $6, note = $7, aggiornato_il = now()
+    if (d.tipo === 'ddt') await c.query(`UPDATE documenti SET dati_trasporto = $2 WHERE id = $1`, [id, JSON.stringify(trasportoDaModulo(b))]);
+    // un documento scartato dallo SdI e riaperto tiene numero e data (si rimanda con gli stessi)
+    await c.query(`UPDATE documenti SET data = CASE WHEN numero IS NULL THEN $2::date ELSE data END,
+      anno = CASE WHEN numero IS NULL THEN $3 ELSE anno END, condizione_pagamento = $4, causale = $5, riferimento_esterno = $6, note = $7, aggiornato_il = now()
       WHERE id = $1`, [id, data, Number(data.slice(0, 4)), String(b.condizione_pagamento ?? '') || null, String(b.causale ?? '').trim() || null,
       String(b.riferimento_esterno ?? '').trim() || null, String(b.note ?? '').trim() || null]);
     await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
     if (righe.length) await c.query(
-      `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id)
-       SELECT $1, r.posizione, r.solo_descrizione, r.prodotto_id, r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.sconto,
-         (SELECT codice FROM aliquote_iva WHERE codice = r.aliquota_iva), (SELECT id FROM documenti WHERE id = r.ddt_id AND tipo = 'ddt')
+      `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id, riga_ordine_id)
+       SELECT $1, r.posizione, r.solo_descrizione, (SELECT id FROM prodotti WHERE id = r.prodotto_id), r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.sconto,
+         (SELECT codice FROM aliquote_iva WHERE codice = r.aliquota_iva), (SELECT id FROM documenti WHERE id = r.ddt_id AND tipo = 'ddt'),
+         (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id)
        FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, solo_descrizione boolean, prodotto_id int, codice text, descrizione text, quantita numeric,
-         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int)`, [id, JSON.stringify(righe)]);
+         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int)`, [id, JSON.stringify(righe)]);
   });
   return [];
 }
@@ -169,10 +210,12 @@ export async function anteprimaDocumento(id: number): Promise<{ esito: EsitoXml;
 export async function emettiDocumento(id: number): Promise<{ numero: string } | { errori: string[] }> {
   try {
     return await transazione(async c => {
-      const d = (await c.query(`SELECT tipo, sezionale, data, stato FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      const d = (await c.query(`SELECT tipo, sezionale, data, stato, numero FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
       if (!d) throw new ErroreEmissione(['Documento non trovato.']);
       if (d.stato !== 'bozza') throw new ErroreEmissione(['Il documento è già emesso.']);
-      const numero = await assegnaNumero(c, d.tipo, d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
+      if (d.tipo === 'ddt') return emettiDdt(c, id);
+      // scartato dallo SdI e corretto: stesso numero (non se ne prende uno nuovo)
+      const numero: number = d.numero ?? await assegnaNumero(c, d.tipo, d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
       const x = await preparaXml(c, id, numero);
       const esito = x.esito;
       const errori = [...esito.errori, ...x.erroriExtra];
@@ -182,6 +225,7 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
         xml = $8, dichiarazione_intento_id = $9, aggiornato_il = now() WHERE id = $1`,
         [id, numero, JSON.stringify(intestatario), esito.totali.imponibile, esito.totali.imposta, esito.totali.bollo, esito.totali.totale, esito.xml,
          x.intentoId]);
+      await c.query(`DELETE FROM documenti_scadenze WHERE documento_id = $1`, [id]);
       for (const s of x.scadenze)
         await c.query(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4)`, [id, s.data, s.importo, s.modalita]);
       await c.query(`UPDATE documenti SET fattura_id = $1 WHERE id IN (SELECT ddt_id FROM documenti_righe WHERE documento_id = $1 AND ddt_id IS NOT NULL)
@@ -193,10 +237,59 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
     throw e;
   }
 }
+
+/** Controlli del DDT (bozza o emesso) con i dati del database. */
+export async function controllaDdt(id: number, c: pg.PoolClient | null = null) {
+  const query = (sql: string, p: unknown[]) => (c ? c.query(sql, p).then(r => r.rows) : q(sql, p));
+  const [d] = await query(`SELECT cliente_id, data, dati_trasporto FROM documenti WHERE id = $1`, [id]);
+  const righe = await query(`SELECT solo_descrizione, descrizione, quantita::float AS quantita FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
+  const dataTesto = typeof d.data === 'string' ? d.data : new Date(d.data).toLocaleDateString('sv-SE');
+  return controlliDdt({ cliente_id: d.cliente_id, data: dataTesto, trasporto: d.dati_trasporto ?? {} }, righe);
+}
+
+/** DDT: numero (stessa transazione), fotografia del destinatario; niente XML né scadenze. */
+async function emettiDdt(c: pg.PoolClient, id: number): Promise<{ numero: string }> {
+  const { errori } = await controllaDdt(id, c);
+  if (errori.length) throw new ErroreEmissione(errori);
+  const d = (await c.query(`SELECT * FROM documenti WHERE id = $1`, [id])).rows[0];
+  const numero: number = d.numero ?? await assegnaNumero(c, 'ddt', d.sezionale, d.data).catch((e: Error) => { throw new ErroreEmissione([e.message]); });
+  const cliente = (await c.query(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id])).rows[0] ?? {};
+  const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione']
+    .map(k => [k, cliente[k] ?? null]).filter(([, v]) => v));
+  const imponibile = Number((await c.query(`SELECT coalesce(sum(round(quantita * prezzo * (1 - sconto / 100), 2)), 0) AS v FROM documenti_righe
+    WHERE documento_id = $1 AND NOT solo_descrizione`, [id])).rows[0].v);
+  await c.query(`UPDATE documenti SET numero = $2, stato = 'emesso', intestatario = $3, imponibile = $4, totale = $4, aggiornato_il = now() WHERE id = $1`,
+    [id, numero, JSON.stringify(intestatario), imponibile]);
+  return { numero: numeroCompleto(numero, d.sezionale) };
+}
+
+/**
+ * DDT emesso per errore (merce non partita): si annulla, il numero resta usato e il DDT resta nell'elenco come annullato
+ * (così la numerazione non ha buchi). Non si annulla un DDT già fatturato o messo in una fattura in preparazione.
+ */
+export async function annullaDdt(id: number): Promise<string | null> {
+  const d = await q1(`SELECT stato, fattura_id, (SELECT count(*)::int FROM documenti_righe r JOIN documenti x ON x.id = r.documento_id
+      WHERE r.ddt_id = $1 AND x.stato <> 'annullato') AS in_fattura FROM documenti WHERE id = $1 AND tipo = 'ddt' AND origine = 'portale'`, [id]);
+  if (!d) return 'Si annullano solo i DDT emessi dal portale.';
+  if (d.stato !== 'emesso') return 'Si annullano solo i DDT emessi (una bozza si elimina).';
+  if (d.fattura_id || d.in_fattura) return 'Il DDT è già in una fattura: non si annulla.';
+  await q(`UPDATE documenti SET stato = 'annullato', aggiornato_il = now() WHERE id = $1`, [id]);
+  return null;
+}
+
 class ErroreEmissione extends Error { constructor(public errori: string[]) { super(errori.join(' ')); } }
 
-/** Elimina una bozza (i documenti emessi non si eliminano: si storna con una nota di credito). */
+/** Elimina una bozza (i documenti emessi non si eliminano: si storna con una nota di credito; uno scartato riaperto ha già il numero). */
 export async function eliminaBozza(id: number): Promise<boolean> {
-  const r = await q(`DELETE FROM documenti WHERE id = $1 AND stato = 'bozza' RETURNING id`, [id]);
+  const r = await q(`DELETE FROM documenti WHERE id = $1 AND stato = 'bozza' AND numero IS NULL RETURNING id`, [id]);
+  return r.length > 0;
+}
+
+/**
+ * Documento scartato dallo SdI: per lo SdI non è mai stato emesso. Torna modificabile (bozza) con lo stesso numero e la stessa data,
+ * si corregge (righe, o i dati del cliente in anagrafica) e si riemette: nuovo XML, poi "Rimanda allo SdI".
+ */
+export async function riapriScartato(id: number): Promise<boolean> {
+  const r = await q(`UPDATE documenti SET stato = 'bozza', aggiornato_il = now() WHERE id = $1 AND stato = 'scartato' RETURNING id`, [id]);
   return r.length > 0;
 }

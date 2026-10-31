@@ -1,7 +1,8 @@
 /**
  * Amministrazione (menu in alto): documenti emessi (fatture, note di credito, autofatture, DDT; anche lo storico di FIC)
  * e documenti ricevuti. Fatture e note di credito si scrivono qui: bozza → Emetti (numero, scadenze, XML FatturaPA).
- * L'invio allo SdI (Invoicetronic) arriva nel passo successivo: per ora l'XML si scarica.
+ * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
+ * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
@@ -12,10 +13,15 @@ import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministraz
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
+import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
+import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, aggiungiDdt, anteprimaDocumento, creaBozza, creaNotaCredito, ddtDaFatturare, eliminaBozza, emettiDocumento, salvaBozza,
-  type TipoEmissibile,
+  TIPI_EMISSIBILI, aggiungiDdt, annullaDdt, anteprimaDocumento, controllaDdt, creaBozza, creaDdtDaOrdine, creaNotaCredito, ddtDaFatturare, eliminaBozza,
+  emettiDocumento, riapriScartato, salvaBozza, type TipoEmissibile,
 } from '../documenti-servizio.js';
+import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
+import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { calcolaTotali } from '../../engine/amministrazione.js';
 
 const NOMI: Record<string, { uno: string; tanti: string }> = {
   fattura: { uno: 'Fattura', tanti: 'Fatture' }, nota_credito: { uno: 'Nota di credito', tanti: 'Note di credito' },
@@ -24,9 +30,44 @@ const NOMI: Record<string, { uno: string; tanti: string }> = {
 const STATI: Record<string, string> = { bozza: 'Bozza', emesso: 'Emesso', inviato: 'Inviato allo SdI', consegnato: 'Consegnato',
   non_consegnato: 'Non consegnato', scartato: 'Scartato', annullato: 'Annullato' };
 const RIGHE_VUOTE = 3;
+const nuovoNome = (tipo: string) => (tipo === 'ddt' ? 'Nuovo DDT' : `Nuova ${NOMI[tipo].uno.toLowerCase()}`);
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 // tabelle delle rate: documenti emessi (incassi) e fatture dei fornitori (pagamenti)
 const SCADENZE = { documenti: 'documenti_scadenze', ricevuti: 'documenti_ricevuti_scadenze' } as const;
+
+/**
+ * Riquadro SdI del documento: invii fatti (reali e di prova) con esito, e i pulsanti possibili con la chiave attuale.
+ * Chiave reale: "Invia allo SdI" solo sui documenti emessi (o scartati). Chiave di prova: "Prova l'invio" anche dalle bozze.
+ */
+async function riquadroSdi(d: any, senzaErrori = true): Promise<Raw> {
+  if (!TIPI_SDI.includes(d.tipo) || d.origine !== 'portale') return html``;
+  const ambiente = ambienteAttuale();
+  const invii = await q(`SELECT i.*, u.nome AS utente FROM sdi_invii i LEFT JOIN utenti u ON u.id = i.creato_da WHERE documento_id = $1 ORDER BY i.id DESC`, [d.id]);
+  const aperti = invii.some(i => i.ambiente === ambiente && i.invoicetronic_id
+    && !['Consegnato', 'Scartato', 'DecorrenzaTermini', 'AccettatoDalDestinatario', 'RifiutatoDalDestinatario'].includes(i.stato));
+  const inCorsoReale = invii.some(i => i.ambiente === 'reale' && !['Scartato', 'errore'].includes(i.stato));
+  const puoInviare = ambiente === 'reale' ? ['emesso', 'scartato'].includes(d.stato) && !inCorsoReale : ambiente === 'prova' && senzaErrori;
+  if (!invii.length && !puoInviare) return ambiente ? html`` : html`<p class="nota">Invio allo SdI: manca la chiave di Invoicetronic su Render.</p>`;
+  return html`<section class="blocco"><h2>SdI</h2>
+    ${ambiente === 'prova' ? html`<p class="nota">Chiave di <strong>prova</strong>: gli invii restano in Invoicetronic e non arrivano allo SdI (esiti simulati, ogni ora alla mezza).</p>` : ''}
+    ${invii.length ? html`<div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th>Inviato</th><th></th><th>File</th><th>Esito</th><th>Dettagli</th></tr></thead>
+      <tbody>${invii.map(i => html`<tr class="${i.stato === 'Scartato' || i.stato === 'errore' ? 'scaduta' : ''}">
+        <td>${new Date(i.inviato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}${i.utente ? html`<br><span class="nota">${i.utente}</span>` : ''}</td>
+        <td>${i.ambiente === 'prova' ? html`<span class="etichetta">prova</span>` : ''}</td>
+        <td>${i.nome_file ?? ''}${i.identificativo ? html`<br><span class="nota">SdI ${i.identificativo}</span>` : ''}</td>
+        <td>${NOMI_STATI_SDI[i.stato] ?? i.stato}</td><td>${i.messaggio ?? ''}</td></tr>`)}</tbody></table></div>` : ''}
+    <div class="azioni-secondarie">
+      ${puoInviare ? html`<form method="post" action="/amministrazione/documenti/${d.id}/invia" class="inline"
+        data-conferma="${ambiente === 'reale' ? "Inviare il documento allo SdI? Diventa definitivo per il cliente e per l'Agenzia delle Entrate."
+          : 'Mandare il documento a Invoicetronic in PROVA? Non arriva allo SdI.'}">
+        <button class="${ambiente === 'reale' ? 'primario' : ''}">${ambiente === 'reale' ? (d.stato === 'scartato' ? 'Rimanda allo SdI' : 'Invia allo SdI') : 'Prova l\'invio'}</button></form>` : ''}
+      ${aperti ? html`<form method="post" action="/amministrazione/documenti/${d.id}/aggiorna-sdi" class="inline"><button>Aggiorna esito</button></form>` : ''}
+      ${d.stato === 'scartato' ? html`<form method="post" action="/amministrazione/documenti/${d.id}/correggi" class="inline"
+        data-conferma="Riaprire il documento per correggerlo? Tiene lo stesso numero e la stessa data; poi Emetti e Rimanda allo SdI.">
+        <button>Correggi</button></form>` : ''}
+    </div></section>`;
+}
 
 /** Conti già usati per incassi e pagamenti (Bper, Carta di Credito…), da proporre quando si segna una rata. */
 async function contiUsati(): Promise<string[]> {
@@ -48,6 +89,72 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, conti: 
         <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline">
           <input type="date" name="pagata_il" value="${oggiRoma()}" required> <input name="conto" list="conti" placeholder="Conto" value="${conti[0] ?? ''}" class="corto">
           <button>Segna ${parola}</button></form>`}</li>`)}</ul>`;
+}
+
+const ETICHETTE_TRASPORTO: Record<string, string> = { causale: 'Causale', a_cura: 'Trasporto a cura del', trasportatore: 'Vettore', porto: 'Porto',
+  colli: 'Colli', peso: 'Peso', aspetto: 'Aspetto dei beni', destinazione: 'Destinazione', inizio: 'Inizio trasporto' };
+
+/** Bozza di DDT: trasporto, righe (il prezzo serve solo alla fattura, non si stampa), controlli, Emetti. */
+async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
+  const t = d.dati_trasporto ?? {};
+  const { errori, avvisi } = await controllaDdt(d.id);
+  const cliente = d.cliente_id ? await q1(`SELECT indirizzo, cap, comune, provincia, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
+  const sede = cliente ? indirizzoSu(cliente) : '';
+  const scelta = (nome: string, valori: readonly string[], attuale: string | undefined, vuota = true) => html`<select name="${nome}">
+    ${vuota ? html`<option value=""></option>` : ''}${[...new Set([...valori, ...(attuale ? [attuale] : [])])].map(v =>
+      html`<option ${v === attuale ? raw('selected') : ''}>${v}</option>`)}</select>`;
+  const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
+  const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
+    <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
+      <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"><input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+    <td><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo">${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
+    <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
+    <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo maiuscolo"></td>
+    <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
+    <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo"></td>
+  </tr>`;
+  return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento">
+      <div class="riga-campi">
+        <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
+        <label>Causale del trasporto <input name="causale_trasporto" value="${t.causale ?? ''}" list="causali-ddt" class="maiuscolo" required></label>
+        <datalist id="causali-ddt">${CAUSALI_DDT.map(c => html`<option value="${c}">`)}</datalist>
+        <label>Rif. ordine del cliente <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}" class="maiuscolo"></label>
+      </div>
+      <div class="riga-campi">
+        <label>Trasporto a cura del ${scelta('a_cura', TRASPORTO_A_CURA, t.a_cura)}</label>
+        <label>Vettore (corriere) <input name="trasportatore" value="${t.trasportatore ?? ''}" class="maiuscolo" placeholder="es. BRT"></label>
+        <label>Porto ${scelta('porto', PORTI, t.porto)}</label>
+        <label class="stretto">Colli <input name="colli" value="${t.colli ?? ''}" class="corto maiuscolo" placeholder="es. 1"></label>
+        <label class="stretto">Peso <input name="peso" value="${t.peso ?? ''}" class="corto maiuscolo" placeholder="es. 2 KG"></label>
+      </div>
+      <div class="riga-campi">
+        <label>Aspetto dei beni <input name="aspetto" value="${t.aspetto ?? ''}" class="maiuscolo" placeholder="es. SCATOLA"></label>
+        <label>Inizio trasporto <input type="datetime-local" name="inizio" value="${t.inizio ?? ''}"></label>
+      </div>
+      <label>Luogo di destinazione (vuoto = sede del cliente${sede ? `: ${sede.replace(/\n/g, ', ')}` : ''})
+        <textarea name="destinazione" rows="3" class="maiuscolo">${t.destinazione ?? ''}</textarea></label>
+      <label>Note interne (non vanno sul DDT) <input name="note" value="${d.note ?? ''}"></label>
+      <div class="tabella-scorre"><table class="editor" id="righe-documento">
+        <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th></tr></thead>
+        <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
+      </table></div>
+      <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
+        <span class="nota">Il prezzo non si stampa sul DDT: passa nella fattura quando si fattura il DDT.</span>
+        <button class="primario">Salva</button></div>
+    </form>
+    <div class="blocco">
+      ${errori.length ? html`<p><strong>Da sistemare prima di emettere:</strong></p><ul class="controlli errori">${errori.map(e => html`<li>${e}</li>`)}</ul>`
+        : html`<p class="nota">Controlli superati: si può emettere.</p>`}
+      ${avvisi.length ? html`<ul class="controlli">${avvisi.map(e => html`<li>${e}</li>`)}</ul>` : ''}
+      <div class="azioni-secondarie">
+        <form method="post" action="/amministrazione/documenti/${d.id}/emetti" class="inline"
+          data-conferma="Emettere il DDT? Prende il numero successivo e non si potrà più modificare (se la merce non parte si annulla).">
+          <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
+        <a class="bottone" href="/amministrazione/documenti/${d.id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>
+        <form method="post" action="/amministrazione/documenti/${d.id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
+          <button class="pericolo">Elimina bozza</button></form>
+      </div>
+    </div>`;
 }
 
 export function rotteAmministrazione() {
@@ -79,7 +186,8 @@ export function rotteAmministrazione() {
     res.send(pagina(req, NOMI[tipo]?.tanti ?? 'Documenti', html`
       <div class="intestazione-pagina"><h1>Amministrazione</h1>
         <div class="azioni">
-          <a href="/amministrazione/documenti/nuovo?tipo=fattura" class="bottone primario">+ Nuova fattura</a>
+          ${tipo === 'ddt' ? html`<a href="/amministrazione/documenti/nuovo?tipo=ddt" class="bottone primario">+ Nuovo DDT</a>`
+            : html`<a href="/amministrazione/documenti/nuovo?tipo=fattura" class="bottone primario">+ Nuova fattura</a>`}
         </div></div>
       ${menuAmministrazione('documenti')}
       <nav class="tasti-sezione">${Object.entries(NOMI).map(([k, v]) =>
@@ -100,16 +208,17 @@ export function rotteAmministrazione() {
           <td>${data(d.data)}</td><td>${d.intestatario ?? ''}</td>
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
-            ${tipo === 'ddt' ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
+            ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
         </tr>`)}</tbody></table></div>` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req), tipo === 'autofattura' ? 'acquisizioni.js' : undefined));
   });
 
   r.get('/documenti/nuovo', async (req, res) => {
     const tipo = (TIPI_EMISSIBILI as readonly string[]).includes(String(req.query.tipo)) ? String(req.query.tipo) : 'fattura';
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
-    res.send(pagina(req, `Nuova ${NOMI[tipo].uno.toLowerCase()}`, html`
+    res.send(pagina(req, nuovoNome(tipo), html`
       <p><a href="/amministrazione/documenti?tipo=${tipo}">← ${NOMI[tipo].tanti}</a></p>
-      <h1>Nuova ${NOMI[tipo].uno.toLowerCase()}</h1>
+      <h1>${nuovoNome(tipo)}</h1>
+      ${tipo === 'ddt' ? html`<p class="nota">Per spedire le schede di un ordine usa "Crea DDT" dalla pagina dell'ordine: righe, quantità da spedire e riferimento si compilano da soli.</p>` : ''}
       ${tipo === 'nota_credito' ? html`<p class="nota">Per stornare una fattura usa "Crea nota di credito" dalla fattura: righe e collegamento si compilano da soli.</p>` : ''}
       <form method="post" action="/amministrazione/documenti/nuovo" class="blocco stretto-form">
         <input type="hidden" name="tipo" value="${tipo}">
@@ -124,6 +233,58 @@ export function rotteAmministrazione() {
     if (!TIPI_EMISSIBILI.includes(tipo) || !Number(req.body.cliente_id)) return res.redirect('/amministrazione/documenti/nuovo');
     const id = await creaBozza(tipo, Number(req.body.cliente_id), req.session.utente?.id ?? null);
     res.redirect(`/amministrazione/documenti/${id}`);
+  });
+
+  // DDT dalle righe ancora da spedire di un ordine (pulsante "Crea DDT" nella pagina dell'ordine)
+  r.post('/documenti/ddt-da-ordine/:ordine', async (req, res) => {
+    try {
+      const id = await creaDdtDaOrdine(Number(req.params.ordine), req.session.utente?.id ?? null);
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('DDT preparato con le schede ancora da spedire: controlla quantità e trasporto, poi Emetti.')}`);
+    } catch (e: any) {
+      res.redirect(`/ordini/${Number(req.params.ordine)}?msg=${encodeURIComponent(e.message)}`);
+    }
+  });
+
+  r.get('/documenti/:id/stampa', async (req, res) => {
+    const id = Number(req.params.id);
+    const d = await q1(`SELECT d.*, c.ragione_sociale AS c_ragione_sociale, c.partita_iva AS c_partita_iva, c.indirizzo AS c_indirizzo, c.cap AS c_cap,
+        c.comune AS c_comune, c.provincia AS c_provincia, c.nazione AS c_nazione
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id WHERE d.id = $1 AND d.tipo IN ('ddt', 'fattura', 'nota_credito')`, [id]);
+    if (!d) return res.status(404).send('Stampa disponibile per DDT, fatture e note di credito');
+    const righe = await q(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
+    const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
+    if (d.tipo !== 'ddt') {
+      // copia di cortesia: cliente come all'emissione (fotografia), in bozza i dati attuali; totali dalle righe con l'IVA predefinita del cliente
+      const attuale = d.cliente_id ? await q1(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
+      const cliente = d.intestatario && d.numero != null ? d.intestatario : attuale ?? {};
+      const conIva = righe.map(r => ({ ...r, aliquota_iva: r.solo_descrizione ? null : r.aliquota_iva || attuale?.aliquota_iva || 'IVA22' }));
+      const totali = calcolaTotali(conIva, await caricaAliquote());
+      const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
+      const pagamento = d.condizione_pagamento ? await q1(`SELECT * FROM condizioni_pagamento WHERE codice = $1`, [d.condizione_pagamento]) : null;
+      const intento = totali.riepilogo.some(g => g.natura === 'N3.5') ? await q1(d.dichiarazione_intento_id
+        ? `SELECT * FROM dichiarazioni_intento WHERE id = $1` : `SELECT * FROM dichiarazioni_intento WHERE cliente_id = $1 ORDER BY data_protocollo DESC LIMIT 1`,
+        [d.dichiarazione_intento_id ?? d.cliente_id]) : null;
+      return res.send(String(stampaFattura(d, conIva, azienda, cliente, totali, scadenze, intento, pagamento)));
+    }
+    // destinatario: la fotografia fatta all'emissione; in bozza i dati attuali dell'anagrafica
+    const dest = d.intestatario && d.numero != null ? d.intestatario : Object.fromEntries(Object.entries(d).filter(([k]) => k.startsWith('c_')).map(([k, v]) => [k.slice(2), v]));
+    res.send(String(stampaDdt(d, righe, azienda, dest)));
+  });
+
+  r.post('/documenti/:id/annulla', async (req, res) => {
+    const id = Number(req.params.id);
+    const errore = await annullaDdt(id);
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(errore ?? 'DDT annullato: il numero resta usato e il DDT resta nell\'elenco come annullato.')}`);
+  });
+
+  // fattura (bozza) con le righe di questo DDT: poi si possono aggiungere altri DDT dello stesso cliente
+  r.post('/documenti/:id/fattura', async (req, res) => {
+    const id = Number(req.params.id);
+    const d = await q1(`SELECT cliente_id, stato, fattura_id FROM documenti WHERE id = $1 AND tipo = 'ddt'`, [id]);
+    if (!d?.cliente_id || d.fattura_id || !['emesso'].includes(d.stato)) return res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('Si fattura solo un DDT emesso e non ancora fatturato.')}`);
+    const fattura = await creaBozza('fattura', d.cliente_id, req.session.utente?.id ?? null);
+    await aggiungiDdt(fattura, [id]);
+    res.redirect(`/amministrazione/documenti/${fattura}?msg=${encodeURIComponent('Fattura preparata con le righe del DDT: controlla prezzi e pagamento (in fondo puoi aggiungere altri DDT del cliente), poi Emetti.')}`);
   });
 
   r.get('/documenti/:id', async (req, res) => {
@@ -145,15 +306,16 @@ export function rotteAmministrazione() {
       <p><strong>${intestatario}</strong> · ${data(d.data)}
         ${d.origine_numero ? html` · storna la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>` : ''}
         ${d.ricevuto_id ? html` · ${TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi} sulla <a href="/amministrazione/ricevuti/${d.ricevuto_id}">fattura del fornitore n. ${d.ricevuto_numero} del ${data(d.ricevuto_data)}</a>` : ''}
-        ${d.tipo === 'ddt' ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>` : ' · da fatturare') : ''}</p>`;
+        ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>` : ' · da fatturare') : ''}</p>`;
 
     if (d.stato !== 'bozza') {
       const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
       const trasporto = d.dati_trasporto ?? {};
       return res.send(pagina(req, titolo, html`${testa}
         ${d.causale ? html`<p class="nota">${d.causale}</p>` : ''}
-        ${d.tipo === 'ddt' && Object.keys(trasporto).length ? html`<p class="nota">${['causale', 'colli', 'peso', 'trasportatore'].filter(k => trasporto[k])
-          .map(k => `${k}: ${trasporto[k]}`).join(' · ')}</p>` : ''}
+        ${d.tipo === 'ddt' && Object.keys(trasporto).length ? html`<p class="nota">${Object.entries(ETICHETTE_TRASPORTO).filter(([k]) => trasporto[k])
+          .map(([k, v]) => `${v}: ${k === 'inizio' ? `${data(trasporto[k].slice(0, 10))} ore ${trasporto[k].slice(11, 16)}` : trasporto[k]}`).join(' · ')}</p>` : ''}
+        ${d.tipo === 'ddt' && d.riferimento_esterno ? html`<p class="nota">${d.riferimento_esterno}</p>` : ''}
         <div class="tabella-scorre"><table class="elenco">
           <thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Q.tà</th><th>U.m.</th><th class="num">Prezzo</th><th class="num">Sconto</th><th class="num">Importo</th><th>IVA</th></tr></thead>
           <tbody>${righe.map(x => x.solo_descrizione ? html`<tr><td></td><td colspan="7"><em>${x.descrizione}</em></td></tr>` : html`<tr>
@@ -162,13 +324,24 @@ export function rotteAmministrazione() {
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
         </table></div>
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
+        ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
+        ${await riquadroSdi(d)}
         ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
+          ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
+            title="${d.tipo === 'ddt' ? '' : 'Copia di cortesia per il cliente (il documento fiscale è l\'XML)'}">${d.tipo === 'ddt' ? 'Stampa / PDF' : 'PDF di cortesia'}</a>` : ''}
+          ${d.tipo === 'ddt' && d.origine === 'portale' && d.stato === 'emesso' && !d.fattura_id ? html`
+            <form method="post" action="/amministrazione/documenti/${id}/fattura" class="inline"><button>Fattura questo DDT</button></form>
+            <form method="post" action="/amministrazione/documenti/${id}/annulla" class="inline"
+              data-conferma="Annullare il DDT n. ${d.numero}? Usalo solo se la merce non è partita: il numero resta usato e il DDT resta nell'elenco come annullato.">
+              <button class="pericolo">Annulla DDT</button></form>` : ''}
           ${d.tipo === 'fattura' && d.cliente_id ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-credito" class="inline"
             data-conferma="Creare una nota di credito (bozza) che storna questa fattura?"><button>Crea nota di credito</button></form>` : ''}
         </div>`, msg(req)));
     }
+
+    if (d.tipo === 'ddt') return res.send(pagina(req, titolo, html`${testa}${await moduloDdt(d, righe)}`, msg(req), 'documenti.js'));
 
     // bozza: modulo modificabile
     const [aliquote, condizioni, ddt, { esito, erroriExtra }] = await Promise.all([
@@ -178,7 +351,7 @@ export function rotteAmministrazione() {
     const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
     const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
       <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo"><input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
-        <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"></td>
+        <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}"><input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
       <td><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
       <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo"></td>
@@ -191,7 +364,7 @@ export function rotteAmministrazione() {
     res.send(pagina(req, titolo, html`${testa}
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
         <div class="riga-campi">
-          <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
+          <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
           ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`
           : html`<label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(c =>
             html`<option value="${c.codice}" ${d.condizione_pagamento === c.codice ? raw('selected') : ''}>${c.descrizione}</option>`)}</select></label>
@@ -222,11 +395,13 @@ export function rotteAmministrazione() {
           <form method="post" action="/amministrazione/documenti/${id}/emetti" class="inline"
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
+          ${d.tipo !== 'autofattura' ? html`<a class="bottone" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>` : ''}
           ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
-          <form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
-            <button class="pericolo">Elimina bozza</button></form>
+          ${d.numero == null ? html`<form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
+            <button class="pericolo">Elimina bozza</button></form>` : ''}
         </div>
-      </div>`, msg(req), 'documenti.js'));
+      </div>
+      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), 'documenti.js'));
   });
 
   r.post('/documenti/:id', async (req, res) => {
@@ -246,12 +421,46 @@ export function rotteAmministrazione() {
     const id = Number(req.params.id);
     const esito = await emettiDocumento(id);
     res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('errori' in esito
-      ? `Non emesso: ${esito.errori.join(' ')}` : `Emesso con il n. ${esito.numero}. Scarica l'XML (l'invio allo SdI dal portale arriva a breve).`)}`);
+      ? `Non emesso: ${esito.errori.join(' ')}` : (await q1(`SELECT tipo FROM documenti WHERE id = $1`, [id]))?.tipo === 'ddt'
+        ? `DDT emesso con il n. ${esito.numero}. Stampalo con "Stampa / PDF" (due copie: una viaggia con la merce).`
+        : `Emesso con il n. ${esito.numero}. Ora mandalo allo SdI con "Invia allo SdI".`)}`);
+  });
+
+  r.post('/documenti/:id/invia', async (req, res) => {
+    const id = Number(req.params.id);
+    let testo: string;
+    try { testo = (await inviaDocumento(id, req.session.utente?.id ?? null)).messaggio; } catch (e: any) { testo = `Non inviato: ${e.message}`; }
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
+  });
+
+  r.post('/ricevuti/scarica', async (req, res) => {
+    let testo: string;
+    try {
+      const esiti = await scaricaRicevute();
+      testo = esiti.length ? `${esiti.length} file dallo SdI: ${esiti.join(' · ')}` : 'Nessuna fattura nuova dallo SdI.';
+    } catch (e: any) { testo = e.message; }
+    res.redirect(`/amministrazione/ricevuti?msg=${encodeURIComponent(testo.slice(0, 1500))}`);
+  });
+
+  r.post('/documenti/:id/correggi', async (req, res) => {
+    const id = Number(req.params.id);
+    const ok = await riapriScartato(id);
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(ok
+      ? 'Documento riaperto con lo stesso numero e la stessa data: correggi (anche i dati del cliente in anagrafica), poi Emetti e Rimanda allo SdI.'
+      : 'Si riaprono solo i documenti scartati dallo SdI.')}`);
+  });
+
+  r.post('/documenti/:id/aggiorna-sdi', async (req, res) => {
+    const id = Number(req.params.id);
+    let testo: string;
+    try { const n = await aggiornaEsitiDocumento(id); testo = n ? 'Esito aggiornato.' : 'Nessun esito nuovo dallo SdI.'; } catch (e: any) { testo = e.message; }
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
   });
 
   r.post('/documenti/:id/elimina', async (req, res) => {
+    const tipo = (await q1(`SELECT tipo FROM documenti WHERE id = $1`, [Number(req.params.id)]))?.tipo ?? 'fattura';
     const ok = await eliminaBozza(Number(req.params.id));
-    res.redirect(ok ? '/amministrazione/documenti?msg=' + encodeURIComponent('Bozza eliminata.')
+    res.redirect(ok ? `/amministrazione/documenti?tipo=${tipo}&msg=` + encodeURIComponent('Bozza eliminata.')
       : `/amministrazione/documenti/${req.params.id}?msg=${encodeURIComponent('Solo le bozze si eliminano: un documento emesso si storna con una nota di credito.')}`);
   });
 
@@ -313,7 +522,9 @@ export function rotteAmministrazione() {
         <button>Cerca</button>
       </form>
       <p class="nota">${righe.length} documenti${daPagare ? html` · da pagare ${euro(totaleDaPagare)}` : html` · imponibile ${euro(totale)}`}.
-        Per ora dallo storico di Fatture in Cloud; poi arriveranno dallo SdI.</p>
+        Le fatture elettroniche arrivano da sole dallo SdI (Invoicetronic); lo storico viene da Fatture in Cloud.</p>
+      ${ambienteAttuale() ? html`<form method="post" action="/amministrazione/ricevuti/scarica" class="inline"><button>Scarica dallo SdI</button>
+        <span class="nota">se una fattura che aspetti non è ancora arrivata</span></form>` : ''}
       <div class="tabella-scorre limitata"><table class="elenco">
         <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th><th>Scadenza</th></tr></thead>
         <tbody>${righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">

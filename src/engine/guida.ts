@@ -303,6 +303,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
   {
+    id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT e stamparlo',
+    parole: 'ddt nuovo emettere fare bolla documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
+    testo: [
+      'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
+      'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
+      'Con "Emetti" il DDT prende il numero successivo e non si modifica più. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
+      'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
+      'Se la merce non parte, "Annulla DDT": il numero resta usato e il DDT resta nell\'elenco come annullato. Un DDT già messo in una fattura non si annulla.',
+      'Per fatturarlo: "Fattura questo DDT" prepara la fattura con le sue righe; si possono aggiungere altri DDT dello stesso cliente.',
+    ],
+    passi: ['Apri l\'ordine e premi Crea DDT (oppure + Nuovo DDT e scegli il cliente).', 'Controlla quantità, colli, peso, vettore e destinazione, poi Salva.', 'Premi Emetti.', 'Premi Stampa / PDF e stampa due copie.'],
+    pagine: [['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/ordini', 'Ordini']],
+  },
+  {
     id: 'conferma-ordine', area: 'ordini', titolo: 'Conferma d\'ordine al cliente (PDF e email)',
     parole: 'conferma confermare conferme ordine pdf email gmail rispondere risposta inviare mandare cliente date consegna righe accettazione',
     testo: [
@@ -488,14 +502,28 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Amministrazione ──
   {
     id: 'nuova-fattura', area: 'amministrazione', titolo: 'Fare una fattura',
-    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva',
+    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa',
     testo: [
+      'Il PDF per il cliente: "PDF di cortesia" sulla fattura o nota di credito emessa (in bozza "Anteprima di stampa", con la scritta BOZZA) apre la copia da stampare o salvare in PDF con "Stampa / salva PDF". La fattura valida resta l\'XML mandato allo SdI: lo dice il piede del PDF.',
       'La fattura nasce come bozza: cliente dall\'anagrafica, righe, e i DDT ancora da fatturare di quel cliente si aggiungono con un clic. L\'IVA predefinita è quella del cliente (lettera d\'intento, estero…) o il 22%.',
       'Con "Emetti" il portale assegna il numero, calcola la scadenza dalla condizione di pagamento, prepara l\'XML della fattura elettronica e segna i DDT come fatturati. Se ci sono errori non si emette e il numero non si consuma.',
-      'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. L\'invio automatico allo SdI (Invoicetronic) e il PDF della fattura sono in preparazione.',
+      'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. Il PDF della fattura è in preparazione.',
     ],
-    passi: ['Amministrazione → + Nuova fattura.', 'Cliente, righe, DDT da fatturare.', 'Salva e controlla gli avvisi.', 'Emetti.'],
+    passi: ['Amministrazione → + Nuova fattura.', 'Cliente, righe, DDT da fatturare.', 'Salva e controlla gli avvisi.', 'Emetti.', 'Invia allo SdI.'],
     pagine: [['/amministrazione/documenti/nuovo?tipo=fattura', 'Nuova fattura'], ['/amministrazione/documenti', 'Documenti emessi']],
+  },
+  {
+    id: 'invio-sdi', area: 'amministrazione', titolo: 'Mandare la fattura allo SdI ed esiti',
+    parole: 'sdi invio inviare mandare invoicetronic esito consegnata scartata scarto ricevuta notifica cassetto fiscale recapito agenzia entrate',
+    testo: [
+      'Dopo "Emetti", nella pagina della fattura (anche nota di credito o autofattura) premi "Invia allo SdI": il portale manda l\'XML a Invoicetronic, che lo passa allo SdI.',
+      'L\'esito arriva da solo, di solito in pochi minuti: "Consegnata" va bene; "Non recapitata" vuol dire che la fattura è valida ma è nell\'area riservata del cliente sul sito dell\'Agenzia: avvisa il cliente. Se tarda, premi "Aggiorna esito".',
+      '"Scartata" vuol dire che per lo SdI la fattura non esiste: premi "Correggi", sistema righe o dati del cliente in anagrafica, poi "Emetti" (stesso numero e stessa data) e "Rimanda allo SdI", entro 5 giorni.',
+      'Con la chiave di prova di Invoicetronic il pulsante è "Prova l\'invio", anche sulle bozze: niente arriva allo SdI e gli esiti sono simulati. Chiave, crediti e collegamento degli esiti sono in Impostazioni → Amministrazione.',
+      'Non si può rimandare un documento già consegnato o in attesa di esito, né mandare una bozza con la chiave reale.',
+    ],
+    passi: ['Emetti il documento.', 'Invia allo SdI.', 'Controlla l\'esito nel riquadro SdI.'],
+    pagine: [['/amministrazione/documenti', 'Documenti emessi'], ['/impostazioni/amministrazione#sdi', 'Impostazioni → Invio allo SdI']],
   },
   {
     id: 'nota-credito', area: 'amministrazione', titolo: 'Stornare una fattura (nota di credito)',
@@ -505,10 +533,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'incassi-pagamenti', area: 'amministrazione', titolo: 'Incassi, pagamenti e fatture dei fornitori',
-    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare',
+    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare arrivate sdi scarica xml p7m',
     testo: [
       'Il cruscotto di Amministrazione mostra fatturato e acquisti dell\'anno rispetto all\'anno prima, incassi e pagamenti aperti per urgenza (scadute, entro 7 giorni, entro 30, oltre), DDT da fatturare e bozze da finire.',
       'Ogni rata, delle fatture emesse e di quelle dei fornitori, si segna incassata o pagata con data e conto. Le fatture dei fornitori sono in "Fatture fornitori", con il filtro "solo da pagare".',
+      "Le fatture dei fornitori arrivano da sole dallo SdI (Invoicetronic): con gli esiti collegati in Impostazioni → Amministrazione → Invio allo SdI entrano appena arrivano, oppure si prendono con \"Scarica dallo SdI\" in Fatture fornitori. Il fornitore si cerca per P.IVA (se è nuovo si aggiunge all'anagrafica con nota DA VERIFICARE), le scadenze arrivano dalla fattura; quelle già caricate da Fatture in Cloud e le copie delle nostre autofatture non si ripetono.",
     ],
     pagine: [['/amministrazione', 'Cruscotto amministrazione'], ['/amministrazione/ricevuti?da_pagare=1', 'Fatture fornitori da pagare']],
   },
