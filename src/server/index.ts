@@ -32,6 +32,7 @@ import { rotteGuida } from './rotte/guida.js';
 import { rotteGmail } from './rotte/gmail.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
+import { contabilitaPuo, paginaIniziale } from '../engine/ruoli.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -81,6 +82,20 @@ export function soloUfficio(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+/**
+ * Amministrazione: l'ufficio fa tutto; la contabilità (commercialista, Sonia di HTS) solo letture (GET), vedi engine/ruoli.ts.
+ */
+function amministrazioneOContabilita(req: Request, res: Response, next: NextFunction) {
+  const u = req.session.utente;
+  if (u?.ruolo === 'contabilita') {
+    if (contabilitaPuo(req.method, req.baseUrl + req.path)) return next();
+    return res.status(403).send(String(layout({ titolo: 'Sola lettura', utente: u, contenuto: html`<h1>Accesso in sola lettura</h1>
+      <p>Il tuo profilo può consultare l'Amministrazione, scaricare Excel, XML e stampe, ma non modificare nulla. Per una correzione chiedi all'ufficio.</p>
+      <p><a href="/amministrazione">← Amministrazione</a></p>` })));
+  }
+  return soloUfficio(req, res, next);
+}
+
 // ── Login ──
 const tentativi = new Map<string, { n: number; fino: number }>();
 const paginaLogin = (errore?: string, torna = '/') => String(layout({
@@ -116,7 +131,7 @@ app.post('/esci', (req, res) => req.session.destroy(() => res.redirect('/login')
 
 app.get('/', (req, res) => {
   if (!req.session.utente) return res.redirect(req.session.operatore ? '/r' : '/login');
-  res.redirect(req.session.utente.ruolo === 'ufficio' ? '/preventivi' : '/r');
+  res.redirect(paginaIniziale(req.session.utente.ruolo));
 });
 // la produzione lavora dalle pagine del reparto (telefono/tablet)
 app.get('/produzione', (_req, res) => res.redirect('/r'));
@@ -136,7 +151,7 @@ app.use('/quotazioni', soloUfficio, rotteComponenti());
 app.use('/componenti', (req, res) => res.redirect(307, '/quotazioni' + req.url));
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
-app.use('/amministrazione', soloUfficio, rotteAmministrazione());
+app.use('/amministrazione', amministrazioneOContabilita, rotteAmministrazione());
 // la guida la può leggere chiunque sia entrato (ufficio e produzione)
 app.use('/guida', (req, res, next) => req.session.utente ? next() : res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl)), rotteGuida());
 app.use('/r', rotteReparto());

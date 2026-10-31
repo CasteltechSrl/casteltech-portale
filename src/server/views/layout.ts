@@ -4,7 +4,9 @@ import { avvisoServizi } from '../stato-servizi.js';
 /** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
 export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
 
-export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzione' }
+import type { Ruolo } from '../../engine/ruoli.js';
+
+export interface Utente { id: number; nome: string; ruolo: Ruolo }
 
 /**
  * Menu in alto a gruppi (Adriano 31/10/2026): ogni gruppo ha una tendina con le sue pagine, così la barra resta corta
@@ -15,7 +17,7 @@ export interface Utente { id: number; nome: string; ruolo: 'ufficio' | 'produzio
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti']] },
   { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni', '/quotazioni'], ['Preventivi', '/preventivi'], ['Preventivi dai documenti del cliente', '/preventivi/documenti'], ['Ordini clienti', '/ordini/cruscotto'], ['Ordini da acquisire', '/ordini/acquisire']] },
-  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
+  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt']] },
   { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies']] },
 ];
@@ -38,19 +40,20 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/stile.css?v=${VERSIONE}">
 </head>
-<body>
+<body class="${opz.utente?.ruolo === 'contabilita' ? 'sola-lettura' : ''}">
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   <nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
-    ${opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI.map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
+    ${(opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI : opz.utente.ruolo === 'contabilita' ? MENU_GRUPPI.filter(g => g.chiave === 'amministrazione') : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
       <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
-    </div>`) : ''}
+    </div>`)}
   </nav>
   <nav class="menu-destra">
     ${opz.utente.ruolo === 'ufficio' ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
     ${voce('/guida', 'Guida', 'guida')}
+    ${opz.utente.ruolo === 'contabilita' ? html`<span class="etichetta">sola lettura</span>` : ''}
   </nav>
   <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}

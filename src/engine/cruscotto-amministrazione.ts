@@ -53,3 +53,26 @@ export function imponibilePerMese(movimenti: MovimentoMese[], anno: number, fino
 export function variazione(attuale: number, prima: number): number | null {
   return prima > 0 ? Math.round(((attuale - prima) / prima) * 100) : null;
 }
+
+/**
+ * Acquisti dell'anno per fornitore e mese (Adriano 31/10/2026): colpo d'occhio su "cosa ho comprato quel mese", al posto
+ * degli ordini a fornitore che in Fatture in Cloud si facevano dopo la fattura (Mouser, DigiKey, Anthropic…) solo per traccia.
+ * Imponibile delle fatture dei fornitori, note di credito in negativo. Fornitori dal più grande.
+ */
+export interface RigaAcquistiFornitore { chiave: string; fornitoreId: number | null; nome: string; mesi: number[]; totale: number; documenti: number }
+export function acquistiPerFornitore(docs: { fornitore_id: number | null; nome: string; tipo: string; data: string; imponibile: number }[]):
+  { righe: RigaAcquistiFornitore[]; mesi: number[]; totale: number } {
+  const perFornitore = new Map<string, RigaAcquistiFornitore>();
+  const mesi = Array<number>(12).fill(0);
+  const arr = (n: number) => Math.round(n * 100) / 100;
+  for (const d of docs) {
+    const chiave = d.fornitore_id ? `f${d.fornitore_id}` : `n${(d.nome || '?').toUpperCase()}`;
+    const r = perFornitore.get(chiave) ?? { chiave, fornitoreId: d.fornitore_id, nome: d.nome || '(senza nome)', mesi: Array<number>(12).fill(0), totale: 0, documenti: 0 };
+    const m = Number(d.data.slice(5, 7)) - 1, v = (d.tipo === 'nota_credito' ? -1 : 1) * (Number(d.imponibile) || 0);
+    r.mesi[m] = arr(r.mesi[m] + v); r.totale = arr(r.totale + v); r.documenti++;
+    mesi[m] = arr(mesi[m] + v);
+    perFornitore.set(chiave, r);
+  }
+  const righe = [...perFornitore.values()].sort((a, b) => b.totale - a.totale || a.nome.localeCompare(b.nome));
+  return { righe, mesi, totale: arr(mesi.reduce((s, x) => s + x, 0)) };
+}
