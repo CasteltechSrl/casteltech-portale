@@ -22,14 +22,17 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const nomeMese = (m: string) => `${MESI[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 
-const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Da acquisire'], ['fornitori', 'Ordini a fornitore']] as const;
+const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Da acquisire']] as const;
 function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string | string[] } = {}) =>
-  String(layout({ titolo, utente, attiva: 'ordini', largo: true, script: opz.script ?? 'elenco.js', avviso: opz.avviso,
-    contenuto: html`<div class="intestazione-pagina"><h1>${attiva === 'fornitori' ? 'Ordini a fornitore' : 'Ordini clienti'}</h1></div>${schede(attiva)}${contenuto}` }));
+  // menu a gruppi (31/10/2026): gli ordini a fornitore stanno negli Acquisti (senza le schede degli ordini clienti), il Gantt nella Produzione
+  String(layout({ titolo, utente, attiva: attiva === 'fornitori' ? 'acquisti' : attiva === 'gantt' ? 'produzione' : 'ordini', largo: true,
+    script: opz.script ?? 'elenco.js', avviso: opz.avviso,
+    contenuto: attiva === 'fornitori' ? html`<div class="intestazione-pagina"><h1>Acquisti · Ordini a fornitore</h1></div>${contenuto}`
+      : html`<div class="intestazione-pagina"><h1>Ordini clienti</h1></div>${schede(attiva)}${contenuto}` }));
 
 const ritardo = (n: number | null) => (n == null ? '' : n > 0 ? html`<span class="ritardo">+${n} gg</span>` : html`<span class="nota">${n} gg</span>`);
 
