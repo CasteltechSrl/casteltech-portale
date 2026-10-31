@@ -13,10 +13,10 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MOSTRATE = 12;   // scadenze elencate per riquadro (le altre sono nei totali)
 
 /** Tasti in cima a tutte le pagine dell'Amministrazione. */
-export function menuAmministrazione(attiva: 'cruscotto' | 'documenti' | 'ricevuti' | 'registri' | 'vies'): Raw {
+export function menuAmministrazione(attiva: 'cruscotto' | 'documenti' | 'ricevuti' | 'registri' | 'vies' | 'analisi'): Raw {
   const voci = [['cruscotto', '/amministrazione', 'Cruscotto'], ['documenti', '/amministrazione/documenti', 'Documenti emessi'],
     ['ricevuti', '/amministrazione/ricevuti', 'Fatture fornitori'], ['registri', '/amministrazione/registri', 'Registri IVA'],
-    ['vies', '/amministrazione/vies', 'Controllo VIES']] as const;
+    ['vies', '/amministrazione/vies', 'Controllo VIES'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
   return html`<nav class="tasti-sezione">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}
     <a href="/impostazioni/amministrazione">Impostazioni</a></nav>`;
 }
@@ -103,7 +103,7 @@ function riquadroScadenze(fasce: Record<Fascia, { totale: number; quante: number
 }
 
 /** Barre affiancate per mese (SVG, senza script), stessa grafica del cruscotto Ordini. */
-function graficoMesi(fatturato: number[], acquisti: number[]): Raw {
+export function graficoMesi(fatturato: number[], acquisti: number[], classi: [string, string] = ['fatturato', 'acquisti'], nomi: [string, string] = ['fatturato', 'acquisti']): Raw {
   const L = 64, A = 240, passo = 60, barra = 20, W = L + fatturato.length * passo + 10, H = A + 30;
   const max = Math.max(1, ...fatturato, ...acquisti);
   const p = 10 ** Math.floor(Math.log10(max));
@@ -111,14 +111,14 @@ function graficoMesi(fatturato: number[], acquisti: number[]): Raw {
   const y = (v: number) => A - (Math.max(0, v) / scala) * (A - 10);
   const etichetta = (v: number) => (v >= 1000 ? `${num(v / 1000, 0)}k` : num(v, 0));
   const colonna = (classe: string, x: number, v: number) => (v > 0 ? html`<rect class="${classe}" x="${x}" y="${y(v)}" width="${barra}" height="${Math.max(1, A - y(v))}" rx="2"/>` : '');
-  return html`<svg class="grafico-mesi" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Fatturato e acquisti per mese">
+  return html`<svg class="grafico-mesi" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${nomi[0]} e ${nomi[1]} per mese">
     ${[0, 0.25, 0.5, 0.75, 1].map(f => html`<line class="griglia" x1="${L}" x2="${W - 5}" y1="${y(scala * f)}" y2="${y(scala * f)}"/>
       <text class="asse" x="${L - 6}" y="${y(scala * f) + 4}" text-anchor="end">${etichetta(scala * f)}</text>`)}
     ${fatturato.map((f, i) => {
       const x = L + i * passo + (passo - 2 * barra - 2) / 2;
-      return html`<g class="mese"><title>${MESI[i]}: fatturato ${euro(f)}, acquisti ${euro(acquisti[i])}</title>
+      return html`<g class="mese"><title>${MESI[i]}: ${nomi[0]} ${euro(f)}, ${nomi[1]} ${euro(acquisti[i])}</title>
         <rect class="sfondo" x="${x - 6}" y="0" width="${2 * barra + 14}" height="${A}"/>
-        ${colonna('fatturato', x, f)}${colonna('acquisti', x + barra + 2, acquisti[i])}
+        ${colonna(classi[0], x, f)}${colonna(classi[1], x + barra + 2, acquisti[i])}
         <text class="asse" x="${x + barra + 1}" y="${A + 16}" text-anchor="middle">${MESI[i]}</text></g>`;
     })}
     <line class="base" x1="${L}" x2="${W - 5}" y1="${A}" y2="${A}"/>

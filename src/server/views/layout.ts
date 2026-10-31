@@ -19,7 +19,7 @@ export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string]
   { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni', '/quotazioni'], ['Preventivi', '/preventivi'], ['Preventivi dai documenti del cliente', '/preventivi/documenti'], ['Ordini clienti', '/ordini/cruscotto'], ['Ordini da acquisire', '/ordini/acquisire']] },
   { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt']] },
-  { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies']] },
+  { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Analisi', '/amministrazione/analisi']] },
 ];
 /** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
 const GRUPPO_DI: Record<string, string> = {
