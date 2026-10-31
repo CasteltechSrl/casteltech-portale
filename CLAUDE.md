@@ -32,6 +32,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Tasti in alto Clienti / Fornitori / Prodotti / Componenti (archivio della codifica), sotto l'elenco con la ricerca veloce
   (`engine/ricerca.ts` = `public/ricerca.js`: filtra mentre si scrive, più parole, accenti e trattini dei codici non contano).
   Un'anagrafica nuova si aggiunge come altro tasto qui. I vecchi indirizzi /impostazioni/anagrafiche e /impostazioni/fornitori portano qui.
+- Prezzi in anagrafica (Adriano 31/10/2026; migrazione 051, `engine/prezzi-fic.ts`, `prezzi-servizio.ts`, test in `tests/prezzi-fic.test.ts`): Prodotti → colonna
+  Prezzo € (vendita a scheda), Componenti → ultimo acquisto (prezzo, fornitore, data, pezzi). Da FIC con `tools/prezzi-da-fic.ts`: prodotto = il più recente tra
+  ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice
+  (valuta estera → euro col cambio dell'ordine). Caricamento "Carica i prezzi da Fatture in Cloud" (anteprima → conferma, ricaricabile); prezzo scritto a mano
+  = fonte 'manuale', il caricamento non lo tocca. Il prezzo va solo sul codice del cliente giusto (cliente non riconosciuto: solo se il codice è unico).
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).

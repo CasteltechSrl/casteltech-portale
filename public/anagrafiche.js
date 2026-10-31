@@ -27,3 +27,26 @@ async function invia(definitivo) {
 }
 controlla?.addEventListener('click', () => invia(false));
 conferma?.addEventListener('click', () => invia(true));
+// Prezzi da Fatture in Cloud (Adriano 31/10/2026): riepilogo, poi conferma
+const controllaPrezzi = document.getElementById('carica-prezzi');
+const confermaPrezzi = document.getElementById('conferma-prezzi');
+const esitoPrezzi = document.getElementById('esito-prezzi');
+async function inviaPrezzi(definitivo) {
+  const f = document.getElementById('file-prezzi').files[0];
+  if (!f) { esitoPrezzi.textContent = 'Scegli prima il file.'; return; }
+  controllaPrezzi.disabled = confermaPrezzi.disabled = true;
+  esitoPrezzi.textContent = definitivo ? 'Caricamento in corso…' : 'Controllo del file…';
+  const res = await fetch(`/anagrafiche/prezzi?conferma=${definitivo ? 1 : 0}`,
+    { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
+  const j = await res.json().catch(() => ({}));
+  controllaPrezzi.disabled = confermaPrezzi.disabled = false;
+  if (!res.ok) { esitoPrezzi.textContent = j.errore || 'Errore'; confermaPrezzi.hidden = true; return; }
+  const p = j.prodotti, c = j.componenti;
+  const testo = `prodotti con prezzo ${p.conPrezzo} su ${p.inPortale} (${p.daFattura} dall'ultima fattura, ${p.daAnagrafica} dall'anagrafica FIC), ` +
+    `${p.senzaPrezzo} restano senza prezzo` + (p.manuali ? `, ${p.manuali} scritti a mano non toccati` : '') + '. ' +
+    `Componenti con prezzo d'acquisto ${c.conPrezzo} su ${c.inArchivio} in archivio` + (c.manuali ? ` (${c.manuali} scritti a mano non toccati)` : '') + '.';
+  if (j.anteprima) { esitoPrezzi.textContent = 'Se confermi: ' + testo; confermaPrezzi.hidden = false; }
+  else { esitoPrezzi.textContent = 'Fatto: ' + testo + ' Ricarica la pagina per vedere i prezzi.'; confermaPrezzi.hidden = true; }
+}
+controllaPrezzi?.addEventListener('click', () => inviaPrezzi(false));
+confermaPrezzi?.addEventListener('click', () => inviaPrezzi(true));

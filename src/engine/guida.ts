@@ -188,6 +188,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/quotazioni', 'Quotazioni (codifica)']],
   },
+  {
+    id: 'prezzi-anagrafiche', area: 'anagrafiche', titolo: 'Prezzo di vendita dei prodotti e ultimo acquisto dei componenti',
+    parole: 'prezzo prezzi listino vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
+    testo: [
+      'In Anagrafiche → Prodotti c\'è la colonna Prezzo €: il prezzo di vendita a scheda, IVA esclusa. Passando sopra la casella si vede da dove arriva: l\'ultima fattura emessa al cliente, l\'anagrafica prodotti di Fatture in Cloud o "scritto a mano".',
+      'I prezzi sono stati presi da Fatture in Cloud: per ogni codice vale il più recente tra l\'ultima fattura e l\'anagrafica di FIC (se l\'anagrafica è stata aggiornata dopo l\'ultima fattura vale quella). I casi in cui erano diversi sono in un Excel a parte da controllare.',
+      'In Anagrafiche → Componenti, cercando un componente, si vede l\'ultimo prezzo d\'acquisto con fornitore, data e pezzi ordinati: viene dall\'ultimo ordine a fornitore con quel P/N o quel codice. Anche l\'Excel dell\'archivio ha queste colonne.',
+      'Un prezzo si corregge scrivendolo nella casella e premendo Salva: da quel momento vale quello e un nuovo caricamento da Fatture in Cloud non lo cambia. Vuotando la casella il prodotto torna senza prezzo.',
+    ],
+    passi: ['Anagrafiche → Prodotti (scegli il cliente per vedere solo i suoi).', 'Correggi il prezzo nella casella Prezzo € e premi Salva.', 'Per ricaricare i prezzi: in fondo alla pagina "Carica i prezzi da Fatture in Cloud", scegli quello preparato da Claude, "Controlla", poi "Conferma e carica".'],
+    pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti'], ['/anagrafiche/componenti', 'Anagrafiche → Componenti']],
+  },
 
   // ── Preventivi ──
   {
