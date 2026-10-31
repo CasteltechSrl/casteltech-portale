@@ -321,3 +321,12 @@ export function preparaRicevutoFic(x: any): { documento: RicevutoStorico | null;
     netto_a_pagare: x.netto_a_pagare == null ? null : arrotonda2(numeroO0(x.netto_a_pagare)),
   } };
 }
+
+/** Modi di pagamento di una rata (Adriano 31/10/2026), scelti quando si segna pagata o incassata; il conto (es. Bper) resta a parte. */
+export const MODI_PAGAMENTO = ['Bonifico', 'Ri.Ba.', 'Bancomat', 'Carta di credito', 'PayPal', 'Compensato con fattura', 'Stornato'] as const;
+
+/** Il modo scritto nel modulo, solo se è uno di quelli previsti (maiuscole e spazi non contano); altrimenti null. */
+export function modoPagamento(valore: unknown): string | null {
+  const v = String(valore ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return MODI_PAGAMENTO.find(m => m.toLowerCase() === v) ?? null;
+}

@@ -194,3 +194,12 @@ test('storico FIC: documento ricevuto da un fornitore', () => {
   assert.equal(preparaRicevutoFic({ fic_id: 9, fornitore: { partita_iva: 'DE239975861' }, data: '2026-01-01' }).documento!.partita_iva, 'DE239975861');
   assert.match(preparaRicevutoFic({ fic_id: 9, data: 'ieri' }).errore!, /mancanti/);
 });
+
+test('Rate: modo di pagamento solo tra quelli previsti (Adriano 31/10/2026)', async () => {
+  const { MODI_PAGAMENTO, modoPagamento } = await import('../src/engine/amministrazione.js');
+  for (const m of ['Bonifico', 'Ri.Ba.', 'Bancomat', 'Carta di credito', 'PayPal', 'Compensato con fattura', 'Stornato']) assert.ok(MODI_PAGAMENTO.includes(m as any));
+  assert.equal(modoPagamento(' carta  di CREDITO '), 'Carta di credito');
+  assert.equal(modoPagamento('paypal'), 'PayPal');
+  assert.equal(modoPagamento('Bper'), null);
+  assert.equal(modoPagamento(''), null);
+});

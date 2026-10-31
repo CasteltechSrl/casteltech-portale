@@ -9,7 +9,7 @@ import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
-import { numeroCompleto } from '../../engine/amministrazione.js';
+import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
@@ -86,12 +86,14 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, conti: 
   const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
   return html`<h2>Scadenze</h2><datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
     <ul class="scadenze">${scadenze.map(s => html`<li>${data(s.data)}: <strong>${euro(Number(s.importo))}</strong> ${s.pagata_il
-      ? html`<span class="stato doc-consegnato">${parola} il ${data(s.pagata_il)}${s.conto ? ` (${s.conto})` : ''}</span>
+      ? html`<span class="stato doc-consegnato">${parola} il ${data(s.pagata_il)}${s.modo || s.conto ? ` (${[s.modo, s.conto].filter(Boolean).join(' · ')})` : ''}</span>
         <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline" data-conferma="Segnare la rata come non ${parola}?">
           <input type="hidden" name="annulla" value="1"><button class="link">annulla</button></form>`
       : html`<span class="stato doc-bozza">da ${sezione === 'documenti' ? 'incassare' : 'pagare'}</span>
         <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline">
-          <input type="date" name="pagata_il" value="${oggiRoma()}" required> <input name="conto" list="conti" placeholder="Conto" value="${conti[0] ?? ''}" class="corto">
+          <input type="date" name="pagata_il" value="${oggiRoma()}" required>
+          <select name="modo" required title="Come è stata ${parola}"><option value="">Modo di pagamento…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select>
+          <input name="conto" list="conti" placeholder="Banca (es. Bper)" title="Facoltativo: banca o conto usato" class="corto">
           <button>Segna ${parola}</button></form>`}</li>`)}</ul>`;
 }
 
@@ -729,8 +731,8 @@ export function rotteAmministrazione() {
     const annulla = req.body.annulla === '1';
     const giorno = String(req.body.pagata_il ?? '');
     if (!annulla && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) return res.redirect(req.get('referer') ?? '/amministrazione');
-    const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3 WHERE id = $1 RETURNING documento_id`,
-      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null]);
+    const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3, modo = $4 WHERE id = $1 RETURNING documento_id`,
+      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null, annulla ? null : modoPagamento(req.body.modo)]);
     const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
     res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.`)}`
       : '/amministrazione');
