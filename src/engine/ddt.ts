@@ -8,6 +8,11 @@
 export const CAUSALI_DDT = ['RESO LAVORATO', 'VENDITA', 'RESO NON LAVORATO', 'RESO DA RIPARAZIONE IN GARANZIA', 'CONTO VISIONE', 'RIPARAZIONE'] as const;
 export const TRASPORTO_A_CURA = ['MITTENTE', 'DESTINATARIO', 'VETTORE'] as const;
 export const PORTI = ['FRANCO', 'ASSEGNATO'] as const;
+/**
+ * DDT dello storico di FIC più vecchi di questa data: non si propongono "da fatturare" (Adriano 31/10/2026, storico dal 2019:
+ * i DDT non fatturati di quegli anni sono resi, conto visione, conto lavorazione già chiusi in FIC). Restano nell'elenco DDT.
+ */
+export const INIZIO_DDT_DA_FATTURARE = '2025-01-01';
 
 /** Dati del trasporto salvati in documenti.dati_trasporto (stesse chiavi dello storico di FIC: causale, colli, peso, trasportatore, destinazione). */
 export interface DatiTrasporto {

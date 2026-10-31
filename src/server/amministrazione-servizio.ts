@@ -9,6 +9,7 @@ import { annoLetteraIntento, controllaDataNumerazione, preparaAzienda, preparaCl
   type Aliquota, type DatiAzienda } from '../engine/amministrazione.js';
 import { transazione } from './db.js';
 import { Anteprima } from './anagrafiche-servizio.js';
+import { INIZIO_DDT_DA_FATTURARE } from '../engine/ddt.js';
 
 export async function caricaAzienda(): Promise<DatiAzienda> {
   const r = await q1<{ valore: Partial<DatiAzienda> }>(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`);
@@ -222,12 +223,14 @@ export async function caricaStoricoFic(dati: { documenti?: unknown[]; ricevuti?:
         const fornitore_id = await fornitore(d.partita_iva);
         if (!fornitore_id) esito.fornitoriSenzaAnagrafica++;
         const r = (await c.query(
-          `INSERT INTO documenti_ricevuti (tipo, numero, data, fornitore_id, intestatario, descrizione, categoria, imponibile, imposta, totale, elettronica, origine, fic_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'fic', $12)
+          `INSERT INTO documenti_ricevuti (tipo, numero, data, fornitore_id, intestatario, descrizione, categoria, imponibile, imposta, totale, elettronica, origine, fic_id,
+             ritenuta, netto_a_pagare)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'fic', $12, $13, $14)
            ON CONFLICT (fic_id) DO UPDATE SET tipo = $1, numero = $2, data = $3, fornitore_id = $4, intestatario = $5, descrizione = $6, categoria = $7,
-             imponibile = $8, imposta = $9, totale = $10, elettronica = $11, aggiornato_il = now()
+             imponibile = $8, imposta = $9, totale = $10, elettronica = $11, ritenuta = $13, netto_a_pagare = $14, aggiornato_il = now()
            RETURNING id, (xmax = 0) AS nuovo`,
-          [d.tipo, d.numero, d.data, fornitore_id, JSON.stringify(d.intestatario), d.descrizione, d.categoria, d.imponibile, d.imposta, d.totale, d.elettronica, d.fic_id])).rows[0];
+          [d.tipo, d.numero, d.data, fornitore_id, JSON.stringify(d.intestatario), d.descrizione, d.categoria, d.imponibile, d.imposta, d.totale, d.elettronica, d.fic_id,
+           d.ritenuta, d.netto_a_pagare])).rows[0];
         if (r.nuovo) esito.ricevuti.nuovi++;
         else { esito.ricevuti.aggiornati++; await c.query(`DELETE FROM documenti_ricevuti_scadenze WHERE documento_id = $1`, [r.id]); }
         if (d.scadenze.length) await c.query(
@@ -247,7 +250,7 @@ export async function caricaStoricoFic(dati: { documenti?: unknown[]; ricevuti?:
           [s.tipo, s.sezionale, s.anno, s.numero, s.data]);
         if (n.rowCount) esito.numerazioni.push(`${NOMI_STORICO[s.tipo]} ${s.anno}${s.sezionale ? ' ' + s.sezionale : ''}: ultimo n. ${s.numero}`);
       }
-      esito.ddtDaFatturare = Number((await c.query(`SELECT count(*) FROM documenti WHERE tipo = 'ddt' AND fattura_id IS NULL AND origine = 'fic'`)).rows[0].count);
+      esito.ddtDaFatturare = Number((await c.query(`SELECT count(*) FROM documenti WHERE tipo = 'ddt' AND fattura_id IS NULL AND origine = 'fic' AND data >= '${INIZIO_DDT_DA_FATTURARE}'`)).rows[0].count);
       const aperte = (await c.query(
         `SELECT count(*)::int AS numero, coalesce(sum(CASE WHEN d.tipo = 'nota_credito' THEN -s.importo ELSE s.importo END), 0)::float AS importo
          FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id WHERE s.pagata_il IS NULL`)).rows[0];

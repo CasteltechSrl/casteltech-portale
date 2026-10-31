@@ -99,6 +99,8 @@ export interface FatturaRicevuta {
   cessionario_piva: string; trasmittente: string;
   imponibile: number; imposta: number; totale: number; descrizione: string;
   scadenze: { data: string; importo: number }[];
+  // professionisti e consulenti: ritenuta d'acconto (da versare noi con F24) e cassa previdenziale / rivalsa (già nell'imponibile)
+  ritenuta: number; tipo_ritenuta: string | null; causale_ritenuta: string | null; cassa: number; netto_a_pagare: number;
 }
 
 /** Tipi SdI delle note di credito (TD04; TD08 nota di credito semplificata). */
@@ -132,11 +134,18 @@ export function datiFattureRicevute(xml: string): FatturaRicevuta[] {
     const descrizioni = tutti(trova(corpo, 'DatiBeniServizi'), 'DettaglioLinee').map(l => t(l, 'Descrizione')).filter(Boolean);
     const scadenze = tutti(corpo, 'DettaglioPagamento').map(p => ({ data: t(p, 'DataScadenzaPagamento') || data, importo: numero(t(p, 'ImportoPagamento')) }))
       .filter(s => s.importo);
+    // DatiRitenuta può ripetersi (1.2.2: ritenuta + contributo INPS…); il totale del documento è prima della ritenuta
+    const ritenute = tutti(gen, 'DatiRitenuta');
+    const ritenuta = arrotonda2(ritenute.reduce((s, r) => s + numero(t(r, 'ImportoRitenuta')), 0));
+    const cassa = arrotonda2(tutti(gen, 'DatiCassaPrevidenziale').reduce((s, r) => s + numero(t(r, 'ImportoContributoCassa')), 0));
+    const netto_a_pagare = arrotonda2(totale - ritenuta);
     const descrizione = `${descrizioni.slice(0, 3).join(' · ')}${descrizioni.length > 3 ? ` e altre ${descrizioni.length - 3} righe` : ''}`.slice(0, 300);
     return {
       tipo: NOTE_CREDITO.has(tipo_sdi) ? 'nota_credito' : 'fattura', tipo_sdi, numero: t(gen, 'Numero'), data, valuta: t(gen, 'Divisa') || 'EUR',
       fornitore, cessionario_piva, trasmittente, imponibile, imposta, totale, descrizione,
-      scadenze: scadenze.length ? scadenze : [{ data, importo: totale }],
+      scadenze: scadenze.length ? scadenze : [{ data, importo: netto_a_pagare }],
+      ritenuta, tipo_ritenuta: ritenute.length ? t(ritenute[0], 'TipoRitenuta') || null : null,
+      causale_ritenuta: ritenute.length ? t(ritenute[0], 'CausalePagamento') || null : null, cassa, netto_a_pagare,
     } as FatturaRicevuta;
   });
 }

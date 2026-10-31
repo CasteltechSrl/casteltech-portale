@@ -9,7 +9,8 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
-import { controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
 export const TIPI_EMISSIBILI = ['fattura', 'nota_credito', 'ddt'] as const;
@@ -22,14 +23,15 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
  * DDT: niente pagamento; trasporto proposto dall'ultimo DDT dello stesso cliente (causale, a cura, vettore, destinazione).
  */
 export async function creaBozza(tipo: TipoEmissibile, clienteId: number, creatoDa: number | null, data = oggiRoma(),
-  extra: { ordine_id?: number; riferimento_esterno?: string | null } = {}): Promise<number> {
+  extra: { ordine_id?: number; riferimento_esterno?: string | null; tipo_sdi?: string; data_ordine?: string | null } = {}): Promise<number> {
   const c = await q1(`SELECT id, condizione_pagamento FROM clienti WHERE id = $1`, [clienteId]);
   if (!c) throw new Error('Cliente non trovato');
   const trasporto = tipo === 'ddt' ? await trasportoProposto(clienteId) : null;
-  const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, creato_da, dati_trasporto, ordine_id, riferimento_esterno)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-    [tipo, tipo === 'ddt' ? null : tipo === 'nota_credito' ? 'TD04' : 'TD01', Number(data.slice(0, 4)), data, clienteId,
-     tipo === 'ddt' ? null : c.condizione_pagamento, creatoDa, trasporto && JSON.stringify(trasporto), extra.ordine_id ?? null, extra.riferimento_esterno ?? null]);
+  const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, creato_da, dati_trasporto, ordine_id,
+    riferimento_esterno, data_ordine) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+    [tipo, tipo === 'ddt' ? null : tipo === 'nota_credito' ? 'TD04' : extra.tipo_sdi ?? 'TD01', Number(data.slice(0, 4)), data, clienteId,
+     tipo === 'ddt' ? null : c.condizione_pagamento, creatoDa, trasporto && JSON.stringify(trasporto), extra.ordine_id ?? null, extra.riferimento_esterno ?? null,
+     extra.data_ordine ?? null]);
   return r!.id;
 }
 
@@ -80,6 +82,72 @@ export async function creaNotaCredito(fatturaId: number, creatoDa: number | null
   });
 }
 
+/**
+ * Nota di debito (TD05, bozza) su una fattura emessa: aumenta l'importo (costi dimenticati, adeguamenti). Si numera con le fatture;
+ * righe vuote da scrivere, fattura collegata (DatiFattureCollegate), stesso ordine e CIG/CUP.
+ */
+export async function creaNotaDebito(fatturaId: number, creatoDa: number | null): Promise<number> {
+  const f = await q1(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'fattura' AND numero IS NOT NULL`, [fatturaId]);
+  if (!f) throw new Error('La nota di debito si fa solo su una fattura emessa.');
+  if (!f.cliente_id) throw new Error('La fattura non è collegata a un cliente in anagrafica.');
+  const data = oggiRoma();
+  const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, documento_origine_id, causale,
+      riferimento_esterno, cig, cup, data_ordine, ordine_id, creato_da)
+    VALUES ('fattura', 'TD05', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    [Number(data.slice(0, 4)), data, f.cliente_id, f.condizione_pagamento, f.id,
+     `Nota di debito relativa alla fattura n. ${numeroCompleto(f.numero, f.sezionale)} del ${f.data.split('-').reverse().join('/')}`,
+     f.riferimento_esterno, f.cig, f.cup, f.data_ordine, f.ordine_id, creatoDa]);
+  return r!.id;
+}
+
+/** Fattura d'acconto (TD02, bozza) su un ordine: riferimento e data dell'ordine compilati, una riga da completare con l'importo. */
+export async function creaAccontoDaOrdine(ordineId: number, creatoDa: number | null): Promise<number> {
+  const o = await q1(`SELECT id, cliente_id, numero, rif_cliente, data_ordine_cliente FROM ordini WHERE id = $1`, [ordineId]);
+  if (!o) throw new Error('Ordine non trovato.');
+  if (!o.cliente_id) throw new Error('Il cliente dell\'ordine non è in anagrafica: collegalo prima di fare la fattura d\'acconto.');
+  const dataOrdine = o.data_ordine_cliente ? String(o.data_ordine_cliente).slice(0, 10) : null;
+  const id = await creaBozza('fattura', o.cliente_id, creatoDa, oggiRoma(), { ordine_id: o.id, riferimento_esterno: o.rif_cliente ?? null,
+    tipo_sdi: 'TD02', data_ordine: dataOrdine });
+  const rif = o.rif_cliente ? ` n. ${o.rif_cliente}${dataOrdine ? ` del ${dataOrdine.split('-').reverse().join('/')}` : ''}` : '';
+  await q(`INSERT INTO documenti_righe (documento_id, posizione, descrizione, quantita, prezzo) VALUES ($1, 1, $2, 1, 0)`,
+    [id, `Acconto sul vostro ordine${rif}`]);
+  return id;
+}
+
+/** Fatture d'acconto (TD02) emesse al cliente e non ancora scalate da nessuna fattura non annullata (nemmeno da questa bozza). */
+export const accontiDaScalare = (clienteId: number) => q<{ id: number; numero: number; sezionale: string; data: string; imponibile: number; totale: number }>(
+  `SELECT d.id, d.numero, d.sezionale, d.data, d.imponibile::float AS imponibile, d.totale::float AS totale FROM documenti d
+   WHERE d.tipo = 'fattura' AND d.tipo_sdi = 'TD02' AND d.cliente_id = $1 AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
+     AND NOT EXISTS (SELECT 1 FROM documenti_righe r JOIN documenti x ON x.id = r.documento_id
+                     WHERE r.acconto_id = d.id AND x.stato <> 'annullato')
+   ORDER BY d.data, d.numero`, [clienteId]);
+
+/** Scala sul saldo le fatture d'acconto scelte: una riga negativa per aliquota, collegata all'acconto. */
+export async function scalaAcconti(id: number, accontoIds: number[]): Promise<number> {
+  const aliquote = await caricaAliquote();
+  return transazione(async c => {
+    const d = (await c.query(`SELECT stato, cliente_id FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
+    const cliente = (await c.query(`SELECT aliquota_iva FROM clienti WHERE id = $1`, [d.cliente_id])).rows[0];
+    let pos = Number((await c.query(`SELECT coalesce(max(posizione), 0) AS p FROM documenti_righe WHERE documento_id = $1`, [id])).rows[0].p);
+    let scalati = 0;
+    for (const accontoId of accontoIds) {
+      const a = (await c.query(`SELECT id, numero, sezionale, data FROM documenti WHERE id = $1 AND tipo = 'fattura' AND tipo_sdi = 'TD02'
+        AND cliente_id = $2 AND numero IS NOT NULL`, [accontoId, d.cliente_id])).rows[0];
+      if (!a) continue;
+      if ((await c.query(`SELECT 1 FROM documenti_righe WHERE documento_id = $1 AND acconto_id = $2`, [id, a.id])).rowCount) continue;
+      const righeAcconto = (await c.query(`SELECT quantita::float, prezzo::float, sconto::float, aliquota_iva, solo_descrizione FROM documenti_righe
+        WHERE documento_id = $1`, [a.id])).rows;
+      const { riepilogo } = calcolaTotali(righeAcconto, aliquote, cliente?.aliquota_iva || 'IVA22');
+      for (const r of righeStornoAcconto({ id: a.id, numero: numeroCompleto(a.numero, a.sezionale), data: a.data, riepilogo }))
+        await c.query(`INSERT INTO documenti_righe (documento_id, posizione, descrizione, quantita, prezzo, aliquota_iva, acconto_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)`, [id, ++pos, r.descrizione, r.quantita, r.prezzo, r.aliquota_iva, r.acconto_id]);
+      scalati++;
+    }
+    return scalati;
+  });
+}
+
 /** Salva intestazione e righe di una bozza. */
 export async function salvaBozza(id: number, b: any): Promise<string[]> {
   const { righe, errori } = righeDaModulo(b.righe ?? []);
@@ -90,6 +158,11 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
     const d = (await c.query(`SELECT stato, tipo FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
     if (d.tipo === 'ddt') await c.query(`UPDATE documenti SET dati_trasporto = $2 WHERE id = $1`, [id, JSON.stringify(trasportoDaModulo(b))]);
+    if (d.tipo === 'fattura' && (TIPI_SCEGLIBILI as readonly string[]).includes(String(b.tipo_sdi ?? '')))
+      await c.query(`UPDATE documenti SET tipo_sdi = $2 WHERE id = $1`, [id, b.tipo_sdi]);
+    if (d.tipo !== 'ddt') await c.query(`UPDATE documenti SET cig = $2, cup = $3, data_ordine = $4 WHERE id = $1`, [id,
+      String(b.cig ?? '').trim().toUpperCase() || null, String(b.cup ?? '').trim().toUpperCase() || null,
+      /^\d{4}-\d{2}-\d{2}$/.test(String(b.data_ordine ?? '')) ? b.data_ordine : null]);
     // un documento scartato dallo SdI e riaperto tiene numero e data (si rimanda con gli stessi)
     await c.query(`UPDATE documenti SET data = CASE WHEN numero IS NULL THEN $2::date ELSE data END,
       anno = CASE WHEN numero IS NULL THEN $3 ELSE anno END, condizione_pagamento = $4, causale = $5, riferimento_esterno = $6, note = $7, aggiornato_il = now()
@@ -97,12 +170,13 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
       String(b.riferimento_esterno ?? '').trim() || null, String(b.note ?? '').trim() || null]);
     await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
     if (righe.length) await c.query(
-      `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id, riga_ordine_id)
+      `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id,
+         riga_ordine_id, acconto_id)
        SELECT $1, r.posizione, r.solo_descrizione, (SELECT id FROM prodotti WHERE id = r.prodotto_id), r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.sconto,
          (SELECT codice FROM aliquote_iva WHERE codice = r.aliquota_iva), (SELECT id FROM documenti WHERE id = r.ddt_id AND tipo = 'ddt'),
-         (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id)
+         (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id), (SELECT id FROM documenti WHERE id = r.acconto_id AND tipo_sdi = 'TD02')
        FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, solo_descrizione boolean, prodotto_id int, codice text, descrizione text, quantita numeric,
-         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int)`, [id, JSON.stringify(righe)]);
+         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int)`, [id, JSON.stringify(righe)]);
   });
   return [];
 }
@@ -111,6 +185,7 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
 export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; numero: number; data: string; righe: number; causale: string | null }>(
   `SELECT d.id, d.numero, d.data, (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id) AS righe, d.dati_trasporto->>'causale' AS causale
    FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = $1 AND d.fattura_id IS NULL AND d.stato <> 'annullato'
+     AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
      AND NOT EXISTS (SELECT 1 FROM documenti_righe r JOIN documenti x ON x.id = r.documento_id
                      WHERE r.ddt_id = d.id AND x.id <> $2 AND x.stato <> 'annullato')
    ORDER BY d.data, d.numero`, [clienteId, esclusoDocumento]);
@@ -147,6 +222,8 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const righe = await query(`SELECT r.*, t.numero AS ddt_numero, t.data AS ddt_data FROM documenti_righe r
     LEFT JOIN documenti t ON t.id = r.ddt_id WHERE r.documento_id = $1 ORDER BY r.posizione`, [id]);
   const [origine] = d.documento_origine_id ? await query(`SELECT numero, sezionale, data FROM documenti WHERE id = $1`, [d.documento_origine_id]) : [];
+  const acconti = await query(`SELECT DISTINCT a.id, a.numero, a.sezionale, a.data FROM documenti_righe r JOIN documenti a ON a.id = r.acconto_id
+    WHERE r.documento_id = $1 AND a.numero IS NOT NULL ORDER BY a.data, a.numero`, [id]);
   const anno = Number(String(d.data).slice(0, 4));
   const [intento] = cliente ? await query(`SELECT id, protocollo, data_protocollo FROM dichiarazioni_intento WHERE cliente_id = $1 AND anno = $2
     ORDER BY data_protocollo DESC LIMIT 1`, [cliente.id, anno]) : [];
@@ -154,8 +231,11 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const azienda = await caricaAzienda();
   const predefinita = cliente?.aliquota_iva || 'IVA22';
   const totali = calcolaTotali(righe.map((r: any) => ({ ...r, aliquota_iva: r.aliquota_iva })), aliquote, predefinita);
-  const scadenze = d.condizione_pagamento && totali.totale > 0
-    ? [{ data: calcolaScadenza(d.data, { giorni: d.giorni, fine_mese: d.fine_mese }), importo: totali.totale, modalita: d.modalita }] : [];
+  // split payment: il cliente paga imponibile + bollo, l'IVA la versa lui
+  const daIncassare = importoDaIncassare(totali, !!cliente?.split_payment);
+  const scadenze = d.condizione_pagamento && daIncassare > 0
+    ? [{ data: calcolaScadenza(d.data, { giorni: d.giorni, fine_mese: d.fine_mese }), importo: daIncassare, modalita: d.modalita }] : [];
+  const dataTesto = (v: unknown) => v == null ? null : typeof v === 'string' ? v.slice(0, 10) : new Date(v as Date).toLocaleDateString('sv-SE');
   const documento: DocumentoXml = {
     id: d.id, tipo: d.tipo, numero: numero ?? d.numero, sezionale: d.sezionale, data: d.data, causale: d.causale, riferimento_esterno: d.riferimento_esterno,
     righe: righe.map((r: any) => ({ codice: r.codice, descrizione: r.descrizione, quantita: r.quantita, um: r.um, prezzo: r.prezzo, sconto: r.sconto,
@@ -163,6 +243,8 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
       ddt: r.ddt_id && !r.solo_descrizione ? { numero: String(r.ddt_numero), data: r.ddt_data } : null })),
     scadenze, origine: origine ? { numero: numeroCompleto(origine.numero, origine.sezionale), data: origine.data } : null,
     intento: intento ? { protocollo: intento.protocollo, data: intento.data_protocollo } : null, aliquota_predefinita: predefinita,
+    tipo_sdi: d.tipo_sdi, cig: d.cig, cup: d.cup, data_ordine: dataTesto(d.data_ordine),
+    acconti: acconti.map((a: any) => ({ numero: numeroCompleto(a.numero, a.sezionale), data: a.data })),
   };
   const clienteXml: ClienteXml = cliente ? { ...cliente, nazione: cliente.nazione || 'IT' } : { ragione_sociale: '' };
   if (!d.condizione_pagamento) totali.errori.push('Manca la condizione di pagamento.');
@@ -191,8 +273,8 @@ async function preparaXml(c: pg.PoolClient | null, id: number, numero: number) {
   }
   const x = await datiXml(c, id, numero);
   const esito = generaFatturaXml(x.documento, x.clienteXml, x.azienda, x.aliquote);
-  const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione', 'codice_sdi', 'pec']
-    .map(k => [k, x.cliente?.[k] ?? null]).filter(([, v]) => v));
+  const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione', 'codice_sdi', 'pec',
+    'pubblica_amministrazione', 'split_payment'].map(k => [k, x.cliente?.[k] ?? null]).filter(([, v]) => v));
   return { esito, erroriExtra: x.totali.errori.filter(e => /condizione di pagamento/.test(e)), intestatario, scadenze: x.documento.scadenze,
     intentoId: esito.totali.riepilogo.some(g => g.natura === 'N3.5') ? x.intento?.id ?? null : null };
 }
@@ -222,9 +304,9 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
       if (errori.length) throw new ErroreEmissione(errori);
       const intestatario = x.intestatario;
       await c.query(`UPDATE documenti SET numero = $2, stato = 'emesso', intestatario = $3, imponibile = $4, imposta = $5, bollo = $6, totale = $7,
-        xml = $8, dichiarazione_intento_id = $9, aggiornato_il = now() WHERE id = $1`,
+        xml = $8, dichiarazione_intento_id = $9, tipo_sdi = coalesce($10, tipo_sdi), aggiornato_il = now() WHERE id = $1`,
         [id, numero, JSON.stringify(intestatario), esito.totali.imponibile, esito.totali.imposta, esito.totali.bollo, esito.totali.totale, esito.xml,
-         x.intentoId]);
+         x.intentoId, d.tipo === 'autofattura' ? null : esito.tipoSdi ?? null]);
       await c.query(`DELETE FROM documenti_scadenze WHERE documento_id = $1`, [id]);
       for (const s of x.scadenze)
         await c.query(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4)`, [id, s.data, s.importo, s.modalita]);

@@ -13,6 +13,8 @@ import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from
 import { cercaComponenti, conteggiComponenti } from '../codifica-servizio.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
+import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
+import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti']];
@@ -87,6 +89,7 @@ export function rotteAnagrafiche() {
             <td><input name="partita_iva" form="c-${c.id}" value="${c.partita_iva ?? ''}" class="maiuscolo"></td>
             <td class="n"><a href="/anagrafiche/prodotti?cliente=${c.id}" title="Vedi i prodotti di questo cliente">${c.prodotti}</a></td><td class="n">${c.preventivi}</td>
             <td class="nowrap"><form method="post" action="/anagrafiche/clienti/${c.id}" id="c-${c.id}"><button>Salva</button></form>
+              <a class="bottone" href="/anagrafiche/clienti/${c.id}/fiscali" title="Indirizzo, P.IVA, codice SDI, PEC, pubblica amministrazione, split payment">Dati fiscali</a>
               ${eliminabile(c) ? html`<form method="post" action="/anagrafiche/clienti/${c.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il cliente ${c.ragione_sociale} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
@@ -201,6 +204,47 @@ export function rotteAnagrafiche() {
     await q(`INSERT INTO clienti (ragione_sociale, partita_iva) VALUES ($1, nullif($2, ''))`, [nome, maiuscolo(req.body.partita_iva)]);
     res.redirect(torna(`${nome} aggiunto.`));
   });
+  // ── Dati fiscali del cliente (fattura elettronica, pubblica amministrazione, split payment) ──
+  const CAMPI_FISCALI: [string, string, string?][] = [['partita_iva', 'Partita IVA'], ['codice_fiscale', 'Codice fiscale'], ['indirizzo', 'Indirizzo'],
+    ['cap', 'CAP'], ['comune', 'Comune'], ['provincia', 'Provincia (sigla)'], ['nazione', 'Nazione (sigla, IT)'],
+    ['codice_sdi', 'Codice destinatario SDI', '7 caratteri; per la pubblica amministrazione il codice ufficio di 6'], ['pec', 'PEC'],
+    ['email_amministrazione', 'Email per le fatture']];
+  r.get('/clienti/:id/fiscali', async (req, res) => {
+    const c = await q1(`SELECT * FROM clienti WHERE id = $1`, [Number(req.params.id)]);
+    if (!c) return res.status(404).send('Cliente non trovato');
+    const [aliquote, condizioni] = await Promise.all([caricaAliquote(true), caricaCondizioniPagamento(true)]);
+    res.send(await pag(req, 'clienti', html`
+      <p><a href="/anagrafiche/clienti">← Clienti</a></p>
+      <h2>${c.ragione_sociale}: dati fiscali</h2>
+      <p class="nota">Servono per fatture, note di credito e DDT. Arrivano da Fatture in Cloud; qui si correggono o si completano
+        (es. un ente pubblico come l'INFN: spunta "Pubblica amministrazione", codice ufficio di 6 caratteri e, quasi sempre, split payment).</p>
+      <form method="post" action="/anagrafiche/clienti/${c.id}/fiscali" class="blocco">
+        <div class="riga-campi">${CAMPI_FISCALI.map(([k, t, aiuto]) => html`<label>${t}
+          <input name="${k}" value="${c[k] ?? (k === 'nazione' ? 'IT' : '')}" class="${['pec', 'email_amministrazione'].includes(k) ? '' : 'maiuscolo'}" ${aiuto ? raw(`title="${aiuto}"`) : ''}></label>`)}
+          <label>IVA predefinita <select name="aliquota_iva"><option value="">22 %</option>${aliquote.map(a =>
+            html`<option value="${a.codice}" ${c.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></label>
+          <label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(p =>
+            html`<option value="${p.codice}" ${c.condizione_pagamento === p.codice ? raw('selected') : ''}>${p.descrizione}</option>`)}</select></label>
+        </div>
+        <label class="spunta"><input type="checkbox" name="pubblica_amministrazione" ${c.pubblica_amministrazione ? raw('checked') : ''}>
+          Pubblica amministrazione (fattura FPA12 al codice ufficio, con numero d'ordine e CIG)</label>
+        <label class="spunta"><input type="checkbox" name="split_payment" ${c.split_payment ? raw('checked') : ''}>
+          Split payment: il cliente paga solo imponibile e bollo, l'IVA la versa lui (art. 17-ter)</label>
+        <div class="barra-azioni"><button class="primario">Salva</button></div>
+      </form>`, msg(req)));
+  });
+  r.post('/clienti/:id/fiscali', async (req, res) => {
+    const id = Number(req.params.id);
+    const { dati, errori } = datiFiscaliDaModulo(req.body ?? {});
+    if (errori.length) return res.redirect(`/anagrafiche/clienti/${id}/fiscali?msg=${encodeURIComponent(`Non salvato: ${errori.join(' ')}`)}`);
+    await q(`UPDATE clienti SET partita_iva = $2, codice_fiscale = $3, indirizzo = $4, cap = $5, comune = $6, provincia = $7, nazione = $8,
+      codice_sdi = $9, pec = $10, email_amministrazione = $11, pubblica_amministrazione = $12, split_payment = $13,
+      aliquota_iva = (SELECT codice FROM aliquote_iva WHERE codice = $14), condizione_pagamento = (SELECT codice FROM condizioni_pagamento WHERE codice = $15),
+      aggiornato_il = now() WHERE id = $1`, [id, dati.partita_iva, dati.codice_fiscale, dati.indirizzo, dati.cap, dati.comune, dati.provincia, dati.nazione,
+      dati.codice_sdi, dati.pec, dati.email_amministrazione, dati.pubblica_amministrazione, dati.split_payment, dati.aliquota_iva, dati.condizione_pagamento]);
+    res.redirect(`/anagrafiche/clienti/${id}/fiscali?msg=${encodeURIComponent('Dati fiscali salvati.')}`);
+  });
+
   r.post('/clienti/:id', async (req, res) => {
     const nome = maiuscolo(req.body.ragione_sociale), id = Number(req.params.id);
     if (!nome) return res.redirect(torna('La ragione sociale non può essere vuota.'));

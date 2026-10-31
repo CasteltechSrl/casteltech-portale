@@ -31,6 +31,11 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('Caricare un ordine'), ['carica-ordine']);
   assert.deepEqual(primi('nota di credito'), ['nota-credito']);
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
+  assert.ok(primi('fattura INFN split payment', 2).includes('pubblica-amministrazione'));
+  assert.ok(primi('codice ufficio CIG pubblica amministrazione', 2).includes('pubblica-amministrazione'));
+  assert.ok(primi('fattura di acconto', 2).includes('tipi-fattura'));
+  assert.ok(primi('nota di debito', 2).includes('tipi-fattura'));
+  assert.ok(primi('ritenuta acconto commercialista F24', 2).includes('ritenute-fornitori'));
   assert.deepEqual(primi('fattura scartata dallo SdI', 1), ['invio-sdi']);
   assert.deepEqual(primi('inviare allo sdi', 1), ['invio-sdi']);
   assert.ok(primi('fatture fornitori arrivate dallo sdi', 3).includes('incassi-pagamenti'));

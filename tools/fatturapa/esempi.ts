@@ -52,10 +52,43 @@ export const FATTURA_RATE: DocumentoXml = {
   scadenze: [{ data: '2026-12-31', importo: 372.1, modalita: 'MP12' }, { data: '2027-01-31', importo: 372.1, modalita: 'MP12' }],
 };
 
+/** Ente pubblico inventato (come l'INFN): solo codice fiscale, codice ufficio di 6 caratteri, split payment. */
+export const CLIENTE_PA: ClienteXml = { ragione_sociale: 'ISTITUTO PUBBLICO DI PROVA - SEZIONE DI ROMA', codice_fiscale: '84001850589',
+  indirizzo: 'VIA DELLA RICERCA SCIENTIFICA, 1', cap: '00133', comune: 'ROMA', provincia: 'RM', nazione: 'IT', codice_sdi: 'E9YBYU',
+  pubblica_amministrazione: true, split_payment: true };
+/** Fattura alla PA: numero e data dell'ordine, CIG; si incassa solo l'imponibile (1.000 €), l'IVA (220 €) la versa l'ente. */
+export const FATTURA_PA: DocumentoXml = {
+  id: 6000, tipo: 'fattura', numero: 119, data: '2026-11-10', riferimento_esterno: '4924', data_ordine: '2025-10-23', cig: 'B8C295DE7C',
+  righe: [{ codice: 'SCH-01', descrizione: 'Assemblaggio schede', quantita: 100, um: 'pz', prezzo: 10 }],
+  scadenze: [{ data: '2026-12-10', importo: 1000, modalita: 'MP05' }],
+};
+/** Fattura d'acconto (TD02) e saldo che la scala con una riga negativa. */
+export const ACCONTO: DocumentoXml = {
+  id: 6001, tipo: 'fattura', tipo_sdi: 'TD02', numero: 120, data: '2026-11-10', riferimento_esterno: 'ORD 77',
+  righe: [{ descrizione: 'Acconto sul vostro ordine n. ORD 77', quantita: 1, prezzo: 300 }],
+  scadenze: [{ data: '2026-11-10', importo: 366, modalita: 'MP05' }],
+};
+export const SALDO: DocumentoXml = {
+  id: 6002, tipo: 'fattura', numero: 125, data: '2026-11-20', riferimento_esterno: 'ORD 77',
+  righe: [{ descrizione: 'Assemblaggio schede', quantita: 100, prezzo: 10 },
+    { descrizione: 'Storno acconto fattura n. 120 del 10/11/2026', quantita: 1, prezzo: -300, aliquota_iva: 'IVA22' }],
+  scadenze: [{ data: '2026-12-31', importo: 854, modalita: 'MP05' }], acconti: [{ numero: '120', data: '2026-11-10' }],
+};
+/** Nota di debito (TD05) su una fattura emessa. */
+export const NOTA_DEBITO: DocumentoXml = {
+  id: 6003, tipo: 'fattura', tipo_sdi: 'TD05', numero: 126, data: '2026-11-21', origine: { numero: '119', data: '2026-11-10' },
+  righe: [{ descrizione: 'Spese di trasporto non addebitate', quantita: 1, prezzo: 50 }],
+  scadenze: [{ data: '2026-12-21', importo: 61, modalita: 'MP05' }],
+};
+
 export const ESEMPI: { nome: string; documento: DocumentoXml; cliente: ClienteXml }[] = [
   { nome: 'fattura-intento-ddt', documento: FATTURA, cliente: CLIENTE_IT },
   { nome: 'nota-credito-ue', documento: NOTA_UE, cliente: CLIENTE_UE },
   { nome: 'fattura-riba-pec', documento: FATTURA_RATE, cliente: CLIENTE_PEC },
+  { nome: 'fattura-pa-split', documento: FATTURA_PA, cliente: CLIENTE_PA },
+  { nome: 'fattura-acconto', documento: ACCONTO, cliente: CLIENTE_IT },
+  { nome: 'fattura-saldo', documento: SALDO, cliente: CLIENTE_IT },
+  { nome: 'nota-debito', documento: NOTA_DEBITO, cliente: CLIENTE_IT },
 ];
 
 // autofatture: fornitori esteri inventati
