@@ -52,3 +52,14 @@ test('guida: dove trovo le voci del menu a gruppi', () => {
   for (const q of ['menu a tendina', 'dove sono finiti gli ordini a fornitore nel menu'])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === 'menu-gruppi'), q);
 });
+
+test('menu a gruppi: tendine meno sensibili (Adriano 31/10/2026, menu.js con ritardo di chiusura e ponte nel CSS)', () => {
+  assert.match(pagina('ufficio'), /<script src="\/static\/menu\.js\?v=[^"]+" defer><\/script>/);
+  const js = readFileSync(new URL('../public/menu.js', import.meta.url), 'utf8');
+  const chiusura = Number(js.match(/CHIUSURA_MS = (\d+)/)?.[1]);
+  assert.ok(chiusura >= 300 && chiusura <= 700, 'ritardo di chiusura tra 0,3 e 0,7 s');
+  const css = readFileSync(new URL('../public/stile.css', import.meta.url), 'utf8');
+  assert.match(css, /\.gruppo \.tendina::before \{ content: ''/);
+  // con lo script attivo la tendina non dipende più da :hover (che la chiudeva subito)
+  assert.match(css, /\.testata:not\(\.menu-js\) \.gruppo:hover \.tendina/);
+});
