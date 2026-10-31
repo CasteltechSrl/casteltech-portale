@@ -12,9 +12,10 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MOSTRATE = 12;   // scadenze elencate per riquadro (le altre sono nei totali)
 
 /** Tasti in cima a tutte le pagine dell'Amministrazione. */
-export function menuAmministrazione(attiva: 'cruscotto' | 'documenti' | 'ricevuti'): Raw {
+export function menuAmministrazione(attiva: 'cruscotto' | 'documenti' | 'ricevuti' | 'registri' | 'vies'): Raw {
   const voci = [['cruscotto', '/amministrazione', 'Cruscotto'], ['documenti', '/amministrazione/documenti', 'Documenti emessi'],
-    ['ricevuti', '/amministrazione/ricevuti', 'Fatture fornitori']] as const;
+    ['ricevuti', '/amministrazione/ricevuti', 'Fatture fornitori'], ['registri', '/amministrazione/registri', 'Registri IVA'],
+    ['vies', '/amministrazione/vies', 'Controllo VIES']] as const;
   return html`<nav class="tasti-sezione">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}
     <a href="/impostazioni/amministrazione">Impostazioni</a></nav>`;
 }
