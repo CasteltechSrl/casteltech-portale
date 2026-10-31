@@ -352,6 +352,11 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ✅ Profilo Contabilità in sola lettura (Adriano 31/10/2026: il commercialista e Sonia di HTS; `engine/ruoli.ts`, migrazione 049, test in `tests/ruoli.test.ts`):
    ruolo 'contabilita' = solo GET sotto /amministrazione (`contabilitaPuo`, middleware `amministrazioneOContabilita` in `index.ts`) + Guida; menu con il solo
    gruppo Amministrazione, `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
+   ✅ Analisi (Adriano 31/10/2026, "trend e analisi critica/di aiuto"; `/amministrazione/analisi`, `engine/analisi.ts`, `rotte/analisi.ts`, test `tests/analisi.test.ts`):
+   dal 1/1 a oggi contro lo stesso periodo dell'anno prima (anni passati: anno intero), fatture emesse/ricevute anche storico FIC: fatturato, acquisti, resta dopo
+   gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che
+   pesano di più, dipendenza, clienti fermi/nuovi, ritardi d'incasso, scaduto > 60 gg, prezzi sotto preventivo, margine < 10 %); tabelle mesi, clienti (margine stimato
+   = fatturato × margine dell'ultimo preventivo del codice, giorni di incasso), prodotti, acquisti per categoria FIC e fornitori. Non è il bilancio.
    ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
    dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
    ✅ Altri tipi di fattura e PA (Adriano 31/10/2026; `engine/tipi-fattura.ts`, migrazione 050): TD24 differita scelta da sola se la fattura cita DDT con

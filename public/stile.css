@@ -715,3 +715,15 @@ body.sola-lettura .menu-destra .etichetta { align-self: center; }
 .settimane b { display: block; font-size: .95rem; color: var(--testo); }
 .settimane a.piena b { color: var(--negativo); }
 .nota.piede { margin-top: 1rem; }
+
+/* Analisi (Amministrazione → Analisi) */
+:root { --serie-anno-prima: #b9c0bc; }
+.campione.anno-prima { background: var(--serie-anno-prima); }
+.grafico-mesi .anno-prima { fill: var(--serie-anno-prima); }
+.commenti-analisi { list-style: none; padding: 0; margin: 0 0 .6rem; display: grid; gap: .5rem; }
+.commenti-analisi li { display: flex; gap: .6rem; align-items: flex-start; background: var(--superficie, #fff); border: 1px solid var(--bordo); border-radius: 10px; padding: .7rem .9rem; }
+.commenti-analisi .pallino { font-size: 1.1rem; line-height: 1.2; }
+.commenti-analisi .critico .pallino { color: var(--negativo, #c0392b); }
+.commenti-analisi .attenzione .pallino { color: #d08a00; }
+.commenti-analisi .bene .pallino { color: var(--accento, #0f6b5a); }
+.commenti-analisi .consiglio { margin-top: .3rem; color: var(--tenue); font-size: .92em; }

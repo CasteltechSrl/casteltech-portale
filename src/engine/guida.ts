@@ -685,6 +685,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/ricevuti/mesi', 'Acquisti per fornitore e mese']],
   },
   {
+    id: 'analisi', area: 'amministrazione', titolo: 'Analisi: andamento, clienti, prodotti e consigli',
+    parole: 'analisi andamento trend fatturato calo crescita confronto anno prima margine margini cliente clienti prodotto prodotti concentrazione dipendenza incasso incassi giorni ritardo pagano consigli commenti previsione bilancio come sta andando azienda',
+    testo: [
+      'In Amministrazione → Analisi c\'è come sta andando l\'azienda, dal 1° gennaio a oggi confrontato con lo stesso periodo dell\'anno prima (per gli anni passati l\'anno intero). Usa le fatture emesse e ricevute, anche lo storico di Fatture in Cloud.',
+      'In alto: fatturato, acquisti, quanto resta dopo gli acquisti (da lì si pagano personale e spese generali) e quanto pesano i primi 3 clienti. Sotto "Cosa dicono i numeri": commenti in parole semplici, prima quelli importanti (rosso), poi le cose da tenere d\'occhio (giallo) e quelle che vanno bene (verde), ognuno con cosa conviene fare.',
+      'I commenti guardano: fatturato in calo o in crescita e da quali clienti viene, previsione dell\'anno con la media dei mesi chiusi, acquisti che pesano più dell\'anno prima, dipendenza da pochi clienti, clienti che non hanno ancora comprato e clienti nuovi, chi paga in ritardo, fatture scadute da oltre 60 giorni, prodotti venduti sotto il prezzo del preventivo o con margine sotto il 10 %.',
+      'Tabelle: fatturato per mese con il grafico dei due anni, clienti (peso, variazione, margine stimato dal preventivo, giorni di incasso e ritardo), prodotti (schede, prezzo medio, prezzo e margine dell\'ultimo preventivo), acquisti per categoria e primi fornitori.',
+      'Non è il bilancio: mancano personale, ammortamenti e banca. Il bilancio provvisorio arriva dopo prima nota e partita doppia. Il margine dei prodotti è quello del preventivo; con i tempi veri delle commesse arriverà il margine reale.',
+    ],
+    passi: ['Amministrazione → Analisi.', 'Leggi "Cosa dicono i numeri".', 'Per un anno passato scegli l\'anno e premi Mostra.'],
+    pagine: [['/amministrazione/analisi', 'Analisi']],
+  },
+  {
     id: 'vies', area: 'amministrazione', titolo: 'Controllo VIES delle partite IVA europee',
     parole: 'vies partita iva europea estera ue comunitaria intracomunitaria cliente estero controllo verifica valida non imponibile art 41 consultazione',
     testo: [

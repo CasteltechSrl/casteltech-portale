@@ -14,6 +14,7 @@ import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/ammi
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
+import { rotteAnalisi } from './analisi.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -182,6 +183,7 @@ export function rotteAmministrazione() {
 
   r.use('/fatture-estere', rotteAutofatture());
   r.use('/registri', rotteRegistriIva());
+  r.use('/analisi', rotteAnalisi());
   r.use('/vies', rotteVies());
 
   r.get('/documenti', async (req, res) => {
