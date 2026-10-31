@@ -12,12 +12,29 @@ import { Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { pool } from './db.js';
 
-/** Tabelle in ordine di dipendenza (per il ripristino). Le sessioni di login non servono. */
-export const TABELLE_BACKUP = [
-  'utenti', 'impostazioni', 'parametri', 'fasi', 'voci_costo', 'materiali',
-  'clienti', 'prodotti', 'alias_clienti', 'alias_prodotti', 'prodotti_revisioni', 'preventivi', 'commesse', 'commesse_fasi',
-  'scansioni', 'rilevazioni', 'notifiche', 'segnalazioni', 'analisi_commesse', 'componenti', 'bom_analisi', 'migrazioni_applicate',
-];
+/**
+ * Tabelle che NON vanno nel backup: le sessioni di login e la cache di 24 ore dei prezzi dei distributori.
+ * Tutte le altre sì, anche quelle aggiunte in futuro (Adriano 31/10/2026: fatture, DDT, ordini, CRM… prima restavano fuori).
+ */
+export const TABELLE_ESCLUSE = ['sessioni', 'fornitori_cache'];
+
+/**
+ * Tabelle in ordine di dipendenza: prima quelle a cui le altre rimandano (clienti prima dei preventivi), così il ripristino
+ * le reinserisce senza errori. A parità, in ordine alfabetico. `legami` = coppie [tabella, tabella a cui rimanda].
+ */
+export function ordinaPerDipendenze(tabelle: string[], legami: [string, string][]): string[] {
+  const dentro = new Set(tabelle);
+  const servono = new Map(tabelle.map(t => [t, new Set<string>()]));
+  for (const [da, a] of legami) if (da !== a && dentro.has(da) && dentro.has(a)) servono.get(da)!.add(a);
+  const fatte: string[] = [], messe = new Set<string>();
+  while (fatte.length < tabelle.length) {
+    const pronte = tabelle.filter(t => !messe.has(t) && [...servono.get(t)!].every(x => messe.has(x))).sort();
+    // rimandi in cerchio (non dovrebbero esserci): si va avanti in ordine alfabetico
+    const prossima = pronte[0] ?? tabelle.filter(t => !messe.has(t)).sort()[0];
+    fatte.push(prossima); messe.add(prossima);
+  }
+  return fatte;
+}
 
 /** Righe lette dal database per volta: il backup non tiene mai tutto il database in memoria. */
 export const RIGHE_PER_VOLTA = 100;
@@ -27,13 +44,13 @@ export type LettoreTabelle = (tabella: string, da: number, n: number) => Promise
 
 /**
  * Testo del backup un pezzo alla volta (stesso formato di sempre, letto da tools/ripristina-backup.ts):
- * { creato_il, versione: 1, tabelle: { nome: [righe] } }. I file (bytea) diventano testo base64.
+ * { creato_il, versione: 1, tabelle: { nome: [righe] } }, tabelle in ordine di dipendenza. I file (bytea) diventano testo base64.
  * 30/10/2026: costruire tutto il JSON in una volta faceva uscire il portale per memoria esaurita (stato 134) alle 20:30.
  */
-export async function* testoBackup(leggi: LettoreTabelle, creatoIl = new Date().toISOString()): AsyncGenerator<string> {
+export async function* testoBackup(tabelle: string[], leggi: LettoreTabelle, creatoIl = new Date().toISOString()): AsyncGenerator<string> {
   yield `{"creato_il":${JSON.stringify(creatoIl)},"versione":1,"tabelle":{`;
   let primaTabella = true;
-  for (const t of TABELLE_BACKUP) {
+  for (const t of tabelle) {
     let righe = await leggi(t, 0, RIGHE_PER_VOLTA);
     if (!righe) continue;
     yield `${primaTabella ? '' : ','}${JSON.stringify(t)}:[`;
@@ -62,11 +79,12 @@ export async function scriviBackup(destinazione: Writable): Promise<void> {
   const c = await pool.connect();
   try {
     await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const leggi: LettoreTabelle = async (t, da, n) => {
-      if (da === 0 && !(await c.query(`SELECT to_regclass($1) AS r`, [t])).rows[0]?.r) return null;
-      return (await c.query(`SELECT * FROM ${t} ORDER BY ctid LIMIT $1 OFFSET $2`, [n, da])).rows;
-    };
-    await pipeline(Readable.from(testoBackup(leggi)), createGzip(), destinazione);
+    const tabelle = (await c.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public'`)).rows
+      .map(r => r.t).filter(t => !TABELLE_ESCLUSE.includes(t));
+    const legami = (await c.query<{ da: string; a: string }>(`SELECT conrelid::regclass::text AS da, confrelid::regclass::text AS a
+      FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace`)).rows.map(r => [r.da, r.a] as [string, string]);
+    const leggi: LettoreTabelle = async (t, da, n) => (await c.query(`SELECT * FROM "${t}" ORDER BY ctid LIMIT $1 OFFSET $2`, [n, da])).rows;
+    await pipeline(Readable.from(testoBackup(ordinaPerDipendenze(tabelle, legami), leggi)), createGzip(), destinazione);
     await c.query('COMMIT');
   } catch (e) {
     await c.query('ROLLBACK').catch(() => {});
@@ -94,6 +112,7 @@ async function backupNotturno() {
   if (!cartella) return;
   try {
     await scriviBackupSuFile(cartella, nomeFileBackup());
+    liberaSpazio(cartella);
     const limite = Date.now() - 30 * 24 * 3600_000;
     for (const f of readdirSync(cartella)) {
       // anche i file provvisori rimasti da un backup interrotto (più vecchi di un giorno)
@@ -104,6 +123,20 @@ async function backupNotturno() {
   } catch (e) {
     console.error('Backup serale NON riuscito', e);
   }
+}
+
+/** Spazio massimo delle copie sul disco di Render (1 GB): oltre si tolgono le più vecchie, tenendone sempre almeno 5. */
+export const SPAZIO_MASSIMO = 750 * 1024 * 1024;
+export function copieDaTogliere(copie: { nome: string; byte: number }[], massimo = SPAZIO_MASSIMO, minimo = 5): string[] {
+  const ordinate = [...copie].sort((a, b) => b.nome.localeCompare(a.nome));   // la più recente per prima (data nel nome)
+  const via: string[] = [];
+  let totale = ordinate.reduce((t, c) => t + c.byte, 0);
+  for (let i = ordinate.length - 1; i >= minimo && totale > massimo; i--) { via.push(ordinate[i].nome); totale -= ordinate[i].byte; }
+  return via;
+}
+function liberaSpazio(cartella: string) {
+  const copie = readdirSync(cartella).filter(f => f.startsWith('casteltech-backup-')).map(nome => ({ nome, byte: statSync(join(cartella, nome)).size }));
+  for (const nome of copieDaTogliere(copie)) unlinkSync(join(cartella, nome));
 }
 
 /** Salva subito una copia nella cartella dei backup (es. prima di un'operazione che cancella dati). */
