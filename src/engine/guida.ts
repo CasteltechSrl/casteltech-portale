@@ -585,6 +585,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/documenti', 'Documenti emessi']],
   },
   {
+    id: 'azioni-documenti', area: 'amministrazione', titolo: 'Più documenti insieme: spunte nell\'elenco (elimina, XML, Excel, incassi)',
+    parole: 'spunta spunte casella selezionare tutti elimina eliminare cancellare bozza bozze scarica xml zip excel incassate incassare incasso duplica copia annulla ddt fatturare piu insieme elenco',
+    testo: [
+      'In Amministrazione → Documenti emessi (Fatture, Note di credito, Autofatture, DDT) ogni riga ha una casella a sinistra: spunta i documenti (la casella in alto li spunta tutti) e usa i pulsanti in alto a destra.',
+      'Elimina toglie solo le bozze: un documento emesso non si elimina mai (la numerazione non deve avere buchi). Una fattura emessa si storna con "Crea nota di credito", un DDT emesso che non è partito si annulla con "Annulla DDT" (il numero resta usato). Il portale dice quali righe spuntate non ha toccato e perché.',
+      'Fatture: "Stampa / PDF" e "Duplica" (copia come bozza di oggi, senza DDT e acconti) e "Crea nota di credito" valgono per un documento alla volta; "Scarica XML" (più di uno: file zip), "Excel" e "Segna incassate" per quanti ne spunti. "Segna incassate" apre una pagina con le rate ancora aperte: scegli data e modo di pagamento (e la banca) e conferma.',
+      'DDT: "Fattura i DDT" prepara una fattura con tutti i DDT emessi spuntati, se sono dello stesso cliente.',
+    ],
+    passi: ['Amministrazione → Documenti emessi → scegli il tipo.', 'Spunta le righe.', 'Premi il pulsante in alto a destra.'],
+    pagine: [['/amministrazione/documenti?tipo=fattura', 'Fatture'], ['/amministrazione/documenti?tipo=ddt', 'DDT']],
+  },
+  {
     id: 'tipi-fattura', area: 'amministrazione', titolo: 'Fattura differita, acconto, nota di debito, beni ammortizzabili',
     parole: 'td24 differita td02 acconto anticipo saldo scalare td05 nota debito aumentare td26 beni ammortizzabili macchinario usato cespite tipo documento',
     testo: [

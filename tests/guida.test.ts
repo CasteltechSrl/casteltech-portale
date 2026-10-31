@@ -134,3 +134,8 @@ test('guida: SMD montati a mano', () => {
 test('guida: mail .eml nella cartella', () => {
   assert.ok(primi('mail eml', 3).includes('pulsante-gmail'));
 });
+
+test('guida: spunte nell\'elenco dei documenti emessi', () => {
+  assert.ok(primi('eliminare più bozze di fattura insieme', 3).includes('azioni-documenti'));
+  assert.ok(primi('scaricare xml di più fatture', 3).includes('azioni-documenti'));
+});

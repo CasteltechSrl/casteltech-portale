@@ -66,7 +66,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Elenchi con spunte (Adriano 29/10/2026; `views/azioni-elenco.ts` + `public/elenco.js`, test in `tests/azioni-elenco.test.ts`): come l'elenco Preventivi,
   casella su ogni riga e pulsanti in alto a destra (`moduloAzioni`, POST `<sezione>/azioni`). Ci sono in Preventivi, Commesse (Stampa scheda, Rientro,
   Duplica, Elimina: insieme solo aperte e senza tempi), Ordini (righe; Conferma d'ordine, Segna evase, Stato dai DDT, Elimina = ordini interi; niente
-  Duplica), BOM di Quotazioni, Ordini a fornitore (Duplica, Elimina = bozze eliminate, emessi annullati), Documenti del cliente, Da acquisire (Scarta), Suggerimenti. Un elenco nuovo con azioni usa lo stesso schema.
+  Duplica), BOM di Quotazioni, Ordini a fornitore (Duplica, Elimina = bozze eliminate, emessi annullati), Documenti del cliente, Da acquisire (Scarta), Suggerimenti,
+  Documenti emessi (Adriano 31/10/2026; regole in `engine/azioni-documenti.ts`, `azioni-documenti-servizio.ts`, test in `tests/azioni-documenti.test.ts`):
+  pulsanti per tipo (fatture: Stampa, XML/zip, Excel, Segna incassate → pagina con data e modo, Duplica, Nota di credito, Elimina; NC; autofatture; DDT: Fattura i DDT
+  dello stesso cliente, Annulla DDT); Elimina SOLO bozze senza numero, il resto si storna/annulla e il messaggio dice cosa non è stato toccato; niente spunte per Contabilità. Un elenco nuovo con azioni usa lo stesso schema.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
