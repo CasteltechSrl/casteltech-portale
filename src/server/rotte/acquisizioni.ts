@@ -132,7 +132,7 @@ export function rotteAcquisizioni() {
       pulsanti: [{ azione: 'scarta', testo: 'Scarta', serve: '1+', pericolo: true,
         chiedi: 'Scartare {n} file? Non diventano ordini: il contenuto si cancella e resta solo la riga, così non si rilegge dal Drive.' }],
     });
-    res.send(pagina(req.session.utente, 'Da acquisire', 'acquisire', html`
+    res.send(pagina(req.session.utente, 'Ordini da e-mail e PDF', 'acquisire', html`
       <section class="blocco">
         <h2>Cartella Google Drive</h2>
         ${driveConfigurato() ? html`<p class="nota">I file messi nella cartella condivisa con <code>${emailAccountDrive()}</code> si acquisiscono da soli
