@@ -1,6 +1,6 @@
 /**
  * Backup del database: tutte le tabelle in un unico file JSON compresso (.json.gz).
- * - dal lunedì al venerdì alle 20:30 (ora italiana, a fine giornata: il database Neon è ancora acceso e non
+ * - dal lunedì al venerdì alle 18:00 (ora italiana, a fine giornata, Adriano 1/11/2026: il database Neon è ancora acceso e non
  *   va svegliato di notte) una copia in BACKUP_DIR (disco di Render), tenendo gli ultimi 30 giorni;
  * - in qualsiasi momento dal pannello Impostazioni → Backup (scarica il file).
  * Ripristino: tools/ripristina-backup.ts
@@ -157,7 +157,7 @@ export function elencoBackup(): { nome: string; kb: number; byte: number }[] {
   } catch { return []; }
 }
 
-/** Controlla ogni 10 minuti se è l'ora del backup (20:30 ora italiana, lunedì–venerdì). Non tocca il database finché non è l'ora. */
+/** Controlla ogni 10 minuti se è l'ora del backup (18:00 ora italiana, lunedì–venerdì). Non tocca il database finché non è l'ora. */
 export function avviaBackupNotturno() {
   let ultimoGiorno = '';
   setInterval(() => {
@@ -165,9 +165,9 @@ export function avviaBackupNotturno() {
     const p = Object.fromEntries(ora.map(x => [x.type, x.value]));
     const giorno = `${p.year}-${p.month}-${p.day}`;
     const feriale = !['Sat', 'Sun'].includes(p.weekday);
-    if (feriale && p.hour === '20' && Number(p.minute) >= 30 && giorno !== ultimoGiorno) {
+    if (feriale && p.hour === '18' && giorno !== ultimoGiorno) {
       ultimoGiorno = giorno;
-      // il portale è ripartito dopo le 20:30 (pubblicazione serale): la copia di oggi c'è già
+      // il portale è ripartito dopo le 18:00 (pubblicazione serale): la copia di oggi c'è già
       if (elencoBackup().some(b => b.nome.startsWith(`casteltech-backup-${giorno}`))) return;
       void backupNotturno();
     }

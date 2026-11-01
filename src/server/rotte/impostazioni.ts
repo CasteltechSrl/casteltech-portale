@@ -497,12 +497,12 @@ export function rotteImpostazioni() {
     const pc = await leggiStatoBackupPc();
     const quando = (iso?: string) => iso ? new Date(iso).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }) : '';
     res.send(pag(req, 'Backup', html`
-      <p class="nota">Dal lunedì al venerdì alle 20:30 il portale salva una copia completa dei dati, fatture, ordini e CRM compresi (ultimi 30 giorni; oltre 750 MB si tolgono le copie più vecchie, almeno 5 restano).
+      <p class="nota">Dal lunedì al venerdì alle 18:00 il portale salva una copia completa dei dati, fatture, ordini e CRM compresi (ultimi 30 giorni; oltre 750 MB si tolgono le copie più vecchie, almeno 5 restano).
         Puoi anche scaricarne una adesso e conservarla dove vuoi (es. Google Drive).</p>
       <form method="post" action="/impostazioni/backup/scarica"><button class="primario">Scarica un backup adesso</button></form>
       <h2>Copia automatica su Google Drive (PC dell'ufficio)</h2>
-      <p class="nota">Ogni sera alle 21:00 il PC prende dal portale le copie nuove e le salva in <code>${CARTELLA_PC_PREDEFINITA}</code>;
-        Google Drive le porta nel cloud da solo. Se il PC è spento, lo fa alla prima accensione. Sul PC restano tutte le copie degli ultimi 60 giorni e poi la prima di ogni mese.
+      <p class="nota">Ogni sera alle 18:30 il PC prende dal portale le copie nuove e le salva in <code>${CARTELLA_PC_PREDEFINITA}</code>;
+        Google Drive le porta nel cloud da solo. Se il PC è già spento, lo fa la mattina dopo appena lo accendi. Sul PC restano tutte le copie degli ultimi 60 giorni e poi la prima di ogni mese.
         Per installarlo: premi il pulsante, apri il file scaricato con un doppio clic e aspetta la scritta FATTO. Se il browser o Windows chiedono conferma
         scegli "Mantieni" / "Ulteriori informazioni → Esegui comunque": il file l'ha preparato il portale.</p>
       ${pc?.chiave ? html`<p>${pc.ultima_copia

@@ -3,7 +3,7 @@
  * "G:\Il mio Drive\01_LAVORO\CASTELTECH\16_Backup\Portale_Render").
  *
  * Come funziona: in Impostazioni → Backup il pulsante "Installa sul PC" scarica un piccolo programma (.bat) con dentro
- * la chiave; aperto una volta, crea un'attività pianificata di Windows che ogni sera alle 21:00 (o alla prima accensione
+ * la chiave; aperto una volta, crea un'attività pianificata di Windows che ogni sera alle 18:30 (o alla prima accensione
  * se il PC era spento) chiede al portale quali copie mancano e le salva nella cartella. Google Drive per desktop le porta
  * nel cloud da solo. Il portale non tocca Google: niente account di servizio né deleghe.
  *
@@ -90,7 +90,7 @@ try {
 /**
  * Installatore da aprire con un doppio clic: le prime righe sono per il Prompt dei comandi, che passa il resto del file
  * a PowerShell (così basta un solo file, senza cambiare le impostazioni di sicurezza del PC).
- * Crea %LOCALAPPDATA%\CasteltechBackup\scarica-backup.ps1, l'attività pianificata delle 21:00 e fa subito la prima copia.
+ * Crea %LOCALAPPDATA%\CasteltechBackup\scarica-backup.ps1, l'attività pianificata delle 18:30 e fa subito la prima copia.
  */
 export function installatoreBackupPc(o: { portale: string; chiave: string; cartella?: string }): string {
   const scaricatore = SCARICATORE.replace('__PORTALE__', () => '__P__').replace('__CHIAVE__', () => '__K__').replace('__CARTELLA__', () => '__C__');
@@ -123,10 +123,10 @@ export function installatoreBackupPc(o: { portale: string; chiave: string; carte
     "$File = Join-Path $Casa 'scarica-backup.ps1'",
     'Set-Content -LiteralPath $File -Value $testo -Encoding UTF8',
     "$azione = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"' + $File + '\"')",
-    "$quando = New-ScheduledTaskTrigger -Daily -At '21:00'",
+    "$quando = New-ScheduledTaskTrigger -Daily -At '18:30'",
     '$regole = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2)',
     `Register-ScheduledTask -TaskName ${ps(ATTIVITA_PC)} -Action $azione -Trigger $quando -Settings $regole -Description 'Ogni sera salva le copie nuove del Portale Casteltech nella cartella di Google Drive' -Force | Out-Null`,
-    "Write-Host 'Attivita pianificata creata: ogni sera alle 21:00 (se il PC e spento, alla prima accensione).'",
+    "Write-Host 'Attivita pianificata creata: ogni sera alle 18:30 (se il PC e spento, alla prima accensione).'",
     "Write-Host 'Prima copia in corso, attendi...'",
     '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $File',
     'if ($LASTEXITCODE -eq 0) {',

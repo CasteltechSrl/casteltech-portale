@@ -84,10 +84,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 ## Database su Neon (piano gratuito)
 Il database si spegne dopo 5 minuti senza richieste e il piano ha 100 ore di calcolo al mese:
 niente controlli periodici che interrogano il database (il controllo di Render `/salute` non lo tocca),
-niente timer frequenti. Uso reale: lun–ven 8–20. Backup lun–ven alle 20:30 in `BACKUP_DIR` (disco Render)
+niente timer frequenti. Uso reale: lun–ven 8–20. Backup lun–ven alle 18:00 (Adriano 1/11/2026) in `BACKUP_DIR` (disco Render)
 + pulsante in Impostazioni → Backup.
 Copia su Google Drive (Adriano 1/11/2026; `engine/backup-pc.ts`, `rotte/api-backup.ts`, test in `tests/backup-pc.test.ts`): Impostazioni → Backup →
-"Installa sul PC" scarica un .bat con la chiave (impostazioni 'backup_pc'); sul PC dell'ufficio crea l'attività pianificata delle 21:00 (alla prima accensione se
+"Installa sul PC" scarica un .bat con la chiave (impostazioni 'backup_pc'); sul PC dell'ufficio crea l'attività pianificata delle 18:30 (alla prima accensione se
 spento) che chiede POST `/api/backup/piano` e scarica con GET `/api/backup/file/:nome` le copie nuove in `G:\Il mio Drive\01_LAVORO\CASTELTECH\16_Backup\Portale_Render`;
 sul PC 60 giorni + la prima copia di ogni mese. Il portale non tocca Google (niente account di servizio: senza spazio su "Il mio Drive").
 Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in streaming, una sola transazione in lettura): mai tutto il
