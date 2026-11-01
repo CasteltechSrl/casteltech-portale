@@ -73,3 +73,34 @@ document.querySelectorAll('form.elimina-attivita').forEach(f => f.addEventListen
       : j.errore || 'Errore';
   });
 })();
+
+// Impostazioni → CRM: dati mancanti cercati online (solo campi vuoti), prima controlla poi completa
+(() => {
+  const controlla = document.getElementById('controlla-completamento');
+  if (!controlla) return;
+  const conferma = document.getElementById('conferma-completamento');
+  const out = document.getElementById('esito-completamento');
+  const nomi = { partita_iva: 'P.IVA', email: 'email', telefono: 'telefoni', sito: 'siti' };
+  const invia = async definitivo => {
+    const f = document.getElementById('file-completamento').files[0];
+    if (!f) { out.textContent = 'Scegli prima il file.'; return; }
+    controlla.disabled = conferma.disabled = true;
+    out.textContent = definitivo ? 'Completamento in corso…' : 'Controllo del file…';
+    const res = await fetch('/impostazioni/crm/completa' + (definitivo ? '?conferma=1' : ''), { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
+    const j = await res.json().catch(() => ({}));
+    controlla.disabled = conferma.disabled = false;
+    if (!res.ok) { out.textContent = j.errore || 'Errore'; conferma.hidden = true; return; }
+    const campi = Object.entries(j.riempiti).filter(([, n]) => n).map(([k, n]) => `${n} ${nomi[k] || k}`);
+    const righe = [
+      `${definitivo ? 'Completate' : 'Da completare'}: ${j.aziende} aziende su ${j.righe} del file.`,
+      campi.length ? `Campi vuoti riempiti: ${campi.join(', ')}.` : 'Nessun campo vuoto da riempire (i dati ci sono già).',
+      j.conDubbi ? `${j.conDubbi} aziende con una nota "Da verificare".` : '',
+      j.scartati.length ? `Non entrati (${j.scartati.length}): ${j.scartati.slice(0, 20).join('; ')}${j.scartati.length > 20 ? '; …' : ''}.` : '',
+      j.sconosciute.length ? `Codici non trovati nel CRM: ${j.sconosciute.slice(0, 20).join(', ')}${j.sconosciute.length > 20 ? '…' : ''}.` : '',
+    ];
+    out.textContent = righe.filter(Boolean).join(' ');
+    conferma.hidden = definitivo;
+  };
+  controlla.addEventListener('click', () => invia(false));
+  conferma.addEventListener('click', () => invia(true));
+})();
