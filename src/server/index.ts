@@ -31,6 +31,8 @@ import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { rotteGmail } from './rotte/gmail.js';
+import { rotteApiClaude } from './rotte/api-claude.js';
+import { rotteCalendario } from './rotte/calendario.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
 import { contabilitaPuo, paginaIniziale } from '../engine/ruoli.js';
@@ -54,6 +56,10 @@ app.post('/sdi/webhook', express.raw({ type: '*/*', limit: '1mb' }), async (req,
 app.use('/api/gmail', rotteGmail());
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
+// controllo settimanale dei suggerimenti fatto da Claude: entra con la sua chiave, senza sessione
+app.use('/api/claude', rotteApiClaude());
+// calendario dei ritardi letto da Google Calendar (indirizzo con la chiave dentro), senza sessione
+app.use('/calendario', rotteCalendario());
 
 const segreto = process.env.SESSION_SECRET;
 if (!segreto && process.env.NODE_ENV === 'production') throw new Error('Manca SESSION_SECRET');

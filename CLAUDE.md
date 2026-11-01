@@ -276,6 +276,15 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Elenco: aperti in cima per stato e priorità, fatti e scartati nascosti ("mostra tutti"). Elimina sempre possibile (non collegati ad altro).
    Primi due (Federico): avviso Telegram al responsabile della fase successiva seguendo il Gantt (responsabili di fase ancora da definire);
    promemoria nel calendario di info@ per le commesse in ritardo su preventivo, capacità produttiva e scadenza.
+   Controllo settimanale di Claude (Adriano 1/11/2026; migrazione 054, `rotte/api-claude.ts`, test in `tests/suggerimenti.test.ts`): stato "Da chiarire"
+   (in cima, giallo) + colonna `risposta` (domanda/risposta per chi ha proposto; chi risponde scrive nelle note). Claude legge e aggiorna con
+   GET/POST `/api/claude/suggerimenti` e la chiave creata in Suggerimenti → Collegamento con Claude (impostazioni 'claude_api', variabile
+   `PORTALE_CHIAVE_CLAUDE` nell'ambiente di Claude); può cambiare solo stato, risposta e aggiungere una riga datata alle note.
+   ✅ Calendario dei ritardi (idea di Federico; `engine/calendario-ritardi.ts`, `rotte/calendario.ts`, test in `tests/calendario-ritardi.test.ts`):
+   `/calendario/<chiave>/ritardi.ics` aggiunto "Da URL" in Google Calendar di info@ (niente delega Workspace), indirizzo in Impostazioni → Promemoria.
+   Eventi: consegna scaduta, fine Gantt superata, doveva partire, avviso 2 gg lavorativi prima dell'inizio, sovraccarico (ore > ore al giorno),
+   commesse aperte oltre la consegna o oltre le ore uomo del preventivo. Copia in memoria, ricalcolata solo lun–ven 7–20 e al massimo ogni ora (Neon).
+   ⬜ Avviso Telegram: "Da chiarire" (responsabili di fase, bot Telegram, quando avvisare).
 4g. ✅ Guida (`rotte/guida.ts`, `engine/guida.ts`, `server/guida-ia.ts`, `public/guida.js`; Adriano 28/10/2026): voce Guida nel menu (anche produzione),
    macro aree con argomenti (cosa si fa, come, cosa non si può fare, pulsanti alle pagine), ricerca intelligente mentre si scrive
    (radici italiane, sinonimi, "ordine+documenti" = "ordine documenti"), "Chiedi alla guida" con l'IA che risponde solo dalla guida

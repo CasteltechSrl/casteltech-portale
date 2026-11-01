@@ -487,6 +487,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     pagine: [['/impostazioni/promemoria', 'Impostazioni → Promemoria']],
   },
+  {
+    id: 'calendario-ritardi', area: 'reparto', titolo: 'Calendario dei ritardi in Google Calendar',
+    parole: 'calendario google ritardo ritardi commessa commesse consegna scaduta in ritardo gantt sovraccarico capacità promemoria info avviso anticipo',
+    testo: [
+      'Il portale prepara un calendario con i promemoria delle lavorazioni a rischio: consegne scadute, lavorazioni che secondo il Gantt dovevano già partire o finire, un avviso 2 giorni lavorativi prima dell\'inizio di ogni lavorazione, i giorni con più ore di lavoro che ore disponibili, le commesse aperte oltre la data di consegna o oltre le ore del preventivo.',
+      'Si aggiunge una volta sola in Google Calendar di info@ come calendario "Da URL": poi si aggiorna da solo (Google lo rilegge ogni qualche ora). Idea di Federico.',
+      'L\'indirizzo contiene una chiave: non va dato fuori dall\'azienda. Se serve, "Crea un indirizzo nuovo" spegne il vecchio.',
+    ],
+    passi: ['Impostazioni → Promemoria → Calendario dei ritardi → "Crea l\'indirizzo del calendario".', 'Copia l\'indirizzo.',
+      'Google Calendar (info@) → Altri calendari → + → Da URL → incolla → Aggiungi calendario.',
+      'Per vedere subito cosa contiene: "Mostra cosa c\'è adesso nel calendario".'],
+    pagine: [['/impostazioni/promemoria#calendario', 'Impostazioni → Promemoria → Calendario dei ritardi']],
+  },
 
   // ── Quotazioni (ex Componenti) ──
   {
@@ -797,9 +810,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'suggerimento', area: 'suggerimenti', titolo: 'Proporre un\'idea per il portale',
     parole: 'suggerimento idea proposta migliorare richiesta funzione manca',
     testo: [
-      'Se manca qualcosa o un passaggio è scomodo, scrivilo in Suggerimenti: titolo, descrizione, chi lo propone, area e priorità. Poi si decide se e quando svilupparlo (da valutare, in programma, in sviluppo, fatto, scartato).',
+      'Se manca qualcosa o un passaggio è scomodo, scrivilo in Suggerimenti: titolo, descrizione, chi lo propone, area e priorità. Poi si decide se e quando svilupparlo (da valutare, da chiarire, in programma, in sviluppo, fatto, scartato).',
+      'Una volta alla settimana Claude legge i suggerimenti aperti: realizza quelli validi e li segna "Fatto" con una risposta che spiega dove trovarli; se un\'idea non è chiara scrive una domanda e la mette "Da chiarire" (in cima all\'elenco, in giallo).',
+      'Per rispondere a una domanda: apri il suggerimento, scrivi la risposta in "Note e risposte" e salva. La settimana dopo Claude la rilegge.',
     ],
-    passi: ['Suggerimenti → + Nuovo suggerimento.', 'Scrivi cosa dovrebbe fare il portale e perché serve.'],
+    passi: ['Suggerimenti → + Nuovo suggerimento.', 'Scrivi cosa dovrebbe fare il portale e perché serve.', 'Se compare una domanda, rispondi nelle note del suggerimento.'],
     pagine: [['/suggerimenti/nuovo', 'Nuovo suggerimento']],
   },
 ];
