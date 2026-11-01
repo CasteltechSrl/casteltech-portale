@@ -2,7 +2,7 @@
  * Indirizzi per il controllo settimanale dei suggerimenti fatto da Claude (Adriano 1/11/2026):
  * "una volta a settimana verifica la sezione suggerimenti e fai gli update".
  * Niente sessione del portale: Claude si presenta con la chiave creata in Suggerimenti (impostazioni 'claude_api'),
- * nell'intestazione x-chiave-portale. Può solo leggere i suggerimenti e scrivere stato, domanda/risposta e una riga di note.
+ * nell'intestazione x-chiave-portale o come Authorization: Bearer (Segreti di rete del progetto). Può solo leggere i suggerimenti e scrivere stato, domanda/risposta e una riga di note.
  *
  *   GET  /api/claude/suggerimenti            → aperti (con ?tutti=1 anche fatti e scartati)
  *   POST /api/claude/suggerimenti/:id        → { stato?, risposta?, nota? }
@@ -31,6 +31,17 @@ export async function nuovaChiaveClaude(): Promise<string> {
   return chiave;
 }
 
+/**
+ * La chiave arriva nell'intestazione x-chiave-portale oppure come "Authorization: Bearer <chiave>":
+ * i "Segreti di rete" del progetto la aggiungono da soli alle richieste verso il portale, così Claude non la vede mai.
+ */
+export function chiaveDallaRichiesta(req: Pick<Request, 'get'>): string | undefined {
+  const diretta = req.get('x-chiave-portale');
+  if (diretta) return diretta;
+  const m = /^Bearer\s+(\S+)\s*$/i.exec(req.get('authorization') ?? '');
+  return m?.[1];
+}
+
 const oggiIt = () => new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' });
 
 export function rotteApiClaude() {
@@ -39,7 +50,7 @@ export function rotteApiClaude() {
   r.use(async (req: Request, res: Response, next: NextFunction) => {
     try {
       const attesa = await leggiChiaveClaude();
-      if (!chiaveGiusta(req.get('x-chiave-portale') ?? undefined, attesa ?? undefined))
+      if (!chiaveGiusta(chiaveDallaRichiesta(req), attesa ?? undefined))
         return res.status(401).json({ errore: attesa ? 'Chiave non valida.' : 'Chiave non ancora creata: Suggerimenti → Collegamento con Claude.' });
       next();
     } catch (e) { next(e); }
