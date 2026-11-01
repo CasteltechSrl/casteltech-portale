@@ -176,6 +176,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    nello storico del prodotto (tabella segnalazioni) e si stampano sulle prossime schede.
    Numerazione fasi (migrazione 019): lettere per pre-produzione, M1… gestione materiale, poi 1, 2, 3… progressivi.
    Sigle operatori: Impostazioni → Operatori (dati reali: solo nel database, mai nel repository).
+3b. ✅ Filiera commessa → DDT → fattura (proposta della revisione, Adriano 1/11/2026; `rigaDdtDaCommessa` e `rigaOrdinePerCommessa` in `engine/ddt.ts`,
+   `creaDdtDaCommessa` e `documentiDellaCommessa` in `documenti-servizio.ts`, POST `/amministrazione/documenti/ddt-da-commessa/:id`, test in `tests/ddt.test.ts`):
+   "Crea DDT" nella pagina della commessa e nel rientro confermato → bozza con cliente, prodotto, schede delle spedizioni del rientro (o tutta la commessa) meno quelle
+   già partite con DDT del portale, prezzo dalla riga d'ordine (quella che cita la commessa, poi stesso prodotto nell'ordine scritto sulla commessa, poi la più vecchia
+   aperta) o dal venduto o dal listino, `documenti.commessa_id` + `documenti_righe.commessa_id`, riga d'ordine collegata; la pagina della commessa elenca DDT e fatture.
 4. 🟡 Rientro schede. ✅ Inserimento manuale (ufficio): `/commesse/:id/rientro`, controlli in `src/engine/rientro.ts`
    (errori bloccano la conferma, avvisi no), consumi del lotto e spedizioni sulla commessa, la scheda stampata si
    compila da sola (tempo effettivo ciclo e uomo, consumo reale a scheda).

@@ -19,6 +19,7 @@ import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js'
 import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
+import { documentiDellaCommessa } from '../documenti-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
@@ -134,7 +135,7 @@ export function rotteCommesse() {
       dataOrdine: dataIso(c.data_ordine), dataConsegna: dataIso(c.data_consegna), quantita: c.quantita, primoLotto: c.primo_lotto,
       segnalazioni: c.segnalazioni ?? '', scheda: schedaTecnica(c.scheda_tecnica), stato: c.stato,
     };
-    res.send(await paginaCommessa(req, prev, dati, c, undefined, req.query.salvata ? 'Commessa salvata' : undefined));
+    res.send(await paginaCommessa(req, prev, dati, c, req.query.msg ? String(req.query.msg) : undefined, req.query.salvata ? 'Commessa salvata' : undefined));
   });
 
   // ── Stampa della scheda di produzione ──
@@ -174,7 +175,7 @@ export function rotteCommesse() {
   r.get('/:id/rientro', async (req, res) => {
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
-    const msg = req.query.ok === 'conferma' ? 'Rientro confermato' : req.query.ok ? 'Salvato' : undefined;
+    const msg = req.query.ok === 'conferma' ? 'Rientro confermato. Con "Crea DDT" prepari la bolla con le schede spedite' : req.query.ok ? 'Salvato' : undefined;
     // fasi fatte insieme su una riga ("FASI 5+6 INSIEME"): il tempo si divide come da preventivo, l'ufficio controlla e salva
     const fasi = await fasiCommessa(c);
     const numeri = new Map([...(await fasiConNumeroAttuale(await leggiPreventivo(c.preventivo_id))), ...fasi]
@@ -313,6 +314,10 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const storico = (prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : []).filter(s => !salvata || s.numero !== salvata.numero || s.origine !== 'ufficio');
   const st = d.scheda;
   const aperte = salvata ? await fasiAperte({ commessaId: salvata.id }) : [];
+  // filiera commessa → DDT → fattura (1/11/2026): DDT e fatture del portale che citano la commessa
+  const documenti = salvata ? await documentiDellaCommessa(salvata.id) : [];
+  const ddt = documenti.filter(x => x.tipo === 'ddt');
+  const numeroDoc = (x: { numero: number | null; sezionale: string | null }) => (x.numero == null ? 'bozza' : `n. ${x.numero}${x.sezionale ? '/' + x.sezionale : ''}`);
   const nTempi = salvata ? (await q1(`SELECT count(*)::int AS n FROM rilevazioni WHERE commessa_id = $1`, [salvata.id]))!.n : 0;
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
@@ -325,7 +330,9 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         ${messaggio ? html`<span class="nota positivo">${messaggio}</span>` : ''}
         ${req.query.tempi ? html`<span class="nota positivo">Tempi aggiunti: ${String(req.query.tempi)}</span>` : ''}
         ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
-          <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>` : ''}
+          <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>
+          <button form="ddt-commessa" class="${['rientrata', 'analizzata', 'chiusa'].includes(salvata.stato) && !ddt.length ? 'primario' : ''}"
+            title="Prepara il DDT con le schede della commessa (quelle del rientro, o tutte), cliente e ordine già compilati">Crea DDT</button>` : ''}
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
         ${salvata ? html`<button form="elimina-commessa" class="pericolo" title="Elimina la commessa creata per errore"
           data-conferma="${confermaEliminaCommessa({ numero: salvata.numero, stato: STATI_TESTO[salvata.stato] ?? salvata.stato, tempi: nTempi })}">Elimina</button>` : ''}
@@ -333,6 +340,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     </div>
     ${aperte.length ? html`<div class="avviso">Fasi aperte dal telefono e non ancora chiuse: ${aperte.map((f, k) => html`${k ? ', ' : ''}<b>${f.numero}</b> ${f.nome}
       (${f.sigla}, dalle ${f.inizio}${f.data !== partiRoma(new Date()).data ? ` del ${f.data.slice(8, 10)}/${f.data.slice(5, 7)}` : ''}) <a href="/r/chiudi/${f.id}">chiudi</a>`)}</div>` : ''}
+    ${documenti.length ? html`<p class="nota filiera">Spedizioni e fatture: ${documenti.map((x, k) => html`${k ? ' · ' : ''}<a href="/amministrazione/documenti/${x.id}">${x.tipo === 'ddt' ? 'DDT' : 'Fattura'} ${numeroDoc(x)}</a>
+      del ${data(x.data)}${x.tipo === 'ddt' ? html` (${num(x.quantita, 0)} pz${x.stato === 'annullato' ? ', annullato' : x.fattura_id ? html`, <a href="/amministrazione/documenti/${x.fattura_id}">fattura n. ${x.fattura_numero ?? 'bozza'}</a>` : x.stato === 'emesso' ? ', da fatturare' : ', bozza'})` : x.stato === 'bozza' ? ' (bozza)' : ''}`)}</p>` : ''}
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">
@@ -394,7 +403,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     </div>
     </form>
     ${salvata ? html`<form id="tempi" method="post" action="/commesse/${salvata.id}/tempi"></form>
-      <form id="elimina-commessa" method="post" action="/commesse/${salvata.id}/elimina"></form>` : ''}`,
+      <form id="elimina-commessa" method="post" action="/commesse/${salvata.id}/elimina"></form>
+      <form id="ddt-commessa" method="post" action="/amministrazione/documenti/ddt-da-commessa/${salvata.id}"></form>` : ''}`,
   }));
 }
 
@@ -523,6 +533,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
         <a class="bottone" href="/commesse/${c.id}/scheda" target="_blank" rel="noopener">Scheda compilata</a>
         <button name="azione" value="salva">Salva</button>
         <button name="azione" value="conferma" class="primario" title="L'ufficio approva tempi e S/P: la commessa diventa rientrata e pronta per l'analisi">Salva e conferma rientro</button>
+        ${c.rientrata_il ? html`<button form="ddt-commessa" title="Prepara il DDT con le schede scritte nelle spedizioni (o tutta la commessa), cliente e ordine già compilati">Crea DDT</button>` : ''}
       </div>
     </div>
     <p class="riepilogo"><strong>${i.cliente}</strong> · ${i.codice}${i.revisione ? ` rev. ${i.revisione}` : ''} · ${i.descrizione} · <strong>${num(c.quantita, 0)} schede</strong>
@@ -599,7 +610,8 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
       </div>
     </aside>
     </div>
-    </form>`,
+    </form>
+    <form id="ddt-commessa" method="post" action="/amministrazione/documenti/ddt-da-commessa/${c.id}"></form>`,
   }));
 }
 

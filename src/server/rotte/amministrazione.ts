@@ -22,7 +22,7 @@ import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-se
 import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine,
+  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
   creaNotaCredito, creaNotaDebito, ddtDaFatturare, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
@@ -355,6 +355,16 @@ export function rotteAmministrazione() {
   });
 
   // DDT dalle righe ancora da spedire di un ordine (pulsante "Crea DDT" nella pagina dell'ordine)
+  // filiera commessa → DDT → fattura (1/11/2026): dalla pagina della commessa o dal rientro
+  r.post('/documenti/ddt-da-commessa/:commessa', async (req, res) => {
+    const commessa = Number(req.params.commessa);
+    try {
+      const id = await creaDdtDaCommessa(commessa, req.session.utente?.id ?? null);
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('DDT preparato con le schede della commessa: controlla quantità, prezzo e trasporto, poi Emetti. Dal DDT emesso, "Fattura questo DDT" prepara la fattura.')}`);
+    } catch (e: any) {
+      res.redirect(`/commesse/${commessa}?msg=${encodeURIComponent(e.message)}`);
+    }
+  });
   r.post('/documenti/ddt-da-ordine/:ordine', async (req, res) => {
     try {
       const id = await creaDdtDaOrdine(Number(req.params.ordine), req.session.utente?.id ?? null);

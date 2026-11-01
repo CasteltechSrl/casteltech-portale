@@ -75,6 +75,38 @@ export function righeDdtDaOrdine(righe: { id: number; tipo: string; codice: stri
       um: 'PZ', prezzo: r.prezzo, prodotto_id: r.prodottoId, riga_ordine_id: r.id }));
 }
 
+/**
+ * DDT dalla commessa (filiera commessa → DDT → fattura, proposta della revisione scelta da Adriano 1/11/2026).
+ * Quante schede: quelle scritte nelle spedizioni del rientro (somma delle quantità), altrimenti tutta la commessa;
+ * meno quelle già partite con DDT del portale collegati alla commessa (così il secondo DDT propone il resto).
+ * Prezzo: quello della riga d'ordine se c'è, altrimenti il prezzo venduto della commessa.
+ */
+export function rigaDdtDaCommessa(c: { quantita: number; spedizioni?: { qta?: string | number | null }[] | null; prezzo_venduto?: number | null;
+  prodotto_id: number | null; codice: string; descrizione: string | null }, giaSpedite: number,
+  rigaOrdine?: { id: number; prezzo: number | null; residuoQuantita: number } | null) {
+  const dichiarate = (c.spedizioni ?? []).reduce((t, s) => t + (Number(String(s?.qta ?? '').replace(',', '.')) || 0), 0);
+  const quantita = Math.max(0, (dichiarate > 0 ? dichiarate : Number(c.quantita) || 0) - giaSpedite);
+  const prezzo = rigaOrdine?.prezzo != null && Number(rigaOrdine.prezzo) > 0 ? Number(rigaOrdine.prezzo) : Number(c.prezzo_venduto) || 0;
+  return { posizione: 1, codice: c.codice.toUpperCase(), descrizione: (c.descrizione ?? '').toUpperCase(), quantita, um: 'PZ', prezzo,
+    prodotto_id: c.prodotto_id, riga_ordine_id: rigaOrdine?.id ?? null, daSpedizioni: dichiarate > 0 };
+}
+
+/**
+ * Quale riga d'ordine spedisce la commessa: prima quella che la cita (commessa_id), poi le righe aperte dello stesso prodotto
+ * nell'ordine con il riferimento scritto sulla commessa, poi qualsiasi riga aperta dello stesso prodotto (ordine più vecchio prima).
+ */
+export function rigaOrdinePerCommessa<R extends { id: number; prodottoId: number | null; commessaId: number | null; rifCliente: string | null;
+  tipo: string; stato: string; residuoQuantita: number; dataOrdine?: unknown }>(righe: R[], c: { id: number; prodotto_id: number | null; ordine_cliente?: string | null }): R | undefined {
+  const citata = righe.find(r => r.commessaId === c.id);
+  if (citata) return citata;
+  if (!c.prodotto_id) return undefined;
+  const aperte = righe.filter(r => r.prodottoId === c.prodotto_id && r.tipo === 'scheda' && r.residuoQuantita > 0 && r.stato !== 'evaso' && r.stato !== 'annullato');
+  const rif = (c.ordine_cliente ?? '').trim().toUpperCase();
+  const pulito = (x: string) => x.replace(/[^A-Z0-9]/g, '');
+  const rifPulito = pulito(rif);
+  return (rifPulito ? aperte.find(r => pulito((r.rifCliente ?? '').toUpperCase()).includes(rifPulito)) : undefined) ?? aperte[0];
+}
+
 /** Indirizzo della sede del cliente su più righe (per la stampa e come destinazione proposta). */
 export function indirizzoSu(c: { indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; nazione?: string | null }): string {
   const citta = [c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' ');
