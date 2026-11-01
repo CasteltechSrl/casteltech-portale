@@ -604,6 +604,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/r', 'Pagine del reparto'], ['/impostazioni/operatori', 'PIN degli operatori']],
   },
   {
+    id: 'fasi-di-oggi', area: 'reparto', titolo: 'Le tue fasi di oggi e la prossima fase (telefono)',
+    parole: 'telefono reparto fasi di oggi mie fasi riapri riaprire fase chiusa prossima fase successiva apri adesso commesse recenti senza qr giornata ore',
+    testo: [
+      'Nella prima pagina del telefono, sotto le fasi aperte, c\'è "Le tue fasi di oggi": commessa, fase, orari, tempo e pezzi di tutto quello che hai aperto o chiuso oggi, con il totale delle ore. Una fase chiusa si riapre con il tasto Riapri (stessa commessa e fase, ora attuale) senza inquadrare di nuovo il QR.',
+      'Sotto ci sono "Le tue commesse degli ultimi giorni": un tocco e sei nella commessa, anche senza scheda sotto mano.',
+      'Quando chiudi una fase, la pagina della commessa propone la "Prossima fase": la prima delle fasi previste dopo quella chiusa che nessuno ha ancora fatto né tiene aperta (se dopo non c\'è più niente, la prima saltata). "Apri adesso" la apre all\'ora attuale; altrimenti scegli un\'altra fase dall\'elenco come sempre.',
+    ],
+    passi: ['Apri /r sul telefono.', 'Chiudi la fase: in alto compare la prossima.', 'Premi "Apri adesso" oppure scegli un\'altra fase.'],
+    pagine: [['/r', 'Reparto (telefono)']],
+  },
+  {
     id: 'tempi-scritti', area: 'reparto', titolo: 'Come si scrivono i tempi (ore e minuti)',
     parole: 'tempo ore minuti formato scrivere 1.30 1:30 orologio secondi',
     testo: [
