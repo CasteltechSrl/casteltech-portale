@@ -18,7 +18,7 @@ import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, typ
 import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/decoder.js';
 import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandidato, type CandidatoPn, type ColonnaPn } from '../engine/codifica/candidati-pn.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
-import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
+import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, digikeyParametri, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa } from './lettura-ia.js';
@@ -98,7 +98,9 @@ function testoCella(v: any): string {
 export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: string[][]; quantita: number[]; utenteId: number }): Promise<number> {
   const h = rigaIntestazione(opz.righe);
   const colonne = nomiColonne(opz.righe[h] ?? []);
-  const dati = opz.righe.slice(h + 1).map((r, i) => ({ n: h + 2 + i, celle: r })).filter(r => r.celle.some(c => String(c ?? '').trim()));
+  const tutte = opz.righe.slice(h + 1).map((r, i) => ({ n: h + 2 + i, celle: r })).filter(r => r.celle.some(c => String(c ?? '').trim()));
+  // intestazioni ripetute e righe di solo testo non sono componenti (Adriano Croci, 27/10/2026)
+  const { tenute: dati } = pulisciRigheBom(opz.righe[h] ?? [], tutte);
   const mappatura = rilevaColonne(colonne, dati.map(r => r.celle.map(c => String(c ?? ''))));
   const r = await q1<{ id: number }>(`INSERT INTO bom_analisi (nome, file_nome, quantita, colonne, mappatura, righe_file, creato_da)
     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [opz.nome, opz.fileNome, opz.quantita, JSON.stringify(colonne), JSON.stringify(mappatura), JSON.stringify(dati), opz.utenteId]);
@@ -240,7 +242,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   for (const c of await perPn(unico(righe.map(r => pnKey(r.pn)).filter((k): k is string => !!k)))) inArchivio.set(c.pn_key!, [...(inArchivio.get(c.pn_key!) ?? []), c]);
   // 3. distributori (servono anche i dati tecnici DigiKey per la codifica)
   av.fase = 'prezzi e disponibilità dai distributori'; av.fatti = 0;
-  const daCercare = righe.filter(r => !(r as any)._escluso && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
+  const daCercare = righe.filter(r => !(r as any)._escluso && !rigaPcb(r) && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
     .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
   const ricerca = await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
@@ -262,6 +264,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     av.fatti++;
     if ((r as any)._escluso) { r.esito = ESITI.NON_MONTATO; r.note.push('escluso nella BOM (DNP / non in distinta)'); continue; }
     if (NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''}`)) { r.esito = ESITI.NON_MONTATO; r.note.push('componente da non montare'); continue; }
+    if (rigaPcb(r)) { r.esito = ESITI.NON_MONTATO; r.note.push('circuito stampato (PCB): non è un componente, si quota a parte'); continue; }
     if (NON_COMPONENTE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''} ${r.footprint ?? ''}`) || NON_COMPONENTE.test(r.designatori ?? '')) {
       r.esito = ESITI.NON_MONTATO; r.note.push('non è un componente da acquistare (fiducial, foro, logo)'); continue;
     }
@@ -775,6 +778,22 @@ export async function salvaRighe(id: number, righe: RigaBom[]) {
   const a = await q1<{ quantita: number[] }>(`SELECT quantita FROM bom_analisi WHERE id = $1`, [id]);
   await q(`UPDATE bom_analisi SET righe = $2, riepilogo = $3, aggiornato_il = now() WHERE id = $1`,
     [id, JSON.stringify(righe.map(r => { const { _fam, _candidati, _escluso, _famDebole, ...x } = r as any; return x; })), JSON.stringify(riepilogo(righe, a?.quantita ?? []))]);
+}
+
+/**
+ * Toglie una riga dalla BOM (suggerimento di Adriano Croci: "un elimina righe qualora servisse eliminare una voce che non serve").
+ * Sparisce anche dal file letto, così non torna con "Rielabora"; acquisti e totali si ricalcolano.
+ */
+export async function togliRiga(id: number, n: number): Promise<string> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  if (!a) return 'BOM non trovata.';
+  const righe: RigaBom[] = (a.righe ?? []).filter((x: RigaBom) => x.n !== n);
+  const righeFile = (a.righe_file ?? []).filter((x: { n: number }) => x.n !== n);
+  if (righe.length === (a.righe ?? []).length && righeFile.length === (a.righe_file ?? []).length) return 'Riga non trovata.';
+  await q(`UPDATE bom_analisi SET righe_file = $2 WHERE id = $1`, [id, JSON.stringify(righeFile)]);
+  await calcolaAcquisti(righe, a.quantita ?? []);
+  await salvaRighe(id, righe);
+  return `Riga ${n} tolta dalla BOM.`;
 }
 
 /** Correzione a mano di una riga: famiglia, attributi, fornito dal cliente. Ricalcola codici e acquisti. */

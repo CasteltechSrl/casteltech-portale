@@ -20,6 +20,9 @@ import { caricaAzienda } from '../amministrazione-servizio.js';
 import { stampaPreventivo, type ClienteStampa } from '../views/stampa-preventivo.js';
 import { leggiRitocchi, versioneStampa } from '../../engine/stampa-preventivo.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
+import { pianificaProduzione } from '../ordini-servizio.js';
+import { caricoGiornaliero } from '../../engine/ordini.js';
+import { stimaConsegna } from '../../engine/consegna-preventivo.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -167,6 +170,45 @@ export function rottePreventivi() {
       azienda: await caricaAzienda(), cliente: cliente ?? null,
       opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
       rit: leggiRitocchi(p.stampa),
+    })));
+  });
+
+  // ── Data di consegna stimata (suggerimento di Federico): arrivo componenti e PCB + capacità del Gantt + 5 gg lavorativi ──
+  r.get('/:id/consegna', async (req, res) => {
+    const p = await leggiPreventivo(Number(req.params.id));
+    if (!p) return res.status(404).send('Preventivo non trovato');
+    const cat: Catalogo = p.catalogo;
+    const ris = calcola(cat, datiDaRiga(p));
+    const oreLavoro = riepilogo(ris).oreCicloPrimoLottoSec / 3600;
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const dataQ = (x: unknown) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '';
+    const componenti = dataQ(req.query.componenti), pcb = dataQ(req.query.pcb);
+    const { oreGiorno, barre } = await pianificaProduzione(oggi);
+    const s = stimaConsegna({ oggi, arrivoComponenti: componenti || null, arrivoPcb: pcb || null, oreLavoro, carico: caricoGiornaliero(barre), oreGiorno });
+    const it = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+    const oreTxt = (n: number) => `${num(Math.round(n * 10) / 10)} h`;
+    res.send(String(layout({
+      titolo: `Consegna · preventivo ${p.numero}`, utente: req.session.utente!, attiva: 'preventivi',
+      contenuto: html`
+      <div class="intestazione-pagina"><h1>Data di consegna · preventivo ${p.numero}</h1>
+        <div class="azioni"><a class="bottone" href="/preventivi/${p.id}">Torna al preventivo</a></div></div>
+      <form method="get" class="riquadro filtri">
+        <label>Arrivo componenti <input type="date" name="componenti" value="${componenti}"></label>
+        <label>Arrivo PCB <input type="date" name="pcb" value="${pcb}"></label>
+        <button type="submit" class="primario">Calcola</button>
+        <small class="nota">Lascia vuoto se il materiale è già in casa o lo manda il cliente subito.</small>
+      </form>
+      <div class="riquadro">
+        <h2>Consegna proposta: settimana ${s.settimana} (venerdì ${it(s.venerdi)})</h2>
+        <ul>
+          <li>Materiale disponibile: ${s.materialeDal ? it(s.materialeDal) : 'già in casa'}</li>
+          <li>Inizio lavorazione: <b>${it(s.inizio)}</b>${s.materialeDal ? ' (arrivo del materiale + 3 giorni lavorativi)' : ' (primo giorno lavorativo)'}</li>
+          <li>Lavoro del preventivo: ${oreTxt(s.oreLavoro)} di tempo ciclo (${p.n_schede} schede, 1° lotto) su ${oreTxt(oreGiorno)} al giorno</li>
+          <li>Fine produzione stimata: <b>${it(s.fine)}</b> (${s.giorniLavoro} giorn${s.giorniLavoro === 1 ? 'o' : 'i'} di lavoro${s.giorniConAltroLavoro ? `, con altro lavoro già in Gantt in ${s.giorniConAltroLavoro} giorn${s.giorniConAltroLavoro === 1 ? 'o' : 'i'}` : ''})</li>
+          <li>Consegna: fine produzione + 5 giorni lavorativi = ${it(s.consegna)}</li>
+        </ul>
+        <p class="nota">Stima: usa le ore libere dei giorni secondo il Gantt degli ordini aperti (<a href="/ordini/gantt">apri il Gantt</a>). Si propone il venerdì della settimana per avere margine. La commessa non viene inserita nel Gantt finché non c'è l'ordine.</p>
+      </div>`,
     })));
   });
 
@@ -429,7 +471,8 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
-        ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>` : ''}
+        ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>
+          <a class="bottone" href="/preventivi/${salvato.id}/consegna" title="Data di consegna stimata: arrivo materiale, capacità produttiva, + 5 giorni lavorativi">Data di consegna</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>
     </div>

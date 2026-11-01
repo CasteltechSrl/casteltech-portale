@@ -283,3 +283,27 @@ test('codifica: dati della BOM diversi da quelli del codice', () => {
 test('codifica: tra due codici uno dentro l\'altro si prova prima quello completo', () => {
   assert.deepEqual(candidatiPn({ valore: 'LMR51430YDDCR', descrizione: 'LMR51430Y' }).map(c => c.pn), ['LMR51430YDDCR', 'LMR51430Y']);
 });
+
+test('BOM: intestazioni ripetute e righe di solo testo non si analizzano (Adriano Croci)', async () => {
+  const { pulisciRigheBom } = await import('../src/engine/codifica/bom.js');
+  const intest = ['Item', 'Qty', 'Reference', 'Value', 'Part Number'];
+  const dati = [
+    { n: 2, celle: ['1', '2', 'R1,R2', '10K', 'RC0603FR-0710KL'] },
+    { n: 3, celle: ['', '', 'Pagina 2', '', ''] },
+    { n: 4, celle: ['Item', 'Qty', 'Reference', 'Value', 'Part Number'] },
+    { n: 5, celle: ['2', '1', 'C1', '100n', 'GRM188R71H104KA93D'] },
+    { n: 6, celle: ['', '', '', '', 'RC0603FR-071KL'] }, // un P/N da solo: anche questa è solo testo
+  ];
+  const { tenute, tolte } = pulisciRigheBom(intest, dati);
+  assert.deepEqual(tenute.map(r => r.n), [2, 5]);
+  assert.deepEqual(tolte, [{ n: 3, motivo: 'riga di solo testo' }, { n: 4, motivo: 'intestazione ripetuta' }, { n: 6, motivo: 'riga di solo testo' }]);
+});
+
+test('BOM: la riga del circuito stampato (PCB) non è un componente; "PCB mount" con designatore sì', async () => {
+  const { rigaPcb } = await import('../src/engine/codifica/bom.js');
+  assert.equal(rigaPcb({ designatori: 'PCB1', descrizioneBom: 'Scheda' }), true);
+  assert.equal(rigaPcb({ designatori: '', descrizioneBom: 'PCB EA1002 rev.0 FR4 1.6mm' }), true);
+  assert.equal(rigaPcb({ designatori: null, valore: 'Circuito stampato' }), true);
+  assert.equal(rigaPcb({ designatori: 'J1', descrizioneBom: 'Terminal block PCB mount' }), false);
+  assert.equal(rigaPcb({ designatori: 'R1', valore: '10K' }), false);
+});

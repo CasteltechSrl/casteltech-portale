@@ -284,6 +284,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `/calendario/<chiave>/ritardi.ics` aggiunto "Da URL" in Google Calendar di info@ (niente delega Workspace), indirizzo in Impostazioni → Promemoria.
    Eventi: consegna scaduta, fine Gantt superata, doveva partire, avviso 2 gg lavorativi prima dell'inizio, sovraccarico (ore > ore al giorno),
    commesse aperte oltre la consegna o oltre le ore uomo del preventivo. Copia in memoria, ricalcolata solo lun–ven 7–20 e al massimo ogni ora (Neon).
+   Suggerimenti realizzati l'1/11/2026: data di consegna nel preventivo (`engine/consegna-preventivo.ts`, GET `/preventivi/:id/consegna`, test in
+   `tests/consegna-preventivo.test.ts`: ultimo arrivo tra componenti e PCB + 3 gg lavorativi, ore ciclo del 1° lotto nelle ore libere del Gantt, + 5 gg lavorativi,
+   proposta = venerdì della settimana ISO); BOM in Quotazioni ripulita (`pulisciRigheBom`: intestazioni ripetute e righe di solo testo; `rigaPcb`: PCB escluso,
+   non cercato dai distributori; "togli" = POST `/quotazioni/bom/:id/riga/:n/elimina`); pasta saldante stimata dai Gerber (`stimaPastaDaGerber`, area aperture ×
+   0,12 mm × 4,2 g/cm³) mostrata accanto alla regola del preventivo, che resta 1,5 g / 450 componenti finché Adriano non decide.
    ⬜ Avviso Telegram: "Da chiarire" (responsabili di fase, bot Telegram, quando avvisare).
 4g. ✅ Guida (`rotte/guida.ts`, `engine/guida.ts`, `server/guida-ia.ts`, `public/guida.js`; Adriano 28/10/2026): voce Guida nel menu (anche produzione),
    macro aree con argomenti (cosa si fa, come, cosa non si può fare, pulsanti alle pagine), ricerca intelligente mentre si scrive

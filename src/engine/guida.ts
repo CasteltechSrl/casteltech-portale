@@ -249,7 +249,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'documenti-cliente', area: 'preventivi', titolo: 'Preventivo dai documenti del cliente (BOM, pick and place, Gerber)',
-    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare alternative pref alt llc elemaster dissipatore viti post wave dopo onda',
+    parole: 'documenti file cliente bom pick place gerber foratura excellon gencad cad zip cartella grande pesante step troppo smd tht refori feeder controlli incongruenze disegno segnalazione va bene ignorare accettare alternative pref alt llc elemaster dissipatore viti post wave dopo onda pasta saldante grammi aperture lamina stima consumo',
     testo: [
       'Quando il cliente manda il pacchetto della scheda, caricalo tutto insieme: il portale legge BOM, pick and place, Gerber, forature e GenCAD e li incrocia.',
       'Il risultato: componenti SMD per lato, THT, feeder, refori, misure, disegno della scheda, consumi stimati (pasta, stagno, filo) e le segnalazioni da controllare (valori diversi tra BOM e pick and place, riferimenti mancanti, lati, sovrapposizioni, componenti da non montare).',
@@ -262,6 +262,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Componenti da non montare: si riconoscono dalla colonna Montato/DNP, dal valore (DNP, NM) e anche dalla colonna Note ("Non Montare"). Se c\'è la BOM, i riferimenti che sono solo nel pick and place (connettori a pettine, punti di test, piazzole per i cavi) non si contano tra i componenti da montare: restano nell\'errore "non sono nella BOM" da controllare.',
       'Si leggono anche i vecchi pick and place Allegro senza separatori (la "m" dopo la rotazione = lato BOT) e i Gerber di CAM350 con i nomi attaccati (pastetop, masktop, maskbot, bot, int2). Se le piazzole si trovano per pochi componenti (coordinate di una scheda sola su un Gerber a pannello) il controllo del case non segnala errori.',
       'Nelle BOM con le alternative del cliente (colonna Pref/Alt o livelli LLC 1 e 2) le righe alternative non sono altri componenti: si conta solo il componente, con il codice della preferita, e le alternative finiscono nella colonna "Alternative del cliente" anche in Quotazioni. Dissipatori, viti, dadi, rondelle, grasso, silicone, fascette, etichette, buste, specifiche e topografici non sono componenti da montare. Le righe "POST WAVE ASSEMBLY" sono pezzi montati dopo l\'onda: tra le segnalazioni, da stimare a mano.',
+      'Pasta saldante dai Gerber: sotto "Pasta saldante" c\'è anche la stima dalle aperture dello strato pasta (area delle aperture × spessore lamina 0,12 mm × 4,2 g/cm³), per lato e in totale. È un confronto: il preventivo usa ancora la regola di 1,5 g ogni 450 componenti finché Adriano non decide di cambiarla.',
       'Se una segnalazione è stata controllata e va bene così (es. un simbolo scritto in modo diverso, componente giusto), premi "Va bene": non conta più tra gli errori, non va nel preventivo da validare e i componenti non sono più rossi nelle stampe. Resta anche dopo Rianalizza; "annulla" la riapre.',
     ],
     passi: ['Preventivi → Da documenti del cliente.', 'Scegli cliente e nome della scheda, carica i file (o lo zip, o la cartella).', 'Carica e analizza, poi controlla "Da controllare".', 'Crea il preventivo da validare (vedi sotto).'],
@@ -305,6 +306,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Se serve: note per il cliente, sconto, righe in più → Aggiorna la stampa.', 'Stampa / salva PDF.'],
     pagine: [['/preventivi', 'Elenco preventivi']],
+  },
+  {
+    id: 'data-consegna', area: 'preventivi', titolo: 'Data di consegna da dare al cliente',
+    parole: 'data consegna quando consegniamo tempi produzione settimana capacità produttiva gantt arrivo componenti pcb materiale stima promettere',
+    testo: [
+      'Dal preventivo salvato, "Data di consegna" stima quando si può consegnare: scrivi le date di arrivo dei componenti e del PCB (vuote se il materiale è già in casa) e premi Calcola.',
+      'Il conto: la lavorazione parte 3 giorni lavorativi dopo l\'arrivo dell\'ultimo materiale; le ore di tempo ciclo del preventivo (1° lotto) occupano le ore libere di ogni giorno secondo il Gantt degli ordini aperti; alla fine della produzione si aggiungono 5 giorni lavorativi.',
+      'Si lavora per settimane: la pagina propone il numero della settimana e il venerdì di quella settimana, da scrivere nell\'offerta.',
+      'È una stima: la commessa entra nel Gantt solo quando arriva l\'ordine.',
+    ],
+    passi: ['Salva il preventivo.', 'Premi "Data di consegna".', 'Scrivi arrivo componenti e PCB, premi Calcola.', 'Riporta al cliente la settimana proposta.'],
+    pagine: [['/preventivi', 'Elenco preventivi'], ['/ordini/gantt', 'Gantt']],
   },
   {
     id: 'azioni-preventivi', area: 'preventivi', titolo: 'Stati, duplicare, eliminare, creare la commessa',
@@ -507,11 +520,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Quotazioni (ex Componenti) ──
   {
     id: 'codifica-bom', area: 'componenti', titolo: 'Codificare una BOM e trovare i prezzi',
-    parole: 'quotazioni quotazione quotare componenti bom distinta codifica codici excel csv prezzi distributori digikey mouser farnell tme reperibilità acquisto scarto ia',
+    parole: 'quotazioni quotazione quotare componenti bom distinta codifica codici excel csv prezzi distributori digikey mouser farnell tme reperibilità acquisto scarto ia togliere riga sbagliata pulizia intestazione ripetuta pcb circuito stampato escluso esclusi',
     testo: [
       'Carica la BOM (Excel o CSV): il portale trova da solo intestazione e colonne, riconosce i componenti dal P/N o dalla descrizione, calcola il codice di produzione e il codice gestionale, e cerca prezzi e disponibilità da DigiKey, Mouser, Farnell e TME.',
       'Le quantità da comprare includono lo scarto (passivi sotto 0,10 € +10%, sotto 1 € +5%, da 1 a 3 € un pezzo in più). Si scarica un Excel con codifica e acquisti.',
       'Le righe "Da completare" vanno sistemate a mano; poi "Salva i codici nell\'archivio".',
+      'Righe che non sono componenti: le intestazioni ripetute (BOM esportate a pagine) e le righe con una sola scritta (titoli, "Note:") si tolgono da sole al caricamento. Il circuito stampato (riferimento PCB/PWB, o descrizione "PCB", "circuito stampato", "bare board") resta nell\'elenco come escluso: non si cerca dai distributori e non entra nel costo, perché il PCB si quota a parte. Il riquadro in cima alla tabella dice quante righe sono escluse e il filtro "Esclusi" le mostra.',
+      'Una riga entrata per sbaglio si toglie con "togli" in fondo alla riga: sparisce dalla BOM e i totali di acquisto si ricalcolano (il file caricato non cambia).',
     ],
     passi: ['Quotazioni → Carica una BOM.', 'Controlla colonne e quantità.', 'Sistema le righe da completare.', 'Salva i codici nell\'archivio, scarica l\'Excel.'],
     pagine: [['/quotazioni', 'Quotazioni']],

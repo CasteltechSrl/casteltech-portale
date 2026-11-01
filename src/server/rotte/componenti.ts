@@ -9,7 +9,7 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, type RigaBom, type Riepilogo,
+  creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, togliRiga, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
@@ -167,6 +167,10 @@ export function rotteComponenti() {
       togli: String(req.body.togli ?? '').trim() || undefined, originale: !!req.body.originale });
     res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#alternative`);
   });
+  r.post('/bom/:id/riga/:n/elimina', async (req, res) => {
+    const msg = await togliRiga(Number(req.params.id), Number(req.params.n));
+    res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent(msg)}`);
+  });
   r.post('/bom/:id/riga/:n', async (req, res) => {
     const attributi: Record<string, string | null> = {};
     for (const k of [...ATTR, 'tecnologia']) attributi[k] = String(req.body[k] ?? '').trim() || null;
@@ -259,6 +263,16 @@ function rimandoPreventivo(a: any, prev: { id: number; numero: string }): Raw {
     <a class="bottone primario" href="/preventivi/${prev.id}?quota-bom=1">Torna al preventivo per la quota</a></div>`;
 }
 
+/** Righe non montate (DNP), PCB e simili in evidenza sopra la tabella: non si comprano, ma è bene vederle (Adriano Croci). */
+function avvisoNonMontati(righe: RigaBom[]): Raw {
+  const nm = righe.filter(r => r.esito === ESITI.NON_MONTATO);
+  if (!nm.length) return html``;
+  return html`<div class="avviso info"><b>${nm.length === 1 ? '1 riga non si monta' : `${nm.length} righe non si montano`}</b> e non si comprano:
+    ${nm.map((r, i) => html`${i ? ' · ' : ''}<a href="#riga-${r.n}">riga ${r.n}</a> ${r.designatori ? `(${r.designatori.length > 30 ? r.designatori.slice(0, 30) + '…' : r.designatori})` : ''}
+      <small>${r.note.find(x => /non montare|escluso|PCB|fiducial/i.test(x)) ?? ''}</small>`)}.
+    Se una voce non serve proprio, "togli" in fondo alla riga la toglie dalla BOM.</div>`;
+}
+
 function paginaAnalisi(a: any): Raw {
   const righe: RigaBom[] = a.righe ?? []; const quantita: number[] = a.quantita ?? [];
   const rp: Riepilogo | undefined = a.riepilogo?.perQuantita ? a.riepilogo : undefined;
@@ -292,9 +306,11 @@ function paginaAnalisi(a: any): Raw {
     <form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>
   </details>` : ''}
   ${righe.length ? html`
+  ${avvisoNonMontati(righe)}
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
     <button data-filtro="manca">Da completare (${righe.filter(r => CLASSE_ESITO[r.esito] === 'manca').length})</button>
     <button data-filtro="nuovo verifica">Nuovi (${righe.filter(r => ['nuovo', 'verifica'].includes(CLASSE_ESITO[r.esito])).length})</button>
+    <button data-filtro="escluso" title="Non montati (DNP), PCB, fiducial, forniti dal cliente">Esclusi (${righe.filter(r => r.esito === ESITI.NON_MONTATO || r.clienteFornisce).length})</button>
     <button data-filtro="critico attenzione">Reperibilità (${righe.filter(r => r.reperibilita && r.reperibilita.livello !== 'ok').length})</button></div>
   <div class="tabella-scorre"><table class="bom"><thead><tr><th>Riga</th><th>P/N</th><th class="n">Qtà</th><th>Esito</th><th>Codice produzione</th><th>Codice gestionale</th>
     <th>Descrizione</th><th>Reperib.</th>${quantita.map(s => html`<th class="n">${num(s, 0)} schede</th>`)}<th>Note</th><th></th></tr></thead><tbody>
@@ -310,7 +326,9 @@ function paginaAnalisi(a: any): Raw {
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
       <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
-      <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a></td></tr>`)}
+      <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a>
+        ${inCorso ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/elimina" class="inline" data-conferma="${`Togliere la riga ${r.n} dalla BOM? Non torna nemmeno con Rielabora.`}">
+          <button class="link negativo" title="Toglie la riga dalla BOM (voce che non serve)">togli</button></form>`}</td></tr>`)}
   </tbody></table></div>
   <p class="nota">Esiti: <span class="esito archivio">in archivio</span> codici esistenti · <span class="esito nuovo">nuovo</span> codici calcolati, da salvare ·
     <span class="esito verifica">da verificare</span> ipotesi da controllare (vedi note) · <span class="esito manca">da completare</span> mancano dati: apri "modifica".

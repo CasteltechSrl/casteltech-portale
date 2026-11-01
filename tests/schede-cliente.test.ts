@@ -559,3 +559,14 @@ test('BOM con "Non Montare" nella colonna Note e componenti solo nel pick and pl
   assert.ok(a.segnalazioni.some(s => s.livello === 'errore' && s.refs?.includes('J1')));
   assert.ok(a.componenti.find(c => c.ref === 'J1')!.segnalazioni.some(s => s.includes('non è nella BOM')));
 });
+
+test('pasta saldante dai Gerber: aree delle aperture × lamina × densità (Adriano Croci)', async () => {
+  const { stimaPastaDaGerber } = await import('../src/engine/scheda/analisi.js');
+  // 100 aperture 1×0,5 mm + 4 tonde Ø1 mm, lamina 0,12, densità 4,2
+  const top = [...Array.from({ length: 100 }, (_, i) => ({ x: i, y: 0, w: 1, h: 0.5 })), ...Array.from({ length: 4 }, (_, i) => ({ x: i, y: 5, w: 1, h: 1, tonda: true }))];
+  const s = stimaPastaDaGerber({ TOP: top, BOT: [{ x: 0, y: 0, w: 100, h: 80 }] }, 0.12, 4.2)!;
+  assert.equal(s.aperture, 104); // la zona piena di 100×80 non conta
+  assert.equal(s.areaMm2, Math.round((50 + Math.PI) * 100) / 100);
+  assert.equal(s.grammi, Math.round((50 + Math.PI) * 0.12 * 4.2 / 1000 * 1000) / 1000);
+  assert.equal(stimaPastaDaGerber({}), null);
+});
