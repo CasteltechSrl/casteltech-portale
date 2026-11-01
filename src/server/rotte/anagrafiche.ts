@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
-import { html, num, raw, type Raw } from '../views/html.js';
+import { html, num, raw, euro, data, type Raw } from '../views/html.js';
 import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from '../anagrafiche-servizio.js';
 import { cercaComponenti, conteggiComponenti } from '../codifica-servizio.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
@@ -20,6 +20,7 @@ import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPre
   aggiornaAcquistoDaOrdine } from '../prezzi-servizio.js';
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
+import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti']];
@@ -109,6 +110,7 @@ export function rotteAnagrafiche() {
             <td><input name="partita_iva" form="c-${c.id}" value="${c.partita_iva ?? ''}" class="maiuscolo"></td>
             <td class="n"><a href="/anagrafiche/prodotti?cliente=${c.id}" title="Vedi i prodotti di questo cliente">${c.prodotti}</a></td><td class="n">${c.preventivi}</td>
             <td class="nowrap"><form method="post" action="/anagrafiche/clienti/${c.id}" id="c-${c.id}"><button>Salva</button></form>
+              <a class="bottone" href="/anagrafiche/clienti/${c.id}" title="Scheda unica: preventivi, ordini aperti, commesse, DDT da fatturare, fatture e incassi, CRM, prezzi">Scheda</a>
               <a class="bottone" href="/anagrafiche/clienti/${c.id}/fiscali" title="Indirizzo, P.IVA, codice SDI, PEC, pubblica amministrazione, split payment">Dati fiscali</a>
               ${eliminabile(c) ? html`<form method="post" action="/anagrafiche/clienti/${c.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il cliente ${c.ragione_sociale} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
@@ -288,8 +290,14 @@ export function rotteAnagrafiche() {
     ['cap', 'CAP'], ['comune', 'Comune'], ['provincia', 'Provincia (sigla)'], ['nazione', 'Nazione (sigla, IT)'],
     ['codice_sdi', 'Codice destinatario SDI', '7 caratteri; per la pubblica amministrazione il codice ufficio di 6'], ['pec', 'PEC'],
     ['email_amministrazione', 'Email per le fatture']];
-  // Scheda del cliente dalla ricerca unica in alto (1/11/2026): per ora i suoi prodotti; diventerà la scheda unica del cliente.
-  r.get('/clienti/:id', (req, res, next) => (/^\d+$/.test(req.params.id) ? res.redirect(`/anagrafiche/prodotti?cliente=${req.params.id}`) : next()));
+  // ── Scheda unica del cliente (proposta della revisione, Adriano 1/11/2026): tutto quel che riguarda un cliente in una pagina ──
+  r.get('/clienti/:id', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const d = await datiSchedaCliente(Number(req.params.id), oggi);
+    if (!d) return res.status(404).send('Cliente non trovato');
+    res.send(await pag(req, 'clienti', schedaCliente(d, oggi), msg(req)));
+  });
   r.get('/clienti/:id/fiscali', async (req, res) => {
     const c = await q1(`SELECT * FROM clienti WHERE id = $1`, [Number(req.params.id)]);
     if (!c) return res.status(404).send('Cliente non trovato');
@@ -442,3 +450,69 @@ const testoPrezzo = (p: { prezzo: number | null; prezzo_nota: string | null; pre
 /** Ultimo acquisto del componente: fornitore, data, quantità e ordine. */
 const testoAcquisto = (c: any) => c.prezzo_acquisto == null ? 'Nessun ordine a fornitore trovato'
   : `${c.prezzo_fornitore ?? ''}, ${dataIt(c.prezzo_data instanceof Date ? c.prezzo_data.toISOString() : c.prezzo_data)}, ${num(Number(c.prezzo_quantita), 0)} pz. ${c.prezzo_nota ?? ''}`.trim();
+
+// ── Scheda unica del cliente (1/11/2026) ──
+const STATI_COMMESSA_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
+const NOMI_DOC: Record<string, string> = { fattura: 'Fattura', nota_credito: 'Nota di credito', nota_debito: 'Nota di debito', ddt: 'DDT' };
+function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
+  const c = d.cliente;
+  const anno = Number(oggi.slice(0, 4));
+  const f = (a: number) => d.fatturato.find(x => x.anno === a)?.importo ?? 0;
+  const variazione = f(anno - 1) > 0 ? Math.round((f(anno) - f(anno - 1)) / f(anno - 1) * 100) : null;
+  const numeroDoc = (x: { numero: number | null; sezionale: string | null }) => (x.numero == null ? 'bozza' : `${x.numero}${x.sezionale ? '/' + x.sezionale : ''}`);
+  const riga = (testo: Raw | string, destra: Raw | string, link?: string, rosso = false) =>
+    html`<li class="${rosso ? 'ritardo' : ''}">${link ? html`<a href="${link}">${testo}</a>` : html`<span>${testo}</span>`}<span class="d">${destra}</span></li>`;
+  const elenco = (righe: Raw[], vuoto: string) => (righe.length ? html`<ul>${righe}</ul>` : html`<p class="nota">${vuoto}</p>`);
+  const area = (titolo: string, link: string, testoLink: string, corpo: Raw) =>
+    html`<section class="area"><header><h2>${titolo}</h2><a href="${link}">${testoLink} →</a></header>${corpo}</section>`;
+  const crm = d.crm;
+  const prossima = crm?.data_prossima_azione ? `${crm.prossima_azione ?? 'prossima azione'} · ${data(crm.data_prossima_azione)}` : null;
+  return html`
+    <div class="intestazione-pagina scheda-cliente">
+      <div><h1>${c.ragione_sociale}</h1>
+        <p class="nota">${[c.partita_iva ? `P.IVA ${c.partita_iva}` : '', [c.indirizzo, c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' '),
+          c.pec ? `PEC ${c.pec}` : '', c.email_amministrazione ? c.email_amministrazione : '', c.condizione_pagamento ? `pagamento ${c.condizione_pagamento}` : '',
+          c.pubblica_amministrazione ? 'pubblica amministrazione' : '', c.split_payment ? 'split payment' : ''].filter(Boolean).join(' · ')}
+          ${d.storico && d.storico.media > 0 ? html` · <span class="etichetta cliente" title="fatturato medio annuo dagli export di Fatture in Cloud">fascia ${d.storico.fascia}</span>` : ''}</p></div>
+      <div class="azioni">
+        <a class="bottone" href="/anagrafiche/clienti/${c.id}/fiscali">Dati fiscali</a>
+        <a class="bottone" href="/anagrafiche/prodotti?cliente=${c.id}">Prodotti (${c.n_prodotti})</a>
+        ${crm ? html`<a class="bottone" href="/crm/${crm.id}">CRM</a>` : ''}
+        <a class="bottone primario" href="/preventivi/nuovo?cliente=${c.id}">+ Preventivo</a>
+        <form method="post" action="/amministrazione/documenti/nuovo" class="inline"><input type="hidden" name="tipo" value="fattura"><input type="hidden" name="cliente_id" value="${c.id}"><button>+ Fattura</button></form>
+        <form method="post" action="/amministrazione/documenti/nuovo" class="inline"><input type="hidden" name="tipo" value="ddt"><input type="hidden" name="cliente_id" value="${c.id}"><button>+ DDT</button></form>
+      </div>
+    </div>
+    <div class="cifre cifre-sei">
+      <a class="cifra" href="/amministrazione/documenti?tipo=fattura&q=${encodeURIComponent(c.ragione_sociale)}"><span>Fatturato ${anno}</span><b>${euro(f(anno))}</b>
+        <small>${variazione == null ? `${anno - 1}: ${euro(f(anno - 1))}` : html`<span class="${variazione >= 0 ? 'positivo' : 'negativo'}">${variazione > 0 ? '+' : ''}${variazione} %</span> su ${anno - 1} (${euro(f(anno - 1))})`}</small></a>
+      <a class="cifra ${d.incassi.scaduto > 0 ? 'allarme' : ''}" href="/amministrazione"><span>Da incassare</span><b>${euro(d.incassi.scaduto + d.incassi.aScadere)}</b>
+        <small>${d.incassi.scaduto > 0 ? html`<span class="negativo">${euro(d.incassi.scaduto)} scaduti (${d.incassi.scaduteN})</span>` : 'nessuna rata scaduta'}${d.giorniIncasso != null ? ` · incassa in ${d.giorniIncasso} gg` : ''}</small></a>
+      <a class="cifra" href="/ordini?q=${encodeURIComponent(c.ragione_sociale)}"><span>Ordini aperti</span><b>${euro(d.valoreOrdiniAperti)}</b><small>${d.ordiniAperti.length} righe da evadere</small></a>
+      <a class="cifra" href="/commesse?q=${encodeURIComponent(c.ragione_sociale)}"><span>Commesse in corso</span><b>${d.commesse.length}</b><small>${d.commesse.filter(x => x.data_consegna && x.data_consegna < oggi).length ? html`<span class="negativo">${d.commesse.filter(x => x.data_consegna && x.data_consegna < oggi).length} oltre la consegna</span>` : 'nessuna oltre la consegna'}</small></a>
+      <a class="cifra ${d.ddtDaFatturare.length ? 'allarme' : ''}" href="/amministrazione/differite"><span>DDT da fatturare</span><b>${d.ddtDaFatturare.length}</b><small>${d.ddtDaFatturare.length ? `dal ${data(d.ddtDaFatturare[0].data)}` : 'tutto fatturato'}</small></a>
+      <a class="cifra" href="/preventivi?q=${encodeURIComponent(c.ragione_sociale)}"><span>Preventivi</span><b>${d.preventivi.length}${d.preventivi.length >= 12 ? '+' : ''}</b><small>${d.preventivi.filter(p => ['inviato', 'bozza', 'da_validare'].includes(p.stato)).length} aperti</small></a>
+    </div>
+    <div class="aree">
+      ${area('Ordini aperti', `/ordini?q=${encodeURIComponent(c.ragione_sociale)}`, 'Ordini', elenco(d.ordiniAperti.slice(0, 8).map(r =>
+        riga(`${r.numero}/${r.anno} · ${r.codice ?? r.descrizione ?? ''} · ${num(r.residuoQuantita, 0)} pz`, r.consegna ? data(r.consegna) : '', `/ordini/${r.ordineId}`, !!(r.consegna && r.consegna < oggi))), 'Nessuna riga d\'ordine da evadere.'))}
+      ${area('Commesse in corso', `/commesse?q=${encodeURIComponent(c.ragione_sociale)}`, 'Commesse', elenco(d.commesse.slice(0, 8).map(x =>
+        riga(`${x.numero} · ${x.codice ?? ''} · ${num(x.quantita, 0)} pz`, `${STATI_COMMESSA_TESTO[x.stato] ?? x.stato}${x.data_consegna ? ' · ' + data(x.data_consegna) : ''}`, `/commesse/${x.id}`, !!(x.data_consegna && x.data_consegna < oggi))), 'Nessuna commessa aperta.'))}
+      ${area('DDT da fatturare', '/amministrazione/differite', 'Fatture differite', elenco(d.ddtDaFatturare.slice(0, 8).map(x =>
+        riga(`DDT n. ${x.numero}`, data(x.data), `/amministrazione/documenti/${x.id}`)), 'Nessun DDT da fatturare.'))}
+      ${area('Incassi scaduti', '/amministrazione', 'Cruscotto', elenco(d.rateScadute.slice(0, 8).map(r =>
+        riga(`Fattura ${numeroDoc(r)} · ${euro(r.importo)}`, `scaduta il ${data(r.data)}`, `/amministrazione/documenti/${r.documento_id}`, true)), 'Nessun incasso scaduto.'))}
+      ${area('Ultimi documenti', `/amministrazione/documenti?tipo=fattura&q=${encodeURIComponent(c.ragione_sociale)}`, 'Documenti', elenco(d.documenti.slice(0, 10).map(x =>
+        riga(`${NOMI_DOC[x.tipo] ?? x.tipo} ${numeroDoc(x)}${x.tipo === 'ddt' ? '' : ' · ' + euro(x.imponibile)}`, `${data(x.data)}${x.stato === 'bozza' ? ' · bozza' : x.stato === 'annullato' ? ' · annullato' : ''}`, `/amministrazione/documenti/${x.id}`)), 'Nessun documento.'))}
+      ${area('Preventivi', `/preventivi?q=${encodeURIComponent(c.ragione_sociale)}`, 'Preventivi', elenco(d.preventivi.slice(0, 8).map(p =>
+        riga(`${p.numero ?? p.id} · ${p.codice ?? ''} · ${num(p.n_schede, 0)} pz${p.prezzo_scheda ? ' · ' + euro(p.prezzo_scheda) + '/scheda' : ''}`, `${String(p.stato).replace(/_/g, ' ')} · ${data(p.creato_il)}`, `/preventivi/${p.id}`)), 'Nessun preventivo.'))}
+      ${area('Prodotti e prezzi', `/anagrafiche/prodotti?cliente=${c.id}`, 'Prodotti', elenco(d.prodotti.slice(0, 10).map(p =>
+        riga(`${p.codice} · ${p.descrizione ?? ''}`, p.prezzo != null ? html`${euro(p.prezzo)}${p.scaglioni ? ' + scaglioni' : ''}` : 'senza prezzo', `/anagrafiche/prodotti?cliente=${c.id}&q=${encodeURIComponent(p.codice)}`)), 'Nessun prodotto in anagrafica.'))}
+      ${area('CRM', crm ? `/crm/${crm.id}` : '/crm', crm ? 'Scheda CRM' : 'CRM', crm ? html`
+        ${prossima ? html`<p class="nota ${crm.data_prossima_azione < oggi ? 'negativo' : ''}"><b>Prossima azione:</b> ${prossima}</p>` : ''}
+        ${crm.responsabile ? html`<p class="nota">Responsabile: ${crm.responsabile}</p>` : ''}
+        ${(crm.contatti ?? []).length ? html`<div class="tit">Referenti</div><ul>${(crm.contatti as any[]).slice(0, 5).map(k => riga(`${k.nome}${k.ruolo ? ' · ' + k.ruolo : ''}`, [k.telefono, k.email].filter(Boolean).join(' · ')))}</ul>` : ''}
+        <div class="tit">Ultime attività</div>${elenco((crm.attivita as any[] ?? []).map(t => riga(`${t.tipo}: ${String(t.descrizione ?? '').slice(0, 80)}`, data(t.data))), 'Nessuna attività registrata.')}`
+        : html`<p class="nota">Il cliente non è ancora collegato a un'azienda del CRM.</p>`)}
+    </div>`;
+}
