@@ -74,7 +74,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
     <div class="legenda"><span class="campione fatturato"></span> fatturato <span class="campione acquisti"></span> acquisti (imponibile, note di credito tolte)</div>
     <div class="tabella-scorre grafico">${graficoMesi(fatturato.slice(0, meseCorrente), acquisti.slice(0, meseCorrente))}</div>
     <div class="due-colonne">
-      <section><h2>Incassi in scadenza</h2>${riquadroScadenze(inc.fasce, incassi.map(s => ({ ...s, numero: numeroCompleto(s.numero_doc, s.sezionale) + (s.anno === anno ? '' : ` del ${s.anno}`) })), oggi,
+      <section><h2>Incassi in scadenza <a class="bottone piccolo" href="/amministrazione/solleciti" title="Rate scadute per cliente ed email di sollecito">Solleciti</a></h2>${riquadroScadenze(inc.fasce, incassi.map(s => ({ ...s, numero: numeroCompleto(s.numero_doc, s.sezionale) + (s.anno === anno ? '' : ` del ${s.anno}`) })), oggi,
         '/amministrazione/documenti/', 'Nessun incasso aperto.')}</section>
       <section><h2>Pagamenti in scadenza</h2>${riquadroScadenze(pag.fasce, pagamenti, oggi, '/amministrazione/ricevuti/', 'Nessun pagamento aperto.')}
         <p class="nota"><a href="/amministrazione/ricevuti?da_pagare=1">Tutte le fatture fornitori da pagare →</a></p></section>

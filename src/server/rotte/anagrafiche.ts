@@ -526,7 +526,7 @@ function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
         riga(`${x.numero} · ${x.codice ?? ''} · ${num(x.quantita, 0)} pz`, `${STATI_COMMESSA_TESTO[x.stato] ?? x.stato}${x.data_consegna ? ' · ' + data(x.data_consegna) : ''}`, `/commesse/${x.id}`, !!(x.data_consegna && x.data_consegna < oggi))), 'Nessuna commessa aperta.'))}
       ${area('DDT da fatturare', '/amministrazione/differite', 'Fatture differite', elenco(d.ddtDaFatturare.slice(0, 8).map(x =>
         riga(`DDT n. ${x.numero}`, data(x.data), `/amministrazione/documenti/${x.id}`)), 'Nessun DDT da fatturare.'))}
-      ${area('Incassi scaduti', '/amministrazione', 'Cruscotto', elenco(d.rateScadute.slice(0, 8).map(r =>
+      ${area('Incassi scaduti', `/amministrazione/solleciti/${d.cliente.id}`, 'Sollecito', elenco(d.rateScadute.slice(0, 8).map(r =>
         riga(`Fattura ${numeroDoc(r)} · ${euro(r.importo)}`, `scaduta il ${data(r.data)}`, `/amministrazione/documenti/${r.documento_id}`, true)), 'Nessun incasso scaduto.'))}
       ${area('Ultimi documenti', `/amministrazione/documenti?tipo=fattura&q=${encodeURIComponent(c.ragione_sociale)}`, 'Documenti', elenco(d.documenti.slice(0, 10).map(x =>
         riga(`${NOMI_DOC[x.tipo] ?? x.tipo} ${numeroDoc(x)}${x.tipo === 'ddt' ? '' : ' · ' + euro(x.imponibile)}`, `${data(x.data)}${x.stato === 'bozza' ? ' · bozza' : x.stato === 'annullato' ? ' · annullato' : ''}`, `/amministrazione/documenti/${x.id}`)), 'Nessun documento.'))}

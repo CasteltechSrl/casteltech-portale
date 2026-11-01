@@ -804,3 +804,14 @@ nav.pagine .nota { margin-left: auto; }
 /* "Riprendi da dove eri" nel cruscotto */
 .riprendi { margin: .6rem 0 0; }
 .riprendi .chips a.chip { background: var(--carta); }
+
+/* "Cosa manca" per la commessa (1/11/2026): stato dei componenti rispetto agli ordini a fornitore */
+.stato.da_ordinare { background: #fde2e0; color: var(--negativo); }
+.stato.ordinato { background: #fff2cc; color: #8a6100; }
+.stato.arrivato { background: #ddf3e5; color: var(--positivo); }
+
+/* Solleciti incassi (1/11/2026) */
+.solleciti .livello-ultimo td:first-child { box-shadow: inset 4px 0 0 var(--negativo); }
+.solleciti .livello-secondo td:first-child { box-shadow: inset 4px 0 0 #e0a400; }
+.testo-sollecito { width: 100%; min-height: 20rem; font-family: inherit; }
+button.collegamento { background: none; border: 0; padding: 0; color: var(--accento, #1f55a6); text-decoration: underline; cursor: pointer; font: inherit; }
