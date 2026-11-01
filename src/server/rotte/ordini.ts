@@ -13,7 +13,7 @@ import {
   type Barra, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
-import { confermeDellOrdine, creaConferma } from '../conferme-ordine-servizio.js';
+import { confermeDellOrdine, creaConferma, duplicaConferma, eliminaOAnnulla } from '../conferme-ordine-servizio.js';
 import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
@@ -206,24 +206,67 @@ export function rotteOrdini() {
   r.get('/conferme', async (req, res) => {
     const anno = Number(req.query.anno) || Number(oggiRoma().slice(0, 4));
     const conferme = await q(`
-      SELECT d.id, d.numero, d.anno, d.data, d.stato, d.imponibile, d.email_inviata_il, d.ordine_id,
+      SELECT d.id, d.numero, d.anno, d.data, d.stato, d.email_inviata_il, d.ordine_id,
+        coalesce(nullif(d.imponibile, 0), (SELECT round(sum(r.quantita * r.prezzo), 2) FROM documenti_righe r WHERE r.documento_id = d.id), 0)::float AS imponibile,
         o.numero AS ordine_numero, o.anno AS ordine_anno, o.rif_cliente, c.ragione_sociale
       FROM documenti d LEFT JOIN ordini o ON o.id = d.ordine_id LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE d.tipo = 'conferma_ordine' AND (d.anno = $1 OR d.numero IS NULL)
       ORDER BY d.numero IS NOT NULL, d.numero DESC NULLS LAST, d.id DESC`, [anno]);
     const anni = await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti WHERE tipo = 'conferma_ordine' ORDER BY anno DESC`);
+    const modulo = moduloAzioni({
+      azione: '/ordini/conferme/azioni', nome: { singolare: "conferma d'ordine", plurale: "conferme d'ordine", femminile: true },
+      pulsanti: [
+        { azione: 'pdf', testo: 'Apri il PDF', serve: '1', nuovaScheda: true, titolo: 'PDF della conferma emessa' },
+        { azione: 'duplica', testo: 'Duplica', serve: '1+', titolo: 'Nuova bozza con le stesse righe, da emettere con il numero successivo' },
+        { azione: 'annulla', testo: 'Annulla / Elimina', serve: '1+', pericolo: true,
+          chiedi: "Annullare {n} conferm{a|e} d'ordine? Le bozze si eliminano; quelle emesse restano nell'elenco come annullate e il numero non si riusa." },
+      ] });
     res.send(pagina(req.session.utente, "Conferme d'ordine", 'conferme', html`
       <p class="nota">Le conferme d'ordine si preparano dalla pagina dell'ordine (pulsante "Conferma d'ordine"), qui c'è l'elenco di tutte.
         Le bozze stanno in cima. Il numero continua la serie "Ordini" di Fatture in Cloud.</p>
       ${anni.length > 1 ? html`<p>${anni.map(a => html`<a href="/ordini/conferme?anno=${a.anno}" class="${a.anno === anno ? 'attiva' : ''}">${a.anno}</a> `)}</p>` : ''}
-      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Ordine</th><th>Stato</th><th>Inviata</th><th class="n">Imponibile</th></tr></thead>
+      ${modulo.apri}
+      <div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Ordine</th><th>Stato</th><th>Inviata</th><th class="n">Imponibile</th></tr></thead>
         <tbody>${conferme.length ? conferme.map(k => html`<tr>
+          ${casella(k.id, k.numero ? `conferma ${k.numero}/${k.anno}` : 'bozza')}
           <td><a href="/ordini/${k.ordine_id}/conferme/${k.id}">${k.numero ? `${k.numero}/${k.anno}` : 'bozza'}</a></td>
           <td>${data(k.data)}</td><td>${k.ragione_sociale ?? ''}</td>
           <td>${k.ordine_id ? html`<a href="/ordini/${k.ordine_id}">${k.ordine_numero}/${k.ordine_anno}</a>${k.rif_cliente ? html` <span class="nota">${k.rif_cliente}</span>` : ''}` : ''}</td>
           <td>${statoConferma(k.stato)}</td><td>${k.email_inviata_il ? data(k.email_inviata_il) : ''}</td>
           <td class="n">${k.imponibile != null ? euro(k.imponibile) : ''}</td></tr>`)
-          : html`<tr><td colspan="7" class="nota">Nessuna conferma d'ordine nel ${anno}.</td></tr>`}</tbody></table></div>`));
+          : html`<tr><td colspan="8" class="nota">Nessuna conferma d'ordine nel ${anno}.</td></tr>`}</tbody></table></div>
+      ${modulo.chiudi}`));
+  });
+
+  // azioni sulle conferme spuntate: PDF, Duplica (nuova bozza), Annulla / Elimina (bozze eliminate, emesse annullate)
+  r.post('/conferme/azioni', async (req, res) => {
+    const ids = idsSpuntati(req.body), azione = String(req.body.azione ?? '');
+    const torna = (msg: string) => res.redirect(conMessaggio(String(req.get('referer') ?? '/ordini/conferme').replace(/^https?:\/\/[^/]+/, '') || '/ordini/conferme', msg));
+    if (!ids.length) return torna("Nessuna conferma d'ordine selezionata.");
+    const righe = await q<{ id: number; ordine_id: number; numero: number | null; anno: number; stato: string }>(
+      `SELECT id, ordine_id, numero, anno, stato FROM documenti WHERE tipo = 'conferma_ordine' AND id = ANY($1) ORDER BY id`, [ids]);
+    if (azione === 'pdf') {
+      if (righe.length !== 1) return torna('Il PDF si apre per una conferma alla volta.');
+      if (!righe[0].numero) return torna('La bozza non ha ancora il PDF: aprila ed emettila.');
+      return res.redirect(`/ordini/${righe[0].ordine_id}/conferme/${righe[0].id}/pdf`);
+    }
+    if (azione === 'duplica') {
+      const nuove: number[] = [];
+      for (const k of righe) { const id = await duplicaConferma(k.id, req.session.utente?.id ?? null); if (id) nuove.push(id); }
+      if (nuove.length === 1) return res.redirect(`/ordini/${righe[0].ordine_id}/conferme/${nuove[0]}?msg=${encodeURIComponent('Copia pronta come bozza: controlla e premi Emetti (prende il numero successivo).')}`);
+      return torna(`${nuove.length} copie create come bozze in cima all'elenco.`);
+    }
+    if (azione === 'annulla') {
+      let eliminate = 0, annullate = 0, gia = 0;
+      for (const k of righe) {
+        if (k.stato === 'annullato') { gia++; continue; }
+        const esito = await eliminaOAnnulla(k.id);
+        if (esito === 'eliminata') eliminate++; else if (esito === 'annullata') annullate++;
+      }
+      return torna([annullate ? `${annullate} annullat${annullate === 1 ? 'a' : 'e'} (numero non riusato)` : '', eliminate ? `${eliminate} bozz${eliminate === 1 ? 'a eliminata' : 'e eliminate'}` : '',
+        gia ? `${gia} già annullat${gia === 1 ? 'a' : 'e'}` : ''].filter(Boolean).join(', ') + '.');
+    }
+    return torna('Azione non riconosciuta.');
   });
 
   // ── Scheda dell'ordine ──

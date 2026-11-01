@@ -162,6 +162,21 @@ export async function eliminaOAnnulla(id: number): Promise<'eliminata' | 'annull
   return 'annullata';
 }
 
+/** Duplica (Adriano 1/11/2026, elenco Conferme d'ordine): nuova bozza sullo stesso ordine con le stesse righe e note; data di oggi, senza numero. */
+export async function duplicaConferma(id: number, utenteId: number | null): Promise<number | null> {
+  const d = await q1(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'conferma_ordine'`, [id]);
+  if (!d) return null;
+  const data = oggiRoma();
+  return transazione(async c => {
+    const nuovo = (await c.query(`INSERT INTO documenti (tipo, anno, data, cliente_id, ordine_id, riferimento_esterno, data_riferimento, condizione_pagamento, note, imponibile, totale, creato_da)
+      VALUES ('conferma_ordine', $1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10) RETURNING id`,
+      [Number(data.slice(0, 4)), data, d.cliente_id, d.ordine_id, d.riferimento_esterno, d.data_riferimento, d.condizione_pagamento, d.note, d.imponibile, utenteId])).rows[0].id;
+    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, codice, descrizione, quantita, prezzo, consegna, prodotto_id, riga_ordine_id)
+      SELECT $2, posizione, codice, descrizione, quantita, prezzo, consegna, prodotto_id, riga_ordine_id FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione, id`, [id, nuovo]);
+    return nuovo;
+  });
+}
+
 // ───────────────────────────── email ─────────────────────────────
 
 /** L'email da cui è arrivato l'ordine (Ordini → Da acquisire, file .eml): serve per rispondere nella stessa conversazione. */
