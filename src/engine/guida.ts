@@ -439,12 +439,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'carica-ordine', area: 'ordini', titolo: 'Caricare un ordine del cliente (PDF, foto, email)',
     parole: 'ordine ordini carico caricare caricamento inserire nuovo file documenti pdf foto email eml acquisire da acquisire drive cartella ia leggere salvo dove',
     testo: [
-      'Gli ordini non si scrivono a mano: si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da email e PDF".',
+      'Gli ordini non si scrivono a mano: si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da e-mail e PDF".',
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi.', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
-    pagine: [['/ordini/acquisire', 'Ordini da email e PDF (Da acquisire)']],
+    pagine: [['/ordini/acquisire', 'Ordini da e-mail e PDF']],
   },
   {
     id: 'cosa-manca', area: 'commesse', titolo: 'Cosa manca per la commessa: componenti da ordinare',
