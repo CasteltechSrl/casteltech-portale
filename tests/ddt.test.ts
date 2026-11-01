@@ -56,3 +56,42 @@ test('DDT da fatturare: vendita e reso lavorato sì; resi non lavorati, garanzie
   // la condizione SQL usa la stessa espressione
   assert.ok(SQL_CAUSALE_DA_FATTURARE.includes(CAUSALI_NON_DA_FATTURARE));
 });
+
+// ── Filiera commessa → DDT → fattura (1/11/2026) ──
+import { rigaDdtDaCommessa, rigaOrdinePerCommessa } from '../src/engine/ddt.js';
+
+test('DDT dalla commessa: schede delle spedizioni del rientro (o tutta la commessa) meno quelle già partite; prezzo dall\'ordine o dal venduto', () => {
+  const c = { quantita: 100, spedizioni: [{ qta: '60' }, { qta: '38' }, { qta: '' }], prezzo_venduto: 12.5, prodotto_id: 7, codice: 'ea1002-0', descrizione: 'scheda prova' };
+  const r = rigaDdtDaCommessa(c, 0, null);
+  assert.equal(r.quantita, 98);                       // 60 + 38 scritte nel rientro
+  assert.equal(r.prezzo, 12.5);
+  assert.equal(r.codice, 'EA1002-0');
+  assert.equal(r.descrizione, 'SCHEDA PROVA');
+  assert.equal(r.riga_ordine_id, null);
+  assert.equal(r.daSpedizioni, true);
+  // senza spedizioni scritte: tutta la commessa; un DDT da 40 già fatto → ne restano 60
+  const r2 = rigaDdtDaCommessa({ ...c, spedizioni: null }, 40, { id: 5, prezzo: 11, residuoQuantita: 60 });
+  assert.equal(r2.quantita, 60);
+  assert.equal(r2.prezzo, 11);                        // il prezzo dell'ordine vince
+  assert.equal(r2.riga_ordine_id, 5);
+  assert.equal(r2.daSpedizioni, false);
+  // tutto già partito → 0 (il servizio si ferma con un messaggio)
+  assert.equal(rigaDdtDaCommessa({ ...c, spedizioni: [] }, 100, null).quantita, 0);
+  // prezzo 0 nell'ordine → vale il venduto
+  assert.equal(rigaDdtDaCommessa(c, 0, { id: 5, prezzo: 0, residuoQuantita: 10 }).prezzo, 12.5);
+});
+
+test('Riga d\'ordine della commessa: prima quella che la cita, poi lo stesso prodotto nell\'ordine scritto sulla commessa, poi la più vecchia aperta', () => {
+  const righe = [
+    { id: 1, prodottoId: 7, commessaId: null, rifCliente: 'PO 4500123', tipo: 'scheda', stato: 'parziale', residuoQuantita: 50 },
+    { id: 2, prodottoId: 7, commessaId: null, rifCliente: 'PO 4500999', tipo: 'scheda', stato: 'da_evadere', residuoQuantita: 100 },
+    { id: 3, prodottoId: 7, commessaId: null, rifCliente: 'PO 4500777', tipo: 'scheda', stato: 'evaso', residuoQuantita: 0 },
+    { id: 4, prodottoId: 8, commessaId: 9, rifCliente: null, tipo: 'scheda', stato: 'da_evadere', residuoQuantita: 10 },
+  ];
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 9, prodotto_id: 7 })?.id, 4);                                   // citata dalla riga
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: 7, ordine_cliente: '4500999' })?.id, 2);        // riferimento dell'ordine
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: 7, ordine_cliente: 'ORD. 4500-777' })?.id, 1);   // quell'ordine è evaso: la più vecchia aperta
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: 7 })?.id, 1);
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: 99 }), undefined);
+  assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: null }), undefined);
+});

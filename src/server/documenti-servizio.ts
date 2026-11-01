@@ -9,8 +9,8 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
-import { completaDaListino } from './prezzi-servizio.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
@@ -63,6 +63,40 @@ export async function creaDdtDaOrdine(ordineId: number, creatoDa: number | null)
     FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, prodotto_id int, codice text, descrizione text, quantita numeric, um text, prezzo numeric, riga_ordine_id int)`,
     [id, JSON.stringify(righe)]);
   return id;
+}
+
+/**
+ * DDT (bozza) dalla commessa: cliente e prodotto della commessa, schede del rientro (o tutta la commessa) meno quelle già partite,
+ * riga d'ordine collegata se la commessa spedisce un ordine (così l'evasione la conta), riferimento all'ordine del cliente.
+ */
+export async function creaDdtDaCommessa(commessaId: number, creatoDa: number | null): Promise<number> {
+  const c = await q1(`SELECT c.id, c.cliente_id, c.quantita, c.spedizioni, c.prezzo_venduto::float AS prezzo_venduto, c.ordine_cliente, c.data_ordine, c.numero,
+      r.prodotto_id, p.codice, p.descrizione
+    FROM commesse c JOIN prodotti_revisioni r ON r.id = c.revisione_id JOIN prodotti p ON p.id = r.prodotto_id WHERE c.id = $1`, [commessaId]);
+  if (!c) throw new Error('Commessa non trovata.');
+  const gia = await q1<{ n: number }>(`SELECT coalesce(sum(x.quantita), 0)::float AS n FROM documenti_righe x JOIN documenti d ON d.id = x.documento_id
+    WHERE d.tipo = 'ddt' AND d.stato <> 'annullato' AND (d.commessa_id = $1 OR x.commessa_id = $1)`, [commessaId]);
+  const rigaOrdine = rigaOrdinePerCommessa((await righeOrdini()).filter(r => r.clienteId === c.cliente_id), c);
+  const riga = rigaDdtDaCommessa(c, gia?.n ?? 0, rigaOrdine);
+  if (!(riga.quantita > 0)) throw new Error(`Tutte le ${c.quantita} schede della commessa ${c.numero} sono già partite con DDT del portale.`);
+  // senza ordine né prezzo venduto: il listino del prodotto (prezzo unico o scaglione della quantità)
+  if (!(riga.prezzo > 0) && riga.prodotto_id) riga.prezzo = (await listinoProdotto(riga.prodotto_id, riga.quantita))?.prezzo ?? 0;
+  const dataOrd = c.data_ordine ? String(c.data_ordine instanceof Date ? c.data_ordine.toISOString() : c.data_ordine).slice(0, 10) : null;
+  const rif = c.ordine_cliente ? `VS. ORDINE ${String(c.ordine_cliente).toUpperCase()}${dataOrd ? ` DEL ${dataOrd.split('-').reverse().join('/')}` : ''}` : null;
+  const id = await creaBozza('ddt', c.cliente_id, creatoDa, oggiRoma(), { ordine_id: rigaOrdine?.ordineId, riferimento_esterno: rif, data_ordine: dataOrd });
+  await q(`UPDATE documenti SET commessa_id = $2 WHERE id = $1`, [id, commessaId]);
+  await q(`INSERT INTO documenti_righe (documento_id, posizione, prodotto_id, codice, descrizione, quantita, um, prezzo, riga_ordine_id, commessa_id)
+    VALUES ($1, 1, $2, $3, $4, $5, 'PZ', $6, $7, $8)`, [id, riga.prodotto_id, riga.codice, riga.descrizione, riga.quantita, riga.prezzo, riga.riga_ordine_id, commessaId]);
+  return id;
+}
+
+/** DDT e fatture del portale collegati a una commessa (per la pagina della commessa). */
+export async function documentiDellaCommessa(commessaId: number) {
+  return q<{ id: number; tipo: string; numero: number | null; sezionale: string | null; data: string; stato: string; quantita: number; fattura_id: number | null; fattura_numero: number | null }>(
+    `SELECT d.id, d.tipo, d.numero, d.sezionale, d.data::text AS data, d.stato, sum(x.quantita)::float AS quantita, d.fattura_id, f.numero AS fattura_numero
+     FROM documenti d JOIN documenti_righe x ON x.documento_id = d.id LEFT JOIN documenti f ON f.id = d.fattura_id
+     WHERE d.tipo IN ('ddt', 'fattura') AND (d.commessa_id = $1 OR x.commessa_id = $1)
+     GROUP BY d.id, f.numero ORDER BY d.tipo, d.data, d.id`, [commessaId]);
 }
 
 /** Nota di credito (bozza) che storna una fattura emessa: stesse righe, collegata alla fattura. */
