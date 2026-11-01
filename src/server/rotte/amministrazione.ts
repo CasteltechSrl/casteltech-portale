@@ -11,6 +11,8 @@ import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
+import { paginata } from '../views/paginazione.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -246,6 +248,7 @@ export function rotteAmministrazione() {
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
         AND ($3 = '' OR coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
       ORDER BY d.numero IS NOT NULL, d.data DESC, d.numero DESC NULLS FIRST`, [tipo, anno, cerca]);
+    const pag = paginata(righe, req.query as Record<string, unknown>);
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti ORDER BY anno DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
     const totale = righe.filter(d => d.stato !== 'bozza' && d.stato !== 'annullato').reduce((s, d) => s + Number(d.imponibile), 0);
@@ -274,7 +277,7 @@ export function rotteAmministrazione() {
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
         <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
-        <tbody>${righe.map(d => html`<tr>
+        <tbody>${pag.righe.map(d => html`<tr>
           ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
             ${d.origine === 'fic' ? html` <span class="etichetta">FIC</span>` : ''}</td>
@@ -282,7 +285,7 @@ export function rotteAmministrazione() {
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
-        </tr>`)}</tbody></table></div>${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
+        </tr>`)}</tbody></table></div>${pag.barra}${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
       [...(tipo === 'autofattura' ? ['acquisizioni.js'] : []), ...(spunte ? ['elenco.js'] : [])]));
   });
 
@@ -748,6 +751,12 @@ export function rotteAmministrazione() {
       WHERE ($3 OR extract(year FROM d.data) = $1) AND (NOT $3 OR d.da_pagare <> 0)
         AND ($2 = '' OR coalesce(d.ragione_sociale, d.intestatario->>'nome', '') ILIKE '%' || $2 || '%' OR d.numero ILIKE $2)
       ORDER BY ${daPagare ? 'd.prossima, d.id' : 'd.data DESC, d.id DESC'}`, [anno, cerca, daPagare]);
+    if (req.query.formato === 'xlsx') return inviaExcel(res, nomeExcel('fatture-fornitori'), await excelSemplice('Fatture fornitori', [
+      { header: 'Data', key: 'data', formato: 'data' }, { header: 'Fornitore', key: 'fornitore', width: 40 }, { header: 'Tipo', key: 'tipo', width: 14 }, { header: 'Numero', key: 'numero', width: 16 },
+      { header: 'Descrizione', key: 'descrizione', width: 40 }, { header: 'Imponibile', key: 'imponibile', formato: 'euro' }, { header: 'IVA', key: 'imposta', formato: 'euro' }, { header: 'Totale', key: 'totale', formato: 'euro' },
+      { header: 'Da pagare', key: 'da_pagare', formato: 'euro' }, { header: 'Prossima scadenza', key: 'prossima', formato: 'data' }, { header: 'Origine', key: 'origine', width: 10 },
+    ], righe.map(d => ({ ...d, fornitore: d.ragione_sociale ?? d.intestatario?.nome ?? '', tipo: d.tipo === 'nota_credito' ? 'Nota di credito' : 'Fattura' }))));
+    const pag = paginata(righe, req.query as Record<string, unknown>);
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT extract(year FROM data)::int AS anno FROM documenti_ricevuti ORDER BY 1 DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
     const segno = (d: any) => (d.tipo === 'nota_credito' ? -1 : 1);
@@ -794,12 +803,12 @@ export function rotteAmministrazione() {
         Le fatture elettroniche arrivano da sole dallo SdI (Invoicetronic); lo storico viene da Fatture in Cloud.</p>
       <div class="tabella-scorre limitata"><table class="elenco">
         <thead><tr><th>Data</th><th>Fornitore</th><th>Numero</th><th>Descrizione</th><th class="num">Imponibile</th><th class="num">Totale</th><th class="num">Da pagare</th><th>Scadenza</th></tr></thead>
-        <tbody>${righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">
+        <tbody>${pag.righe.map(d => html`<tr class="${d.prossima && d.prossima < oggi ? 'scaduta' : ''}">
           <td>${data(d.data)}</td><td>${d.ragione_sociale ?? d.intestatario?.nome ?? ''}</td>
           <td><a href="/amministrazione/ricevuti/${d.id}">${d.tipo === 'nota_credito' ? html`<span class="etichetta">NC</span> ` : ''}${d.numero || 'senza n.'}</a></td>
           <td><span class="nota taglia">${d.descrizione ?? ''}</span></td>
           <td class="num">${euro(Number(d.imponibile))}</td><td class="num">${euro(Number(d.totale))}</td>
-          <td class="num">${d.da_pagare ? euro(d.da_pagare) : ''}</td><td>${d.prossima ? data(d.prossima) : ''}</td></tr>`)}</tbody></table></div>`, msg(req)));
+          <td class="num">${d.da_pagare ? euro(d.da_pagare) : ''}</td><td>${d.prossima ? data(d.prossima) : ''}</td></tr>`)}</tbody></table></div>${pag.barra}`, msg(req)));
   });
 
   // Acquisti per fornitore e mese (Adriano 31/10/2026): cosa si è comprato in un mese, al posto degli ordini "di traccia" di FIC

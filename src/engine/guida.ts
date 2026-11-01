@@ -71,6 +71,36 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cerca', 'Ricerca']],
   },
   {
+    id: 'tasti-rapidi', area: 'inizio', titolo: 'Tasti rapidi: fare prima con la tastiera',
+    parole: 'tasti rapidi scorciatoie tastiera shortcut alt n nuovo esc escape punto interrogativo elenco tasti ctrl s salva barra slash ricerca veloce',
+    testo: [
+      'In tutte le pagine dell\'ufficio funzionano alcuni tasti: / (barra) o Ctrl+K vanno alla ricerca in alto; Alt+N preme il pulsante "+ Nuovo…" della pagina in cui sei (nuovo preventivo in Preventivi, nuova fattura in Documenti emessi, nuovo fornitore in Anagrafiche…); Ctrl+S salva la bozza che stai scrivendo; Esc chiude tendine e finestre.',
+      'Premendo ? (Shift+7 sulla tastiera italiana, fuori dalle caselle di testo) compare l\'elenco dei tasti rapidi; Esc o un clic fuori lo chiude.',
+    ],
+    passi: ['Apri la pagina dell\'elenco (es. Preventivi).', 'Premi Alt+N: si apre il modulo del nuovo preventivo.', 'Premi ? se non ricordi un tasto.'],
+    pagine: [['/cruscotto', 'Cruscotto generale']],
+  },
+  {
+    id: 'excel-elenchi', area: 'inizio', titolo: 'Ogni elenco in Excel e a pagine',
+    parole: 'excel xlsx scaricare esportare esporta elenco tabella foglio pagine pagina successiva elenco lungo troppo lungo 100 righe filtro',
+    testo: [
+      'Preventivi, Commesse, Ordini clienti, Clienti, Prodotti, Fornitori, CRM e Fatture fornitori hanno il pulsante "Excel" accanto alla ricerca: scarica un foglio con le stesse righe che vedi sullo schermo, con lo stesso filtro, date e importi già formattati.',
+      'Gli elenchi lunghi (preventivi, commesse, righe d\'ordine, documenti emessi e ricevuti) mostrano 100 righe per pagina; in fondo ci sono i numeri delle pagine e "‹ ›". Il filtro scritto nella casella di ricerca resta cambiando pagina. Il file Excel contiene tutte le righe, non solo la pagina.',
+    ],
+    passi: ['Scrivi il filtro che ti serve nella casella di ricerca dell\'elenco.', 'Clicca "Excel": il file si scarica con il nome dell\'elenco e la data di oggi.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse'], ['/ordini', 'Ordini clienti'], ['/anagrafiche/clienti', 'Clienti']],
+  },
+  {
+    id: 'riprendi-cruscotto', area: 'inizio', titolo: 'Riprendi da dove eri',
+    parole: 'riprendi riprendere dove eri ultime cose aperte lavoro lasciato bozza preventivo commessa aperta ieri cruscotto recenti ultimi',
+    testo: [
+      'In cima al cruscotto generale il riquadro "Riprendi da dove eri" elenca le ultime otto cose toccate negli ultimi 14 giorni e ancora aperte: bozze di fattura, DDT e ordini a fornitore, preventivi in bozza o da validare, commesse aperte, documenti del cliente caricati e non ancora trasformati in preventivo.',
+      'Prima vengono le tue, poi quelle dei colleghi; accanto c\'è quando sono state toccate l\'ultima volta ("oggi 10:32", "ieri 16:05"). Un clic riapre la pagina. Se non c\'è niente di aperto il riquadro non compare.',
+    ],
+    passi: ['Apri il cruscotto (clic su "Portale Casteltech" in alto a sinistra).', 'Clicca la voce da riprendere.'],
+    pagine: [['/cruscotto', 'Cruscotto generale']],
+  },
+  {
     id: 'cruscotto-generale', area: 'inizio', titolo: 'La prima pagina: il cruscotto generale',
     parole: 'cruscotto generale homepage pagina iniziale home riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
     testo: [

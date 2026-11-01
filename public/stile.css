@@ -788,3 +788,19 @@ kbd { font: inherit; font-size: .85em; padding: 0 .35em; border: 1px solid var(-
 /* bozze che si salvano da sole (1/11/2026): stato accanto al pulsante Salva */
 .stato-autosalva { margin-left: auto; margin-right: .6rem; font-size: .9rem; }
 .stato-autosalva.negativo { color: #c0392b; font-weight: 550; }
+/* elenchi a pagine (1/11/2026) */
+nav.pagine { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: center; margin: .8rem 0; }
+nav.pagine a, nav.pagine b { padding: .25rem .55rem; border-radius: 6px; border: 1px solid var(--bordo); text-decoration: none; }
+nav.pagine b { background: var(--accento); color: #fff; border-color: var(--accento); }
+nav.pagine .nota { margin-left: auto; }
+/* finestra dei tasti rapidi (tasto ?) */
+.pannello-tasti { position: fixed; right: 1rem; bottom: 1rem; z-index: 40; width: min(26rem, 92vw); background: var(--carta); border: 1px solid var(--bordo); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 1rem 1.2rem; }
+.pannello-tasti h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
+.pannello-tasti ul { list-style: none; margin: 0; padding: 0; }
+.pannello-tasti li { padding: .3rem 0; border-bottom: 1px solid var(--bordo); font-size: .92rem; }
+.pannello-tasti li:last-child { border-bottom: 0; }
+.pannello-tasti kbd { margin-right: .4rem; }
+/* "Riprendi da dove eri" nel cruscotto */
+.riprendi { margin: .6rem 0 0; }
+.riprendi .chips a.chip { background: var(--carta); }

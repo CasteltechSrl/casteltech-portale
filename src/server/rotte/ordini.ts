@@ -2,6 +2,8 @@
  * Ordini dei clienti: elenco delle righe (da evadere / evase), scheda dell'ordine con le date del foglio
  * "Schedulazione produzione", cruscotto (fatturato e previsione), Gantt della produzione, fatture senza ordine.
  */
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
+import { paginata } from '../views/paginazione.js';
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
@@ -40,9 +42,9 @@ export function rotteOrdini() {
   const r = Router();
 
   // ── Elenco delle righe ──
-  r.get('/', async (req, res) => {
-    const vista = ['evasi', 'tutti'].includes(String(req.query.vista)) ? String(req.query.vista) : 'aperti';
-    const cerca = String(req.query.q ?? '').trim().toUpperCase();
+  const righeFiltrate = async (query: Record<string, unknown>) => {
+    const vista = ['evasi', 'tutti'].includes(String(query.vista)) ? String(query.vista) : 'aperti';
+    const cerca = String(query.q ?? '').trim().toUpperCase();
     const tutte = await righeOrdini();
     let righe = tutte.filter(x =>
       (vista === 'tutti' || (vista === 'evasi' ? ['evaso', 'annullato'].includes(x.stato) : ['da_evadere', 'parziale'].includes(x.stato))) &&
@@ -50,7 +52,24 @@ export function rotteOrdini() {
     righe = vista === 'aperti'
       ? righe.sort((a, b) => (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999') || a.numero - b.numero)
       : righe.sort((a, b) => b.anno - a.anno || b.numero - a.numero);
-    const totale = righe.reduce((a, x) => a + x.residuoValore, 0);
+    return { vista, cerca, tutte, righe };
+  };
+  r.get('/elenco.xlsx', async (req, res) => {
+    const { righe } = await righeFiltrate(req.query as Record<string, unknown>);
+    inviaExcel(res, nomeExcel('ordini-clienti'), await excelSemplice('Ordini', [
+      { header: 'Ordine', key: 'ordine', width: 12 }, { header: 'Data', key: 'dataOrdine', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
+      { header: 'Rif. cliente', key: 'rifCliente', width: 18 }, { header: 'Codice', key: 'codice', width: 18 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
+      { header: 'Q.tà', key: 'quantita', formato: 'numero' }, { header: 'Spedite', key: 'quantitaSpedita', formato: 'numero' }, { header: 'Da fare', key: 'residuoQuantita', formato: 'numero' },
+      { header: 'Prezzo', key: 'prezzo', formato: 'euro' }, { header: 'Valore da evadere', key: 'residuoValore', formato: 'euro' }, { header: 'Arrivo materiale', key: 'arrivoMateriale', formato: 'data' },
+      { header: 'Consegna richiesta', key: 'consegnaRichiesta', formato: 'data' }, { header: 'Consegna prevista', key: 'prevista', formato: 'data' }, { header: 'Ritardo (gg)', key: 'ritardo', formato: 'intero' },
+      { header: 'Stato', key: 'statoTesto', width: 14 },
+    ], righe.map(x => ({ ...x, ordine: `${x.numero}/${x.anno}`, statoTesto: STATI_ORDINE[x.stato] ?? x.stato }))));
+  });
+
+  r.get('/', async (req, res) => {
+    const { vista, cerca, tutte, righe: filtrate } = await righeFiltrate(req.query as Record<string, unknown>);
+    const totale = filtrate.reduce((a, x) => a + x.residuoValore, 0);
+    const { righe, barra, info } = paginata(filtrate, req.query as Record<string, unknown>);
     const oggi = oggiRoma();
     const modulo = moduloAzioni({
       azione: '/ordini/azioni', nome: { singolare: 'riga', plurale: 'righe', femminile: true }, gruppi: { singolare: 'ordine', plurale: 'ordini' },
@@ -68,7 +87,8 @@ export function rotteOrdini() {
     });
     res.send(pagina(req.session.utente, 'Ordini', vista, html`
       <form class="cerca" method="get">${vista !== 'aperti' ? html`<input type="hidden" name="vista" value="${vista}">` : ''}
-        <input name="q" value="${req.query.q ?? ''}" placeholder="Cerca cliente, codice, n° ordine, rif. cliente…" type="search"><button>Cerca</button></form>
+        <input name="q" value="${req.query.q ?? ''}" placeholder="Cerca cliente, codice, n° ordine, rif. cliente…" type="search"><button>Cerca</button>
+        <a class="bottone" href="/ordini/elenco.xlsx?vista=${vista}${cerca ? `&q=${encodeURIComponent(cerca)}` : ''}" title="Scarica queste righe in Excel">Excel</a></form>
       ${tutte.length ? '' : html`<p class="vuoto">Nessun ordine nel portale. Si caricano da <a href="/impostazioni/ordini">Impostazioni → Ordini</a>.</p>`}
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco ordini">
@@ -87,8 +107,9 @@ export function rotteOrdini() {
             <td>${data(x.prevista)}</td><td>${ritardo(x.ritardo)}</td>
             <td><span class="stato ${x.stato}">${STATI_ORDINE[x.stato]}</span></td>
           </tr>`)}</tbody>
-        ${righe.length ? html`<tfoot><tr><td colspan="11">${righe.length} righe</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
+        ${righe.length ? html`<tfoot><tr><td colspan="11">${filtrate.length} righe${info.pagine > 1 ? ` (${info.da}–${info.a} in questa pagina)` : ''}</td><td class="n"><b>${euro(totale)}</b></td><td colspan="5"></td></tr></tfoot>` : ''}
       </table></div>
+      ${barra}
       ${modulo.chiudi}
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
         I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.

@@ -3,6 +3,7 @@
  * (telefonate, email, visite, offerte) e prossima azione con la data. Le aziende dubbie dell'import
  * restano nella lista "Da verificare" finché non si confermano o si scartano.
  */
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { Router, type Request } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -32,6 +33,17 @@ export function rotteCrm() {
   const msg = (req: Request) => (req.query.msg ? String(req.query.msg) : undefined);
 
   // ── Ricerca e cose da fare ──
+  r.get('/elenco.xlsx', async (req, res) => {
+    const filtri = { testo: String(req.query.q ?? ''), stato: String(req.query.stato ?? ''), provincia: String(req.query.prov ?? ''), responsabile: String(req.query.resp ?? ''), soloAzioni: req.query.azioni === '1' };
+    const righe = await cercaAziende(filtri, 5000);
+    inviaExcel(res, nomeExcel('crm'), await excelSemplice('CRM', [
+      { header: 'Azienda', key: 'nome', width: 40 }, { header: 'Città', key: 'citta', width: 22 }, { header: 'Prov.', key: 'provincia', width: 6 }, { header: 'Telefono', key: 'telefono', width: 16 },
+      { header: 'Email', key: 'email', width: 30 }, { header: 'Stato', key: 'stato', width: 14 }, { header: 'Priorità', key: 'priorita', width: 10 }, { header: 'Responsabile', key: 'responsabile', width: 14 },
+      { header: 'Prossima azione', key: 'prossima_azione', width: 30 }, { header: 'Quando', key: 'data_prossima_azione', formato: 'data' }, { header: 'Ultimo contatto', key: 'ultimo_contatto', formato: 'data' },
+      { header: 'Già cliente', key: 'cliente', width: 10 },
+    ], righe.map((a: any) => ({ ...a, stato: String(a.stato ?? '').replace(/_/g, ' '), cliente: a.cliente_id ? 'sì' : '' }))));
+  });
+
   r.get('/', async (req, res) => {
     await allineaClienti();
     const oggi = oggiRoma();
@@ -76,7 +88,8 @@ export function rotteCrm() {
         <div class="cifra"><span>Aziende</span><b>${num(conti.aziende, 0)}</b><small>di cui ${conti.clienti} clienti</small></div>
       </div>`}
 
-      <h2>${cerca ? html`Risultati <span class="nota">(${righe.length}${righe.length === 200 ? '+, restringi la ricerca' : ''})</span>` : 'Prossime azioni'}</h2>
+      <h2>${cerca ? html`Risultati <span class="nota">(${righe.length}${righe.length === 200 ? '+, restringi la ricerca' : ''})</span>` : 'Prossime azioni'}
+        <a class="bottone" href="/crm/elenco.xlsx?${new URLSearchParams({ q: filtri.testo, stato: filtri.stato, prov: filtri.provincia, resp: filtri.responsabile, azioni: cerca ? (filtri.soloAzioni ? '1' : '') : '1' })}" title="Queste aziende in Excel">Excel</a></h2>
       ${righe.length ? html`<div class="tabella-scorre"><table class="elenco crm">
         <thead><tr><th>Azienda</th><th>Città</th><th>Telefono</th><th>Referente</th><th>Stato</th><th>Prossima azione</th><th>Quando</th></tr></thead>
         <tbody>${righe.map(a => html`<tr class="cliccabile ${scadenza(a.data_prossima_azione, oggi) ?? ''} ${a.cliente_id ? 'gia-cliente' : ''}" data-href="/crm/${a.id}">

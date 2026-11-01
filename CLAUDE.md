@@ -346,6 +346,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    telefono: "Aperta per sbaglio: annulla l'apertura", una sola apertura per fase (migrazione 057). Prodotto già usato: il cliente non si cambia.
    Ordine con conferma emessa non si elimina. Pagina Prodotti leggera (una sola tendina clienti, `clienti-al-clic`). Niente doppio invio dei moduli (`conferma.js`).
    Limite 20 domande/ora alla guida IA. Pulizia sessioni dopo il login (non con un timer). Id non numerici negli indirizzi = pagina non trovata (non errore).
+   ✅ Scorciatoie e elenchi (proposta della revisione, gruppo A, Adriano 1/11/2026 "applica i suggerimenti"; test in `tests/scorciatoie-elenchi.test.ts`):
+   "Riprendi da dove eri" in cima al cruscotto (`engine/riprendi.ts`, `cosePerRiprendere` in `cruscotto-generale-servizio.ts`: ultime 8 cose aperte in 14 giorni,
+   prima quelle dell'utente); tasti rapidi `public/tasti.js` in ogni pagina (Alt+N = pulsante "+ Nuovo…" della pagina, Esc, "?" = finestra dei tasti; / e Ctrl+K
+   della ricerca, Ctrl+S delle bozze); elenchi lunghi a pagine da 100 (`engine/paginazione.ts` + `views/paginazione.ts`: `paginata(righe, req.query)` → righe, barra;
+   preventivi, commesse, ordini, documenti emessi e ricevuti); pulsante Excel con lo stesso filtro su preventivi, commesse, ordini, clienti, prodotti, fornitori,
+   CRM, fatture fornitori (`server/excel.ts`: `excelSemplice` + `inviaExcel`; un elenco nuovo aggiunge la sua rotta `/elenco.xlsx` con le stesse righe filtrate).
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

@@ -4,7 +4,8 @@
  */
 import { testoDifferite } from '../../engine/fatture-differite.js';
 import { Router } from 'express';
-import { datiCruscottoGenerale, type DatiCruscottoGenerale } from '../cruscotto-generale-servizio.js';
+import { datiCruscottoGenerale, cosePerRiprendere, type DatiCruscottoGenerale } from '../cruscotto-generale-servizio.js';
+import { quandoBreve, type VoceRiprendi } from '../../engine/riprendi.js';
 import { euroBreve, saluto } from '../../engine/cruscotto-generale.js';
 import { layout } from '../views/layout.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
@@ -21,10 +22,10 @@ export function rotteCruscottoGenerale() {
   const r = Router();
   r.get('/', async (req, res) => {
     const oggi = oggiRoma();
-    const d = await datiCruscottoGenerale(oggi);
+    const [d, riprendi] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null)]);
     res.send(String(layout({
       titolo: 'Cruscotto', utente: req.session.utente, attiva: 'cruscotto', largo: true,
-      contenuto: pagina(d, oggi, req.session.utente?.nome ?? ''),
+      contenuto: pagina(d, oggi, req.session.utente?.nome ?? '', riprendi),
     })));
   });
   return r;
@@ -38,7 +39,7 @@ const elenco = (righe: Raw[], vuoto: string) => (righe.length ? html`<ul>${righe
 const riquadro = (titolo: string, link: string, testoLink: string, corpo: Raw) =>
   html`<section class="area"><header><h2>${titolo}</h2><a href="${link}">${testoLink} →</a></header>${corpo}</section>`;
 
-function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string): Raw {
+function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: VoceRiprendi[] = []): Raw {
   const c = d.cifre;
   const primoNome = nome.split(' ')[0];
   return html`
@@ -47,7 +48,9 @@ function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string): Raw {
 
     <div class="oggi"><h3>Da fare oggi</h3>
       ${d.daFare.length ? html`<div class="chips">${d.daFare.map(v => html`<a class="chip ${v.livello}" href="${v.link}"><b>${v.quanti}</b> ${v.testo}</a>`)}</div>`
-        : html`<p class="nota">Niente in sospeso. Buon lavoro!</p>`}</div>
+        : html`<p class="nota">Niente in sospeso. Buon lavoro!</p>`}
+      ${riprendi.length ? html`<div class="riprendi"><h3>Riprendi da dove eri</h3>
+        <div class="chips">${riprendi.map(v => html`<a class="chip" href="${v.href}" title="${v.dettaglio ?? ''}"><b>${v.tipo}</b> ${v.titolo} <small class="nota">${quandoBreve(v.quando, oggi)}</small></a>`)}</div></div>` : ''}</div>
 
     <div class="cifre cifre-sei">
       <a class="cifra" href="/amministrazione"><span>Fatturato ${oggi.slice(0, 4)}</span><b>${euro(c.fatturato)}</b>

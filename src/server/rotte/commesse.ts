@@ -2,6 +2,8 @@
  * Pagine delle commesse: elenco, nuova da preventivo, scheda della commessa (modificabile),
  * stampa della scheda di produzione (A4, con QR su ogni pagina).
  */
+import { paginata } from '../views/paginazione.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { Router, type Request } from 'express';
 import QRCode from 'qrcode';
 import { q, q1, transazione } from '../db.js';
@@ -32,14 +34,26 @@ export function rotteCommesse() {
   const r = Router();
 
   // ── Elenco ──
-  r.get('/', async (req, res) => {
-    const cerca = String(req.query.q ?? '').trim();
-    const righe = await q(`
+  const elencoCommesse = (cerca: string, limite = 2000) => q(`
       SELECT c.id, c.numero, c.creato_il, c.data_consegna, c.quantita, c.stato, c.ordine_cliente, c.intestazione, p.numero AS preventivo
       FROM commesse c LEFT JOIN preventivi p ON p.id = c.preventivo_id
       WHERE $1 = '' OR c.numero ILIKE '%'||$1||'%' OR (c.intestazione->>'cliente') ILIKE '%'||$1||'%'
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
-      ORDER BY c.creato_il DESC, c.id DESC LIMIT 300`, [cerca]);
+      ORDER BY c.creato_il DESC, c.id DESC LIMIT ${limite}`, [cerca]);
+  r.get('/elenco.xlsx', async (req, res) => {
+    const righe = await elencoCommesse(String(req.query.q ?? '').trim());
+    inviaExcel(res, nomeExcel('commesse'), await excelSemplice('Commesse', [
+      { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
+      { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
+      { header: 'Q.tà', key: 'quantita', formato: 'intero' }, { header: 'Ordine cliente', key: 'ordine_cliente', width: 18 }, { header: 'Consegna', key: 'data_consegna', formato: 'data' },
+      { header: 'Preventivo', key: 'preventivo', width: 14 }, { header: 'Stato', key: 'stato', width: 14 },
+    ], righe.map(c => ({ ...c, cliente: c.intestazione?.cliente, codice: c.intestazione?.codice, revisione: c.intestazione?.revisione, descrizione: c.intestazione?.descrizione, stato: STATI_TESTO[c.stato] ?? c.stato }))));
+  });
+
+  r.get('/', async (req, res) => {
+    const cerca = String(req.query.q ?? '').trim();
+    const tutte = await elencoCommesse(cerca);
+    const { righe, barra } = paginata(tutte, req.query as Record<string, unknown>);
     // schede scansionate arrivate dalla cartella Drive (o caricate in Ordini → Da acquisire) ancora da portare nel rientro
     const scansioni = await q(`SELECT a.id, a.nome_file, a.stato, a.errore, a.creato_il, a.proposta FROM acquisizioni a
       WHERE a.tipo = 'scheda_produzione' AND a.stato IN ('da_confermare', 'errore') ORDER BY a.creato_il DESC LIMIT 50`);
@@ -73,7 +87,8 @@ export function rotteCommesse() {
               : html`<span class="nota">${x.numero}${x.fatto ? ' (fatto)' : ' (commessa non trovata)'}</span> `)}</td></tr>`)}</tbody></table>`
           : html`<p class="nota">Nessuna scheda scansionata da portare nel rientro.</p>`}
       </section>
-      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button></form>
+      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button>
+        <a class="bottone" href="/commesse/elenco.xlsx${cerca ? `?q=${encodeURIComponent(cerca)}` : ''}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
@@ -86,7 +101,7 @@ export function rotteCommesse() {
             <td class="taglia">${c.intestazione?.descrizione}</td><td class="n">${num(c.quantita, 0)}</td>
             <td>${c.ordine_cliente}</td><td>${data(c.data_consegna)}</td><td>${c.preventivo}</td>
             <td><span class="stato ${c.stato}">${STATI_TESTO[c.stato] ?? c.stato}</span></td>
-          </tr>`)}</tbody></table></div>
+          </tr>`)}</tbody></table></div>${barra}
       ${modulo.chiudi}
       ${righe.length ? '' : html`<p class="vuoto">Nessuna commessa${cerca ? ' trovata' : ''}.</p>`}`,
     })));
