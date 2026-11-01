@@ -22,7 +22,7 @@ export const ruoloDaModulo = (x: unknown): Ruolo => (RUOLI as readonly string[])
 /** Pagina iniziale dopo l'accesso: per l'ufficio il cruscotto generale (Adriano 31/10/2026). */
 export const paginaIniziale = (ruolo: Ruolo) => (ruolo === 'ufficio' ? '/cruscotto' : ruolo === 'contabilita' ? '/amministrazione' : '/r');
 
-/** La contabilità può solo leggere (GET/HEAD) le pagine dell'Amministrazione. */
+/** La contabilità può solo leggere (GET/HEAD) le pagine dell'Amministrazione (e la ricerca in alto, che per lei trova solo documenti). */
 export const contabilitaPuo = (metodo: string, percorso: string) =>
-  (metodo === 'GET' || metodo === 'HEAD') && (percorso === '/amministrazione' || percorso.startsWith('/amministrazione/'))
+  (metodo === 'GET' || metodo === 'HEAD') && (percorso === '/amministrazione' || percorso.startsWith('/amministrazione/') || percorso === '/cerca' || percorso === '/cerca/')
   && !/^\/amministrazione\/documenti\/nuovo(\/|\?|$)/.test(percorso);

@@ -35,6 +35,7 @@ import { rotteDipendenti } from './rotte/dipendenti.js';
 import { rotteGmail } from './rotte/gmail.js';
 import { rotteApiClaude } from './rotte/api-claude.js';
 import { rotteCalendario } from './rotte/calendario.js';
+import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
 import { contabilitaPuo, paginaIniziale } from '../engine/ruoli.js';
@@ -152,6 +153,8 @@ app.get('/produzione', (_req, res) => res.redirect('/r'));
 // controllo di Render: NON interroga il database, così Neon (piano gratuito) può spegnersi quando nessuno lavora
 app.get('/salute', (_req, res) => { res.send('ok'); });
 
+// ricerca unica in alto (1/11/2026): ufficio e contabilità (quest'ultima trova solo i documenti)
+app.use('/cerca', amministrazioneOContabilita, rotteCerca());
 // cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026)
 app.use('/cruscotto', soloUfficio, rotteCruscottoGenerale());
 app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());

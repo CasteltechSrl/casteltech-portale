@@ -748,3 +748,34 @@ body.stampa-semplice main { max-width: 60rem; margin: 1.5rem auto; padding: 0 1r
 body.stampa-semplice table.elenco { margin-bottom: 1.2rem; }
 body.stampa-semplice .firma { margin-top: 3rem; }
 @media print { body.stampa-semplice .non-stampa { display: none; } body.stampa-semplice main { margin: 0; max-width: none; } }
+
+/* ── Ricerca unica in alto (1/11/2026): casella nella testata, tendina con le prime voci, pagina /cerca ── */
+.testata form.cerca-globale { position: relative; flex: 0 1 16rem; min-width: 8rem; margin-left: auto; }
+.testata form.cerca-globale input { width: 100%; padding: .4rem .7rem; border: 1px solid var(--bordo); border-radius: 999px; background: var(--sfondo, #f4f6f5); font-size: .92rem; }
+.testata form.cerca-globale input:focus { background: var(--carta); outline: 2px solid var(--accento-chiaro); border-color: var(--accento); }
+.suggerimenti-ricerca { position: absolute; top: 100%; right: 0; margin-top: 6px; min-width: 100%; width: max(100%, 26rem); max-width: 90vw; max-height: 70vh; overflow: auto;
+  background: var(--carta); border: 1px solid var(--bordo); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 30; padding: .3rem; }
+.suggerimenti-ricerca a { display: grid; grid-template-columns: 6.5rem 1fr; gap: .1rem .6rem; align-items: baseline; padding: .45rem .6rem; border-radius: 6px; text-decoration: none; color: var(--testo); }
+.suggerimenti-ricerca a:hover, .suggerimenti-ricerca a.scelta { background: var(--accento-chiaro); }
+.suggerimenti-ricerca a .tipo { font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--tenue); }
+.suggerimenti-ricerca a .dettaglio { grid-column: 2; font-size: .85rem; color: var(--tenue); }
+.suggerimenti-ricerca a.tutti { display: block; text-align: center; color: var(--accento); font-weight: 550; border-top: 1px solid var(--bordo); border-radius: 0; margin-top: .2rem; }
+.gruppo-ricerca h2 { font-size: 1.05rem; margin: 1.2rem 0 .4rem; }
+.risultati-ricerca { list-style: none; padding: 0; margin: 0; }
+.risultati-ricerca li a { display: block; padding: .5rem .7rem; border-radius: 6px; text-decoration: none; color: var(--testo); }
+.risultati-ricerca li a:hover { background: var(--accento-chiaro); }
+kbd { font: inherit; font-size: .85em; padding: 0 .35em; border: 1px solid var(--bordo); border-bottom-width: 2px; border-radius: 4px; background: var(--carta); }
+@media (max-width: 640px) { .testata form.cerca-globale { flex-basis: 100%; margin-left: 0; order: 3; } .suggerimenti-ricerca a { grid-template-columns: 1fr; } .suggerimenti-ricerca a .dettaglio { grid-column: 1; } }
+/* schermi da portatile (fino a 1660 px): il menu con Qualità e Dipendenti non ci stava più su una riga (1/11/2026):
+   spazi più stretti, casella di ricerca corta che si allarga quando ci si scrive, solo "Esci" al posto del nome
+   (il nome resta nel titolo passando sopra). Sotto i 1300 px ricerca e Esci vanno a capo invece di far scorrere la pagina. */
+@media (max-width: 1660px) {
+  .testata { gap: .5rem .7rem; padding: .5rem 1rem; }
+  .testata nav a, .testata .gruppo .titolo-gruppo { padding: .4rem .45rem; }
+  .testata nav.menu-destra a { padding: .4rem .4rem; }
+  .testata form.cerca-globale { flex: 0 1 8rem; min-width: 6rem; }
+  .testata form.cerca-globale:focus-within { flex-basis: 18rem; }
+  .testata .utente { white-space: nowrap; }
+  .testata .utente .nome-utente { display: none; }
+}
+@media (max-width: 1300px) { .testata { flex-wrap: wrap; } .testata form.cerca-globale { flex: 1 1 9rem; } }
