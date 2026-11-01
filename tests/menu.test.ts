@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layout, gruppoAttivo, MENU_GRUPPI } from '../src/server/views/layout.js';
+import { layout, gruppoAttivo, MENU_GRUPPI, MENU_CONTABILITA } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -62,4 +62,17 @@ test('menu a gruppi: tendine meno sensibili (Adriano 31/10/2026, menu.js con rit
   assert.match(css, /\.gruppo \.tendina::before \{ content: ''/);
   // con lo script attivo la tendina non dipende più da :hover (che la chiudeva subito)
   assert.match(css, /\.testata:not\(\.menu-js\) \.gruppo:hover \.tendina/);
+});
+
+test('profilo Contabilità: pagine dell\'Amministrazione in fila, senza tendine; il menu dell\'ufficio non cambia (Adriano 1/11/2026)', () => {
+  const p = String(layout({ titolo: 'Prova', utente: { id: 2, nome: 'Commercialista', ruolo: 'contabilita' }, attiva: 'amministrazione', contenuto: html`` }));
+  const barra = p.split('<nav class="menu menu-piatto">')[1].split('</nav>')[0];
+  assert.doesNotMatch(barra, /tendina|titolo-gruppo/);
+  assert.deepEqual(link(barra).map(v => v[1]), MENU_CONTABILITA.map(v => v[1]));
+  assert.equal(MENU_CONTABILITA[0][1], '/amministrazione');
+  // solo pagine dell'Amministrazione (le altre il profilo non le può aprire)
+  assert.ok(MENU_CONTABILITA.every(([, h]) => h === '/amministrazione' || h.startsWith('/amministrazione/')));
+  // ufficio: sempre i gruppi con le tendine
+  assert.match(pagina('ufficio'), /<nav class="menu"><!--/);
+  assert.doesNotMatch(pagina('ufficio'), /menu-piatto/);
 });

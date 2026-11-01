@@ -26,3 +26,14 @@ export const paginaIniziale = (ruolo: Ruolo) => (ruolo === 'ufficio' ? '/cruscot
 export const contabilitaPuo = (metodo: string, percorso: string) =>
   (metodo === 'GET' || metodo === 'HEAD') && (percorso === '/amministrazione' || percorso.startsWith('/amministrazione/') || percorso === '/cerca' || percorso === '/cerca/')
   && !/^\/amministrazione\/documenti\/nuovo(\/|\?|$)/.test(percorso);
+
+/**
+ * Dove andare dopo l'accesso (Adriano 1/11/2026: il commercialista entra direttamente nel cruscotto dell'Amministrazione).
+ * Si torna alla pagina chiesta prima del login solo se il profilo la può aprire; altrimenti la pagina iniziale del profilo.
+ */
+export function paginaDopoAccesso(ruolo: Ruolo, torna: unknown): string {
+  const t = String(torna ?? '/');
+  if (!t.startsWith('/') || t.startsWith('//') || t === '/') return paginaIniziale(ruolo);
+  if (ruolo === 'contabilita' && !contabilitaPuo('GET', t.split(/[?#]/)[0])) return paginaIniziale(ruolo);
+  return t;
+}

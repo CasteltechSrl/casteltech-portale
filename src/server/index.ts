@@ -39,7 +39,7 @@ import { rotteCalendario } from './rotte/calendario.js';
 import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
-import { contabilitaPuo, paginaIniziale } from '../engine/ruoli.js';
+import { contabilitaPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -141,8 +141,7 @@ app.post('/login', async (req, res) => {
   if (Date.now() - ultimaPuliziaSessioni > 24 * 3600_000) { ultimaPuliziaSessioni = Date.now(); archivioSessioni.pruneSessions(e => { if (e) console.error('Pulizia sessioni:', e); }); }
   req.session.regenerate(() => {
     req.session.utente = { id: u.id, nome: u.nome, ruolo: u.ruolo };
-    const torna = String(req.body.torna ?? '/');
-    res.redirect(torna.startsWith('/') && !torna.startsWith('//') ? torna : '/');
+    res.redirect(paginaDopoAccesso(u.ruolo, req.body.torna));
   });
 });
 app.post('/esci', (req, res) => req.session.destroy(() => res.redirect('/login')));

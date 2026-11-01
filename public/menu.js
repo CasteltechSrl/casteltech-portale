@@ -1,3 +1,15 @@
+// Menu del profilo Contabilità (pagine in fila, senza tendine): accende la voce della pagina aperta (il prefisso più lungo).
+(() => {
+  const voci = [...document.querySelectorAll('.testata nav.menu-piatto a')];
+  const qui = location.pathname.replace(/\/+$/, '') || '/';
+  let migliore = null;
+  for (const a of voci) {
+    const h = new URL(a.href).pathname.replace(/\/+$/, '');
+    if ((qui === h || qui.startsWith(h + '/')) && (!migliore || h.length > migliore.h.length)) migliore = { a, h };
+  }
+  if (migliore) migliore.a.classList.add('attiva');
+})();
+
 // Menu in alto a gruppi: tendine meno sensibili (Adriano 31/10/2026: "spariscono spessissimo passando nei sottomenu").
 // - la tendina si apre passando sopra al nome del gruppo e si chiude solo dopo CHIUSURA_MS che il mouse è uscito:
 //   se si scivola fuori per un attimo (o in diagonale verso una voce) resta aperta;

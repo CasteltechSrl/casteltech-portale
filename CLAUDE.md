@@ -453,7 +453,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    errori del servizio = "non verificabile", non "non valida"): pagina Amministrazione → Controllo VIES e riquadro nella bozza di fattura a cliente UE.
    ✅ Profilo Contabilità in sola lettura (Adriano 31/10/2026: il commercialista e Sonia di HTS; `engine/ruoli.ts`, migrazione 049, test in `tests/ruoli.test.ts`):
    ruolo 'contabilita' = solo GET sotto /amministrazione (`contabilitaPuo`, middleware `amministrazioneOContabilita` in `index.ts`) + Guida; menu con il solo
-   gruppo Amministrazione, `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
+   pagine dell'Amministrazione in fila nella barra, senza tendine (`MENU_CONTABILITA` in `views/layout.ts`, Adriano 1/11/2026; il menu dell'ufficio non cambia),
+   dopo l'accesso dritto al cruscotto `/amministrazione` (`paginaDopoAccesso`), `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
    ✅ Analisi (Adriano 31/10/2026, "trend e analisi critica/di aiuto"; `/amministrazione/analisi`, `engine/analisi.ts`, `rotte/analisi.ts`, test `tests/analisi.test.ts`):
    dal 1/1 a oggi contro lo stesso periodo dell'anno prima (anni passati: anno intero), fatture emesse/ricevute anche storico FIC: fatturato, acquisti, resta dopo
    gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che
