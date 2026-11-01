@@ -22,8 +22,8 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   nel preventivo il menu Codice mostra SOLO i codici del cliente scelto (`prodottiPerCliente`), il prodotto nuovo si aggiunge con "+ Nuovo prodotto";
   i vecchi codici senza cliente sono in evidenza in Anagrafiche → Prodotti (in cima, gialli, conteggio sul tasto) finché non si assegnano o si eliminano.
 
-- Menu in alto a gruppi (Adriano 31/10/2026, `MENU_GRUPPI` in `views/layout.ts`, test in `tests/menu.test.ts`): Anagrafiche, Commerciale (CRM, Quotazioni,
-  Preventivi, Ordini clienti), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt; poi macchine e consumi),
+- Menu in alto a gruppi (Adriano 31/10/2026, `MENU_GRUPPI` in `views/layout.ts`, test in `tests/menu.test.ts`): Anagrafiche, Commerciale (Adriano 1/11/2026, in quest'ordine:
+  CRM, Quotazioni componenti, Documenti dei clienti, Preventivi, Ordini clienti, Conferme d'ordine = elenco `/ordini/conferme`, poi Ordini da email e PDF = Da acquisire), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt; poi macchine e consumi),
   Amministrazione, Qualità (dal 1/11/2026); ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti:
   Sicurezza e ambiente. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
   Tendine meno sensibili (Adriano 31/10/2026, `public/menu.js`): si chiudono 0,45 s dopo l'uscita del mouse, ponte invisibile tra nome e tendina,
