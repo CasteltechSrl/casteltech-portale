@@ -439,12 +439,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'carica-ordine', area: 'ordini', titolo: 'Caricare un ordine del cliente (PDF, foto, email)',
     parole: 'ordine ordini carico caricare caricamento inserire nuovo file documenti pdf foto email eml acquisire da acquisire drive cartella ia leggere salvo dove',
     testo: [
-      'Gli ordini non si scrivono a mano: si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi.',
+      'Gli ordini non si scrivono a mano: si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da email e PDF".',
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi.', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
-    pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
+    pagine: [['/ordini/acquisire', 'Ordini da email e PDF (Da acquisire)']],
   },
   {
     id: 'cosa-manca', area: 'commesse', titolo: 'Cosa manca per la commessa: componenti da ordinare',
@@ -528,13 +528,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Dall\'ordine caricato nel portale si prepara la conferma per il cliente: il pulsante "Conferma d\'ordine" in alto nella pagina dell\'ordine copia tutte le righe con quantità, prezzi e date di consegna.',
       'Righe e date si cambiano liberamente nella conferma (non toccano l\'ordine): si aggiungono righe con "+ Riga", si tolgono con la spunta "Togli". Le consegne a programma diventano una riga per ogni consegna.',
-      'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (numerazione propria delle conferme) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
+      'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (la serie continua quella degli "Ordini" di Fatture in Cloud: 74 al 23/10/2026) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
       'Invio: se l\'ordine è arrivato per email, "Invia con Gmail" risponde a quell\'email (stessa conversazione) da info@casteltech.net con il PDF allegato; destinatario, oggetto e testo si possono cambiare. Finché la delega di Gmail non è attiva il pulsante è spento: scarica il PDF con "Apri il PDF" e mandalo dalla posta.',
       'Non si può preparare la conferma se il cliente dell\'ordine non è in anagrafica. Una bozza si elimina; una conferma emessa si annulla (resta nell\'elenco e il numero non si riusa).',
+      'Tutte le conferme (bozze in cima, poi per numero) stanno in Commerciale → Conferme d\'ordine, con cliente, ordine, stato e data di invio.',
     ],
     passi: ['Apri l\'ordine (Ordini → Da evadere, clic sulla riga).', 'Premi "Conferma d\'ordine".', 'Controlla righe, prezzi e date di consegna, correggi e Salva.',
       'Premi Emetti.', 'Controlla destinatario e testo, poi "Invia con Gmail" (oppure "Apri il PDF" e mandalo a mano).'],
-    pagine: [['/ordini', 'Ordini da evadere']],
+    pagine: [['/ordini/conferme', 'Conferme d\'ordine'], ['/ordini', 'Ordini da evadere']],
   },
   {
     id: 'ordini-fornitore', area: 'ordini', titolo: 'Ordini a fornitore (componenti, PCB, lavorazioni)',

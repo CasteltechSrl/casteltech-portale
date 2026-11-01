@@ -24,7 +24,7 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const nomeMese = (m: string) => `${MESI[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 
-const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Da acquisire']] as const;
+const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['conferme', "Conferme d'ordine"], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Da acquisire']] as const;
 function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
@@ -200,6 +200,30 @@ export function rotteOrdini() {
       <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Fattura</th><th>Data</th><th>Cliente</th><th>Righe</th><th class="n">Imponibile</th></tr></thead>
         <tbody>${fatture.map(f => html`<tr><td>${f.numero}/${anno}</td><td>${data(f.data)}</td><td>${f.cliente}</td><td class="taglia">${f.righe}</td><td class="n">${euro(f.imponibile)}</td></tr>`)}</tbody>
         <tfoot><tr><td colspan="4">${fatture.length} fatture</td><td class="n"><b>${euro(totale)}</b></td></tr></tfoot></table></div>`));
+  });
+
+  // ── Conferme d'ordine (Adriano 1/11/2026): elenco di tutte le conferme, dal menu Commerciale ──
+  r.get('/conferme', async (req, res) => {
+    const anno = Number(req.query.anno) || Number(oggiRoma().slice(0, 4));
+    const conferme = await q(`
+      SELECT d.id, d.numero, d.anno, d.data, d.stato, d.imponibile, d.email_inviata_il, d.ordine_id,
+        o.numero AS ordine_numero, o.anno AS ordine_anno, o.rif_cliente, c.ragione_sociale
+      FROM documenti d LEFT JOIN ordini o ON o.id = d.ordine_id LEFT JOIN clienti c ON c.id = d.cliente_id
+      WHERE d.tipo = 'conferma_ordine' AND (d.anno = $1 OR d.numero IS NULL)
+      ORDER BY d.numero IS NOT NULL, d.numero DESC NULLS LAST, d.id DESC`, [anno]);
+    const anni = await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti WHERE tipo = 'conferma_ordine' ORDER BY anno DESC`);
+    res.send(pagina(req.session.utente, "Conferme d'ordine", 'conferme', html`
+      <p class="nota">Le conferme d'ordine si preparano dalla pagina dell'ordine (pulsante "Conferma d'ordine"), qui c'è l'elenco di tutte.
+        Le bozze stanno in cima. Il numero continua la serie "Ordini" di Fatture in Cloud.</p>
+      ${anni.length > 1 ? html`<p>${anni.map(a => html`<a href="/ordini/conferme?anno=${a.anno}" class="${a.anno === anno ? 'attiva' : ''}">${a.anno}</a> `)}</p>` : ''}
+      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Ordine</th><th>Stato</th><th>Inviata</th><th class="n">Imponibile</th></tr></thead>
+        <tbody>${conferme.length ? conferme.map(k => html`<tr>
+          <td><a href="/ordini/${k.ordine_id}/conferme/${k.id}">${k.numero ? `${k.numero}/${k.anno}` : 'bozza'}</a></td>
+          <td>${data(k.data)}</td><td>${k.ragione_sociale ?? ''}</td>
+          <td>${k.ordine_id ? html`<a href="/ordini/${k.ordine_id}">${k.ordine_numero}/${k.ordine_anno}</a>${k.rif_cliente ? html` <span class="nota">${k.rif_cliente}</span>` : ''}` : ''}</td>
+          <td>${statoConferma(k.stato)}</td><td>${k.email_inviata_il ? data(k.email_inviata_il) : ''}</td>
+          <td class="n">${k.imponibile != null ? euro(k.imponibile) : ''}</td></tr>`)
+          : html`<tr><td colspan="7" class="nota">Nessuna conferma d'ordine nel ${anno}.</td></tr>`}</tbody></table></div>`));
   });
 
   // ── Scheda dell'ordine ──

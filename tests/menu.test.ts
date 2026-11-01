@@ -15,12 +15,18 @@ test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acqu
   assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione', 'Qualità', 'Dipendenti']);
   assert.deepEqual(destra('ufficio'), ['Impostazioni', 'Suggerimenti', 'Guida']);
   const voci = link(menu('ufficio'));
-  assert.ok(voci.some(v => v[0] === 'Quotazioni' && v[1] === '/quotazioni'));
+  assert.ok(voci.some(v => v[0] === 'Quotazioni componenti' && v[1] === '/quotazioni'));
   assert.ok(voci.some(v => v[0] === 'Ordini a fornitore' && v[1] === '/ordini/fornitori'));
   assert.ok(voci.some(v => v[0] === 'Commesse' && v[1] === '/commesse'));
   // la produzione vede solo la Guida
   assert.deepEqual(gruppi('produzione'), []);
   assert.deepEqual(destra('produzione'), ['Guida']);
+});
+
+test('Commerciale nell\'ordine di Adriano (1/11/2026): CRM, Quotazioni componenti, Documenti dei clienti, Preventivi, Ordini clienti, Conferme d\'ordine', () => {
+  const g = MENU_GRUPPI.find(x => x.chiave === 'commerciale')!;
+  assert.deepEqual(g.voci.map(v => v[0]).slice(0, 6), ['CRM', 'Quotazioni componenti', 'Documenti dei clienti', 'Preventivi', 'Ordini clienti', "Conferme d'ordine"]);
+  assert.ok(g.voci.some(v => v[1] === '/ordini/conferme'));
 });
 
 test('menu a gruppi: la sezione della pagina accende il suo gruppo', () => {
