@@ -60,6 +60,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche', 'Anagrafiche'], ['/quotazioni', 'Quotazioni'], ['/preventivi', 'Preventivi'], ['/ordini', 'Ordini'], ['/commesse', 'Commesse'], ['/amministrazione', 'Amministrazione']],
   },
   {
+    id: 'ricerca-unica', area: 'inizio', titolo: 'La ricerca in alto: trovare subito un cliente, un codice, una commessa o una fattura',
+    parole: 'cerca ricerca casella testata barra trova numero commessa ordine fattura ddt cliente codice scorciatoia tasto slash control k ctrl',
+    testo: [
+      'In alto a destra, in ogni pagina dell\'ufficio, c\'è una casella di ricerca unica. Scrivi quel che hai in mano e il portale ti porta alla pagina giusta: una ragione sociale, un codice prodotto, il numero di una commessa (C2026-0012), un numero di ordine o di fattura (12/2026 o solo 12), una partita IVA, un P/N di componente.',
+      'Mentre scrivi compaiono le prime voci: con le frecce e Invio apri quella evidenziata. Se il risultato è uno solo (o il numero è preciso) si apre direttamente la pagina, altrimenti l\'elenco raggruppato per tipo.',
+      'Da qualsiasi punto della pagina il tasto / (barra) oppure Ctrl+K porta il cursore nella casella; Esc la chiude. Il profilo Contabilità trova solo documenti emessi e fatture dei fornitori.',
+    ],
+    passi: ['Premi / (o clicca la casella in alto).', 'Scrivi un pezzo di nome, codice o numero.', 'Invio sulla voce evidenziata, oppure "Tutti i risultati…" per l\'elenco completo.'],
+    pagine: [['/cerca', 'Ricerca']],
+  },
+  {
     id: 'cruscotto-generale', area: 'inizio', titolo: 'La prima pagina: il cruscotto generale',
     parole: 'cruscotto generale homepage pagina iniziale home riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
     testo: [

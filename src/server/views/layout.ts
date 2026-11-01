@@ -53,12 +53,16 @@ ${opz.utente ? html`
       <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
     </div>`)}
   </nav>
+  ${opz.utente.ruolo === 'produzione' ? '' : html`<form class="cerca-globale" method="get" action="/cerca" role="search" autocomplete="off">
+    <input name="q" type="search" placeholder="Cerca…  /" title="Ricerca unica: cliente, codice, commessa, numero di ordine o fattura (tasto / oppure Ctrl+K)" aria-label="Cerca nel portale" autocomplete="off">
+    <div class="suggerimenti-ricerca" hidden></div>
+  </form>`}
   <nav class="menu-destra">
     ${opz.utente.ruolo === 'ufficio' ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
     ${voce('/guida', 'Guida', 'guida')}
     ${opz.utente.ruolo === 'contabilita' ? html`<span class="etichetta">sola lettura</span>` : ''}
   </nav>
-  <div class="utente">${opz.utente.nome} · <form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
+  <div class="utente" title="${opz.utente.nome}"><span class="nome-utente">${opz.utente.nome} · </span><form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}
 <main class="${opz.utente ? (opz.largo ? 'largo' : '') : 'centrato'}">
 ${opz.utente?.ruolo === 'ufficio' ? avvisoDeiServizi() : ''}
@@ -67,6 +71,7 @@ ${opz.contenuto}
 </main>
 ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
 <script src="/static/menu.js?v=${VERSIONE}" defer></script>
+<script src="/static/cerca.js?v=${VERSIONE}" defer></script>
 <script src="/static/tempi.js?v=${VERSIONE}" defer></script>`) : ''}
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>

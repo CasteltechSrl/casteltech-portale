@@ -40,8 +40,8 @@ const paginaAnagrafiche: PaginaAnagrafiche = async (req, scheda, contenuto, avvi
 };
 
 /** Casella della ricerca veloce: filtra le righe della tabella `tabella` mentre si scrive. */
-const ricercaVeloce = (tabella: string, segnaposto: string, totale: number) => html`
-  <div class="ricerca-veloce"><input type="search" data-filtra="${tabella}" data-conta="conta-${tabella}" placeholder="${segnaposto}" autofocus autocomplete="off">
+const ricercaVeloce = (tabella: string, segnaposto: string, totale: number, valore = '') => html`
+  <div class="ricerca-veloce"><input type="search" data-filtra="${tabella}" data-conta="conta-${tabella}" placeholder="${segnaposto}" value="${valore}" autofocus autocomplete="off">
     <span class="nota">Trovati: <b id="conta-${tabella}">${totale}</b></span></div>`;
 
 export function rotteAnagrafiche() {
@@ -173,7 +173,7 @@ export function rotteAnagrafiche() {
         <select name="cliente" class="invia-subito"><option value="0">Tutti i clienti</option><option value="-1" ${filtro === -1 ? raw('selected') : ''}>— senza cliente (da assegnare) —</option>${opzClienti(filtro, false)}</select>
         <noscript><button>Filtra</button></noscript>
       </form>
-      ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length)}
+      ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length, String(req.query.q ?? ''))}
       <template id="modello-clienti">${opzClienti(null)}</template>
       <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>
@@ -288,6 +288,8 @@ export function rotteAnagrafiche() {
     ['cap', 'CAP'], ['comune', 'Comune'], ['provincia', 'Provincia (sigla)'], ['nazione', 'Nazione (sigla, IT)'],
     ['codice_sdi', 'Codice destinatario SDI', '7 caratteri; per la pubblica amministrazione il codice ufficio di 6'], ['pec', 'PEC'],
     ['email_amministrazione', 'Email per le fatture']];
+  // Scheda del cliente dalla ricerca unica in alto (1/11/2026): per ora i suoi prodotti; diventerà la scheda unica del cliente.
+  r.get('/clienti/:id', (req, res, next) => (/^\d+$/.test(req.params.id) ? res.redirect(`/anagrafiche/prodotti?cliente=${req.params.id}`) : next()));
   r.get('/clienti/:id/fiscali', async (req, res) => {
     const c = await q1(`SELECT * FROM clienti WHERE id = $1`, [Number(req.params.id)]);
     if (!c) return res.status(404).send('Cliente non trovato');
