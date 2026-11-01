@@ -531,7 +531,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (la serie continua quella degli "Ordini" di Fatture in Cloud: 74 al 23/10/2026) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
       'Invio: se l\'ordine è arrivato per email, "Invia con Gmail" risponde a quell\'email (stessa conversazione) da info@casteltech.net con il PDF allegato; destinatario, oggetto e testo si possono cambiare. Finché la delega di Gmail non è attiva il pulsante è spento: scarica il PDF con "Apri il PDF" e mandalo dalla posta.',
       'Non si può preparare la conferma se il cliente dell\'ordine non è in anagrafica. Una bozza si elimina; una conferma emessa si annulla (resta nell\'elenco e il numero non si riusa).',
-      'Tutte le conferme (bozze in cima, poi per numero) stanno in Commerciale → Conferme d\'ordine, con cliente, ordine, stato e data di invio.',
+      'Tutte le conferme (bozze in cima, poi per numero) stanno in Commerciale → Conferme d\'ordine, con cliente, ordine, stato e data di invio. Spuntando le righe: "Apri il PDF", "Duplica" (nuova bozza con le stesse righe, prende il numero successivo all\'emissione) e "Annulla / Elimina" (le bozze si eliminano, le emesse si annullano). Per cambiare il numero di una conferma emessa: Duplica, poi annulla quella vecchia ed emetti la copia.',
     ],
     passi: ['Apri l\'ordine (Ordini → Da evadere, clic sulla riga).', 'Premi "Conferma d\'ordine".', 'Controlla righe, prezzi e date di consegna, correggi e Salva.',
       'Premi Emetti.', 'Controlla destinatario e testo, poi "Invia con Gmail" (oppure "Apri il PDF" e mandalo a mano).'],
