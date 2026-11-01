@@ -785,3 +785,6 @@ kbd { font: inherit; font-size: .85em; padding: 0 .35em; border: 1px solid var(-
 .blocco.differite.scaduto { border-left: 4px solid #c0392b; }
 .blocco.differite h2 { font-size: 1.05rem; margin: 0; }
 .blocco.differite h2 small { font-weight: 400; margin-left: .5rem; }
+/* bozze che si salvano da sole (1/11/2026): stato accanto al pulsante Salva */
+.stato-autosalva { margin-left: auto; margin-right: .6rem; font-size: .9rem; }
+.stato-autosalva.negativo { color: #c0392b; font-weight: 550; }
