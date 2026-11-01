@@ -10,6 +10,7 @@ import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
+import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -127,7 +128,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
     <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
     <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo"></td>
   </tr>`;
-  return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento">
+  return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento" data-autosalva="${d.stato === 'bozza' ? '1' : ''}">
       <div class="riga-campi">
         <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
         <label>Causale del trasporto <input name="causale_trasporto" value="${t.causale ?? ''}" list="causali-ddt" class="maiuscolo" required></label>
@@ -530,7 +531,7 @@ export function rotteAmministrazione() {
         </div>`, msg(req)));
     }
 
-    if (d.tipo === 'ddt') return res.send(pagina(req, titolo, html`${testa}${await moduloDdt(d, righe)}`, msg(req), 'documenti.js'));
+    if (d.tipo === 'ddt') return res.send(pagina(req, titolo, html`${testa}${await moduloDdt(d, righe)}`, msg(req), ['documenti.js', 'autosalva.js']));
 
     // bozza: modulo modificabile
     const [aliquote, condizioni, ddt, { esito, erroriExtra }, acconti, cliente] = await Promise.all([
@@ -564,7 +565,7 @@ export function rotteAmministrazione() {
     res.send(pagina(req, titolo, html`${testa}
       ${clienteUe ? await riquadroVies(clienteUe.partita_iva, clienteUe.nazione, `/amministrazione/documenti/${id}`) : ''}
       ${d.tipo === 'fattura' || d.tipo === 'nota_credito' ? await riquadroPlafond(d.cliente_id, String(d.data), (d.tipo === 'nota_credito' ? -1 : 1) * t.riepilogo.filter((g: any) => g.natura === 'N3.5').reduce((s: number, g: any) => s + Number(g.imponibile), 0)) : ''}
-      <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento">
+      <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento" data-autosalva="${d.stato === 'bozza' ? '1' : ''}">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
           ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`
@@ -624,13 +625,14 @@ export function rotteAmministrazione() {
             <button class="pericolo">Elimina bozza</button></form>` : ''}
         </div>
       </div>
-      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), 'documenti.js'));
+      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), ['documenti.js', 'autosalva.js']));
   });
 
   r.post('/documenti/:id', async (req, res) => {
     const id = Number(req.params.id);
-    const errori = await salvaBozza(id, req.body);
-    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.')}`);
+    let errori: string[];
+    try { errori = await salvaBozza(id, req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
+    rispondiSalvataggio(req, res, errori, `/amministrazione/documenti/${id}?msg=${encodeURIComponent(errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.')}`);
   });
 
   r.post('/documenti/:id/ddt', async (req, res) => {

@@ -3,6 +3,7 @@
  * di consegna dell'ordine in una bozza modificabile → Emetti (numero e PDF salvato) → Invia con Gmail in risposta
  * all'email dell'ordine. Senza la delega di Gmail il PDF si scarica e si manda a mano.
  */
+import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { Router } from 'express';
 import { q1 } from '../db.js';
 import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -61,7 +62,7 @@ export function rotteConferme() {
       <p>Cliente <b>${d.intestatario?.ragione_sociale ?? d.ragione_sociale}</b>${d.email_inviata_il
         ? html` · inviata a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}` : ''}</p>
       ${emessa && !annullata ? html`<p class="nota">La conferma è già emessa: se la correggi e salvi, il PDF si rifà con lo stesso numero${d.email_inviata_il ? ' (poi rimandala al cliente)' : ''}.</p>` : ''}
-      <form method="post" action="${base}" class="blocco" id="modulo-documento">
+      <form method="post" action="${base}" class="blocco" id="modulo-documento" data-autosalva="${annullata ? '' : '1'}">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
           <label>Vostro ordine n. <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}" class="maiuscolo"></label>
@@ -108,12 +109,13 @@ export function rotteConferme() {
             : html`<b>Invio con Gmail non ancora attivo</b> (manca la delega di Google Workspace per info@): scarica il PDF e mandalo dalla posta. Quando la delega c'è, questo pulsante funziona da solo.`}</span>
           <button class="primario" ${email.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
         </div>
-      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: 'documenti.js' }));
+      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: ['documenti.js', 'autosalva.js'] }));
   });
 
   r.post('/:id/conferme/:cid', async (req, res) => {
-    const errori = await salvaConferma(Number(req.params.cid), req.body);
-    res.redirect(indirizzo(req.params.id, req.params.cid, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
+    let errori: string[];
+    try { errori = await salvaConferma(Number(req.params.cid), req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
+    rispondiSalvataggio(req, res, errori, indirizzo(req.params.id, req.params.cid, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
   });
 
   r.get('/:id/conferme/:cid/pdf', async (req, res) => {

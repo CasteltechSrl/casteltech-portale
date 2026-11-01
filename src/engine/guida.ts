@@ -366,6 +366,16 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
   {
+    id: 'bozze-autosalvataggio', area: 'amministrazione', titolo: 'Le bozze si salvano da sole',
+    parole: 'salvataggio automatico autosave bozza salva da sola modifiche non salvate ctrl s scorciatoia perso lavoro chiudere pagina',
+    testo: [
+      'Nelle bozze di fattura e nota di credito, DDT, conferma d\'ordine e ordine a fornitore non serve più premere Salva a ogni modifica: due secondi dopo l\'ultima cosa scritta la bozza si salva da sola, e accanto al pulsante Salva compare "Salvato alle 10:32".',
+      'Se qualcosa non va (es. data non valida) compare in rosso "Non salvato: …" con il motivo: si corregge e si risalva. Il pulsante Salva funziona come prima e ricarica la pagina con i totali aggiornati; Ctrl+S (Cmd+S sul Mac) lo preme.',
+      'Chiudendo la pagina con modifiche non ancora salvate il browser chiede conferma. I documenti già emessi non cambiano: il salvataggio automatico vale solo per le bozze (e per le conferme d\'ordine ancora modificabili).',
+    ],
+    pagine: [['/amministrazione/documenti', 'Documenti emessi'], ['/ordini/fornitori', 'Ordini a fornitore']],
+  },
+  {
     id: 'fatture-differite', area: 'amministrazione', titolo: 'Fatture differite: i DDT da fatturare entro il 15',
     parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla',
     testo: [

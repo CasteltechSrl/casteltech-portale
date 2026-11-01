@@ -414,6 +414,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    d'intento, `/amministrazione/lettere-intento`, avviso nella bozza `riquadroPlafond`: fatture N3.5 dell'anno dalla data della prima lettera, giallo dall'80 %).
    ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
    dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
+   ✅ Bozze che si salvano da sole (proposta della revisione, Adriano 1/11/2026; `server/autosalva.ts`, `public/autosalva.js`, test in `tests/autosalva.test.ts`):
+   il modulo `#modulo-documento` con `data-autosalva="1"` (fattura/NC/DDT in bozza, conferma d'ordine non annullata, ordine a fornitore) si salva 2 s dopo l'ultima
+   modifica con lo stesso POST del pulsante Salva + intestazione `X-Autosalva: 1` → JSON (`rispondiSalvataggio`); stato accanto a Salva, Ctrl+S = Salva, avviso
+   del browser se si chiude con modifiche non salvate. Un modulo nuovo si aggancia con lo stesso attributo e `rispondiSalvataggio` nel suo POST.
    ✅ Fatture differite (proposta della revisione, Adriano 1/11/2026; `engine/fatture-differite.ts`, `ddtDaFatturareTutti` + `fatturaTuttiIDdt` in
    `documenti-servizio.ts`, `/amministrazione/differite`, test in `tests/fatture-differite.test.ts`): DDT da fatturare per cliente con il termine (15 del mese
    dopo il DDT più vecchio), "Fattura tutti i DDT" = una bozza per cliente (TD24 da sola all'emissione), "Fattura tutti i clienti in scadenza"; nel cruscotto

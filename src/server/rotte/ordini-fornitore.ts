@@ -3,6 +3,7 @@
  * "+ Nuovo ordine" con il fornitore SOLO dall'anagrafica, bozza → Emetti (numero e PDF) → Invia con Gmail,
  * arrivo della merce riga per riga, fattura del fornitore collegata. Dalla BOM quotata: un ordine per distributore.
  */
+import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { Router } from 'express';
 import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import { riquadriSceltaProdotto } from '../views/scelta-prodotto.js';
@@ -174,7 +175,7 @@ export function rotteOrdiniFornitore() {
         ? html` · dalla BOM <a href="/quotazioni/bom/${d.bom_id}">${d.bom_nome ?? d.bom_id}</a>` : ''}${d.email_inviata_il
         ? html` · inviato a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}` : ''}</p>
       ${emesso && !annullato ? html`<p class="nota">L'ordine è già emesso: se lo correggi e salvi, il PDF si rifà con lo stesso numero${d.email_inviata_il ? ' (poi rimandalo al fornitore)' : ''}. Il fornitore non si cambia più.</p>` : ''}
-      <form method="post" action="${base}" class="blocco" id="modulo-documento">
+      <form method="post" action="${base}" class="blocco" id="modulo-documento" data-autosalva="${annullato ? '' : '1'}">
         <div class="riga-campi">
           ${emesso ? html`<input type="hidden" name="fornitore_id" value="${d.fornitore_id ?? ''}">` : html`<label class="largo">Fornitore
             <select name="fornitore_id"><option value="">— scegli dall'anagrafica —</option>${fornitori.map(f =>
@@ -250,12 +251,13 @@ export function rotteOrdiniFornitore() {
             : html`<b>Invio con Gmail non ancora attivo</b> (manca la delega di Google Workspace per info@): scarica il PDF e mandalo dalla posta.`}</span>
           <button class="primario" ${email.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
         </div>
-      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: 'documenti.js' }));
+      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: ['documenti.js', 'autosalva.js'] }));
   });
 
   r.post('/:id', async (req, res) => {
-    const errori = await salvaOrdineFornitore(Number(req.params.id), req.body);
-    res.redirect(msg(`/ordini/fornitori/${req.params.id}`, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
+    let errori: string[];
+    try { errori = await salvaOrdineFornitore(Number(req.params.id), req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
+    rispondiSalvataggio(req, res, errori, msg(`/ordini/fornitori/${req.params.id}`, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
   });
 
   r.get('/:id/pdf', async (req, res) => {
