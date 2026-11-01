@@ -2,6 +2,7 @@
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
 import { paginata } from '../views/paginazione.js';
+import { CAMPI_SEMPLICE } from '../../engine/preventivo-semplice.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
@@ -525,9 +526,9 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`
     : p.tipo === 'durata'
-    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
+    ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''} ${CAMPI_SEMPLICE.has(p.codice) ? 'campo-semplice' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
         <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
-    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
+    : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''} ${CAMPI_SEMPLICE.has(p.codice) ? 'campo-semplice' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
         <input inputmode="decimal" data-param="${p.codice}" value="${valore(p.codice)}" placeholder="${p.default ?? ''}"></label>`;
   // campi che alimentano SOLO costi una tantum (letti dalle formule): evidenziati in ambra
   const usate = (formule: string[]) => new Set(formule.flatMap(f => { try { return variabiliUsate(f); } catch { return []; } }));
@@ -545,6 +546,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
+        <span class="vista-preventivo" title="Semplice: solo quantità e costi che cambiano da una scheda all'altra; Completo: tutti i campi. I valori nascosti contano comunque."><button type="button" data-vista="semplice">Semplice</button><button type="button" data-vista="completo" class="attiva">Completo</button></span>
         ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>
           <a class="bottone" href="/preventivi/${salvato.id}/consegna" title="Data di consegna stimata: arrivo materiale, capacità produttiva, + 5 giorni lavorativi">Data di consegna</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
@@ -616,7 +618,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         <div class="campi-parametri">${cat.parametri.filter(p => p.gruppo === g).map(campoParametro)}</div>
       </details>`)}
 
-      <details class="blocco">
+      <details class="blocco materiali-consumo">
         <summary>Prezzi materiali di consumo (di questo preventivo)</summary>
         <div class="campi-parametri">${cat.materiali.map(m => html`
           <label>${m.descrizione} <span class="unita">€/${m.um}</span>

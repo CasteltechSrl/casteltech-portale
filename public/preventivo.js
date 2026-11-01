@@ -300,6 +300,28 @@
   });
   form.addEventListener('submit', e => e.preventDefault());
 
+  // Vista Semplice / Completo (src/engine/preventivo-semplice.ts): nasconde i campi che non si toccano quasi mai; il calcolo non cambia
+  const bottoniVista = form.querySelectorAll('.vista-preventivo button');
+  const applicaVista = vista => {
+    const semplice = vista === 'semplice';
+    form.classList.toggle('vista-semplice', semplice);
+    bottoniVista.forEach(b => b.classList.toggle('attiva', b.dataset.vista === (semplice ? 'semplice' : 'completo')));
+    form.querySelectorAll('details.blocco .campi-parametri').forEach(box => {
+      const tutti = box.querySelectorAll(':scope > label[data-param], :scope > label:has([data-param])');
+      const nascosti = Array.from(tutti).filter(l => !l.classList.contains('campo-semplice') && !l.classList.contains('scelta-provenienza')).length;
+      const det = box.closest('details');
+      det.classList.toggle('senza-semplici', nascosti === tutti.length && tutti.length > 0);
+      let nota = box.querySelector('.campi-nascosti');
+      if (!nota) { nota = document.createElement('span'); nota.className = 'campi-nascosti'; box.appendChild(nota); }
+      nota.textContent = nascosti ? `${nascosti} campi avanzati nascosti: passa a "Completo" per vederli.` : '';
+    });
+    try { localStorage.setItem('preventivo-vista', semplice ? 'semplice' : 'completo'); } catch (e) { /* senza memoria del browser resta la vista di questa pagina */ }
+  };
+  bottoniVista.forEach(b => b.addEventListener('click', () => applicaVista(b.dataset.vista)));
+  let vistaSalvata = 'completo';
+  try { vistaSalvata = localStorage.getItem('preventivo-vista') || 'completo'; } catch (e) { /* vedi sopra */ }
+  if (vistaSalvata === 'semplice') applicaVista('semplice');
+
   document.getElementById('mostra-tutte').addEventListener('change', e => {
     document.getElementById('tabella-fasi').classList.toggle('mostra-zero', e.target.checked);
   });

@@ -4,6 +4,7 @@
  * restano nella lista "Da verificare" finché non si confermano o si scartano.
  */
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
+import { conCampo } from '../../engine/errori-campo.js';
 import { Router, type Request } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -300,7 +301,7 @@ export function rotteCrm() {
     const giorno = dataValida(req.body.data) ?? oggiRoma();
     const tipo = String(req.body.tipo) in TIPI_ATTIVITA ? String(req.body.tipo) : 'nota';
     const descrizione = formatta('descrizione_attivita', req.body.descrizione);
-    if (!descrizione) return res.redirect(`/crm/${id}?msg=${encodeURIComponent('Scrivi cosa è stato fatto.')}`);
+    if (!descrizione) return res.redirect(conCampo(`/crm/${id}?msg=${encodeURIComponent('Scrivi cosa è stato fatto.')}`, 'descrizione'));
     const stato = statoDa(req.body.stato);
     await transazione(async c => {
       await c.query(`INSERT INTO crm_attivita (azienda_id, data, tipo, referente, descrizione, utente_id) VALUES ($1,$2,$3,$4,$5,$6)`,

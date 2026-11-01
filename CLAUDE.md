@@ -360,6 +360,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    distributore, poi P/N), bozze dei mancanti per distributore. Solleciti incassi (`engine/solleciti.ts`, `solleciti-servizio.ts`, `/amministrazione/solleciti[/:cliente]`,
    test `tests/solleciti.test.ts`): rate scadute per cliente, livello primo/secondo/ultimo (30/60 gg), email con fatture e IBAN, "Invia con Gmail" (delega) o mailto/copia +
    "Segna come mandato"; registrato in `crm_attivita` tipo email; "incassi scaduti" del cruscotto e la scheda cliente portano qui.
+   ✅ Gruppo C delle proposte (Adriano 1/11/2026; test `tests/interfaccia-moduli.test.ts`): errori accanto al campo (`engine/errori-campo.ts`: `conCampo(url, campo, modulo?)`
+   aggiunge `&campo=&modulo=` ai redirect con `?msg=`; `public/errori-campo.js` in ogni pagina salva i valori del modulo all'invio e, tornando con `campo=`, li rimette,
+   scrive il messaggio sotto il campo e ci porta il cursore; password mai conservate; usato in Utenti, Fasi/Parametri/Voci, Clienti, Prodotti, attività CRM: un modulo
+   nuovo che rifiuta un valore usa `conCampo`). Preventivo Semplice/Completo (`engine/preventivo-semplice.ts` `CAMPI_SEMPLICE` = quantità e costi che cambiano da una
+   scheda all'altra, classe `campo-semplice`, pulsanti accanto a Salva, scelta in localStorage `preventivo-vista`, all'inizio Completo; i campi nascosti contano comunque).
+   Numeri e date (`public/formati.js`): nelle caselle `inputmode="decimal"` il punto diventa virgola uscendo (solo "12.5", mai "1.000"); browser non in italiano =
+   nota sotto la prima casella data; niente `type="number"` nel portale.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

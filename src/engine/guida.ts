@@ -101,6 +101,36 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cruscotto', 'Cruscotto generale']],
   },
   {
+    id: 'errori-accanto-campo', area: 'inizio', titolo: 'Quando un modulo non si salva: l\'errore compare sotto il campo',
+    parole: 'errore campo modulo non salvato rosso messaggio valori persi riscrivere password email codice duplicato esiste già',
+    testo: [
+      'Se un dato non va bene (password troppo corta, codice già esistente, prezzo scritto male, cliente mancante…), la pagina torna con il messaggio in cima e, in più, il messaggio in rosso sotto la casella sbagliata, con il cursore già lì.',
+      'Quello che avevi scritto nelle altre caselle del modulo resta al suo posto: correggi solo il campo segnato e premi di nuovo Salva o Aggiungi. Le password non vengono conservate: si riscrivono.',
+      'Funziona in Impostazioni → Utenti, Fasi/Parametri/Voci, Anagrafiche → Clienti e Prodotti e nelle attività del CRM; le bozze di fattura, DDT e ordini hanno già il salvataggio automatico.',
+    ],
+    pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti'], ['/impostazioni/utenti', 'Impostazioni → Utenti']],
+  },
+  {
+    id: 'numeri-date-uniformi', area: 'inizio', titolo: 'Numeri con la virgola e date gg/mm/aaaa',
+    parole: 'numeri virgola punto decimali date formato gg/mm/aaaa giorno mese anno browser lingua italiano inglese mm/dd scrittura uniforme',
+    testo: [
+      'I numeri si scrivono con la virgola (12,50) ma il portale accetta anche il punto: uscendo dalla casella il punto diventa virgola, così si legge sempre allo stesso modo. Le migliaia non vanno separate (scrivi 1500, non 1.500).',
+      'Le date si scelgono dal calendario della casella e si leggono gg/mm/aaaa. La casella la disegna il browser nella SUA lingua: se il browser è in inglese mostra mese/giorno/anno e sotto la prima data della pagina compare una nota. Per vedere gg/mm/aaaa basta mettere l\'italiano nella lingua del browser (Chrome: Impostazioni → Lingue).',
+    ],
+    pagine: [['/cruscotto', 'Cruscotto generale']],
+  },
+  {
+    id: 'preventivo-semplice', area: 'preventivi', titolo: 'Preventivo: vista Semplice o Completo',
+    parole: 'preventivo semplice completo vista campi nascosti avanzati troppi campi pochi campi quantità veloce federico pulsante',
+    testo: [
+      'In alto nel preventivo, accanto a Salva, ci sono i pulsanti Semplice e Completo. In Semplice restano solo i campi che cambiano davvero da una scheda all\'altra: componenti SMD e feeder per lato, componenti THT (tipologie, da preparare, in giostra, punti a mano), numero item, collaudo, montaggio meccanico, cablaggio, firmware, costi di componenti e PCB, lamine, attrezzature PCB, spedizioni. Ogni gruppo dice quanti campi avanzati sono nascosti.',
+      'I campi nascosti valgono comunque: il calcolo usa sempre tutti i valori (i tempi standard restano quelli del catalogo o del preventivo). Completo mostra tutto come prima. Il browser ricorda la vista scelta per i prossimi preventivi; all\'inizio è Completo.',
+      'Le spunte delle Informazioni generali, i prezzi dei materiali di consumo e le tariffe restano visibili solo in Completo (materiali) o sempre (spunte, tariffe).',
+    ],
+    passi: ['Apri un preventivo.', 'Premi Semplice: compila quantità e costi.', 'Se serve un tempo particolare, premi Completo e cercalo nel suo gruppo.'],
+    pagine: [['/preventivi/nuovo', 'Nuovo preventivo']],
+  },
+  {
     id: 'ordine-da-preventivo', area: 'preventivi', titolo: 'Il cliente ha confermato: creare l\'ordine dal preventivo',
     parole: 'ordine dal preventivo crea ordine cliente conferma confermato accettato righe quantità prezzo consegna proposta una tantum',
     testo: [

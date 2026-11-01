@@ -3,6 +3,7 @@
  * Le modifiche valgono per i NUOVI preventivi: quelli salvati restano calcolati come al momento del salvataggio.
  */
 import express, { Router, type Request } from 'express';
+import { conCampo } from '../../engine/errori-campo.js';
 import { importaDocumenti, leggiDocumenti, type Avanzamento } from '../import-legacy-servizio.js';
 import bcrypt from 'bcryptjs';
 import { q, q1 } from '../db.js';
@@ -417,17 +418,17 @@ export function rotteImpostazioni() {
 
     r.post(`/${slug}/:codice`, async (req, res) => {
       const errore = await verificaFormula(req.body);
-      if (errore) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${req.params.codice}: ${errore}. Non salvato.`)}`);
+      if (errore) return res.redirect(conCampo(`/impostazioni/${slug}?msg=${encodeURIComponent(`${req.params.codice}: ${errore}. Non salvato.`)}`, T.formula ?? 'codice', `f-${slug}-${req.params.codice}`));
       const set = T.campi.map((c, i) => `${c.nome} = $${i + 2}`).join(', ');
       await q(`UPDATE ${T.tabella} SET ${set} WHERE ${T.chiave} = $1`, [req.params.codice, ...valori(req.body)]);
       res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${req.params.codice} salvato.`)}`);
     });
     r.post(`/${slug}`, async (req, res) => {
       const codice = String(req.body.codice ?? '').trim();
-      if (!CODICE_VALIDO.test(codice)) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent('Codice non valido: solo lettere, numeri e _, iniziando con una lettera.')}`);
-      if (await q1(`SELECT 1 FROM ${T.tabella} WHERE ${T.chiave} = $1`, [codice])) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`Il codice ${codice} esiste già.`)}`);
+      if (!CODICE_VALIDO.test(codice)) return res.redirect(conCampo(`/impostazioni/${slug}?msg=${encodeURIComponent('Codice non valido: solo lettere, numeri e _, iniziando con una lettera.')}`, 'codice', `f-${slug}-nuovo`));
+      if (await q1(`SELECT 1 FROM ${T.tabella} WHERE ${T.chiave} = $1`, [codice])) return res.redirect(conCampo(`/impostazioni/${slug}?msg=${encodeURIComponent(`Il codice ${codice} esiste già.`)}`, 'codice', `f-${slug}-nuovo`));
       const errore = await verificaFormula(req.body);
-      if (errore) return res.redirect(`/impostazioni/${slug}?msg=${encodeURIComponent(`${errore}. Non aggiunto.`)}`);
+      if (errore) return res.redirect(conCampo(`/impostazioni/${slug}?msg=${encodeURIComponent(`${errore}. Non aggiunto.`)}`, T.formula ?? 'codice', `f-${slug}-nuovo`));
       const v = valori(req.body);
       // campi obbligatori senza valore: valori di riserva sensati
       const nomi = T.campi.map(c => c.nome);
@@ -533,11 +534,11 @@ export function rotteImpostazioni() {
   });
   r.post('/utenti', async (req, res) => {
     const pwd = String(req.body.password ?? '');
-    if (pwd.length < 10) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'));
+    if (pwd.length < 10) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'), 'password', 'u-nuovo'));
     try {
       await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, $4)`,
         [String(req.body.nome).trim(), String(req.body.email).trim(), await bcrypt.hash(pwd, 12), ruoloDaModulo(req.body.ruolo)]);
-    } catch { return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Email già presente.')); }
+    } catch { return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('Email già presente.'), 'email', 'u-nuovo')); }
     res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente aggiunto.'));
   });
   r.post('/utenti/:id/elimina', async (req, res) => {
@@ -566,7 +567,7 @@ export function rotteImpostazioni() {
       [id, String(req.body.nome).trim(), String(req.body.email ?? '').trim(), ruolo, attivo]);
     const pwd = String(req.body.password ?? '');
     if (pwd) {
-      if (pwd.length < 10) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Password non cambiata: almeno 10 caratteri.'));
+      if (pwd.length < 10) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('Password non cambiata: almeno 10 caratteri.'), 'password', `u-${id}`));
       await q(`UPDATE utenti SET password_hash = $2 WHERE id = $1`, [id, await bcrypt.hash(pwd, 12)]);
     }
     res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente salvato.'));
