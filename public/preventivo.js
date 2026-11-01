@@ -77,8 +77,10 @@
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const n = ++richiesta;
-      const res = await fetch('/preventivi/calcola', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) });
-      if (res.ok && n === richiesta) aggiorna(await res.json());
+      const res = await fetch('/preventivi/calcola', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) }).catch(() => null);
+      if (n !== richiesta) return;
+      if (res && res.ok) { aggiorna(await res.json()); if (statoEl.dataset.calcolo) { statoEl.textContent = ''; statoEl.classList.remove('negativo'); delete statoEl.dataset.calcolo; } }
+      else { statoEl.textContent = 'Calcolo non riuscito: ricontrolla i totali prima di salvare.'; statoEl.classList.add('negativo'); statoEl.dataset.calcolo = '1'; }
     }, 250);
   }
 
@@ -91,7 +93,8 @@
     selProdotto.innerHTML = '<option value="">Caricamento…</option>';
     descrizione.value = '';
     if (!selCliente.value) { selProdotto.innerHTML = '<option value="">— prima scegli il cliente —</option>'; return; }
-    const elenco = await (await fetch('/preventivi/prodotti?cliente=' + encodeURIComponent(selCliente.value))).json();
+    const elenco = await fetch('/preventivi/prodotti?cliente=' + encodeURIComponent(selCliente.value)).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!elenco) { selProdotto.innerHTML = '<option value="">Elenco non caricato: riscegli il cliente</option>'; return; }
     selProdotto.innerHTML = '';
     const vuota = new Option(elenco.length ? '— scegli il codice —' : 'Nessun codice per questo cliente: usa «+ Nuovo prodotto»', '');
     selProdotto.add(vuota);
@@ -260,7 +263,7 @@
     // campionatura: ricarico al 35% (togliendo la spunta torna quello di prima)
     if (el.dataset.param === 'campionatura') {
       const ric = form.querySelector('[data-tariffa=ricarico]');
-      if (el.checked) { ric.dataset.prima = ric.value; ric.value = '1.35'; }
+      if (el.checked) { ric.dataset.prima = ric.value; ric.value = '1,35'; }
       else if (ric.dataset.prima) ric.value = ric.dataset.prima;
     }
     // lamina: std oppure con trattamenti
@@ -303,7 +306,8 @@
 
   document.getElementById('salva').addEventListener('click', async () => {
     statoEl.textContent = 'Salvataggio…';
-    const res = await fetch('/preventivi/salva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) });
+    const res = await fetch('/preventivi/salva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) }).catch(() => null);
+    if (!res) { statoEl.textContent = 'Portale non raggiungibile: controlla la connessione e riprova a salvare.'; statoEl.classList.add('negativo'); return; }
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { statoEl.textContent = j.errore || 'Errore nel salvataggio'; statoEl.classList.add('negativo'); return; }
     modificato = false;

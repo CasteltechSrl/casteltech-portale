@@ -65,9 +65,16 @@ export function rotteGuida() {
     res.json(cercaGuida(q, 6).map(x => ({ titolo: x.argomento.titolo, area: x.area.nome, href: indirizzoArgomento(x.argomento), testo: x.argomento.testo[0] })));
   });
 
+  // l'IA costa: ogni utente può fare al massimo 20 domande all'ora (contatore in memoria, niente database)
+  const domandeFatte = new Map<string, number[]>();
   r.post('/chiedi', async (req, res) => {
     const domanda = String(req.body?.domanda ?? '').trim().slice(0, 500);
     if (!domanda) return res.status(400).json({ errore: 'Scrivi una domanda.' });
+    const chi = String(req.session.utente?.id ?? req.ip ?? '?');
+    const recenti = (domandeFatte.get(chi) ?? []).filter(t => t > Date.now() - 3600_000);
+    if (recenti.length >= 20) return res.status(429).json({ errore: 'Hai fatto molte domande in quest\'ora: riprova più tardi, intanto cerca negli argomenti.' });
+    recenti.push(Date.now()); domandeFatte.set(chi, recenti);
+    if (domandeFatte.size > 500) domandeFatte.clear();
     const collegamenti = (ids: string[]) => ids.map(id => ARGOMENTI_GUIDA.find(a => a.id === id)!).map(a => ({ titolo: a.titolo, href: indirizzoArgomento(a) }));
     const ricerca = () => cercaGuida(domanda, 3).map(x => x.argomento.id);
     if (!iaConfigurata()) return res.json({ risposta: 'L\'IA non è configurata: ecco gli argomenti della guida che parlano di questo.', argomenti: collegamenti(ricerca()) });

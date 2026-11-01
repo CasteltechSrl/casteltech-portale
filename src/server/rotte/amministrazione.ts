@@ -9,7 +9,7 @@ import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoSce
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
-import { html, data, euro, num, raw, type Raw } from '../views/html.js';
+import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
@@ -121,9 +121,9 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
     <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
     <td>${cellaDescrizione(x, i, prodotti, 'maiuscolo')}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
-    <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
+    <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
     <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo maiuscolo"></td>
-    <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
+    <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
     <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo"></td>
   </tr>`;
   return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento">
@@ -466,7 +466,7 @@ export function rotteAmministrazione() {
             <form method="post" action="/amministrazione/documenti/${id}/annulla" class="inline"
               data-conferma="Annullare il DDT n. ${d.numero}? Usalo solo se la merce non è partita: il numero resta usato e il DDT resta nell'elenco come annullato.">
               <button class="pericolo">Annulla DDT</button></form>` : ''}
-          ${d.tipo === 'fattura' && d.cliente_id ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-credito" class="inline"
+          ${d.tipo === 'fattura' && d.cliente_id && !['scartato', 'annullato'].includes(d.stato) ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-credito" class="inline"
             data-conferma="Creare una nota di credito (bozza) che storna questa fattura?"><button>Crea nota di credito</button></form>
             ${d.tipo_sdi !== 'TD05' ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-debito" class="inline"
             data-conferma="Creare una nota di debito (bozza) che aumenta l'importo di questa fattura?"><button title="Per aggiungere importi a questa fattura (costi dimenticati, adeguamenti)">Crea nota di debito</button></form>` : ''}` : ''}
@@ -494,9 +494,9 @@ export function rotteAmministrazione() {
         <input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
         <input type="hidden" name="righe[${i}][acconto_id]" value="${x.acconto_id ?? ''}"></td>
       <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
-      <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo"></td>
-      <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][sconto]" value="${x.sconto || ''}" class="cortissimo" inputmode="decimal"></td>
       <td><select name="righe[${i}][aliquota_iva]"><option value="">predefinita</option>${aliquote.map(a =>
         html`<option value="${a.codice}" ${x.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></td>
@@ -539,8 +539,11 @@ export function rotteAmministrazione() {
       </form>
       ${ddt.length ? html`<form method="post" action="/amministrazione/documenti/${id}/ddt" class="blocco">
         <h2>DDT da fatturare di questo cliente</h2>
-        ${ddt.map(x => html`<label class="riga-spunta"><input type="checkbox" name="ddt" value="${x.id}"> DDT n. ${x.numero} del ${data(x.data)}
+        ${ddt.filter(x => x.daFatturare).map(x => html`<label class="riga-spunta"><input type="checkbox" name="ddt" value="${x.id}"> DDT n. ${x.numero} del ${data(x.data)}
           <span class="nota">${x.righe} righe${x.causale ? ` · ${x.causale}` : ''}</span></label>`)}
+        ${ddt.some(x => !x.daFatturare) ? html`<details class="nota"><summary>Altri ${ddt.filter(x => !x.daFatturare).length} DDT senza fattura (resi non lavorati, garanzie, conto visione: di solito non si fatturano)</summary>
+          ${ddt.filter(x => !x.daFatturare).map(x => html`<label class="riga-spunta"><input type="checkbox" name="ddt" value="${x.id}"> DDT n. ${x.numero} del ${data(x.data)}
+            <span class="nota">${x.righe} righe${x.causale ? ` · ${x.causale}` : ''}</span></label>`)}</details>` : ''}
         <button>Aggiungi i DDT scelti</button> <span class="nota">Salva prima le modifiche alle righe: i DDT si aggiungono in fondo.</span>
       </form>` : ''}
       ${acconti.length ? html`<form method="post" action="/amministrazione/documenti/${id}/acconti" class="blocco">

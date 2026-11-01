@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { controlliDdt, indirizzoSu, righeDdtDaOrdine, trasportoDaModulo } from '../src/engine/ddt.js';
+import { controlliDdt, indirizzoSu, righeDdtDaOrdine, trasportoDaModulo, CAUSALI_NON_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, causaleDaFatturare } from '../src/engine/ddt.js';
 import { righeDaModulo } from '../src/engine/documenti.js';
 
 test('DDT: trasporto dal modulo in MAIUSCOLO, campi vuoti tolti, corriere scritto in "a cura" = vettore', () => {
@@ -44,4 +44,15 @@ test('Indirizzo su più righe; la nazione solo se estera', () => {
   assert.equal(indirizzoSu({ indirizzo: 'STRADA FIORENZUOLA, 8', cap: '29014', comune: "CASTELL'ARQUATO", provincia: 'PC', nazione: 'IT' }),
     "STRADA FIORENZUOLA, 8\n29014 CASTELL'ARQUATO (PC)");
   assert.equal(indirizzoSu({ indirizzo: 'RUE 1', comune: 'PARIS', nazione: 'FR' }), 'RUE 1\nPARIS\nFR');
+});
+
+test('DDT da fatturare: vendita e reso lavorato sì; resi non lavorati, garanzie, conto visione, conto lavorazione, campioni no', () => {
+  for (const c of ['VENDITA', 'RESO LAVORATO', 'Reso lavorato', 'Sale', 'Vente de biens', '', null, undefined, 'Completamento Fornitura', 'RESO RIPARATO'])
+    assert.equal(causaleDaFatturare(c), true, String(c));
+  for (const c of ['RESO NON LAVORATO', 'Returned unworked', 'RIPARAZIONE IN GARANZIA', 'reso riparato in garanzia', 'WARRANTY REPAIR', 'CONTO VISIONE',
+    'Resp conto visione', 'CONTO LAVORAZIONE', 'IN CONTO LAVORO', 'C/LAVORAZIONE', 'Conto prova', 'CAMPIONI GRATUITI', "RESO DI PRESTITO D'USO",
+    'SOSTITUZIONE SCHEDE', 'C/RIPARAZIONE'])
+    assert.equal(causaleDaFatturare(c), false, c);
+  // la condizione SQL usa la stessa espressione
+  assert.ok(SQL_CAUSALE_DA_FATTURARE.includes(CAUSALI_NON_DA_FATTURARE));
 });

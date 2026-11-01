@@ -62,6 +62,8 @@ export function rotteAutofatture() {
     String(layout({ titolo, utente: req.session.utente, attiva: 'amministrazione', contenuto, avviso, largo: true }));
 
   // caricamento da Amministrazione: si sa già che è una fattura estera, l'IA fa solo la lettura della fattura
+  // La guida e i vecchi collegamenti puntano qui senza id: si va all'elenco delle autofatture (con il riquadro delle fatture estere).
+  r.get('/', (_req, res) => res.redirect('/amministrazione/documenti?tipo=autofattura'));
   r.post('/carica', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
     const nome = decodeURIComponent(String(req.get('x-nome-file') ?? '')).trim();
     const dati = req.body as Buffer;

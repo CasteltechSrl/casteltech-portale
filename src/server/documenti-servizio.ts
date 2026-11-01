@@ -10,7 +10,7 @@ import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliq
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
 import { completaDaListino } from './prezzi-servizio.js';
-import { INIZIO_DDT_DA_FATTURARE, controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, controlliDdt, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
@@ -68,8 +68,8 @@ export async function creaDdtDaOrdine(ordineId: number, creatoDa: number | null)
 /** Nota di credito (bozza) che storna una fattura emessa: stesse righe, collegata alla fattura. */
 export async function creaNotaCredito(fatturaId: number, creatoDa: number | null): Promise<number> {
   return transazione(async c => {
-    const f = (await c.query(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'fattura' AND numero IS NOT NULL`, [fatturaId])).rows[0];
-    if (!f) throw new Error('Si può stornare solo una fattura emessa.');
+    const f = (await c.query(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'fattura' AND numero IS NOT NULL AND stato NOT IN ('bozza', 'scartato', 'annullato')`, [fatturaId])).rows[0];
+    if (!f) throw new Error('Si può stornare solo una fattura emessa (non una bozza né una fattura scartata dallo SdI: quella si corregge e si rimanda).');
     if (!f.cliente_id) throw new Error('La fattura non è collegata a un cliente in anagrafica.');
     const data = oggiRoma();
     const id = (await c.query(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, documento_origine_id, causale, creato_da)
@@ -88,8 +88,8 @@ export async function creaNotaCredito(fatturaId: number, creatoDa: number | null
  * righe vuote da scrivere, fattura collegata (DatiFattureCollegate), stesso ordine e CIG/CUP.
  */
 export async function creaNotaDebito(fatturaId: number, creatoDa: number | null): Promise<number> {
-  const f = await q1(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'fattura' AND numero IS NOT NULL`, [fatturaId]);
-  if (!f) throw new Error('La nota di debito si fa solo su una fattura emessa.');
+  const f = await q1(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'fattura' AND numero IS NOT NULL AND stato NOT IN ('bozza', 'scartato', 'annullato')`, [fatturaId]);
+  if (!f) throw new Error('La nota di debito si fa solo su una fattura emessa (non scartata dallo SdI né annullata).');
   if (!f.cliente_id) throw new Error('La fattura non è collegata a un cliente in anagrafica.');
   const data = oggiRoma();
   const r = await q1<{ id: number }>(`INSERT INTO documenti (tipo, tipo_sdi, anno, data, cliente_id, condizione_pagamento, documento_origine_id, causale,
@@ -185,9 +185,10 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
 }
 
 /** DDT del cliente non ancora fatturati (né già messi in un'altra bozza). */
-export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; numero: number; data: string; righe: number; causale: string | null }>(
-  `SELECT d.id, d.numero, d.data, (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id) AS righe, d.dati_trasporto->>'causale' AS causale
-   FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = $1 AND d.fattura_id IS NULL AND d.stato <> 'annullato'
+export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; numero: number; data: string; righe: number; causale: string | null; daFatturare: boolean }>(
+  `SELECT d.id, d.numero, d.data, (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id) AS righe, d.dati_trasporto->>'causale' AS causale,
+     (${SQL_CAUSALE_DA_FATTURARE}) AS "daFatturare"
+   FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = $1 AND d.fattura_id IS NULL AND d.stato <> 'annullato' AND d.numero IS NOT NULL
      AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
      AND NOT EXISTS (SELECT 1 FROM documenti_righe r JOIN documenti x ON x.id = r.documento_id
                      WHERE r.ddt_id = d.id AND x.id <> $2 AND x.stato <> 'annullato')
@@ -201,7 +202,9 @@ export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number>
     let pos = Number((await c.query(`SELECT coalesce(max(posizione), 0) AS p FROM documenti_righe WHERE documento_id = $1`, [id])).rows[0].p);
     let aggiunti = 0;
     for (const ddtId of ddtIds) {
-      const t = (await c.query(`SELECT id, numero, data FROM documenti WHERE id = $1 AND tipo = 'ddt' AND cliente_id = $2 AND fattura_id IS NULL`, [ddtId, d.cliente_id])).rows[0];
+      // solo DDT emessi (con il numero): una bozza di DDT non si può citare in fattura
+      const t = (await c.query(`SELECT id, numero, data FROM documenti WHERE id = $1 AND tipo = 'ddt' AND cliente_id = $2 AND fattura_id IS NULL
+        AND numero IS NOT NULL AND stato <> 'annullato'`, [ddtId, d.cliente_id])).rows[0];
       if (!t) continue;
       await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, descrizione, quantita, prezzo, ddt_id)
         VALUES ($1, $2, true, $3, 1, 0, $4)`, [id, ++pos, `DDT n. ${t.numero} del ${t.data.split('-').reverse().join('/')}`, t.id]);
@@ -228,8 +231,9 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const acconti = await query(`SELECT DISTINCT a.id, a.numero, a.sezionale, a.data FROM documenti_righe r JOIN documenti a ON a.id = r.acconto_id
     WHERE r.documento_id = $1 AND a.numero IS NOT NULL ORDER BY a.data, a.numero`, [id]);
   const anno = Number(String(d.data).slice(0, 4));
+  // la lettera deve essere già protocollata alla data della fattura (una lettera del 20/01 non copre la fattura del 10/01)
   const [intento] = cliente ? await query(`SELECT id, protocollo, data_protocollo FROM dichiarazioni_intento WHERE cliente_id = $1 AND anno = $2
-    ORDER BY data_protocollo DESC LIMIT 1`, [cliente.id, anno]) : [];
+    AND data_protocollo <= $3 ORDER BY data_protocollo DESC LIMIT 1`, [cliente.id, anno, d.data]) : [];
   const aliquote: Aliquota[] = await caricaAliquote();
   const azienda = await caricaAzienda();
   const predefinita = cliente?.aliquota_iva || 'IVA22';
@@ -272,14 +276,15 @@ async function preparaXml(c: pg.PoolClient | null, id: number, numero: number) {
     if (!f) esito.errori.push('Manca il fornitore.');
     const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione']
       .map(k => [k, (fornitore as any)[k] ?? null]).filter(([, v]) => v));
-    return { esito, erroriExtra: [] as string[], intestatario, scadenze: [] as DocumentoXml['scadenze'], intentoId: null };
+    return { esito, erroriExtra: [] as string[], intestatario, scadenze: [] as DocumentoXml['scadenze'], intentoId: null, aliquotaPredefinita: null as string | null };
   }
   const x = await datiXml(c, id, numero);
   const esito = generaFatturaXml(x.documento, x.clienteXml, x.azienda, x.aliquote);
   const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione', 'codice_sdi', 'pec',
     'pubblica_amministrazione', 'split_payment'].map(k => [k, x.cliente?.[k] ?? null]).filter(([, v]) => v));
   return { esito, erroriExtra: x.totali.errori.filter(e => /condizione di pagamento/.test(e)), intestatario, scadenze: x.documento.scadenze,
-    intentoId: esito.totali.riepilogo.some(g => g.natura === 'N3.5') ? x.intento?.id ?? null : null };
+    intentoId: esito.totali.riepilogo.some(g => g.natura === 'N3.5') ? x.intento?.id ?? null : null,
+    aliquotaPredefinita: x.documento.aliquota_predefinita ?? null };
 }
 
 /** Anteprima: totali ed errori dell'XML (senza numero, che si prende all'emissione). */
@@ -310,6 +315,10 @@ export async function emettiDocumento(id: number): Promise<{ numero: string } | 
         xml = $8, dichiarazione_intento_id = $9, tipo_sdi = coalesce($10, tipo_sdi), aggiornato_il = now() WHERE id = $1`,
         [id, numero, JSON.stringify(intestatario), esito.totali.imponibile, esito.totali.imposta, esito.totali.bollo, esito.totali.totale, esito.xml,
          x.intentoId, d.tipo === 'autofattura' ? null : esito.tipoSdi ?? null]);
+      // fotografia dell'aliquota: le righe "predefinita" prendono il codice usato nell'XML, così la copia di cortesia e una nota di credito
+      // futura restano uguali anche se l'ufficio cambia l'IVA predefinita del cliente (revisione 1/11/2026)
+      if (x.aliquotaPredefinita)
+        await c.query(`UPDATE documenti_righe SET aliquota_iva = $2 WHERE documento_id = $1 AND aliquota_iva IS NULL AND NOT solo_descrizione`, [id, x.aliquotaPredefinita]);
       await c.query(`DELETE FROM documenti_scadenze WHERE documento_id = $1`, [id]);
       for (const s of x.scadenze)
         await c.query(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4)`, [id, s.data, s.importo, s.modalita]);

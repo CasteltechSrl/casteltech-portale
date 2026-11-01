@@ -71,3 +71,15 @@ test('FatturaPA: errori che lo SdI scarterebbe', () => {
   assert.match(generaFatturaXml({ ...FATTURA_RATE, righe: [{ descrizione: 'solo testo', quantita: 1, prezzo: 0, solo_descrizione: true }], scadenze: [] },
     CLIENTE_IT, AZIENDA, ALIQUOTE).errori.join(), /righe con un importo/);
 });
+
+test('fattura: riferimento ordine oltre 20 caratteri = errore chiaro (non un taglio); capitale sociale e telefono scritti in modi diversi', () => {
+  const lungo = generaFatturaXml({ ...FATTURA, riferimento_esterno: 'ORDINE-2026-0001234567890' }, CLIENTE_IT, AZIENDA, ALIQUOTE);
+  assert.ok(lungo.errori.some(e => /20 caratteri/.test(e)), lungo.errori.join(' | '));
+  const az = { ...AZIENDA, rea_ufficio: 'PC', rea_numero: '190591', capitale_sociale: '10000.00', telefono: '+39 0523 190 24 64' };
+  const { xml, errori } = generaFatturaXml(FATTURA, CLIENTE_IT, az, ALIQUOTE);
+  assert.deepEqual(errori, []);
+  assert.match(xml, /<CapitaleSociale>10000\.00<\/CapitaleSociale>/);
+  assert.match(xml, /<Telefono>05231902464<\/Telefono>/);   // senza spazi; il +39 si toglie perché non ci starebbe nei 12 caratteri
+  const az2 = { ...az, capitale_sociale: '10.000,00' };
+  assert.match(generaFatturaXml(FATTURA, CLIENTE_IT, az2, ALIQUOTE).xml, /<CapitaleSociale>10000\.00<\/CapitaleSociale>/);
+});

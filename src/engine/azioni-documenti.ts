@@ -73,7 +73,7 @@ export function motivoEscluso(azione: AzioneDocumenti, d: DocumentoElenco): stri
     case 'xml': return d.ha_xml ? null : d.stato === 'bozza' ? 'è una bozza (l\'XML nasce con Emetti)' : 'non ha il file XML';
     case 'incassa': return d.tipo === 'fattura' && emesso(d) ? null : 'non è una fattura emessa';
     case 'duplica': return d.tipo === 'fattura' && d.cliente_id ? null : 'si duplicano solo le fatture con il cliente in anagrafica';
-    case 'nota_credito': return d.tipo === 'fattura' && d.numero != null && d.stato !== 'annullato' ? null : 'si storna solo una fattura emessa';
+    case 'nota_credito': return d.tipo === 'fattura' && emesso(d) ? null : 'si storna solo una fattura emessa (non scartata né annullata)';
     case 'fattura_ddt':
       if (d.tipo !== 'ddt' || d.stato !== 'emesso') return 'non è un DDT emesso';
       if (d.fattura_id) return 'è già fatturato';

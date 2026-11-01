@@ -66,8 +66,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accento); o
 input[type=checkbox], input[type=radio] { width: auto; margin: 0; accent-color: var(--accento); transform: scale(1.15); }
 label { display: block; font-size: .85rem; color: var(--tenue); }
 label input, label select, label textarea, label output { margin-top: .2rem; }
-label small { display: block; font-size: .78rem; color: #8a948f; margin-top: .15rem; }
-.unita { color: #8a948f; font-size: .78rem; }
+label small { display: block; font-size: .78rem; color: var(--tenue); margin-top: .15rem; }
+.unita { color: var(--tenue); font-size: .78rem; }
 label.spunta { display: flex; align-items: center; gap: .5rem; color: var(--testo); }
 label.spunta.piccola { font-size: .82rem; font-weight: 400; color: var(--tenue); }
 output { display: block; padding: .45rem 0; font-weight: 650; color: var(--testo); }

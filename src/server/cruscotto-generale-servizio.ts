@@ -11,7 +11,7 @@ import { avvisoServizi } from './stato-servizi.js';
 import { caricoGiornaliero } from '../engine/ordini.js';
 import { imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
-import { INIZIO_DDT_DA_FATTURARE } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
@@ -45,16 +45,17 @@ export async function datiCruscottoGenerale(oggi: string) {
     q<{ id: number; ragione_sociale: string; prossima_azione: string | null; data_prossima_azione: string }>(`SELECT id, ragione_sociale, prossima_azione, data_prossima_azione
       FROM crm_aziende WHERE da_verificare IS NULL AND data_prossima_azione <= $1::date + 7 ORDER BY data_prossima_azione, id LIMIT ${MOSTRATE}`, [oggi]),
     q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, data, imponibile FROM documenti
-      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
+      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
     q<{ data: string; importo: number; documento_id: number; numero_doc: number; sezionale: string; anno: number; nome: string }>(`
       SELECT s.data, s.importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS nome
       FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato') ORDER BY s.data, d.numero`),
+      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY s.data, d.numero`),
     q<{ data: string; importo: number }>(`SELECT s.data, s.importo FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura'`),
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti d
-      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato') AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')`),
+      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
+        AND ${SQL_CAUSALE_DA_FATTURARE}`),
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti WHERE stato = 'bozza' AND tipo IN ('fattura', 'nota_credito', 'autofattura', 'ddt')`),
     q<{ stato: string; quanti: number; ultimo: number }>(`SELECT stato, count(*)::int AS quanti, max(id) AS ultimo FROM documenti
       WHERE stato IN ('scartato', 'non_consegnato', 'inviato') AND tipo IN ('fattura', 'nota_credito', 'autofattura') GROUP BY stato`),

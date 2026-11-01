@@ -53,6 +53,7 @@ ${opz.avviso ? html`<div class="avviso">${opz.avviso}</div>` : ''}
 ${opz.ok ? html`<div class="conferma">${opz.ok}</div>` : ''}
 ${opz.contenuto}
 </main>
+<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
 <script src="/static/reparto.js?v=${VERSIONE}" defer></script>
 <script src="/static/tempi.js?v=${VERSIONE}" defer></script>
 </body>
@@ -136,6 +137,18 @@ export function rotteReparto() {
       [f.id, fine, intero(req.body.pezzi) ?? null, tipo, tipo === 'P' ? note : null, tipo === 'P' ? null : (note || null), intero(req.body.persone) || null]);
     annullaFase(f.id);
     const msg = `Fase ${f.numero} chiusa: ${hhmm(minutiDelGiorno(fine) - minutiDelGiorno(f.inizio))}`;
+    res.redirect(req.session.operatore ? `/r/c/${f.codice_qr}?ok=${encodeURIComponent(msg)}` : `/commesse/${f.commessa_id}`);
+  });
+
+  // Fase aperta per sbaglio (tasto premuto due volte, fase sbagliata): si toglie la riga invece di chiuderla con un tempo finto.
+  // Solo chi l'ha aperta (o l'ufficio), e solo se è ancora aperta.
+  r.post('/chiudi/:id/annulla', operatoreOUfficio, async (req, res) => {
+    const [f] = await fasiAperte({ id: Number(req.params.id) });
+    if (!f) return res.redirect('/r?ok=' + encodeURIComponent('Fase già chiusa'));
+    if (req.session.utente?.ruolo !== 'ufficio' && f.sigla !== req.session.operatore?.sigla) return res.status(403).send('Fase di un altro operatore');
+    await q(`DELETE FROM rilevazioni WHERE id = $1 AND chiusa_il IS NULL`, [f.id]);
+    annullaFase(f.id);
+    const msg = `Apertura della fase ${f.numero} annullata`;
     res.redirect(req.session.operatore ? `/r/c/${f.codice_qr}?ok=${encodeURIComponent(msg)}` : `/commesse/${f.commessa_id}`);
   });
 
@@ -226,7 +239,8 @@ export function rotteReparto() {
         VALUES ($1,$2,$3,$4,$5,$6,'S',$7,'tablet',$8) RETURNING id`, [x.c.id, f.codice, op.sigla, adesso.data, inizio, persone, riga, apertaIl])).rows[0].id;
       await cl.query(`UPDATE commesse SET stato = 'in_produzione', aggiornato_il = now() WHERE id = $1 AND stato = 'aperta'`, [x.c.id]);
       return Number(nuova);
-    });
+    }).catch(e => { if (e?.code === '23505') return null; throw e; });   // doppio tocco: la seconda apertura non entra (indice unico, migrazione 057)
+    if (id === null) return res.redirect(`/r/c/${x.c.codice_qr}?errore=${encodeURIComponent(`Hai già la fase ${f.numero} aperta: chiudila prima`)}`);
     pianificaFase({ id, aperta_il: apertaIl, previsto_sec: f.cicloSec ?? 0 });
     res.redirect(`/r/c/${x.c.codice_qr}?ok=${encodeURIComponent(`Fase ${f.numero} aperta alle ${inizio}`)}`);
   });
@@ -341,5 +355,8 @@ async function paginaChiudi(req: Request, errore?: string) {
       ${sceltaSP(b.tipo)}
       <label>Note <small>con P: la causa del problema</small><textarea name="note" rows="2">${b.note ?? ''}</textarea></label>
       <button class="primario grande">■ Chiudi la fase</button>
+    </form>
+    <form method="post" action="/r/chiudi/${f.id}/annulla" class="modulo-reparto" data-conferma="Aperta per sbaglio? La riga si toglie e non resta nessun tempo.">
+      <button class="link">Aperta per sbaglio: annulla l'apertura</button>
     </form>` });
 }

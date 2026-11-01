@@ -10,6 +10,7 @@ import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
 import { TIPI_SPESA, bolloPerTrimestre, spesaDaModulo, testoPlafond, usoPlafond, type UsoPlafond } from '../../engine/fiscale.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
+import { annoLetteraIntento } from '../../engine/amministrazione.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) =>
@@ -136,7 +137,7 @@ export function rotteFiscale() {
     if (!clienteId || !protocollo || !/^\d{4}-\d{2}-\d{2}$/.test(dataProt)) return torna('Servono protocollo e data della lettera.');
     if (await q1(`SELECT 1 FROM dichiarazioni_intento WHERE protocollo = $1`, [protocollo])) return torna(`La lettera ${protocollo} è già registrata.`);
     await q(`INSERT INTO dichiarazioni_intento (cliente_id, protocollo, data_protocollo, anno, plafond, note) VALUES ($1, $2, $3, $4, $5, nullif($6, ''))`,
-      [clienteId, protocollo, dataProt, Number(dataProt.slice(0, 4)), numero(b.plafond), String(b.note ?? '').trim()]);
+      [clienteId, protocollo, dataProt, annoLetteraIntento(dataProt), numero(b.plafond), String(b.note ?? '').trim()]);
     torna(`Lettera ${protocollo} aggiunta.`);
   });
   r.post('/lettere-intento/:id', async (req, res) => {

@@ -5,7 +5,7 @@
 import { q } from '../db.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
-import { INIZIO_DDT_DA_FATTURARE } from '../../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../../engine/ddt.js';
 import { NOMI_FASCE, fasciaScadenza, imponibilePerMese, riepilogoScadenze, variazione, type Fascia } from '../../engine/cruscotto-amministrazione.js';
 
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
@@ -27,21 +27,22 @@ export async function contenutoCruscotto(): Promise<Raw> {
   const oggi = oggiRoma();
   const anno = Number(oggi.slice(0, 4));
   const meseCorrente = Number(oggi.slice(5, 7));
-  const [emessi, ricevuti, incassi, pagamenti, ddt, bozze] = await Promise.all([
+  const [emessi, ricevuti, incassi, pagamenti, ddtTutti, bozze] = await Promise.all([
     q(`SELECT tipo, data, imponibile FROM documenti
-      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
+      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
     q(`SELECT tipo, data, imponibile FROM documenti_ricevuti WHERE extract(year FROM data)::int IN ($1::int, $1::int - 1)`, [anno]),
     q<Scadenza & { numero_doc: number; sezionale: string; anno: number }>(`SELECT s.id, s.data, s.importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS nome
       FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato') ORDER BY s.data, d.numero`),
+      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY s.data, d.numero`),
     q<Scadenza>(`SELECT s.id, s.data, s.importo, d.id AS documento_id, d.numero, coalesce(f.ragione_sociale, d.intestatario->>'nome', '') AS nome
       FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' ORDER BY s.data, d.id`),
-    q<{ nome: string; quanti: number; ultimo: string }>(`SELECT coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '?') AS nome,
-        count(*)::int AS quanti, max(d.data) AS ultimo
+    q<{ nome: string; quanti: number; ultimo: string; altri: number }>(`SELECT coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '?') AS nome,
+        count(*) FILTER (WHERE ${SQL_CAUSALE_DA_FATTURARE})::int AS quanti, max(d.data) FILTER (WHERE ${SQL_CAUSALE_DA_FATTURARE}) AS ultimo,
+        count(*) FILTER (WHERE NOT (${SQL_CAUSALE_DA_FATTURARE}))::int AS altri
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato')
+      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
         AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') GROUP BY 1 ORDER BY 2 DESC, 1`),
     q(`SELECT d.id, d.tipo, d.data, coalesce(c.ragione_sociale, f.ragione_sociale, '') AS nome FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
       LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE d.stato = 'bozza' AND d.tipo <> 'conferma_ordine' ORDER BY d.creato_il DESC`),
@@ -56,6 +57,8 @@ export async function contenutoCruscotto(): Promise<Raw> {
     return html`stesso periodo ${anno - 1}: ${euro(prima)}${v == null ? '' : html` <span class="${v >= 0 ? 'positivo' : 'negativo'}">(${v > 0 ? '+' : ''}${v} %)</span>`}`;
   };
   const rate = (n: number) => (n === 1 ? '1 rata' : `${n} rate`);
+  const ddtAltri = ddtTutti.reduce((s, x) => s + x.altri, 0);
+  const ddt = ddtTutti.filter(x => x.quanti > 0);
   const ddtTotale = ddt.reduce((s, x) => s + x.quanti, 0);
 
   return html`
@@ -78,7 +81,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
     </div>
     <div class="due-colonne">
       <section><h2>DDT da fatturare</h2>
-        ${ddt.length ? html`<p class="nota">${ddtTotale} DDT di ${ddt.length} clienti (compresi resi e riparazioni non da fatturare).</p>
+        ${ddt.length ? html`<p class="nota">${ddtTotale} DDT di ${ddt.length} clienti (vendite e resi lavorati${ddtAltri ? html`; altri ${ddtAltri} DDT senza fattura sono resi non lavorati, garanzie, conto visione o conto lavorazione e non si contano` : ''}).</p>
           <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Cliente</th><th class="num">DDT</th><th>Ultimo</th></tr></thead>
           <tbody>${ddt.slice(0, MOSTRATE).map(x => html`<tr><td>${x.nome}</td><td class="num">${x.quanti}</td><td>${data(x.ultimo)}</td></tr>`)}</tbody></table></div>
           <p class="nota"><a href="/amministrazione/documenti?tipo=ddt">Elenco dei DDT →</a> · si fatturano da "+ Nuova fattura" scegliendo il cliente.</p>`

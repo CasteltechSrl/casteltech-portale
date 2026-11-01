@@ -110,13 +110,13 @@ async function caricaDentro(c: pg.PoolClient, f: FileAnagrafiche, togli: boolean
       await c.query(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = coalesce($4, cliente_id) WHERE id = $1`, [id, maiuscolo(p.codice), maiuscolo(p.descrizione), cl]);
       idProdotti.add(id);
     }
-    for (const [vecchio, nuovo] of Object.entries(f.alias_clienti)) {
+    for (const [vecchio, nuovo] of Object.entries(f.alias_clienti ?? {})) {
       const id = idCliente.get(maiuscolo(nuovo));
       if (id && maiuscolo(vecchio) !== maiuscolo(nuovo))
         await c.query(`INSERT INTO alias_clienti (nome, cliente_id) VALUES ($1,$2) ON CONFLICT (nome) DO UPDATE SET cliente_id = $2`, [maiuscolo(vecchio), id]);
     }
     let aliasProdotti = 0;
-    for (const a of f.alias_prodotti) {
+    for (const a of f.alias_prodotti ?? []) {
       const cl = idCliente.get(maiuscolo(a.cliente));
       if (!cl) continue;
       const p = (await c.query(

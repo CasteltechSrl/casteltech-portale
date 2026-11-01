@@ -25,6 +25,9 @@ const nf2 = new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFract
 export const euro = (n: number | null | undefined) => (n == null ? '' : nf2.format(n) + ' €');
 export const num = (n: number | null | undefined, dec = 2) =>
   n == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', maximumFractionDigits: dec }).format(n);
+/** Numero dentro una casella di modulo: virgola decimale e niente separatore delle migliaia (che il modulo leggerebbe come decimale). */
+export const numCampo = (n: number | string | null | undefined, dec = 4) =>
+  n == null || n === '' ? '' : new Intl.NumberFormat('it-IT', { useGrouping: false, maximumFractionDigits: dec }).format(Number(n));
 export const data = (d: string | Date | null | undefined) =>
   d ? new Date(d).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }) : '';
 /** secondi → "h:mm" */
