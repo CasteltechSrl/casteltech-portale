@@ -7,6 +7,7 @@
  */
 import { createSign } from 'node:crypto';
 import { aggiungiFile, elabora } from './acquisizioni-servizio.js';
+import { leggiDocumentoPaghe, registraDocumentoPaghe, tipoDocumentoPaghe } from './dipendenti-servizio.js';
 import { fileDaAcquisire, idCartellaDa, orarioDrive } from '../engine/acquisizioni.js';
 import { partiRoma } from '../engine/promemoria.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
@@ -96,6 +97,14 @@ export function controllaDrive(): Promise<EsitoDrive> {
       try {
         if (Number(f.size ?? 0) > MAX_BYTE) throw new Error('file oltre 30 MB');
         const dati = Buffer.from(await (await chiama(`/files/${f.id}?alt=media&supportsAllDrives=true`)).arrayBuffer());
+        // documenti dello studio paghe (cedolini, riepiloghi, note contabili, F24): vanno in Dipendenti, mai in "Da acquisire"
+        if (tipoDocumentoPaghe(f.name)) {
+          const p = await registraDocumentoPaghe(f.name, dati, { origine: 'drive', driveId: f.id });
+          if (p.id && !p.doppione) await leggiDocumentoPaghe(p.id);
+          await chiama(`/files/${f.id}?addParents=${acquisiti}&removeParents=${ordini}&supportsAllDrives=true`, { method: 'PATCH' });
+          esito.letti.push(f.name);
+          continue;
+        }
         // stesso file già registrato (es. spostamento non riuscito l'altra volta): non si rilegge
         const { id } = await aggiungiFile(f.name, dati, { origine: 'drive', driveId: f.id });
         if (id) await elabora(id);

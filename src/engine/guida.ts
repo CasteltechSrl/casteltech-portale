@@ -35,6 +35,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza, consumi dei servizi.' },
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
   { id: 'qualita', nome: 'Qualità', descrizione: 'Non conformità e reclami, tarature, manutenzioni, verifiche ESD, documenti del sistema, formazione, audit, rischi.' },
+  { id: 'dipendenti', nome: 'Dipendenti', descrizione: 'Costo del personale, buste paga riservate, nota spese con il rimborso chilometrico.' },
 ];
 
 export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
@@ -804,6 +805,42 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Facoltativo: con ANTHROPIC_ADMIN_KEY su Render il costo del mese diventa quello ufficiale di Anthropic; con NEON_API_KEY e NEON_PROJECT_ID si vedono le ore di calcolo del database.',
     ],
     pagine: [['/impostazioni/servizi', 'Impostazioni → Servizi']],
+  },
+
+  // ── Dipendenti ──
+  {
+    id: 'dipendenti', area: 'dipendenti', titolo: 'Costo del personale e buste paga (area riservata)',
+    parole: 'dipendenti personale costo stipendi buste paga cedolini cedolino riepilogo nota contabile f24 studio paghe upa contributi inps tfr soci password riservata riservato permesso',
+    testo: [
+      'Dal 1/11/2026 il menu in alto ha il gruppo Dipendenti. In "Costo del personale" tutto l\'ufficio vede il costo totale di ogni mese per l\'azienda (dipendenti e soci: lordo + contributi INPS a carico dell\'azienda + TFR + enti bilaterali e assistenza sanitaria), il totale e la media dell\'anno, il confronto con gli stessi mesi dell\'anno prima, il peso sul fatturato e gli F24 delle paghe con la scadenza.',
+      'I documenti dello studio paghe (cedolini, riepilogo, nota contabile, F24) si mettono nella stessa cartella Google Drive "Da acquisire" degli ordini, con il nome con cui li manda lo studio (es. "Casteltech - ced 08-2026.pdf", "Casteltech - nc 08-2026.pdf", "Casteltech - f24 del 16-09-26.pdf"): il portale li riconosce dal nome e li porta in Dipendenti, non in Ordini → Da acquisire. Si possono anche caricare dalla pagina Costo del personale.',
+      'La nota contabile la legge l\'IA e diventa il costo del mese; l\'F24 dà scadenza e totale. I cedolini e i riepiloghi NON vanno all\'IA e non si aprono senza la password.',
+      'Buste paga (area riservata): la apre solo l\'amministratore del portale e chi ha la sua spunta, scrivendo la password delle buste paga (diversa da quella di accesso). Dentro: costo per qualifica, netto in busta, tutti i PDF dello studio, F24 da segnare pagati, lo storico dall\'archivio. Si richiude da sola dopo 15 minuti senza aprire pagine, o con "Chiudi l\'area riservata".',
+      'Lo storico 2019–2026 viene dalle note contabili della cartella 7_DIPENDENTI E SOCI (fino al 2021 dal "bilancino" del vecchio studio): file costi_personale.json.gz, si carica dall\'area riservata → Storico dall\'archivio. I mesi letti dal portale non vengono sovrascritti. L\'INAIL si paga una volta l\'anno (F24 di febbraio) e non è nei mesi.',
+    ],
+    passi: [
+      'Prima volta (amministratore): Dipendenti → Buste paga → scegli la password delle buste paga.',
+      'Per dare l\'accesso a un collega dell\'ufficio: area riservata aperta → "Chi può aprire le buste paga" → spunta → Salva i permessi.',
+      'Ogni mese: metti i PDF dello studio nella cartella "Da acquisire" (o caricali da Costo del personale); il costo del mese compare da solo.',
+    ],
+    pagine: [['/dipendenti', 'Dipendenti → Costo del personale'], ['/dipendenti/riservata', 'Dipendenti → Buste paga']],
+  },
+  {
+    id: 'nota-spese', area: 'dipendenti', titolo: 'Nota spese e rimborso chilometrico',
+    parole: 'nota spese rimborso km chilometrico chilometri trasferta viaggio auto tariffa aci destinazione cliente pranzo parcheggio pedaggio modulo excel pagato da pagare',
+    testo: [
+      'Dipendenti → Nota spese funziona come il "Modulo rimborso km" in Excel: una nota al mese per persona, una riga per viaggio con data, partenza, destinazione, km di andata, altre spese (pranzo, parcheggio, pedaggi) e note.',
+      'I km di andata si scrivono da soli scegliendo una destinazione dell\'elenco (Destinazioni e km); il viaggio è di andata e ritorno (km × 2), togli la spunta A/R per la sola andata. Rimborso = km × tariffa dell\'auto + altre spese.',
+      'Le persone e le loro auto con la tariffa al km (tabelle ACI) stanno in Dipendenti → Persone e auto. La tariffa si copia nella nota quando la crei: cambiarla dopo non cambia le note già fatte.',
+      'Sotto ogni persona c\'è il riepilogo dell\'anno: totale, pagato, da pagare (come il foglio RIEPILOGO). "Segna pagato" registra un rimborso, anche un acconto. "Stampa" prepara il modulo da firmare (anche in PDF).',
+      '"Importa il modulo Excel" carica un vecchio modulo dell\'anno: destinazioni, persone con l\'auto e le note dei mesi compilati.',
+    ],
+    passi: [
+      'Dipendenti → Nota spese → scegli persona, mese e auto → Nuova nota spese.',
+      'Scrivi data e destinazione per ogni viaggio (i km arrivano dall\'elenco), le altre spese → Salva.',
+      'Quando paghi: "Segna pagato" sotto la persona con data e importo.',
+    ],
+    pagine: [['/dipendenti/note-spese', 'Dipendenti → Nota spese'], ['/dipendenti/persone', 'Dipendenti → Persone e auto'], ['/dipendenti/note-spese/destinazioni', 'Destinazioni e km']],
   },
 
   // ── Suggerimenti ──

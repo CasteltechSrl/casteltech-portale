@@ -31,6 +31,7 @@ import { rotteQualita } from './rotte/qualita.js';
 import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
+import { rotteDipendenti } from './rotte/dipendenti.js';
 import { rotteGmail } from './rotte/gmail.js';
 import { rotteApiClaude } from './rotte/api-claude.js';
 import { rotteCalendario } from './rotte/calendario.js';
@@ -163,6 +164,8 @@ app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
 app.use('/qualita', soloUfficio, rotteQualita());
 app.use('/amministrazione', amministrazioneOContabilita, rotteAmministrazione());
+// Dipendenti (Adriano 1/11/2026): costo del personale per l'ufficio; buste paga solo con permesso e password (rotte/dipendenti.ts)
+app.use('/dipendenti', soloUfficio, rotteDipendenti());
 // la guida la può leggere chiunque sia entrato (ufficio e produzione)
 app.use('/guida', (req, res, next) => req.session.utente ? next() : res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl)), rotteGuida());
 app.use('/r', rotteReparto());

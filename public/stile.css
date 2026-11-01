@@ -742,3 +742,9 @@ form.modulo-qualita button { justify-self: start; }
 .etichetta.q-in_corso, .etichetta.q-da_ripetere, .etichetta.q-in_revisione, .etichetta.q-con_rilievi { background: #fff4d6; color: #7a5a00; }
 .etichetta.q-chiusa, .etichetta.q-positivo, .etichetta.q-in_vigore { background: #ddf3e5; color: var(--positivo); }
 .carica-qualita { margin-top: 1rem; }
+/* Dipendenti: stampa della nota spese (Adriano 1/11/2026) */
+body.stampa-semplice { background: #fff; }
+body.stampa-semplice main { max-width: 60rem; margin: 1.5rem auto; padding: 0 1rem; }
+body.stampa-semplice table.elenco { margin-bottom: 1.2rem; }
+body.stampa-semplice .firma { margin-top: 3rem; }
+@media print { body.stampa-semplice .non-stampa { display: none; } body.stampa-semplice main { margin: 0; max-width: none; } }

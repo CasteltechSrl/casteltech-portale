@@ -309,6 +309,15 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    formazione, audit, rischi e opportunità (valore × frequenza). Cruscotto `/qualita`: scadute, entro un mese, NC aperte, difetti più frequenti.
    Dati del Drive (vecchi, per la struttura): file `qualita_esempio.json.gz` in Project Files → qualita, "Carica i dati dal Drive" (ricaricabile, `chiaveImport`).
    ⬜ Sicurezza e ambiente; schede del personale e mansionario restano alla sezione Dipendenti.
+4k. ✅ Dipendenti (Adriano 1/11/2026; menu Dipendenti, `rotte/dipendenti.ts`, `dipendenti-servizio.ts`, `lettura-paghe-ia.ts`, `engine/dipendenti.ts`, migrazione 056,
+   test in `tests/dipendenti.test.ts`): Costo del personale per tutto l'ufficio (solo il TOTALE del mese: lordo + INPS azienda + TFR + enti; anni × mesi, confronto con
+   gli stessi mesi dell'anno prima, peso sul fatturato, F24 con scadenza). Area riservata "Buste paga": solo l'utente ADMIN_EMAIL e chi ha `utenti.paghe` (spunta data da lui),
+   più la password delle buste paga (impostazioni 'paghe_password', bcrypt), aperta 15 minuti: costo per qualifica, netto, PDF dello studio, storico. Documenti dello studio
+   paghe (U.P.A.) riconosciuti dal NOME (`tipoDocumentoPaghe`: ced/cedolini, riepilogo, nc/nota contabile, f24) nella cartella Drive "Da acquisire" → `paghe_documenti`,
+   mai in Ordini → Da acquisire; nota contabile e F24 letti dall'IA, cedolini e riepiloghi MAI all'IA. Storico 2019–2026 dalle note contabili dell'archivio
+   (2019–2021 "bilancino" del vecchio studio, conti 5xxxx): file costi_personale.json.gz fuori dal repository (Project Files → dipendenti). Nota spese come il
+   "Modulo rimborso km" Excel (km andata × 2 × tariffa + altre spese; tariffa copiata nella nota; import del modulo con la tariffa del mese da C4), destinazioni con i km,
+   persone e auto, pagamenti e "da pagare" per anno, stampa da firmare. Dati delle persone SOLO nel database.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).
