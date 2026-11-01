@@ -1,6 +1,8 @@
 /**
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
+import { paginata } from '../views/paginazione.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { Router } from 'express';
 import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
@@ -33,9 +35,7 @@ export function rottePreventivi() {
   const r = Router();
 
   // ── Elenco ──
-  r.get('/', async (req, res) => {
-    const cerca = String(req.query.q ?? '').trim();
-    const righe = await q(`
+  const elencoPreventivi = (cerca: string, limite = 2000) => q(`
       SELECT id, numero, creato_il, intestazione, n_schede, totale_secondo_lotto, stato, origine,
         (tariffe->>'ricarico')::numeric AS ricarico,
         (risultato->'totali'->>'prezzoOrarioMedio')::numeric AS prezzo_orario,
@@ -44,7 +44,23 @@ export function rottePreventivi() {
       FROM preventivi
       WHERE $1 = '' OR (intestazione->>'cliente') ILIKE '%'||$1||'%' OR (intestazione->>'codice') ILIKE '%'||$1||'%'
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
-      ORDER BY creato_il DESC, id DESC LIMIT 300`, [cerca]);
+      ORDER BY creato_il DESC, id DESC LIMIT ${limite}`, [cerca]);
+  // Excel dell'elenco con gli stessi filtri (1/11/2026)
+  r.get('/elenco.xlsx', async (req, res) => {
+    const righe = await elencoPreventivi(String(req.query.q ?? '').trim());
+    inviaExcel(res, nomeExcel('preventivi'), await excelSemplice('Preventivi', [
+      { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
+      { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
+      { header: 'Nr. PCB', key: 'n_schede', formato: 'intero' }, { header: '€/h', key: 'prezzo_orario', formato: 'euro' }, { header: 'Ricarico', key: 'ricarico', formato: 'numero' },
+      { header: '€/PCB', key: 'prezzo_scheda', formato: 'euro' }, { header: 'Totale lotti successivi', key: 'totale_secondo_lotto', formato: 'euro' },
+      { header: 'Una tantum', key: 'una_tantum', formato: 'euro' }, { header: 'Stato', key: 'stato', width: 12 },
+    ], righe.map(p => ({ ...p, cliente: p.intestazione?.cliente, codice: p.intestazione?.codice, revisione: p.intestazione?.revisione, descrizione: p.intestazione?.descrizione, stato: String(p.stato).replace(/_/g, ' ') }))));
+  });
+
+  r.get('/', async (req, res) => {
+    const cerca = String(req.query.q ?? '').trim();
+    const tutte = await elencoPreventivi(cerca);
+    const { righe, barra } = paginata(tutte, req.query as Record<string, unknown>);
     const msg = String(req.query.msg ?? '');
     const modulo = moduloAzioni({
       azione: '/preventivi/azioni', nome: { singolare: 'preventivo', plurale: 'preventivi' },
@@ -63,7 +79,8 @@ export function rottePreventivi() {
         <div><a class="bottone" href="/preventivi/documenti" title="Carica BOM, pick and place e Gerber del cliente: il portale li controlla e conta i componenti">Da documenti del cliente</a>
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
-      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button></form>
+      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button>
+        <a class="bottone" href="/preventivi/elenco.xlsx${cerca ? `?q=${encodeURIComponent(cerca)}` : ''}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco preventivi">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
@@ -78,9 +95,9 @@ export function rottePreventivi() {
             <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
           </tr>`)}
-        </tbody></table></div>
+        </tbody></table></div>${barra}
       ${modulo.chiudi}
-      ${righe.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
+      ${tutte.length ? '' : html`<p class="vuoto">Nessun preventivo${cerca ? ' trovato' : ''}.</p>`}`,
       script: 'elenco.js',
     })));
   });

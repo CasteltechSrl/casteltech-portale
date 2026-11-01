@@ -21,6 +21,7 @@ import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPre
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti']];
@@ -91,12 +92,36 @@ export function rotteAnagrafiche() {
     </details>`;
 
   // ── Clienti ──
+  r.get('/clienti.xlsx', async (_req, res) => {
+    const righe = await q(`SELECT ragione_sociale, partita_iva, codice_fiscale, indirizzo, cap, comune, provincia, nazione, codice_sdi, pec, email_amministrazione, condizione_pagamento,
+        (SELECT count(*)::int FROM prodotti p WHERE p.cliente_id = c.id) AS prodotti FROM clienti c ORDER BY ragione_sociale`);
+    inviaExcel(res, nomeExcel('clienti'), await excelSemplice('Clienti', [
+      { header: 'Ragione sociale', key: 'ragione_sociale', width: 40 }, { header: 'Partita IVA', key: 'partita_iva', width: 14 }, { header: 'Codice fiscale', key: 'codice_fiscale', width: 18 },
+      { header: 'Indirizzo', key: 'indirizzo', width: 30 }, { header: 'CAP', key: 'cap', width: 8 }, { header: 'Comune', key: 'comune', width: 22 }, { header: 'Prov.', key: 'provincia', width: 6 },
+      { header: 'Nazione', key: 'nazione', width: 8 }, { header: 'Codice SDI', key: 'codice_sdi', width: 12 }, { header: 'PEC', key: 'pec', width: 30 }, { header: 'Email amministrazione', key: 'email_amministrazione', width: 30 },
+      { header: 'Pagamento', key: 'condizione_pagamento', width: 12 }, { header: 'Prodotti', key: 'prodotti', formato: 'intero' },
+    ], righe));
+  });
+  r.get('/prodotti.xlsx', async (req, res) => {
+    const filtro = Number(req.query.cliente) || 0;
+    const righe = await q(`SELECT c.ragione_sociale AS cliente, p.codice, p.descrizione, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_data::text AS prezzo_data,
+        (SELECT string_agg(s.da || CASE WHEN s.a IS NULL THEN '+' ELSE '-' || s.a END || '=' || s.prezzo, '; ' ORDER BY s.da) FROM prodotti_scaglioni s WHERE s.prodotto_id = p.id) AS scaglioni
+      FROM prodotti p LEFT JOIN clienti c ON c.id = p.cliente_id WHERE $1 = 0 OR p.cliente_id = $1 ORDER BY c.ragione_sociale NULLS FIRST, p.codice`, [filtro]).catch(() => q(
+      `SELECT c.ragione_sociale AS cliente, p.codice, p.descrizione, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_data::text AS prezzo_data, NULL AS scaglioni
+       FROM prodotti p LEFT JOIN clienti c ON c.id = p.cliente_id WHERE $1 = 0 OR p.cliente_id = $1 ORDER BY c.ragione_sociale NULLS FIRST, p.codice`, [filtro]));
+    inviaExcel(res, nomeExcel('prodotti'), await excelSemplice('Prodotti', [
+      { header: 'Cliente', key: 'cliente', width: 36 }, { header: 'Codice', key: 'codice', width: 20 }, { header: 'Descrizione', key: 'descrizione', width: 44 },
+      { header: 'Prezzo €', key: 'prezzo', formato: 'euro' }, { header: 'Scaglioni', key: 'scaglioni', width: 28 }, { header: 'Fonte prezzo', key: 'prezzo_fonte', width: 12 }, { header: 'Data prezzo', key: 'prezzo_data', formato: 'data' },
+    ], righe));
+  });
+
   r.get('/clienti', async (req, res) => {
     const clienti = await elencoClienti();
     res.send(await pag(req, 'clienti', html`
       <p class="nota">Nei preventivi il cliente si sceglie solo da qui. Tutto viene salvato in MAIUSCOLO.
         Il tasto <b>Elimina</b> compare solo sui clienti mai usati (preventivi, commesse, ordini): quelli inseriti per errore.</p>
       ${ricercaVeloce('tab-clienti', 'Cerca ragione sociale o partita IVA…', clienti.length)}
+      <p class="nota"><a class="bottone" href="/anagrafiche/clienti.xlsx" title="Tutti i clienti con i dati fiscali in Excel">Excel</a></p>
       <div class="tabella-scorre limitata"><table class="editor" id="tab-clienti">
         <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th class="n">Prodotti</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
@@ -176,6 +201,7 @@ export function rotteAnagrafiche() {
         <noscript><button>Filtra</button></noscript>
       </form>
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length, String(req.query.q ?? ''))}
+      <p class="nota"><a class="bottone" href="/anagrafiche/prodotti.xlsx${filtro > 0 ? `?cliente=${filtro}` : ''}" title="Prodotti e prezzi in Excel (del cliente scelto, o tutti)">Excel</a></p>
       <template id="modello-clienti">${opzClienti(null)}</template>
       <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>

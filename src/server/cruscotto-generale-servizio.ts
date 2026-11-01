@@ -14,6 +14,7 @@ import { numeroCompleto } from '../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
 import { contaDifferite } from '../engine/fatture-differite.js';
+import { ordinaRiprendi, type VoceRiprendi } from '../engine/riprendi.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
 const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -149,3 +150,37 @@ export async function datiCruscottoGenerale(oggi: string) {
 }
 
 export type DatiCruscottoGenerale = Awaited<ReturnType<typeof datiCruscottoGenerale>>;
+
+/**
+ * "Riprendi da dove eri" (1/11/2026): le ultime cose toccate negli ultimi 14 giorni e ancora aperte, prima quelle dell'utente.
+ * Una lettura sola, già filtrata per stato: bozze di fattura/NC/DDT/conferma/ordine a fornitore, preventivi bozza o da validare,
+ * commesse aperte o in produzione, pacchetti di documenti del cliente non ancora diventati preventivo.
+ */
+export async function cosePerRiprendere(utenteId: number | null, quante = 8): Promise<VoceRiprendi[]> {
+  const voci = await q<VoceRiprendi>(`
+    SELECT * FROM (
+      SELECT CASE d.tipo WHEN 'ddt' THEN 'DDT' WHEN 'nota_credito' THEN 'Nota di credito' WHEN 'conferma_ordine' THEN 'Conferma d''ordine'
+               WHEN 'ordine_fornitore' THEN 'Ordine a fornitore' WHEN 'autofattura' THEN 'Autofattura' ELSE 'Fattura' END AS tipo,
+             'bozza · ' || coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', 'senza intestatario') AS titolo,
+             NULL AS dettaglio,
+             CASE WHEN d.tipo = 'ordine_fornitore' THEN '/ordini/fornitori/' || d.id WHEN d.tipo = 'conferma_ordine' THEN '/ordini/' || d.ordine_id || '/conferme/' || d.id
+                  ELSE '/amministrazione/documenti/' || d.id END AS href,
+             to_char(d.aggiornato_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD"T"HH24:MI') AS quando, d.creato_da AS "utenteId"
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
+      WHERE d.stato = 'bozza' AND d.aggiornato_il > now() - interval '14 days'
+      UNION ALL
+      SELECT 'Preventivo', coalesce(p.numero, 'P' || p.id) || ' · ' || coalesce(p.intestazione->>'cliente', '') AS titolo,
+             nullif(coalesce(p.intestazione->>'codice', '') || CASE WHEN p.stato = 'da_validare' THEN ' · da validare' ELSE ' · bozza' END, '') AS dettaglio,
+             '/preventivi/' || p.id, to_char(p.aggiornato_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD"T"HH24:MI'), p.creato_da
+      FROM preventivi p WHERE p.stato IN ('bozza', 'da_validare') AND p.aggiornato_il > now() - interval '14 days'
+      UNION ALL
+      SELECT 'Commessa', k.numero || ' · ' || coalesce(k.intestazione->>'cliente', ''), coalesce(k.intestazione->>'codice', '') || ' · ' || replace(k.stato, '_', ' '),
+             '/commesse/' || k.id, to_char(k.aggiornato_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD"T"HH24:MI'), k.creato_da
+      FROM commesse k WHERE k.stato IN ('aperta', 'in_produzione') AND k.aggiornato_il > now() - interval '14 days'
+      UNION ALL
+      SELECT 'Documenti del cliente', coalesce(s.nome, 'pacchetto ' || s.id), 'da analizzare o da trasformare in preventivo',
+             '/preventivi/documenti/' || s.id, to_char(s.creato_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD"T"HH24:MI'), s.creato_da
+      FROM pacchetti_scheda s WHERE s.creato_il > now() - interval '14 days' AND s.padre_id IS NULL AND s.preventivo_id IS NULL
+    ) x ORDER BY quando DESC LIMIT 60`).catch(() => [] as VoceRiprendi[]);
+  return ordinaRiprendi(voci, utenteId, quante);
+}

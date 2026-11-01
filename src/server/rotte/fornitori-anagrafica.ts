@@ -9,6 +9,7 @@ import { html, raw, type Raw } from '../views/html.js';
 import type { PaginaAnagrafiche } from './anagrafiche.js';
 import { preparaFornitore, CAMPI_FORNITORE, type CampoFornitore } from '../../engine/anagrafica-fornitori.js';
 import { caricaFornitori, salvaFornitore } from '../anagrafica-fornitori-servizio.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 
 const ETICHETTE: Record<CampoFornitore, string> = {
   ragione_sociale: 'Ragione sociale', partita_iva: 'Partita IVA', codice_fiscale: 'Codice fiscale', indirizzo: 'Indirizzo', cap: 'CAP',
@@ -30,11 +31,20 @@ export function rotteFornitoriAnagrafica(pagina: PaginaAnagrafiche) {
       <button class="primario">${pulsante}</button>
     </form>`;
 
+  r.get('/elenco.xlsx', async (_req, res) => {
+    const righe = await q(`SELECT ragione_sociale, partita_iva, codice_fiscale, indirizzo, cap, comune, provincia, paese, email, pec, telefono, referente, iban, codice_sdi, note FROM fornitori_anagrafica ORDER BY ragione_sociale`);
+    inviaExcel(res, nomeExcel('fornitori'), await excelSemplice('Fornitori', [
+      { header: 'Ragione sociale', key: 'ragione_sociale', width: 40 }, { header: 'Partita IVA', key: 'partita_iva', width: 16 }, { header: 'Codice fiscale', key: 'codice_fiscale', width: 18 },
+      { header: 'Indirizzo', key: 'indirizzo', width: 30 }, { header: 'CAP', key: 'cap', width: 8 }, { header: 'Comune', key: 'comune', width: 22 }, { header: 'Prov.', key: 'provincia', width: 6 }, { header: 'Paese', key: 'paese', width: 8 },
+      { header: 'Email', key: 'email', width: 30 }, { header: 'PEC', key: 'pec', width: 30 }, { header: 'Telefono', key: 'telefono', width: 16 }, { header: 'Referente', key: 'referente', width: 20 },
+      { header: 'IBAN', key: 'iban', width: 30 }, { header: 'Codice SDI', key: 'codice_sdi', width: 12 }, { header: 'Note', key: 'note', width: 40 },
+    ], righe));
+  });
   r.get('/', async (req, res) => {
     const righe = await q(`SELECT id, ragione_sociale, partita_iva, comune, provincia, paese, email, telefono, note FROM fornitori_anagrafica ORDER BY ragione_sociale`);
     res.send(await pag(req, html`
       <div class="intestazione-pagina"><p class="nota">Solo fornitori con partita IVA valida, senza doppioni (una P.IVA = un fornitore). Tutto in MAIUSCOLO, email e PEC in minuscolo.</p>
-        <a href="/anagrafiche/fornitori/nuovo" class="bottone primario">+ Nuovo fornitore</a></div>
+        <div><a class="bottone" href="/anagrafiche/fornitori/elenco.xlsx" title="Tutti i fornitori in Excel">Excel</a> <a href="/anagrafiche/fornitori/nuovo" class="bottone primario">+ Nuovo fornitore</a></div></div>
       <div class="ricerca-veloce"><input type="search" data-filtra="tab-fornitori" data-conta="conta-fornitori" placeholder="Cerca nome, P.IVA, comune, email, telefono…" autofocus autocomplete="off">
         <span class="nota">Trovati: <b id="conta-fornitori">${righe.length}</b></span></div>
       <div class="tabella-scorre limitata"><table class="elenco" id="tab-fornitori">
