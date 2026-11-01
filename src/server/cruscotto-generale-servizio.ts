@@ -9,9 +9,9 @@ import { elencoOrdiniFornitore } from './ordini-fornitore-servizio.js';
 import { elencoBackup } from './backup.js';
 import { avvisoServizi } from './stato-servizi.js';
 import { caricoGiornaliero } from '../engine/ordini.js';
-import { imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
+import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
 import { contaDifferite } from '../engine/fatture-differite.js';
 import { ordinaRiprendi, type VoceRiprendi } from '../engine/riprendi.js';
@@ -49,15 +49,15 @@ export async function datiCruscottoGenerale(oggi: string) {
     q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, data, imponibile FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
     q<{ data: string; importo: number; documento_id: number; numero_doc: number; sezionale: string; anno: number; nome: string }>(`
-      SELECT s.data, s.importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno,
+      SELECT (${SQL_DATA_DA_INCASSARE})::text AS data, (${SQL_IMPORTO_DA_INCASSARE})::float AS importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS nome
       FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY s.data, d.numero`),
+      WHERE s.pagata_il IS NULL AND d.tipo IN ('fattura', 'nota_credito') AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY 1, d.numero`),
     q<{ data: string; importo: number }>(`SELECT s.data, s.importo FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura'`),
     q<{ data: string }>(`SELECT d.data::text AS data FROM documenti d
       WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
-        AND ${SQL_CAUSALE_DA_FATTURARE}`),
+        AND ${SQL_DDT_DA_FATTURARE}`),
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti WHERE stato = 'bozza' AND tipo IN ('fattura', 'nota_credito', 'autofattura', 'ddt')`),
     q<{ stato: string; quanti: number; ultimo: number }>(`SELECT stato, count(*)::int AS quanti, max(id) AS ultimo FROM documenti
       WHERE stato IN ('scartato', 'non_consegnato', 'inviato') AND tipo IN ('fattura', 'nota_credito', 'autofattura') GROUP BY stato`),
@@ -86,7 +86,7 @@ export async function datiCruscottoGenerale(oggi: string) {
   const meseCorrente = Number(oggi.slice(5, 7));
   const fatturatoMese = imponibilePerMese(emessi, anno)[meseCorrente - 1];
   const inc = riepilogoScadenze(incassi, oggi), pag = riepilogoScadenze(pagamenti, oggi);
-  const incassiScaduti = incassi.filter(s => s.data < oggi).slice(0, 3)
+  const incassiScaduti = incassi.filter(s => s.data < oggi && s.importo > 0).slice(0, 3)
     .map(s => ({ ...s, numero: numeroCompleto(s.numero_doc, s.sezionale) + (s.anno === anno ? '' : `/${s.anno}`), giorni: giorniTra(s.data, oggi) }));
   const sdiConto = (stato: string) => sdi.find(x => x.stato === stato)?.quanti ?? 0;
   const sdiUltimo = (stato: string) => sdi.find(x => x.stato === stato)?.ultimo;

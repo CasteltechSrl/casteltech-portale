@@ -11,7 +11,7 @@ import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type Documento
 import { righeDaModulo } from '../engine/documenti.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
 import type { DdtAperto } from '../engine/fatture-differite.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
@@ -227,7 +227,7 @@ export const ddtDaFatturareTutti = () => q<DdtAperto>(
      (SELECT coalesce(sum(x.quantita * x.prezzo * (1 - coalesce(x.sconto, 0) / 100)), 0)::float FROM documenti_righe x WHERE x.documento_id = d.id AND NOT x.solo_descrizione) AS totale
    FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
    WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.numero IS NOT NULL AND d.cliente_id IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
-     AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') AND ${SQL_CAUSALE_DA_FATTURARE}
+     AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') AND ${SQL_DDT_DA_FATTURARE}
      AND NOT EXISTS (SELECT 1 FROM documenti_righe y JOIN documenti f ON f.id = y.documento_id WHERE y.ddt_id = d.id AND f.stato = 'bozza')
    ORDER BY d.data, d.numero`);
 
@@ -241,7 +241,7 @@ export async function fatturaTuttiIDdt(clienteId: number, ddtIds: number[], crea
 
 export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; numero: number; data: string; righe: number; causale: string | null; daFatturare: boolean }>(
   `SELECT d.id, d.numero, d.data, (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id) AS righe, d.dati_trasporto->>'causale' AS causale,
-     (${SQL_CAUSALE_DA_FATTURARE}) AS "daFatturare"
+     (${SQL_DDT_DA_FATTURARE}) AS "daFatturare"
    FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = $1 AND d.fattura_id IS NULL AND d.stato <> 'annullato' AND d.numero IS NOT NULL
      AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
      AND NOT EXISTS (SELECT 1 FROM documenti_righe r JOIN documenti x ON x.id = r.documento_id

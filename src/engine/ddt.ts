@@ -21,12 +21,27 @@ export const INIZIO_DDT_DA_FATTURARE = '2025-01-01';
  * per PostgreSQL (sintassi POSIX semplice), applicata alla causale in MAIUSCOLO.
  */
 export const CAUSALI_NON_DA_FATTURARE =
-  'NON LAVORAT|UNWORKED|GARANZIA|WARRANTY|VISIONE|CONTO LAVOR|C/LAVOR|CONTO PROVA|CAMPION|PRESTITO|SOSTITUZIONE|C/RIPARAZ';
+  'NON LAVORAT|UNWORKED|GARANZIA|WARRANTY|VISIONE|CONTO LAVOR|C/LAVOR|CONTO PROVA|CAMPION|PRESTITO|SOSTITUZIONE|C/RIPARAZ|RIPARAT|RESO RIPARAZ|COMPLETAMENTO';
 const espressioneNonDaFatturare = new RegExp(CAUSALI_NON_DA_FATTURARE);
 /** true se un DDT con questa causale va proposto da fatturare (vendita, reso lavorato, causale vuota o sconosciuta). */
 export const causaleDaFatturare = (causale: string | null | undefined) => !espressioneNonDaFatturare.test((causale ?? '').toUpperCase());
 /** Condizione SQL equivalente, da usare nelle query con l'alias `d` sulla tabella documenti. */
 export const SQL_CAUSALE_DA_FATTURARE = `upper(coalesce(d.dati_trasporto->>'causale', '')) !~ '${CAUSALI_NON_DA_FATTURARE}'`;
+
+/**
+ * DDT da proporre "da fatturare" (Adriano 1/11/2026, controllo dei 64 DDT 2025-26 dello storico FIC: quasi tutti fatturati prima con
+ * anticipo/proforma, oppure riparazioni): causale da fatturare (sopra, con "riparato" e "completamento fornitura" fuori), non segnato
+ * "Già fatturato" dall'ufficio (`documenti.fatturato_altrove`) e, se viene dallo storico FIC, con un valore (i DDT FIC a valore zero
+ * accompagnavano merce già fatturata). I DDT del portale a valore zero restano: il prezzo si scrive in fattura.
+ */
+export function ddtDaFatturareRegola(d: { causale?: string | null; origine: string; valore: number; fatturatoAltrove?: string | null }): boolean {
+  if (d.fatturatoAltrove) return false;
+  if (!causaleDaFatturare(d.causale)) return false;
+  return !(d.origine === 'fic' && Math.abs(d.valore) < 0.005);
+}
+/** Condizione SQL equivalente a `ddtDaFatturareRegola` (alias `d` sulla tabella documenti). */
+export const SQL_DDT_DA_FATTURARE = `(${SQL_CAUSALE_DA_FATTURARE} AND d.fatturato_altrove IS NULL
+  AND NOT (d.origine = 'fic' AND NOT EXISTS (SELECT 1 FROM documenti_righe zz WHERE zz.documento_id = d.id AND abs(coalesce(zz.quantita, 0) * coalesce(zz.prezzo, 0)) >= 0.005)))`;
 
 /** Dati del trasporto salvati in documenti.dati_trasporto (stesse chiavi dello storico di FIC: causale, colli, peso, trasportatore, destinazione). */
 export interface DatiTrasporto {

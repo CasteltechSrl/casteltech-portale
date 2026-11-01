@@ -6,7 +6,7 @@ import type { Barra } from '../src/engine/ordini.js';
 // sabato 31/10/2026 → i promemoria "di oggi" vanno al lunedì 2/11
 const OGGI = '2026-11-02'; // lunedì
 const barra = (p: Partial<Barra>): Barra => ({ id: 1, etichetta: 'ACME · A1', inizio: '2026-11-10', fine: '2026-11-11', giorni: 2, ore: 12,
-  stimata: false, inRitardo: false, consegna: '2026-11-12', ...p });
+  stimata: false, inRitardo: false, oltreConsegna: false, consegna: '2026-11-12', ...p });
 const commessa = (p: Partial<CommessaAperta>): CommessaAperta => ({ id: 7, numero: '26-100', cliente: 'ACME', codice: 'A1', stato: 'in_produzione',
   consegna: '2026-11-20', uomoPrevistoSec: 36000, uomoFattoSec: 1000, ...p });
 const vuoto = { barre: [] as Barra[], carico: {}, oreGiorno: 8, commesse: [] as CommessaAperta[] };

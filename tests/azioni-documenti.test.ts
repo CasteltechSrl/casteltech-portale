@@ -10,7 +10,7 @@ test('documenti emessi: pulsanti per tipo', () => {
   assert.deepEqual(azioni('fattura'), ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'elimina']);
   assert.deepEqual(azioni('nota_credito'), ['stampa', 'xml', 'excel', 'elimina']);
   assert.deepEqual(azioni('autofattura'), ['xml', 'excel', 'elimina']);
-  assert.deepEqual(azioni('ddt'), ['stampa', 'excel', 'fattura_ddt', 'annulla', 'elimina']);
+  assert.deepEqual(azioni('ddt'), ['stampa', 'excel', 'fattura_ddt', 'gia_fatturato', 'annulla', 'elimina']);
   // Elimina e Annulla chiedono conferma; la stampa apre una scheda nuova
   const f = pulsantiDocumenti('ddt');
   assert.ok(f.find(p => p.azione === 'elimina')!.chiedi && f.find(p => p.azione === 'annulla')!.chiedi);
@@ -67,4 +67,13 @@ test('documenti emessi: messaggio delle righe escluse si accorcia oltre 5', () =
 test('documenti emessi: schede nell\'ordine del lavoro (Adriano 1/11/2026), si apre sui DDT', () => {
   assert.deepEqual(SCHEDE_DOCUMENTI.map(s => s.tanti), ['DDT', 'Fatture', 'Autofatture', 'Note di credito']);
   assert.equal(SCHEDE_DOCUMENTI[0].tipo, 'ddt');
+});
+
+test('documenti emessi: "Già fatturato" solo sui DDT emessi non fatturati e non già segnati (Adriano 1/11/2026)', () => {
+  const ddt = (x: Partial<DocumentoElenco>) => doc({ tipo: 'ddt', origine: 'fic', ...x });
+  assert.equal(motivoEscluso('gia_fatturato', ddt({})), null);
+  assert.match(motivoEscluso('gia_fatturato', ddt({ fattura_id: 9 }))!, /già in una fattura/);
+  assert.match(motivoEscluso('gia_fatturato', ddt({ fatturato_altrove: 'Già fatturato' }))!, /già segnato/);
+  assert.match(motivoEscluso('gia_fatturato', ddt({ stato: 'annullato' }))!, /non è un DDT emesso/);
+  assert.match(motivoEscluso('gia_fatturato', doc({}))!, /non è un DDT emesso/);
 });

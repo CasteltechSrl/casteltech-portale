@@ -23,7 +23,9 @@ export function situazioneIncassi(rate: RataCliente[], oggi: string): { scaduto:
   let scaduto = 0, scaduteN = 0, aScadere = 0, aScadereN = 0;
   for (const r of rate) {
     if (r.pagata) continue;
-    if (r.data < oggi) { scaduto += Number(r.importo); scaduteN++; } else { aScadere += Number(r.importo); aScadereN++; }
+    // le note di credito (importo negativo) tolgono dal totale ma non contano come rate
+    const conta = Number(r.importo) > 0 ? 1 : 0;
+    if (r.data < oggi) { scaduto += Number(r.importo); scaduteN += conta; } else { aScadere += Number(r.importo); aScadereN += conta; }
   }
   return { scaduto, scaduteN, aScadere, aScadereN };
 }

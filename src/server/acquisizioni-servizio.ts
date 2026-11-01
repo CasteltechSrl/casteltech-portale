@@ -10,7 +10,7 @@ import { leggiFatturaEsteraConIa, leggiFogliTempiConIa, leggiOrdineConIa, type P
 import { collegaFatturaEstera } from './autofatture-servizio.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
-import { abbinaDdt, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
+import { dividiDdt, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
@@ -221,9 +221,10 @@ export async function collegaDdt(d: DdtDb): Promise<DdtDb> {
   const aperte = await righeAperteCliente(clienteId);
   const candidate: RigaAperta[] = aperte.map(a => ({ id: a.id, codice: a.codice, codiceCliente: a.codiceCliente, descrizione: a.descrizione,
     rifCliente: a.rifCliente, residuo: a.residuoQuantita, consegna: a.consegna }));
-  const proposte = abbinaDdt(d.righe, candidate, d.rifOrdine);
   const valide = new Set(aperte.map(a => a.id));
-  const righe = d.righe.map((r, i) => ({ ...r, rigaId: r.rigaId === undefined || (r.rigaId && !valide.has(r.rigaId)) ? proposte[i] : r.rigaId }));
+  // righe da proporre (mai abbinate o abbinate a una riga non più aperta): quantità oltre la riga d'ordine divisa tra le righe a breve
+  const daProporre = d.righe.map(r => (r.rigaId === undefined || (r.rigaId && !valide.has(r.rigaId)) ? { ...r, rigaId: undefined } : r));
+  const righe = dividiDdt(daProporre, candidate, d.rifOrdine, d.data);
   return { ...d, clienteId, cliente: maiuscolo(cliente), righe };
 }
 

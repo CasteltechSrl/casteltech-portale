@@ -50,3 +50,13 @@ test('Fatture fornitori: riquadro "Scadute da pagare" (una riga per fattura, la 
   assert.equal(r.fatture[1].giorni, 31);
   assert.equal(r.totale, 162.3);
 });
+
+test('cruscotto: nota di credito aperta nel "da incassare" (Adriano 1/11/2026)', async () => {
+  const { SQL_IMPORTO_DA_INCASSARE, SQL_DATA_DA_INCASSARE } = await import('../src/engine/cruscotto-amministrazione.js');
+  const r = riepilogoScadenze([{ data: '2026-10-01', importo: 1000 }, { data: '2026-10-01', importo: -200 }] as any, '2026-11-02');
+  assert.equal(r.totale, 800);
+  assert.equal(r.fasce.scaduta.totale, 800);
+  assert.equal(r.fasce.scaduta.quante, 1);
+  assert.match(SQL_IMPORTO_DA_INCASSARE, /nota_credito.*-s\.importo/);
+  assert.match(SQL_DATA_DA_INCASSARE, /documento_origine_id/);
+});

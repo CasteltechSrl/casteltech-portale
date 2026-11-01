@@ -32,13 +32,14 @@ export interface DocumentoElenco {
   cliente_id?: number | null;
   fattura_id?: number | null;
   ha_xml?: boolean;
+  fatturato_altrove?: string | null;
 }
 
 export interface PulsanteDocumenti {
   azione: AzioneDocumenti; testo: string; serve: '1' | '1+'; titolo?: string; pericolo?: boolean; chiedi?: string; nuovaScheda?: boolean;
 }
 
-export type AzioneDocumenti = 'stampa' | 'xml' | 'excel' | 'incassa' | 'duplica' | 'nota_credito' | 'fattura_ddt' | 'annulla' | 'elimina';
+export type AzioneDocumenti = 'stampa' | 'xml' | 'excel' | 'incassa' | 'duplica' | 'nota_credito' | 'fattura_ddt' | 'gia_fatturato' | 'annulla' | 'elimina';
 
 const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
   stampa: { azione: 'stampa', testo: 'Stampa / PDF', serve: '1', nuovaScheda: true, titolo: 'Apre la stampa del documento spuntato (da salvare in PDF)' },
@@ -48,6 +49,9 @@ const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
   duplica: { azione: 'duplica', testo: 'Duplica', serve: '1', titolo: 'Nuova bozza con lo stesso cliente e le stesse righe (senza DDT e acconti)' },
   nota_credito: { azione: 'nota_credito', testo: 'Crea nota di credito', serve: '1', titolo: 'Storna la fattura emessa spuntata' },
   fattura_ddt: { azione: 'fattura_ddt', testo: 'Fattura i DDT', serve: '1+', titolo: 'Una fattura (bozza) con i DDT emessi spuntati dello stesso cliente' },
+  gia_fatturato: { azione: 'gia_fatturato', testo: 'Già fatturato', serve: '1+',
+    titolo: 'Per i DDT già fatturati prima (anticipo, proforma) o in Fatture in Cloud senza collegamento: escono dai "da fatturare"',
+    chiedi: 'Segnare {n} DDT come già fatturat{o|i}? Escono dai DDT da fatturare (si rimettono dalla pagina del DDT).' },
   annulla: { azione: 'annulla', testo: 'Annulla DDT', serve: '1+', pericolo: true, titolo: 'Per i DDT emessi la cui merce non è partita: il numero resta usato',
     chiedi: 'Annullare {n} DDT? Il numero resta usato e il DDT resta nell\'elenco come annullato.' },
   elimina: { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Si eliminano solo le bozze: i documenti emessi restano (si stornano o si annullano)',
@@ -59,7 +63,7 @@ export function pulsantiDocumenti(tipo: string): PulsanteDocumenti[] {
   const a: AzioneDocumenti[] = tipo === 'fattura' ? ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'elimina']
     : tipo === 'nota_credito' ? ['stampa', 'xml', 'excel', 'elimina']
     : tipo === 'autofattura' ? ['xml', 'excel', 'elimina']
-    : tipo === 'ddt' ? ['stampa', 'excel', 'fattura_ddt', 'annulla', 'elimina']
+    : tipo === 'ddt' ? ['stampa', 'excel', 'fattura_ddt', 'gia_fatturato', 'annulla', 'elimina']
     : ['excel'];
   return a.map(x => P[x]);
 }
@@ -90,6 +94,10 @@ export function motivoEscluso(azione: AzioneDocumenti, d: DocumentoElenco): stri
       if (d.tipo !== 'ddt' || d.stato !== 'emesso') return 'non è un DDT emesso';
       if (d.fattura_id) return 'è già fatturato';
       return d.cliente_id ? null : 'non ha il cliente in anagrafica';
+    case 'gia_fatturato':
+      if (d.tipo !== 'ddt' || d.numero == null || ['bozza', 'annullato'].includes(d.stato)) return 'non è un DDT emesso';
+      if (d.fattura_id) return 'è già in una fattura';
+      return d.fatturato_altrove ? 'è già segnato come fatturato' : null;
     case 'annulla':
       if (d.tipo !== 'ddt' || d.origine !== 'portale') return 'si annullano solo i DDT emessi dal portale';
       if (d.stato !== 'emesso') return d.stato === 'bozza' ? 'è una bozza (si elimina)' : 'non è emesso';

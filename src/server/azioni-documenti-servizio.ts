@@ -17,12 +17,25 @@ export interface DocumentoSpuntato extends DocumentoElenco {
 /** I documenti spuntati (solo del tipo dell'elenco, così da un elenco non si tocca altro). */
 export async function documentiSpuntati(ids: number[], tipo: string): Promise<DocumentoSpuntato[]> {
   if (!ids.length) return [];
-  const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.anno, d.data, d.stato, d.origine, d.cliente_id, d.fattura_id,
+  const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.anno, d.data, d.stato, d.origine, d.cliente_id, d.fattura_id, d.fatturato_altrove,
       d.imponibile::float AS imponibile, d.totale::float AS totale, d.xml IS NOT NULL AS ha_xml,
       coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
     FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
     WHERE d.id = ANY($1) AND d.tipo = $2 ORDER BY d.data, d.numero NULLS LAST, d.id`, [ids, tipo]);
   return righe.map(r => ({ ...r, etichetta: r.numero == null ? 'bozza' : `n. ${numeroCompleto(r.numero, r.sezionale ?? undefined)}` }));
+}
+
+/** DDT segnati "Già fatturato" (anticipo, proforma o fattura di FIC senza collegamento): escono dai DDT da fatturare. */
+export async function segnaGiaFatturati(ids: number[], chi: string): Promise<number> {
+  if (!ids.length) return 0;
+  const nota = `Già fatturato (anticipo o Fatture in Cloud), segnato da ${chi} il ${new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}`;
+  const r = await q(`UPDATE documenti SET fatturato_altrove = $2 WHERE id = ANY($1) AND tipo = 'ddt' AND fattura_id IS NULL AND fatturato_altrove IS NULL RETURNING id`, [ids, nota]);
+  return r.length;
+}
+
+/** Toglie il segno "Già fatturato": il DDT torna tra quelli da fatturare. */
+export async function rimettiDaFatturare(id: number): Promise<void> {
+  await q(`UPDATE documenti SET fatturato_altrove = NULL WHERE id = $1 AND tipo = 'ddt'`, [id]);
 }
 
 /** Elimina le bozze (stessa regola di "Elimina bozza": stato bozza e nessun numero). */
@@ -96,9 +109,28 @@ export async function rateAperte(ids: number[]) {
 /** Segna incassate le rate scelte (solo di fatture emesse, solo quelle ancora aperte). */
 export async function segnaIncassate(rate: number[], giorno: string, modo: string, conto: string | null): Promise<number> {
   if (!rate.length) return 0;
-  return (await q(`UPDATE documenti_scadenze s SET pagata_il = $2, modo = $3, conto = $4 FROM documenti d
+  const fatte = await q<{ documento_id: number }>(`UPDATE documenti_scadenze s SET pagata_il = $2, modo = $3, conto = $4 FROM documenti d
     WHERE s.id = ANY($1) AND s.pagata_il IS NULL AND d.id = s.documento_id AND d.tipo = 'fattura' AND d.numero IS NOT NULL
-    RETURNING s.id`, [rate, giorno, modo, conto])).length;
+    RETURNING s.documento_id`, [rate, giorno, modo, conto]);
+  await compensaNoteCredito(fatte.map(r => r.documento_id));
+  return fatte.length;
+}
+
+/**
+ * Note di credito compensate (Adriano 1/11/2026, come in Fatture in Cloud): quando la fattura stornata è tutta incassata, le rate ancora
+ * aperte delle sue note di credito si chiudono da sole con modo "Compensato con fattura" e la scritta "Compensazione con fattura n. X",
+ * alla data dell'ultimo incasso della fattura (o della nota, se è più recente). Restituisce quante rate ha chiuso.
+ */
+export async function compensaNoteCredito(fattureIds: number[]): Promise<number> {
+  const ids = [...new Set(fattureIds)];
+  if (!ids.length) return 0;
+  return (await q(`UPDATE documenti_scadenze s SET pagata_il = greatest(nc.data, (SELECT max(x.pagata_il) FROM documenti_scadenze x WHERE x.documento_id = f.id)),
+      modo = 'Compensato con fattura', conto = 'Compensazione con fattura n. ' || f.numero || coalesce(nullif('/' || f.sezionale, '/'), '') || ' del ' || to_char(f.data, 'DD/MM/YYYY')
+    FROM documenti nc JOIN documenti f ON f.id = nc.documento_origine_id
+    WHERE s.documento_id = nc.id AND s.pagata_il IS NULL AND nc.tipo = 'nota_credito' AND nc.stato NOT IN ('bozza', 'annullato', 'scartato')
+      AND f.id = ANY($1) AND f.tipo = 'fattura'
+      AND NOT EXISTS (SELECT 1 FROM documenti_scadenze y WHERE y.documento_id = f.id AND y.pagata_il IS NULL)
+    RETURNING s.id`, [ids])).length;
 }
 
 /**
