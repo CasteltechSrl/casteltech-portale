@@ -253,7 +253,12 @@ export function avvisiServizi(righe: RigaServizio[]): RigaServizio[] {
   return righe.filter(r => r.stato === 'attenzione' || r.stato === 'critico').sort((a, b) => PESO[b.stato] - PESO[a.stato]);
 }
 
-/** Un riavvio è "inatteso" se il portale ripartito è la stessa versione di prima (non è stata una pubblicazione). */
-export function riavvioInatteso(versionePrima: string | null | undefined, versioneOra: string | null | undefined): boolean {
-  return !!versionePrima && !!versioneOra && versionePrima === versioneOra;
+/**
+ * Un riavvio è "inatteso" se il portale ripartito è la stessa versione di prima (non è stata una pubblicazione)
+ * e il portale di prima non era stato fermato da Render in modo regolare (SIGTERM: variabile cambiata su Render,
+ * riavvio a mano, manutenzione). Memoria esaurita = il processo muore senza fermarsi bene (1/11/2026: il riavvio
+ * dopo aver aggiunto GMAIL_MITTENTE era segnalato come memoria esaurita).
+ */
+export function riavvioInatteso(versionePrima: string | null | undefined, versioneOra: string | null | undefined, fermatoBene = false): boolean {
+  return !fermatoBene && !!versionePrima && !!versioneOra && versionePrima === versioneOra;
 }
