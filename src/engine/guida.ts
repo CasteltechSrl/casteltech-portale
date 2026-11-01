@@ -171,6 +171,16 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
 
   // ── Anagrafiche ──
   {
+    id: 'scheda-cliente', area: 'anagrafiche', titolo: 'La scheda unica del cliente',
+    parole: 'scheda cliente tutto in una pagina situazione cliente riepilogo preventivi ordini aperti commesse ddt fatture incassi scaduti crm prezzi prodotti storico',
+    testo: [
+      'Anagrafiche → Clienti → "Scheda" (o il cliente trovato con la ricerca in alto) apre una pagina con tutto quel che riguarda quel cliente: fatturato dell\'anno e dell\'anno prima, da incassare e scaduto (con i giorni medi di incasso), ordini aperti, commesse in corso, DDT da fatturare, preventivi.',
+      'Sotto, un riquadro per argomento con le ultime righe e il collegamento alla pagina completa: ordini da evadere, commesse, DDT da fatturare, incassi scaduti, ultimi documenti, preventivi, prodotti con il prezzo di listino, CRM (prossima azione, referenti, ultime attività).',
+      'In alto i pulsanti per partire da lì: Dati fiscali, Prodotti, CRM, + Preventivo (con il cliente già scelto), + Fattura, + DDT.',
+    ],
+    pagine: [['/anagrafiche/clienti', 'Clienti']],
+  },
+  {
     id: 'clienti', area: 'anagrafiche', titolo: 'Aggiungere o correggere un cliente',
     parole: 'cliente clienti nuovo aggiungere ragione sociale anagrafica alias nome diverso',
     testo: [

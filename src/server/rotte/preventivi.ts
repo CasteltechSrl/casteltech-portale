@@ -90,8 +90,9 @@ export function rottePreventivi() {
     const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
     // i valori standard sono già scritti nelle caselle (modificabili), spunte comprese (es. prima produzione)
     const standard = Object.fromEntries(cat.parametri.filter(p => p.default != null && p.gruppo !== 'GENERALE' && p.gruppo !== 'PRE-PRODUZIONE').map(p => [p.codice, p.default]));
-    const dati = normalizza({ tariffe, nSchedeInPCB: 1, parametri: standard }, cat);
-    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti(), [], await elencoBom()));
+    // ?cliente=ID (dalla scheda del cliente, 1/11/2026): cliente già scelto e i suoi codici nel menu
+    const dati = normalizza({ tariffe, nSchedeInPCB: 1, parametri: standard, clienteId: Number(req.query.cliente) || undefined }, cat);
+    res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), undefined, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [], await elencoBom()));
   });
 
   // prodotti (prima di '/:id', altrimenti "prodotti" verrebbe letto come numero di preventivo)

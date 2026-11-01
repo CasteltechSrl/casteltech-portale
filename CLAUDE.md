@@ -33,7 +33,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Ricerca unica in alto (proposta della revisione, Adriano 1/11/2026 "applica i suggerimenti"; `rotte/cerca.ts`, regole in `engine/ricerca-globale.ts`, letture in
   `ricerca-globale-servizio.ts`, `public/cerca.js`, test in `tests/ricerca-globale.test.ts`): casella nella testata (tasto `/` o Ctrl+K), trova clienti, prodotti,
   commesse (C2026-0012), ordini e documenti (12/2026 o 12), fatture fornitori, preventivi, fornitori, CRM, componenti, guida; voci mentre si scrive
-  (`/cerca?formato=json`), un solo risultato o numero esatto = pagina diretta; contabilità solo documenti. `/anagrafiche/clienti/:id` = scheda del cliente (per ora i prodotti).
+  (`/cerca?formato=json`), un solo risultato o numero esatto = pagina diretta; contabilità solo documenti.
+- Scheda unica del cliente (proposta della revisione, Adriano 1/11/2026; `/anagrafiche/clienti/:id`, `scheda-cliente-servizio.ts`, conti in `engine/scheda-cliente.ts`,
+  test in `tests/scheda-cliente.test.ts`): sei numeri (fatturato anno/anno prima, da incassare e scaduto con giorni medi di incasso, ordini aperti, commesse,
+  DDT da fatturare, preventivi) + riquadri ordini, commesse, DDT, incassi scaduti, documenti, preventivi, prodotti e prezzi, CRM; pulsanti Dati fiscali, Prodotti,
+  CRM, + Preventivo (`/preventivi/nuovo?cliente=ID` preseleziona il cliente), + Fattura, + DDT. Tasto "Scheda" nell'elenco Clienti; la ricerca in alto porta qui.
 - Sezione Anagrafiche (menu in alto, `rotte/anagrafiche.ts`; Adriano 27/10/2026): TUTTE le anagrafiche stanno lì, non in Impostazioni.
   Tasti in alto Clienti / Fornitori / Prodotti / Componenti (archivio della codifica), sotto l'elenco con la ricerca veloce
   (`engine/ricerca.ts` = `public/ricerca.js`: filtra mentre si scrive, più parole, accenti e trattini dei codici non contano).
