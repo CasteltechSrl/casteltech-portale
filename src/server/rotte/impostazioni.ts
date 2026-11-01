@@ -11,6 +11,8 @@ import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.
 import { layout } from '../views/layout.js';
 import { html, data, raw, type Raw } from '../views/html.js';
 import { elencoBackup, nomeFileBackup, salvaBackupSuDisco, scriviBackup } from '../backup.js';
+import { leggiStatoBackupPc, nuovaChiaveBackupPc } from './api-backup.js';
+import { CARTELLA_PC_PREDEFINITA, installatoreBackupPc } from '../../engine/backup-pc.js';
 import { leggiOperatori } from '../../engine/operatori.js';
 import { caricaOperatori } from '../commesse-servizio.js';
 import { caricaPin } from './reparto.js';
@@ -482,12 +484,25 @@ export function rotteImpostazioni() {
   r.get('/importa/stato', (_req, res) => res.json(importInCorso ?? { finito: true, totale: 0 }));
 
   // ── Backup ──
-  r.get('/backup', (req, res) => {
+  r.get('/backup', async (req, res) => {
     const copie = elencoBackup();
+    const pc = await leggiStatoBackupPc();
+    const quando = (iso?: string) => iso ? new Date(iso).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }) : '';
     res.send(pag(req, 'Backup', html`
       <p class="nota">Dal lunedì al venerdì alle 20:30 il portale salva una copia completa dei dati, fatture, ordini e CRM compresi (ultimi 30 giorni; oltre 750 MB si tolgono le copie più vecchie, almeno 5 restano).
         Puoi anche scaricarne una adesso e conservarla dove vuoi (es. Google Drive).</p>
       <form method="post" action="/impostazioni/backup/scarica"><button class="primario">Scarica un backup adesso</button></form>
+      <h2>Copia automatica su Google Drive (PC dell'ufficio)</h2>
+      <p class="nota">Ogni sera alle 21:00 il PC prende dal portale le copie nuove e le salva in <code>${CARTELLA_PC_PREDEFINITA}</code>;
+        Google Drive le porta nel cloud da solo. Se il PC è spento, lo fa alla prima accensione. Sul PC restano tutte le copie degli ultimi 60 giorni e poi la prima di ogni mese.
+        Per installarlo: premi il pulsante, apri il file scaricato con un doppio clic e aspetta la scritta FATTO. Se il browser o Windows chiedono conferma
+        scegli "Mantieni" / "Ulteriori informazioni → Esegui comunque": il file l'ha preparato il portale.</p>
+      ${pc?.chiave ? html`<p>${pc.ultima_copia
+          ? html`Ultima copia presa dal PC: <strong>${quando(pc.ultima_copia_il)}</strong> (<code>${pc.ultima_copia}</code>).`
+          : html`Installato il ${quando(pc.creata_il)}: nessuna copia ancora presa dal PC.`}
+        ${pc.ultimo_contatto_il ? html` Ultimo controllo del PC: ${quando(pc.ultimo_contatto_il)}.` : ''}</p>` : ''}
+      <form method="post" action="/impostazioni/backup/pc"${pc?.chiave ? raw(' data-conferma="Il programma già installato sul PC smetterà di funzionare finché non apri il file nuovo. Continuo?"') : ''}>
+        <button${pc?.chiave ? '' : raw(' class="primario"')}>${pc?.chiave ? 'Reinstalla sul PC (file nuovo)' : 'Installa sul PC'}</button></form>
       <h2>Copie automatiche</h2>
       ${copie.length ? html`<table class="editor"><thead><tr><th>File</th><th class="n">Dimensione</th><th></th></tr></thead><tbody>
         ${copie.map(c => html`<tr><td><code>${c.nome}</code></td><td class="n">${c.kb} KB</td><td><a href="/impostazioni/backup/file/${encodeURIComponent(c.nome)}">Scarica</a></td></tr>`)}
@@ -498,6 +513,13 @@ export function rotteImpostazioni() {
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeFileBackup()}"`);
     await scriviBackup(res).catch(e => { console.error('Backup scaricato NON riuscito', e); res.destroy(); });
+  });
+  // installatore per il PC: chiave nuova dentro il file (quella vecchia smette di funzionare)
+  r.post('/backup/pc', async (req, res) => {
+    const chiave = await nuovaChiaveBackupPc();
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="installa-backup-portale.bat"');
+    res.send(installatoreBackupPc({ portale: `${req.protocol}://${req.get('host')}`, chiave }));
   });
   r.get('/backup/file/:nome', (req, res) => {
     const nome = basename(String(req.params.nome));

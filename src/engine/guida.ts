@@ -964,10 +964,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'backup', area: 'impostazioni', titolo: 'Copie di sicurezza (backup)',
-    parole: 'backup copia sicurezza salvataggio dati scaricare ripristino',
+    parole: 'backup copia sicurezza salvataggio dati scaricare ripristino drive google pc cartella',
     testo: ['Dal lunedì al venerdì alle 20:30 il portale salva da solo una copia completa dei dati (tiene gli ultimi 30 giorni). In Impostazioni → Backup si può scaricare una copia in qualsiasi momento.',
       'Nella copia ci sono tutti i dati del portale: preventivi, commesse, anagrafiche, ordini, fatture, DDT e fatture dei fornitori, CRM, documenti dei clienti. Restano fuori solo gli accessi e la cache dei prezzi dei distributori.',
-      'Se le copie occupano più di 750 MB, il portale cancella da solo le più vecchie e ne tiene sempre almeno 5.'],
+      'Se le copie occupano più di 750 MB, il portale cancella da solo le più vecchie e ne tiene sempre almeno 5.',
+      'Copia su Google Drive: in Impostazioni → Backup premi "Installa sul PC" e apri il file scaricato sul PC dell\'ufficio (doppio clic, poi "Esegui" se Windows lo chiede). Da quel momento ogni sera alle 21:00 il PC salva le copie nuove nella cartella 16_Backup\\Portale_Render di Google Drive (se il PC è spento, alla prima accensione). Sul PC restano gli ultimi 60 giorni più la prima copia di ogni mese.',
+      'Nella stessa pagina vedi quando il PC ha preso l\'ultima copia. Se smette (PC cambiato, file reinstallato altrove), premi "Reinstalla sul PC" e riapri il file nuovo: quello vecchio smette di funzionare.'],
     pagine: [['/impostazioni/backup', 'Impostazioni → Backup']],
   },
   {

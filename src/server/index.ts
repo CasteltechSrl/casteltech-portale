@@ -34,6 +34,7 @@ import { rotteGuida } from './rotte/guida.js';
 import { rotteDipendenti } from './rotte/dipendenti.js';
 import { rotteGmail } from './rotte/gmail.js';
 import { rotteApiClaude } from './rotte/api-claude.js';
+import { rotteApiBackup } from './rotte/api-backup.js';
 import { rotteCalendario } from './rotte/calendario.js';
 import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
@@ -61,6 +62,8 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 // controllo settimanale dei suggerimenti fatto da Claude: entra con la sua chiave, senza sessione
 app.use('/api/claude', rotteApiClaude());
+// copia dei backup nella cartella Google Drive del PC dell'ufficio: il programma installato entra con la sua chiave, senza sessione
+app.use('/api/backup', rotteApiBackup());
 // calendario dei ritardi letto da Google Calendar (indirizzo con la chiave dentro), senza sessione
 app.use('/calendario', rotteCalendario());
 

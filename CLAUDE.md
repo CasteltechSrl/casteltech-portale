@@ -86,6 +86,10 @@ Il database si spegne dopo 5 minuti senza richieste e il piano ha 100 ore di cal
 niente controlli periodici che interrogano il database (il controllo di Render `/salute` non lo tocca),
 niente timer frequenti. Uso reale: lun–ven 8–20. Backup lun–ven alle 20:30 in `BACKUP_DIR` (disco Render)
 + pulsante in Impostazioni → Backup.
+Copia su Google Drive (Adriano 1/11/2026; `engine/backup-pc.ts`, `rotte/api-backup.ts`, test in `tests/backup-pc.test.ts`): Impostazioni → Backup →
+"Installa sul PC" scarica un .bat con la chiave (impostazioni 'backup_pc'); sul PC dell'ufficio crea l'attività pianificata delle 21:00 (alla prima accensione se
+spento) che chiede POST `/api/backup/piano` e scarica con GET `/api/backup/file/:nome` le copie nuove in `G:\Il mio Drive\01_LAVORO\CASTELTECH\16_Backup\Portale_Render`;
+sul PC 60 giorni + la prima copia di ogni mese. Il portale non tocca Google (niente account di servizio: senza spazio su "Il mio Drive").
 Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in streaming, una sola transazione in lettura): mai tutto il
 database in memoria (30/10/2026 il backup costruito in un colpo solo faceva uscire il portale con stato 134).
 Nel backup TUTTE le tabelle (Adriano 31/10/2026) tranne `TABELLE_ESCLUSE` (sessioni, cache prezzi), in ordine di dipendenza
@@ -376,7 +380,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    margine del preventivo < 10 % = "margine basso"; solo avviso, si emette comunque). Pagina Amministrazione → Controlli settimanali (`/amministrazione/controlli`,
    `engine/controlli.ts` `elencoControlli`: commesse oltre consegna, DDT da fatturare da 20+ gg, fasi aperte da 2+ gg, ordini senza data, prodotti in ordine senza prezzo,
    clienti fatturati senza SDI/PEC, fatture fornitori senza scadenza, preventivi bozza fermi 30+ gg; letto solo all'apertura; link nel riquadro Amministrazione del cruscotto).
-   Un controllo nuovo = una voce in `elencoControlli` + la sua lettura in `datiControlli`. Backup su Drive NON fatto: punto aperto, decide Adriano.
+   Un controllo nuovo = una voce in `elencoControlli` + la sua lettura in `datiControlli`. Backup su Drive: fatto con il PC dell'ufficio (vedi Database su Neon).
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).
