@@ -18,7 +18,8 @@ import {
   TIPI_PAGHE, TIPI_RISERVATI, MINUTI_SBLOCCO, controllaPasswordPaghe, costoAzienda, kmRiga, nomeMeseMaiuscolo, puoAprireRiservata, riepilogoAnno,
   rigaNotaDaModulo, rimborsoRiga, sbloccoValido, tabellaCosti, tipoDocumentoPaghe, totaliNotaSpese, type TipoPaghe,
 } from '../../engine/dipendenti.js';
-import { caricaStoricoCosti, importaModuloKm, leggiDocumentoPaghe, registraDocumentoPaghe, totaliNoteAnno } from '../dipendenti-servizio.js';
+import { caricaStoricoCedolini, caricaStoricoCosti, importaModuloKm, leggiDocumentoPaghe, registraDocumentoPaghe, totaliNoteAnno } from '../dipendenti-servizio.js';
+import { totaliCedolini } from '../../engine/cedolini.js';
 
 declare module 'express-session' { interface SessionData { pagheSbloccate?: number } }
 
@@ -62,6 +63,31 @@ async function fatturatoMesi(): Promise<Map<string, number>> {
       sum(CASE WHEN tipo = 'nota_credito' THEN -imponibile ELSE imponibile END)::float AS v
     FROM documenti WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND numero IS NOT NULL GROUP BY 1, 2`);
   return new Map(r.map(x => [`${x.anno}-${x.mese}`, Number(x.v) || 0]));
+}
+
+type BustaRiga = { id: number; mese: number; mensilita: string; nome: string; persona: string; qualifica: string | null; lordo: number; ritenute: number;
+  netto: number; ore_lavorate: number | null; contributi_dipendente: number | null; irpef: number | null; addizionali: number | null; avvisi: number };
+
+/** Buste paga dell'anno: una riga per persona, il netto di ogni mese (clic = il cedolino), totali dell'anno. */
+function tabellaBuste(anno: number, buste: BustaRiga[]): Raw {
+  if (!buste.length) return html`<h2>Buste paga per persona</h2><p class="vuoto">Nessuna busta paga letta nel ${anno}. I cedolini nuovi arrivano dalla cartella
+    "Da acquisire" (si leggono da soli, senza IA); lo storico si carica qui sotto in "Storico dall'archivio".</p>`;
+  const persone = [...new Set(buste.map(b => b.persona))];
+  const colonne = [...Array.from({ length: 12 }, (_, i) => ({ mese: i + 1, mensilita: 'ordinaria', titolo: nomeMeseMaiuscolo(i + 1).slice(0, 3) })),
+    ...(buste.some(b => b.mensilita === 'tredicesima') ? [{ mese: 12, mensilita: 'tredicesima', titolo: '13ª' }] : []),
+    ...(buste.some(b => b.mensilita === 'quattordicesima') ? [{ mese: 0, mensilita: 'quattordicesima', titolo: '14ª' }] : [])];
+  const cella = (rr: BustaRiga[], c: { mese: number; mensilita: string }) => rr.find(b => b.mensilita === c.mensilita && (c.mensilita === 'quattordicesima' || b.mese === c.mese));
+  return html`<h2>Buste paga per persona · netto in busta</h2>
+    <p class="nota">Clic sul nome: tutte le buste paga della persona; clic sull'importo: il cedolino con le voci. "!" = qualcosa da controllare sul PDF.</p>
+    <div class="tabella-scorre"><table class="elenco compatta">
+      <thead><tr><th>Persona</th>${colonne.map(c => html`<th class="num">${c.titolo}</th>`)}<th class="num">Lordo anno</th><th class="num">Netto anno</th></tr></thead>
+      <tbody>${persone.map(p => { const rr = buste.filter(b => b.persona === p); const t = totaliCedolini(rr); return html`<tr>
+        <td><a href="/dipendenti/riservata/persona?p=${encodeURIComponent(p)}">${rr[0].nome}</a><br><span class="nota">${rr[rr.length - 1].qualifica ?? ''}</span></td>
+        ${colonne.map(c => { const b = cella(rr, c); return html`<td class="num nowrap">${b ? html`<a href="/dipendenti/riservata/cedolini/${b.id}">${euro(b.netto)}</a>${b.avvisi ? ' !' : ''}` : ''}</td>`; })}
+        <td class="num">${euro(t.lordo)}</td><td class="num"><b>${euro(t.netto)}</b></td></tr>`; })}</tbody>
+      <tfoot><tr><th>Totale</th>${colonne.map(c => { const rr = buste.filter(b => cella([b], c)); return html`<th class="num">${rr.length ? euro(totaliCedolini(rr).netto) : ''}</th>`; })}
+        <th class="num">${euro(totaliCedolini(buste).lordo)}</th><th class="num">${euro(totaliCedolini(buste).netto)}</th></tr></tfoot>
+    </table></div>`;
 }
 
 export function rotteDipendenti() {
@@ -471,12 +497,16 @@ export function rotteDipendenti() {
         <button class="primario">Apri</button></form>`));
 
     const anno = Number(req.query.anno) || annoOggi();
-    const [costi, documenti, utenti, anni] = await Promise.all([
+    const [costi, documenti, utenti, anni, buste] = await Promise.all([
       q(`SELECT mese, qualifica, lordo::float, contributi::float, tfr::float, altri::float, netto::float, origine FROM costi_personale WHERE anno = $1 ORDER BY mese, qualifica`, [anno]),
-      q(`SELECT id, tipo, anno, mese, nome_file, stato, errore, totale::float AS totale, to_char(scadenza, 'YYYY-MM-DD') AS scadenza, pagato_il, origine FROM paghe_documenti
+      q(`SELECT id, tipo, anno, mese, nome_file, stato, errore, totale::float AS totale, to_char(scadenza, 'YYYY-MM-DD') AS scadenza, pagato_il, origine, lettura FROM paghe_documenti
         WHERE anno = $1 OR (anno IS NULL AND extract(year FROM creato_il) = $1) ORDER BY mese DESC NULLS LAST, tipo`, [anno]),
       admin ? q(`SELECT id, nome, email, paghe FROM utenti WHERE attivo AND ruolo = 'ufficio' ORDER BY nome`) : Promise.resolve([]),
-      q<{ anno: number }>(`SELECT DISTINCT anno FROM costi_personale UNION SELECT DISTINCT anno FROM paghe_documenti WHERE anno IS NOT NULL ORDER BY 1 DESC`),
+      q<{ anno: number }>(`SELECT DISTINCT anno FROM costi_personale UNION SELECT DISTINCT anno FROM paghe_documenti WHERE anno IS NOT NULL
+        UNION SELECT DISTINCT anno FROM cedolini ORDER BY 1 DESC`),
+      q<BustaRiga>(`SELECT id, mese, mensilita, nome, coalesce(codice_fiscale, nome) AS persona, qualifica, lordo::float, ritenute::float, netto::float,
+          ore_lavorate::float, contributi_dipendente::float, irpef::float, addizionali::float, jsonb_array_length(avvisi) AS avvisi
+        FROM cedolini WHERE anno = $1 ORDER BY nome, mese, mensilita`, [anno]),
     ]);
     const qualifiche = [...new Set(costi.map((c: any) => c.qualifica))];
     const perMese = Array.from({ length: 12 }, (_, i) => costi.filter((c: any) => c.mese === i + 1));
@@ -486,6 +516,7 @@ export function rotteDipendenti() {
         <form method="post" action="/dipendenti/riservata/chiudi" class="inline"><button>Chiudi l'area riservata</button></form></div>
       ${menuDipendenti('riservata')}
       <form class="cerca" method="get"><select name="anno">${elencoAnni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select><button>Mostra</button></form>
+      ${tabellaBuste(anno, buste)}
       <h2>Costo per qualifica</h2>
       ${costi.length ? html`<div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Mese</th><th>Qualifica</th><th class="num">Lordo</th><th class="num">Contributi azienda</th><th class="num">TFR</th><th class="num">Altri</th><th class="num">Costo azienda</th><th class="num">Netto in busta</th><th>Da</th></tr></thead>
@@ -502,14 +533,15 @@ export function rotteDipendenti() {
       ${documenti.length ? html`<div class="tabella-scorre"><table class="elenco"><thead><tr><th>Mese</th><th>Documento</th><th>File</th><th>Lettura</th><th></th></tr></thead>
         <tbody>${documenti.map((d: any) => html`<tr><td>${d.mese ? nomeMeseMaiuscolo(d.mese) : ''}</td><td>${TIPI_PAGHE[d.tipo as TipoPaghe]}${d.tipo === 'f24' && d.scadenza ? ` · scadenza ${data(d.scadenza)}` : ''}</td>
           <td><a href="/dipendenti/riservata/documenti/${d.id}" target="_blank">${d.nome_file}</a></td>
-          <td>${d.stato === 'errore' ? html`<span class="negativo">${d.errore}</span>` : d.tipo === 'f24' && d.totale != null ? euro(d.totale) : d.stato === 'letto' ? 'letto' : ''}</td>
-          <td class="nowrap">${['nota_contabile', 'f24'].includes(d.tipo) ? html`<form method="post" action="/dipendenti/riservata/documenti/${d.id}/rileggi" class="inline"><button class="link">Rileggi</button></form>` : ''}
+          <td>${d.stato === 'errore' ? html`<span class="negativo">${d.errore}</span>` : d.tipo === 'f24' && d.totale != null ? euro(d.totale) : d.stato === 'letto' && d.tipo === 'cedolini' ? `${d.lettura?.cedolini ?? ''} cedolini letti` : d.stato === 'letto' ? 'letto' : ''}</td>
+          <td class="nowrap">${['nota_contabile', 'f24', 'cedolini'].includes(d.tipo) ? html`<form method="post" action="/dipendenti/riservata/documenti/${d.id}/rileggi" class="inline"><button class="link">Rileggi</button></form>` : ''}
             ${d.tipo === 'f24' ? html`<form method="post" action="/dipendenti/riservata/documenti/${d.id}/pagato" class="inline"><button class="link">${d.pagato_il ? 'Da pagare' : 'Segna pagato'}</button></form>` : ''}
             <form method="post" action="/dipendenti/riservata/documenti/${d.id}/elimina" class="inline" data-conferma="${`Eliminare ${d.nome_file}?`}"><button class="link negativo">Elimina</button></form></td></tr>`)}</tbody></table></div>`
         : html`<p class="vuoto">Nessun documento nel ${anno}.</p>`}
       <h2>Storico dall'archivio</h2>
-      <p class="nota">File costi_personale.json.gz preparato da Claude dalle note contabili della cartella "7_DIPENDENTI E SOCI" (2019–2026). Prima mostra quanti mesi carica, poi chiede conferma.
-        I mesi già letti dal portale dalla nota contabile o corretti a mano non si toccano.</p>
+      <p class="nota">File preparati da Claude dalla cartella "7_DIPENDENTI E SOCI" (2019–2026): costi_personale.json.gz (note contabili: costo per qualifica) e
+        cedolini.json.gz (buste paga: un cedolino per persona e mese). Prima mostra cosa carica, poi chiede conferma.
+        I mesi già letti dal portale dai documenti arrivati o corretti a mano non si toccano.</p>
       <div class="blocco"><input type="file" id="file-storico" accept=".gz,.json"> <button class="primario" id="avvia-storico">Carica lo storico</button> <span id="esito-storico" class="nota"></span></div>
       ${admin ? html`<h2>Chi può aprire le buste paga</h2>
         <p class="nota">Solo tu (amministratore) e gli utenti dell'ufficio con la spunta; tutti devono scrivere la password delle buste paga.</p>
@@ -603,11 +635,93 @@ export function rotteDipendenti() {
       if (b[0] === 0x1f && b[1] === 0x8b) b = gunzipSync(b);
       f = JSON.parse(b.toString('utf8'));
     } catch { return res.status(400).json({ errore: 'File non valido: serve costi_personale.json.gz' }); }
+    if ((f as any)?.tipo === 'cedolini') {
+      const c = await caricaStoricoCedolini(f, { anteprima: req.query.conferma !== '1' });
+      const per = c.dal && c.al ? `da ${String(c.dal).slice(4)}/${String(c.dal).slice(0, 4)} a ${String(c.al).slice(4)}/${String(c.al).slice(0, 4)}` : '';
+      return res.json({ anteprima: c.anteprima, messaggio: c.anteprima
+        ? `Nel file ${c.cedolini} buste paga di ${c.persone} persone in ${c.mesi} mesi ${per}: ne carico ${c.caricati}${c.saltati ? `, ${c.saltati} restano come sono (già lette dai PDF arrivati)` : ''}. Confermi?`
+        : `Caricate ${c.caricati} buste paga ${per}.` });
+    }
     const e = await caricaStoricoCosti(f, { anteprima: req.query.conferma !== '1' });
     const periodo = e.dal && e.al ? `da ${String(e.dal).slice(4)}/${String(e.dal).slice(0, 4)} a ${String(e.al).slice(4)}/${String(e.al).slice(0, 4)}` : '';
     res.json({ anteprima: e.anteprima, messaggio: e.anteprima
       ? `Nel file ${e.mesi} mesi ${periodo}: ne carico ${e.caricati}${e.saltati ? `, ${e.saltati} restano come sono (già letti dalla nota contabile o corretti a mano)` : ''}. Confermi?`
       : `Caricati ${e.caricati} mesi ${periodo}.` });
+  });
+
+
+  // buste paga di una persona: tutti gli anni, con i totali dell'anno
+  r.get('/riservata/persona', async (req, res) => {
+    if (!(await aperta(req, res))) return;
+    const persona = String(req.query.p ?? '');
+    const righe = await q<BustaRiga & { anno: number; retribuzione: number | null; paga_oraria: number | null; livello: string | null; mansione: string | null;
+      data_assunzione: string | null; data_cessazione: string | null; matricola: string | null }>(`
+      SELECT id, anno, mese, mensilita, nome, coalesce(codice_fiscale, nome) AS persona, qualifica, livello, mansione, matricola, lordo::float, ritenute::float,
+        netto::float, ore_lavorate::float, contributi_dipendente::float, irpef::float, addizionali::float, retribuzione::float, paga_oraria::float,
+        to_char(data_assunzione, 'YYYY-MM-DD') AS data_assunzione, to_char(data_cessazione, 'YYYY-MM-DD') AS data_cessazione, jsonb_array_length(avvisi) AS avvisi
+      FROM cedolini WHERE coalesce(codice_fiscale, nome) = $1 ORDER BY anno DESC, mese DESC, mensilita DESC`, [persona]);
+    if (!righe.length) return vai(res, '/dipendenti/riservata', 'Nessuna busta paga per questa persona.');
+    const ultima = righe[0];
+    const anni = [...new Set(righe.map(x => x.anno))];
+    res.send(pagina(req, ultima.nome, html`
+      <div class="intestazione-pagina"><h1>🔒 ${ultima.nome}</h1><a href="/dipendenti/riservata?anno=${ultima.anno}">← Buste paga</a></div>
+      ${menuDipendenti('riservata')}
+      <p>${[ultima.qualifica, ultima.mansione, ultima.livello ? `livello ${ultima.livello}` : null, ultima.matricola ? `matricola ${ultima.matricola}` : null].filter(Boolean).join(' · ')}
+        ${righe.find(x => x.data_assunzione) ? html` · assunzione ${data(righe.find(x => x.data_assunzione)!.data_assunzione!)}` : ''}
+        ${ultima.data_cessazione ? html` · <b>cessazione ${data(ultima.data_cessazione)}</b>` : ''}</p>
+      ${anni.map(a => { const rr = righe.filter(x => x.anno === a); const t = totaliCedolini(rr); return html`
+        <h2>${a}</h2>
+        <div class="tabella-scorre"><table class="elenco">
+          <thead><tr><th>Mese</th><th class="num">Ore</th><th class="num">Paga oraria</th><th class="num">Lordo</th><th class="num">Contributi</th><th class="num">IRPEF</th>
+            <th class="num">Addizionali</th><th class="num">Ritenute</th><th class="num">Netto</th></tr></thead>
+          <tbody>${rr.slice().reverse().map(x => html`<tr data-href="/dipendenti/riservata/cedolini/${x.id}">
+            <td><a href="/dipendenti/riservata/cedolini/${x.id}">${nomeMeseMaiuscolo(x.mese)}${x.mensilita !== 'ordinaria' ? ` · ${x.mensilita}` : ''}</a>${x.avvisi ? html` <span class="etichetta" title="da controllare">!</span>` : ''}</td>
+            <td class="num">${x.ore_lavorate != null ? num(x.ore_lavorate) : ''}</td><td class="num">${x.paga_oraria != null ? num(x.paga_oraria, 4) : ''}</td>
+            <td class="num">${euro(x.lordo)}</td><td class="num">${x.contributi_dipendente != null ? euro(x.contributi_dipendente) : ''}</td>
+            <td class="num">${x.irpef != null ? euro(x.irpef) : ''}</td><td class="num">${x.addizionali != null ? euro(x.addizionali) : ''}</td>
+            <td class="num">${euro(x.ritenute)}</td><td class="num"><b>${euro(x.netto)}</b></td></tr>`)}</tbody>
+          <tfoot><tr><th>Totale ${a}</th><th class="num">${num(t.ore)}</th><th></th><th class="num">${euro(t.lordo)}</th><th class="num">${euro(t.contributi)}</th>
+            <th class="num">${euro(t.irpef)}</th><th class="num">${euro(t.addizionali)}</th><th class="num">${euro(t.ritenute)}</th><th class="num">${euro(t.netto)}</th></tr></tfoot>
+        </table></div>`; })}
+    `, { script: 'dipendenti.js' }));
+  });
+
+  // un cedolino: dati e voci (competenze e ritenute)
+  r.get('/riservata/cedolini/:id', async (req, res) => {
+    if (!(await aperta(req, res))) return;
+    const c = await q1<any>(`SELECT *, lordo::float, ritenute::float, netto::float, ore_lavorate::float, paga_oraria::float, retribuzione::float,
+        contributi_dipendente::float, irpef::float, addizionali::float, to_char(data_assunzione, 'YYYY-MM-DD') AS assunzione,
+        to_char(data_cessazione, 'YYYY-MM-DD') AS cessazione FROM cedolini WHERE id = $1`, [Number(req.params.id)]);
+    if (!c) return vai(res, '/dipendenti/riservata', 'Busta paga non trovata.');
+    const voci = (c.voci ?? []) as { codice: string; descrizione: string; quantita?: number; importo: number; tipo: string }[];
+    const periodo = `${nomeMeseMaiuscolo(c.mese)} ${c.anno}${c.mensilita !== 'ordinaria' ? ` · ${c.mensilita}` : ''}`;
+    res.send(pagina(req, `${c.nome} ${periodo}`, html`
+      <div class="intestazione-pagina"><h1>🔒 ${c.nome} · ${periodo}</h1>
+        <a href="/dipendenti/riservata/persona?p=${encodeURIComponent(c.codice_fiscale ?? c.nome)}">← Tutte le buste paga di ${c.nome}</a></div>
+      ${menuDipendenti('riservata')}
+      <div class="cifre">
+        <div class="cifra"><span>Lordo (competenze)</span><b>${euro(c.lordo)}</b></div>
+        <div class="cifra"><span>Ritenute</span><b>${euro(c.ritenute)}</b></div>
+        <div class="cifra"><span>Netto in busta</span><b>${euro(c.netto)}</b></div>
+      </div>
+      <table class="elenco"><tbody>
+        <tr><th>Qualifica</th><td>${[c.qualifica, c.mansione, c.livello ? `livello ${c.livello}` : null].filter(Boolean).join(' · ')}</td></tr>
+        ${c.matricola ? html`<tr><th>Matricola</th><td>${c.matricola}</td></tr>` : ''}
+        ${c.assunzione ? html`<tr><th>Assunzione</th><td>${data(c.assunzione)}${c.cessazione ? html` · cessazione ${data(c.cessazione)}` : ''}</td></tr>` : ''}
+        ${c.ore_lavorate != null ? html`<tr><th>Ore lavorate</th><td>${num(c.ore_lavorate)}${c.giorni_lavorati != null ? ` · ${c.giorni_lavorati} giorni` : ''}</td></tr>` : ''}
+        ${c.paga_oraria != null ? html`<tr><th>Paga oraria</th><td>${num(c.paga_oraria, 5)} €${c.retribuzione != null ? html` · retribuzione mensile ${euro(c.retribuzione)}` : ''}</td></tr>` : ''}
+        <tr><th>Contributi del dipendente</th><td>${c.contributi_dipendente != null ? euro(c.contributi_dipendente) : '—'}</td></tr>
+        <tr><th>IRPEF</th><td>${c.irpef != null ? euro(c.irpef) : '—'} ${c.addizionali != null ? html` · addizionali ${euro(c.addizionali)}` : ''}</td></tr>
+        <tr><th>Da</th><td>${c.origine === 'documento' && c.documento_id ? html`<a href="/dipendenti/riservata/documenti/${c.documento_id}" target="_blank">${c.file}</a>` : `archivio: ${c.file ?? ''}`}</td></tr>
+      </tbody></table>
+      ${(c.avvisi ?? []).length ? html`<p class="avviso">Da controllare sul PDF: ${(c.avvisi as string[]).join('; ')}.</p>` : ''}
+      <h2>Voci</h2>
+      ${voci.length ? html`<div class="tabella-scorre"><table class="elenco"><thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Ore / giorni / %</th><th class="num">Ritenute</th><th class="num">Competenze</th></tr></thead>
+        <tbody>${voci.map(v => html`<tr><td>${v.codice}</td><td>${v.descrizione}</td><td class="num">${v.quantita != null ? num(v.quantita) : ''}</td>
+          <td class="num">${v.tipo === 'ritenuta' ? euro(v.importo) : ''}</td><td class="num">${v.tipo === 'competenza' ? euro(v.importo) : ''}</td></tr>`)}</tbody>
+        <tfoot><tr><th></th><th>Totali del cedolino</th><th></th><th class="num">${euro(c.ritenute)}</th><th class="num">${euro(c.lordo)}</th></tr></tfoot></table></div>`
+        : html`<p class="vuoto">Voci non lette.</p>`}
+    `));
   });
 
   return r;

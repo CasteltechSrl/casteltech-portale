@@ -143,15 +143,18 @@ test('area riservata: permesso dell\'amministratore + password, aperta 15 minuti
 
 test('area riservata: i documenti si aprono solo con l\'area aperta, la sezione è solo dell\'ufficio', () => {
   const rotte = readFileSync(new URL('../src/server/rotte/dipendenti.ts', import.meta.url), 'utf8');
-  for (const p of ["r.get('/riservata/documenti/:id'", "r.post('/riservata/storico'", "r.post('/riservata/documenti/:id/elimina'"]) {
+  for (const p of ["r.get('/riservata/documenti/:id'", "r.post('/riservata/storico'", "r.post('/riservata/documenti/:id/elimina'",
+    "r.get('/riservata/persona'", "r.get('/riservata/cedolini/:id'"]) {
     const dopo = rotte.split(p)[1];
     assert.ok(dopo && /^[^\n]*\n\s*if \(!\(await aperta\(req, res\)\)\) return;/.test(dopo), p);
   }
   const index = readFileSync(new URL('../src/server/index.ts', import.meta.url), 'utf8');
   assert.match(index, /app\.use\('\/dipendenti', soloUfficio, rotteDipendenti\(\)\)/);
-  // i cedolini non vanno mai all'IA
+  // i cedolini non vanno mai all'IA: si leggono dal testo del PDF nel portale
   const servizio = readFileSync(new URL('../src/server/dipendenti-servizio.ts', import.meta.url), 'utf8');
-  assert.match(servizio, /\['nota_contabile', 'f24'\]\.includes\(d\.tipo\)/);
+  const ramoCedolini = servizio.split("if (d.tipo === 'cedolini') {")[1]?.split('} else if')[0] ?? '';
+  assert.match(ramoCedolini, /leggiCedolini\(await testoPdf\(d\.contenuto\)/);
+  assert.doesNotMatch(ramoCedolini, /ConIa|chiediTestoIa/);
 });
 
 test('nota spese come il modulo rimborso km: km andata × 2, rimborso = km × tariffa + altre spese', () => {
