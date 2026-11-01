@@ -458,6 +458,25 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/commesse', 'Commesse'], ['/ordini/fornitori', 'Ordini a fornitore']],
   },
   {
+    id: 'avviso-margine-fattura', area: 'amministrazione', titolo: 'Fattura: avviso se il prezzo è sotto il preventivo o il margine è basso',
+    parole: 'fattura prezzo basso sotto preventivo margine basso riga gialla avviso prezzo sbagliato controllo prezzi guadagno 10%',
+    testo: [
+      'Nella bozza di fattura ogni riga con un codice prodotto viene confrontata con l\'ultimo preventivo salvato di quel codice per lo stesso cliente. Se il prezzo scritto (tolto lo sconto) è sotto il prezzo a scheda del preventivo di oltre l\'1 %, la riga diventa gialla con "sotto il preventivo"; se il prezzo è in linea ma il margine del preventivo è sotto il 10 %, "margine basso".',
+      'Sopra la tabella c\'è il riepilogo con i numeri del preventivo (es. "lì 5,54 € a scheda, qui 5,00 €, −10 %"). È solo un avviso: la fattura si emette comunque. Senza un preventivo di quel codice non compare niente.',
+    ],
+    pagine: [['/amministrazione/documenti', 'Documenti emessi']],
+  },
+  {
+    id: 'controlli-settimanali', area: 'amministrazione', titolo: 'Controlli settimanali: le cose lasciate a metà',
+    parole: 'controlli settimanali lunedì cose a metà ddt vecchi non fatturati ordini senza data consegna prodotti senza prezzo clienti senza codice sdi pec fatture fornitori senza scadenza preventivi fermi bozze commesse oltre consegna fasi aperte',
+    testo: [
+      'Amministrazione → Controlli settimanali raccoglie in una pagina sola, dalle più urgenti, le cose che nessun cruscotto mostra insieme: commesse aperte oltre la data di consegna; DDT da fatturare da più di 20 giorni; fasi aperte dal telefono da più di 2 giorni; ordini con righe senza data di consegna; prodotti in ordine senza prezzo in anagrafica; clienti fatturati nell\'ultimo anno senza codice destinatario né PEC; fatture fornitori senza scadenza di pagamento; preventivi in bozza fermi da più di 30 giorni.',
+      'Ogni riga porta alla pagina dove si sistema (commessa, DDT, ordine, prodotto, dati fiscali del cliente, fattura del fornitore, preventivo). La pagina si calcola quando la apri: niente controlli automatici. Il link sta anche nel riquadro Amministrazione del cruscotto generale.',
+    ],
+    passi: ['Il lunedì apri Amministrazione → Controlli settimanali.', 'Parti dalle sezioni urgenti (rosse).', 'Sistema ogni riga dalla sua pagina; ricarica per vedere cosa resta.'],
+    pagine: [['/amministrazione/controlli', 'Controlli settimanali']],
+  },
+  {
     id: 'solleciti-incassi', area: 'amministrazione', titolo: 'Solleciti incassi: email al cliente per le fatture scadute',
     parole: 'sollecito solleciti incassi pagamento fatture scadute scaduto email cliente gmail iban ritardo ultimo avviso crm',
     testo: [

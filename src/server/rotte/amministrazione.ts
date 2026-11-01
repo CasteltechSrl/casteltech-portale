@@ -35,6 +35,10 @@ import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDif
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
+import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
+import { marginePreventivo } from '../../engine/analisi.js';
+import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
+import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
 import { documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, scriviXml, segnaIncassate } from '../azioni-documenti-servizio.js';
@@ -195,6 +199,25 @@ export function rotteAmministrazione() {
   r.use('/vies', rotteVies());
 
   // ── Fatture differite (1/11/2026): DDT da fatturare per cliente, "Fattura tutti" = una bozza per cliente (TD24 da sola all'emissione) ──
+  // ── Controlli settimanali (proposta della revisione, Adriano 1/11/2026; regole in engine/controlli.ts) ──
+  r.get('/controlli', async (req, res) => {
+    const oggi = oggiRoma();
+    const controlli = elencoControlli(await datiControlli(oggi));
+    const r2 = riepilogoControlli(controlli);
+    const NOMI: Record<string, string> = { urgente: 'urgente', controllare: 'da controllare', normale: 'quando c\'è tempo' };
+    res.send(pagina(req, 'Controlli', html`
+      <div class="intestazione-pagina"><h1>Controlli settimanali</h1><div class="azioni"><a class="bottone" href="/amministrazione">Cruscotto</a></div></div>
+      <p class="nota">Le cose lasciate a metà che nessun cruscotto mostra insieme: da guardare una volta la settimana (es. il lunedì). Ogni riga porta alla pagina dove si sistema.
+        Si calcola quando apri la pagina, niente controlli automatici.</p>
+      ${controlli.length ? html`<p class="riepilogo-controlli">${r2.totale} ${r2.totale === 1 ? 'cosa da sistemare' : 'cose da sistemare'}${r2.urgenti ? html`, <b class="negativo">${r2.urgenti} urgenti</b>` : ''}${r2.daControllare ? html`, ${r2.daControllare} da controllare` : ''}.</p>
+        ${controlli.map(c => html`<section class="blocco controllo ${c.livello}">
+          <h2>${c.titolo} <span class="etichetta ${c.livello}">${NOMI[c.livello]}</span> <span class="conta">${c.righe.length}</span></h2>
+          <p class="nota">${c.spiegazione}</p>
+          <ul class="elenco-controllo">${c.righe.map(v => html`<li>${v.link ? html`<a href="${v.link}">${v.testo}</a>` : v.testo}${v.dettaglio ? html` <small>· ${v.dettaglio}</small>` : ''}</li>`)}</ul>
+        </section>`)}`
+        : html`<p class="avviso info"><b>Tutto a posto.</b> Nessun DDT vecchio da fatturare, nessuna commessa oltre la consegna, ordini con le date, prodotti con il prezzo, clienti con il recapito SdI, fatture fornitori con la scadenza, nessuna bozza di preventivo ferma.</p>`}`));
+  });
+
   // ── Solleciti incassi (proposta della revisione, Adriano 1/11/2026) ──
   r.get('/solleciti', async (req, res) => {
     const oggi = oggiRoma();
@@ -614,7 +637,14 @@ export function rotteAmministrazione() {
     // fattura e note al cliente: codice solo dall'anagrafica del cliente (Adriano 31/10/2026); autofattura: righe del fornitore estero, libere
     const conAnagrafica = d.tipo !== 'autofattura' && !!d.cliente_id;
     const prodotti = conAnagrafica ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
-    const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
+    // avviso margine (engine/avviso-margine.ts): prezzo sotto l'ultimo preventivo del codice o margine del preventivo sotto il 10 % → riga gialla
+    const riferimenti = new Map<string, RiferimentoPreventivo>();
+    if (conAnagrafica && d.tipo === 'fattura') {
+      for (const r of await riferimentiPreventivi(d.cliente_id)) if (r.prezzo_scheda) riferimenti.set(r.codice, { numero: r.numero, preventivoId: r.id, prezzoScheda: r.prezzo_scheda,
+        marginePct: marginePreventivo({ guadagnoLotto: r.guadagno ?? undefined, totaleSecondoLotto: r.totale ?? undefined }) });
+    }
+    const avvisiMargine = avvisiRighe(righe, riferimenti);
+    const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''} ${avvisiMargine.has(i) ? `riga-margine ${avvisiMargine.get(i)!.livello}` : ''}">
       <td>${conAnagrafica ? cellaCodice(x, i, prodotti) : html`<input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
         <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}">`}<input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
         <input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
@@ -622,7 +652,7 @@ export function rotteAmministrazione() {
       <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo"></td>
-      <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal">${avvisiMargine.has(i) ? html`<small class="avviso-margine" title="${avvisiMargine.get(i)!.testo}">⚠ ${avvisiMargine.get(i)!.livello === 'critico' ? 'sotto il preventivo' : 'margine basso'}</small>` : ''}</td>
       <td><input name="righe[${i}][sconto]" value="${x.sconto || ''}" class="cortissimo" inputmode="decimal"></td>
       <td><select name="righe[${i}][aliquota_iva]"><option value="">predefinita</option>${aliquote.map(a =>
         html`<option value="${a.codice}" ${x.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></td>
@@ -653,6 +683,7 @@ export function rotteAmministrazione() {
           : cliente?.split_payment ? html`<p class="nota">Split payment: il cliente paga solo imponibile e bollo, l'IVA la versa lui.</p>` : ''}
         <label>Causale (stampata sulla fattura) <input name="causale" value="${d.causale ?? ''}"></label>
         <label>Note interne (non vanno in fattura) <input name="note" value="${d.note ?? ''}"></label>
+        ${riepilogoAvvisi(avvisiMargine) ? html`<p class="avviso margine">${riepilogoAvvisi(avvisiMargine)} ${[...avvisiMargine.values()].map(a => a.testo).join(' ')}</p>` : ''}
         <div class="tabella-scorre"><table class="editor" id="righe-documento">
           <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th>Prezzo €</th><th>Sconto %</th><th>IVA</th><th title="Solo testo">Testo</th></tr></thead>
           <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
