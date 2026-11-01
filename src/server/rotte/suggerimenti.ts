@@ -27,8 +27,9 @@ async function riquadroChiaveClaude(appenaCreata: boolean): Promise<Raw> {
   return html`<details class="blocco" ${appenaCreata ? raw('open') : ''}><summary>Collegamento con Claude (controllo settimanale) ·
       ${chiave ? html`<span class="positivo">attivo</span>` : html`<span class="negativo">da attivare</span>`}</summary>
     <p class="nota">Claude legge i suggerimenti e scrive le risposte attraverso un indirizzo protetto da una chiave.
-      Si fa una volta sola: crea la chiave, poi copiala nelle impostazioni dell'ambiente di Claude (Impostazioni del progetto → Ambiente cloud →
-      variabile <code>PORTALE_CHIAVE_CLAUDE</code>). Creare una chiave nuova disattiva la vecchia.</p>
+      Si fa una volta sola: crea la chiave, poi in Claude apri Impostazioni progetto → Ambiente → Segreti di rete → Aggiungi, con host
+      <code>casteltech-portale.onrender.com</code> e come valore la chiave (se chiede il tipo: Bearer / intestazione Authorization).
+      Creare una chiave nuova disattiva la vecchia.</p>
     ${appenaCreata && chiave ? html`<p><strong>Chiave:</strong> <code class="chiave-intera">${chiave}</code></p>
       <p class="nota">Copiala adesso: per sicurezza poi non si mostra più per intero.</p>` : chiave ? html`<p class="nota">Chiave attiva: …${chiave.slice(-4)}</p>` : ''}
     <form method="post" action="/suggerimenti/chiave-claude" ${chiave ? raw('data-conferma="Creare una chiave nuova? Quella di adesso smette di funzionare."') : ''}>

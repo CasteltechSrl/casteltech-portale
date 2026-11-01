@@ -278,8 +278,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    promemoria nel calendario di info@ per le commesse in ritardo su preventivo, capacità produttiva e scadenza.
    Controllo settimanale di Claude (Adriano 1/11/2026; migrazione 054, `rotte/api-claude.ts`, test in `tests/suggerimenti.test.ts`): stato "Da chiarire"
    (in cima, giallo) + colonna `risposta` (domanda/risposta per chi ha proposto; chi risponde scrive nelle note). Claude legge e aggiorna con
-   GET/POST `/api/claude/suggerimenti` e la chiave creata in Suggerimenti → Collegamento con Claude (impostazioni 'claude_api', variabile
-   `PORTALE_CHIAVE_CLAUDE` nell'ambiente di Claude); può cambiare solo stato, risposta e aggiungere una riga datata alle note.
+   GET/POST `/api/claude/suggerimenti` e la chiave creata in Suggerimenti → Collegamento con Claude (impostazioni 'claude_api'; nel progetto Claude
+   è un "Segreto di rete" per casteltech-portale.onrender.com, arriva come Authorization: Bearer, oppure x-chiave-portale); può cambiare solo stato, risposta e aggiungere una riga datata alle note.
    ✅ Calendario dei ritardi (idea di Federico; `engine/calendario-ritardi.ts`, `rotte/calendario.ts`, test in `tests/calendario-ritardi.test.ts`):
    `/calendario/<chiave>/ritardi.ics` aggiunto "Da URL" in Google Calendar di info@ (niente delega Workspace), indirizzo in Impostazioni → Promemoria.
    Eventi: consegna scaduta, fine Gantt superata, doveva partire, avviso 2 gg lavorativi prima dell'inizio, sovraccarico (ore > ore al giorno),

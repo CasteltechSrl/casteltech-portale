@@ -48,3 +48,12 @@ test('suggerimenti: aggiornamento da Claude con stato, domanda e nota datata in 
   assert.equal(aggiungiNota(null, 'dopo'), 'dopo');
   assert.equal(aggiungiNota('prima', null), 'prima');
 });
+
+test('api Claude: chiave da x-chiave-portale o da Authorization: Bearer (segreti di rete)', async () => {
+  const { chiaveDallaRichiesta } = await import('../src/server/rotte/api-claude.js').catch(() => ({ chiaveDallaRichiesta: null as any }));
+  if (!chiaveDallaRichiesta) return; // senza DATABASE_URL il modulo del server non si carica
+  const req = (h: Record<string, string>) => ({ get: (n: string) => h[n.toLowerCase()] }) as any;
+  assert.equal(chiaveDallaRichiesta(req({ 'x-chiave-portale': 'abc' })), 'abc');
+  assert.equal(chiaveDallaRichiesta(req({ authorization: 'Bearer xyz' })), 'xyz');
+  assert.equal(chiaveDallaRichiesta(req({ authorization: 'Basic xyz' })), undefined);
+});
