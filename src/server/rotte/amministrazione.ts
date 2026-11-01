@@ -9,6 +9,7 @@ import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoSce
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
+import { differitePerCliente } from '../../engine/fatture-differite.js';
 import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -23,7 +24,7 @@ import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scar
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
   TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
-  creaNotaCredito, creaNotaDebito, ddtDaFatturare, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
+  creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
@@ -187,6 +188,52 @@ export function rotteAmministrazione() {
   r.use('/analisi', rotteAnalisi());
   r.use('/', rotteFiscale());
   r.use('/vies', rotteVies());
+
+  // ── Fatture differite (1/11/2026): DDT da fatturare per cliente, "Fattura tutti" = una bozza per cliente (TD24 da sola all'emissione) ──
+  r.get('/differite', async (req, res) => {
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const gruppi = differitePerCliente(await ddtDaFatturareTutti(), oggi);
+    const totale = gruppi.reduce((n, g) => n + g.ddt.length, 0);
+    const daFareOra = gruppi.filter(g => g.scaduto || g.inScadenza);
+    const g = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+    res.send(pagina(req, 'Fatture differite', html`
+      <div class="intestazione-pagina"><h1>Fatture differite · DDT da fatturare</h1>
+        <div class="azioni">${daFareOra.length ? html`<form method="post" action="/amministrazione/differite/fattura-tutti" class="inline"
+          data-conferma="${`Preparare ${daFareOra.length} ${daFareOra.length === 1 ? 'bozza di fattura' : 'bozze di fattura'} (una per cliente) con i DDT in scadenza o scaduti? Le controlli e le emetti una per una.`}">
+          <button class="primario">Fattura tutti i clienti in scadenza (${daFareOra.length})</button></form>` : ''}</div></div>
+      <p class="nota">I DDT di vendita e reso lavorato di un mese si fatturano <b>entro il 15 del mese dopo</b> (fattura differita TD24, scelta da sola all'emissione).
+        Qui ci sono tutti i DDT emessi e non ancora fatturati, un gruppo per cliente: <b>Fattura tutti i DDT</b> prepara una bozza con le righe di tutti i DDT del cliente,
+        da controllare ed emettere. Il cruscotto avvisa dal 1° del mese (giallo) e dal 16 (rosso).</p>
+      ${gruppi.length === 0 ? html`<p class="vuoto">Nessun DDT da fatturare.</p>` : html`<p class="nota">${totale} DDT di ${gruppi.length} clienti.</p>
+      ${gruppi.map(x => html`<section class="blocco differite ${x.scaduto ? 'scaduto' : x.inScadenza ? 'in-scadenza' : ''}">
+        <div class="intestazione-pagina"><h2>${x.cliente} <small class="nota">${x.ddt.length} DDT · entro il ${g(x.termine)}${x.scaduto ? ' · termine superato' : x.inScadenza ? ' · da fare questo mese' : ''}</small></h2>
+          <form method="post" action="/amministrazione/differite/fattura" class="inline"><input type="hidden" name="cliente_id" value="${x.clienteId}">
+            ${x.ddt.map(d => html`<input type="hidden" name="ddt[]" value="${d.id}">`)}
+            <button class="${x.scaduto || x.inScadenza ? 'primario' : ''}">Fattura tutti i DDT</button></form></div>
+        <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th class="num">Righe</th><th class="num">Importo</th></tr></thead>
+          <tbody>${x.ddt.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
+            <td class="num">${d.righe ?? ''}</td><td class="num">${d.totale != null ? euro(d.totale) : ''}</td></tr>`)}</tbody></table></section>`)}`}`, msg(req)));
+  });
+  r.post('/differite/fattura', async (req, res) => {
+    const clienteId = Number(req.body.cliente_id);
+    const ids = [req.body.ddt ?? []].flat().map(Number).filter(n => n > 0);
+    try {
+      const id = await fatturaTuttiIDdt(clienteId, ids, req.session.utente?.id ?? null);
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`Fattura preparata con ${ids.length} DDT: controlla prezzi e pagamento, poi Emetti (diventa differita TD24 da sola).`)}`);
+    } catch (e: any) {
+      res.redirect(`/amministrazione/differite?msg=${encodeURIComponent(e.message)}`);
+    }
+  });
+  r.post('/differite/fattura-tutti', async (req, res) => {
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const gruppi = differitePerCliente(await ddtDaFatturareTutti(), oggi).filter(x => x.scaduto || x.inScadenza);
+    let fatte = 0;
+    const errori: string[] = [];
+    for (const x of gruppi) {
+      try { await fatturaTuttiIDdt(x.clienteId, x.ddt.map(d => d.id), req.session.utente?.id ?? null); fatte++; } catch (e: any) { errori.push(`${x.cliente}: ${e.message}`); }
+    }
+    res.redirect(`/amministrazione/documenti?tipo=fattura&msg=${encodeURIComponent(`${fatte} ${fatte === 1 ? 'bozza preparata' : 'bozze preparate'} (una per cliente): controllale ed emettile una per una.${errori.length ? ' Non riuscite: ' + errori.join('; ') : ''}`)}`);
+  });
 
   r.get('/documenti', async (req, res) => {
     const tipo = String(req.query.tipo ?? 'fattura');
