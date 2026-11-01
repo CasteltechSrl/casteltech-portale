@@ -27,6 +27,7 @@ import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteOrdiniFornitore } from './rotte/ordini-fornitore.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
+import { rotteQualita } from './rotte/qualita.js';
 import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
@@ -160,6 +161,7 @@ app.use('/quotazioni', soloUfficio, rotteComponenti());
 app.use('/componenti', (req, res) => res.redirect(307, '/quotazioni' + req.url));
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
+app.use('/qualita', soloUfficio, rotteQualita());
 app.use('/amministrazione', amministrazioneOContabilita, rotteAmministrazione());
 // la guida la può leggere chiunque sia entrato (ufficio e produzione)
 app.use('/guida', (req, res, next) => req.session.utente ? next() : res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl)), rotteGuida());

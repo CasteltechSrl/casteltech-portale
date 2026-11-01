@@ -24,7 +24,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 
 - Menu in alto a gruppi (Adriano 31/10/2026, `MENU_GRUPPI` in `views/layout.ts`, test in `tests/menu.test.ts`): Anagrafiche, Commerciale (CRM, Quotazioni,
   Preventivi, Ordini clienti), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt; poi macchine e consumi),
-  Amministrazione; ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti: Qualità,
+  Amministrazione, Qualità (dal 1/11/2026); ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti:
   Sicurezza e ambiente. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
   Tendine meno sensibili (Adriano 31/10/2026, `public/menu.js`): si chiudono 0,45 s dopo l'uscita del mouse, ponte invisibile tra nome e tendina,
   cambio gruppo solo se il mouse si ferma 0,18 s, clic sul nome a tendina chiusa (tablet) la apre.
@@ -301,6 +301,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    solo voci non a zero, una sola cosa = link diretto: `cosaDaFare`), sei numeri chiave, un riquadro per area (Commerciale, Ordini clienti, Produzione con il carico
    di 4 settimane dal Gantt = `pianificaProduzione` + `caricoSettimane`, Acquisti, Amministrazione con lo SdI, Promemoria e sistema: scadenze del 15/16, servizi, backup).
    Letture una volta sola all'apertura, niente aggiornamenti automatici (Neon). Contabilità resta su /amministrazione, reparto su /r. Una voce nuova = una riga in `cosaDaFare`.
+4j. ✅ Qualità (Adriano 31/10/2026; menu Qualità, `rotte/qualita.ts`, regole in `engine/qualita.ts`, migrazione 055 `qualita_voci` = sezione + dati jsonb,
+   test in `tests/qualita.test.ts`): le sezioni principali della cartella Drive 5_QUALITA, ognuna un registro descritto in `SEZIONI_QUALITA` (campo nuovo o
+   sezione nuova = una voce lì, niente migrazione): documenti del sistema (EPR-SYS/EPR-OPE/EWI-OPE, manuale, moduli QF), non conformità e reclami (numero
+   NC-anno-progressivo, codice difetto, trattamento, causa, azione entro il, Chiudi), codifica dei difetti (POST/CODIFICA DIFETTOLOGIA), strumenti e tarature
+   (ultima + ogni quanti mesi), piano delle manutenzioni e verifiche ESD (mesi previsti, scadenza = mese previsto dopo l'ultima volta; spunte → "Fatto oggi"),
+   formazione, audit, rischi e opportunità (valore × frequenza). Cruscotto `/qualita`: scadute, entro un mese, NC aperte, difetti più frequenti.
+   Dati del Drive (vecchi, per la struttura): file `qualita_esempio.json.gz` in Project Files → qualita, "Carica i dati dal Drive" (ricaricabile, `chiaveImport`).
+   ⬜ Sicurezza e ambiente; schede del personale e mansionario restano alla sezione Dipendenti.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

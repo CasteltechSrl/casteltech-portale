@@ -34,6 +34,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'amministrazione', nome: 'Amministrazione', descrizione: 'Fatture, note di credito, DDT, incassi e pagamenti, fatture dei fornitori.' },
   { id: 'impostazioni', nome: 'Impostazioni', descrizione: 'Tariffe, fasi, operatori e PIN, utenti, promemoria, copie di sicurezza, consumi dei servizi.' },
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
+  { id: 'qualita', nome: 'Qualità', descrizione: 'Non conformità e reclami, tarature, manutenzioni, verifiche ESD, documenti del sistema, formazione, audit, rischi.' },
 ];
 
 export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
@@ -816,6 +817,40 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Suggerimenti → + Nuovo suggerimento.', 'Scrivi cosa dovrebbe fare il portale e perché serve.', 'Se compare una domanda, rispondi nelle note del suggerimento.'],
     pagine: [['/suggerimenti/nuovo', 'Nuovo suggerimento']],
+  },
+  // ── Qualità ──
+  {
+    id: 'qualita-sezione', area: 'qualita', titolo: 'La sezione Qualità: cosa c\'è e dove',
+    parole: 'qualita iso 9001 sistema qualita cartella 5_qualita registri cruscotto scadenze',
+    testo: [
+      'Nel menu Qualità ci sono i registri che prima stavano nella cartella 5_QUALITA del Drive: documenti del sistema (manuale, procedure EPR, istruzioni EWI, moduli), non conformità e reclami, codifica dei difetti, strumenti e tarature, piano delle manutenzioni, verifiche ESD, formazione, audit, rischi e opportunità.',
+      'Il cruscotto della Qualità mostra cosa è scaduto o scade entro un mese (tarature, manutenzioni, verifiche ESD, azioni correttive, audit, riesami dei rischi), le non conformità aperte e i difetti più frequenti.',
+      'I dati vecchi del Drive si caricano dal cruscotto con "Carica i dati dal Drive" (file qualita_esempio.json.gz): si può ripetere, le righe uguali si aggiornano.',
+    ],
+    passi: ['Qualità → Cruscotto della qualità.', 'Clic su una scadenza per aprire la riga, oppure sui tasti in alto per il registro.', 'In ogni registro: + Nuovo per aggiungere, la ricerca filtra mentre scrivi, le spunte servono per Fatto oggi, Duplica, Elimina.'],
+    pagine: [['/qualita', 'Cruscotto della qualità']],
+  },
+  {
+    id: 'non-conformita', area: 'qualita', titolo: 'Registrare una non conformità o un reclamo del cliente',
+    parole: 'non conformita nc reclamo cliente difetto azione correttiva causa rpc rapporto controllo deroga rilavorato reso',
+    testo: [
+      'Ogni non conformità ha un numero che si dà da solo (NC-2026-001), la data, l\'origine (reclamo del cliente, interna, fornitore, audit), il prodotto, i pezzi difettosi, il codice del difetto e cosa si è fatto del lotto.',
+      'Poi si scrivono la causa, l\'azione correttiva, chi se ne occupa ed entro quando: la data compare nel cruscotto quando si avvicina. Con "Chiudi" (spunta nell\'elenco) la non conformità si chiude con la data di oggi.',
+      'I codici dei difetti si scelgono da Qualità → Codifica dei difetti, così il cruscotto conta i difetti più frequenti.',
+    ],
+    passi: ['Qualità → Non conformità e reclami → + Nuova non conformità.', 'Compila difetto, pezzi e trattamento del lotto, poi Aggiungi.', 'Quando l\'azione è fatta: stato Chiusa (o spunta + Chiudi).'],
+    pagine: [['/qualita/non_conformita', 'Non conformità e reclami']],
+  },
+  {
+    id: 'tarature-manutenzioni', area: 'qualita', titolo: 'Tarature, manutenzioni e verifiche ESD: segnare che sono state fatte',
+    parole: 'taratura tarare strumento saldatore termoigrometro manutenzione macchina forno onda pick place esd bracciali scarpe banchi scadenza fatto oggi',
+    testo: [
+      'Strumenti e tarature: per ogni strumento si scrive ogni quanti mesi va tarato e l\'ultima taratura; la prossima scadenza si calcola da sola.',
+      'Piano delle manutenzioni e verifiche ESD: per ogni intervento si scrivono i mesi in cui va fatto (es. "1, 8" = gennaio e agosto, "1-12" = tutti i mesi) e l\'ultima volta; la scadenza è il mese previsto successivo.',
+      'Quando l\'intervento è fatto: spunta le righe e premi "Fatto oggi" (o "Tarato oggi"): l\'ultima volta diventa oggi con esito positivo e la scadenza si sposta.',
+    ],
+    passi: ['Qualità → Strumenti e tarature (o Piano delle manutenzioni, Verifiche ESD).', 'Spunta le righe fatte → Fatto oggi.', 'Se l\'esito non è positivo, apri la riga e correggi esito e note.'],
+    pagine: [['/qualita/strumenti', 'Strumenti e tarature'], ['/qualita/manutenzioni', 'Piano delle manutenzioni'], ['/qualita/esd', 'Verifiche ESD']],
   },
 ];
 

@@ -11,8 +11,8 @@ const menu = (ruolo: 'ufficio' | 'produzione') => pagina(ruolo).split('<nav clas
 const destra = (ruolo: 'ufficio' | 'produzione') => link(pagina(ruolo).split('<nav class="menu-destra">')[1].split('</nav>')[0]).map(v => v[0]);
 const gruppi = (ruolo: 'ufficio' | 'produzione') => [...menu(ruolo).matchAll(/class="titolo-gruppo[^"]*"[^>]*>([^<]+)</g)].map(m => m[1]);
 
-test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acquisti, Produzione, Amministrazione; a destra Impostazioni, Suggerimenti, Guida', () => {
-  assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione']);
+test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acquisti, Produzione, Amministrazione, Qualità; a destra Impostazioni, Suggerimenti, Guida', () => {
+  assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione', 'Qualità']);
   assert.deepEqual(destra('ufficio'), ['Impostazioni', 'Suggerimenti', 'Guida']);
   const voci = link(menu('ufficio'));
   assert.ok(voci.some(v => v[0] === 'Quotazioni' && v[1] === '/quotazioni'));
