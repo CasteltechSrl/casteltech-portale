@@ -269,10 +269,15 @@ export function decodificaMpn(pn: unknown): [string | null, Attributi] {
 }
 
 // ───────────────────────────── colonne della BOM ─────────────────────────────
-const DESIGNATORE: [RegExp, string][] = [[/^(RN|RA)\d/, 'RR'], [/^FB\d/, 'FR'], [/^(LED|DL)\d/, 'DL'], [/^(R)\d/, 'RS'], [/^(C)\d/, 'CC'],
+const DESIGNATORE: [RegExp, string][] = [[/^(BT|BAT)\d/, 'BT'], [/^(RT|TH|NTC)\d/, 'NT'], [/^(ANT|AE)\d/, 'AN'], [/^(OK|ISO)\d/, 'IC'], [/^(RN|RA)\d/, 'RR'], [/^FB\d/, 'FR'], [/^(LED|DL)\d/, 'DL'], [/^(R)\d/, 'RS'], [/^(C)\d/, 'CC'],
   [/^(L)\d/, 'ID'], [/^(D|CR|DZ|TVS)\d/, 'DI'], [/^(U|IC)\d/, 'IC'], [/^(Q|T)\d/, 'TR'],
   [/^(J|P|X|CN|CON)\d/, 'CN'], [/^(Y|XTAL)\d/, 'QZ'], [/^(F)\d/, 'FS'], [/^(K|RL)\d/, 'RL'], [/^(SW|S)\d/, 'IT']];
-const PAROLE: [RegExp, string][] = [[/\bRES(ISTOR|ISTENZA)?\b/, 'RS'], [/\bCAP(ACITOR|ACITORE)?\b.*\b(ALUM|ELECTROLYTIC|ELETTROL)/, 'CE'],
+const PAROLE: [RegExp, string][] = [
+  // aggiunte 1/11/2026 (registro in aggiunte.ts): prima delle parole generiche (un NTC è anche "resistor", un MKP anche "capacitor")
+  [/\bNTC\b|\bPTC\b|THERMISTOR|TERMISTOR/, 'NT'], [/POTENTIOMETER|POTENZIOMETR|\bTRIMMER\b/, 'PO'],
+  [/\bBATTER|COIN\s?CELL|\bCR\d{4}\b/, 'BT'], [/\bANTENN/, 'AN'], [/\bOPTO|FOTOACCOPP|PHOTOCOUPL/, 'IC'],
+  [/\bMKP\b|\bMKT\b|\bCAP(ACITOR|ACITORE)?\b.*\b(FILM|POLYPROP|POLYEST|POLIPROP|POLIEST)/, 'CF'],
+  [/\bRES(ISTOR|ISTENZA)?\b/, 'RS'], [/\bCAP(ACITOR|ACITORE)?\b.*\b(ALUM|ELECTROLYTIC|ELETTROL)/, 'CE'],
   [/\bTANTAL/, 'CT'], [/\bCAP(ACITOR|ACITORE)?\b|\bMLCC\b/, 'CC'], [/\bFERRITE|\bBEAD\b/, 'FR'],
   [/\bINDUCTOR|\bINDUTT/, 'ID'], [/\bLED\b/, 'DL'], [/\bZENER/, 'DZ'], [/\bSCHOTTKY/, 'DS'],
   [/\bTVS\b|\bSUPPRESS/, 'SP'], [/\bDIOD/, 'DI'], [/\bMOSFET/, 'TM'], [/\b(NPN|PNP|BJT)\b/, 'TB'],
@@ -327,7 +332,14 @@ export function daColonneBom(fam: string | null, valore?: unknown, footprint?: u
     const w = T.match(/(\d+(?:[.,]\d+)?\s?M?W|\d+\/\d+\s?W)\b/);
     if (w) a.potenza = w[1].replace(/ /g, '');
   }
-  if (fam === 'CC' || fam === 'CE' || fam === 'CT') {
+  if (fam === 'NT') {
+    const m = V.match(/(?<![\w.])(\d+(?:[.,]\d+)?\s?[KM]?|\d+[RKM]\d+)\s?(?:OHM|Ω|R)?(?![\w])/);
+    if (m) a.valore = m[1].replace(/ /g, '');
+    const t = T.match(/(\d+(?:[.,]\d+)?)\s?%/);
+    if (t) a.tolleranza = t[1];
+  }
+  if (fam === 'BT') a.tipo = /HOLDER|PORTA|CLIP|SOCKET/.test(T + ' ' + String(footprint ?? '').toUpperCase()) ? 'PORTABATTERIA' : 'BATTERIA';
+  if (fam === 'CC' || fam === 'CE' || fam === 'CT' || fam === 'CF') {
     const m = T.match(/(\d+(?:[.,]\d+)?\s?[PNUΜµ]F?|\d+[PNU]\d+F?)(?![\w])/);
     if (m) a.valore = m[1].replace(/ /g, '').replace(/µ/g, 'U').replace(/Μ/g, 'U');
     const v = T.match(/(\d+(?:[.,]\d+)?)\s?V(?:DC)?\b/);

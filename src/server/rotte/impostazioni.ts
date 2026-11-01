@@ -2,6 +2,7 @@
  * Pannello Impostazioni (solo ufficio): tariffe, fasi, parametri, materiali, voci di costo, utenti.
  * Le modifiche valgono per i NUOVI preventivi: quelli salvati restano calcolati come al momento del salvataggio.
  */
+import { REGISTRO_AGGIUNTE } from '../../engine/codifica/aggiunte.js';
 import express, { Router, type Request } from 'express';
 import { conCampo } from '../../engine/errori-campo.js';
 import { importaDocumenti, leggiDocumenti, type Avanzamento } from '../import-legacy-servizio.js';
@@ -169,6 +170,8 @@ export function rotteImpostazioni() {
       mouser: html`<code>MOUSER_API_KEY</code>: mouser.it → My Mouser → APIs → "Search API". Gratuita, 30 ricerche al minuto.`,
       farnell: html`<code>FARNELL_API_KEY</code>: partner.element14.com → Register → My API Keys. Gratuita. Negozio: <code>FARNELL_STORE</code> (vuoto = it.farnell.com).`,
       tme: html`<code>TME_APP_TOKEN</code> e <code>TME_APP_SECRET</code>: developers.tme.eu → Sign up → nuova applicazione (API v2). Gratuita.`,
+      arrow: html`<code>ARROW_LOGIN</code> e <code>ARROW_API_KEY</code>: developers.arrow.com → "Request API Key" (gratuita per i clienti Arrow; arrow.com e Verical
+        hanno la stessa chiave). Prezzi in dollari convertiti in euro al cambio BCE. Aggiunto l'1/11/2026: lettura da confermare con la prima "Prova".`,
     };
     res.send(pag(req, 'Componenti', html`
       <section class="blocco stretto-form">
@@ -191,6 +194,11 @@ export function rotteImpostazioni() {
           <td class="nota"><code>ANTHROPIC_API_KEY</code> (già usata per la lettura delle schede): legge le righe di BOM senza P/N o non riconosciute.</td><td></td></tr>
         </tbody></table>
       </section>
+      <details class="blocco"><summary>Regole aggiunte alla codifica (${REGISTRO_AGGIUNTE.length})</summary>
+        <p class="nota">Famiglie, case e categorie aggiunti dopo il programma "Codifica componenti". I componenti già in archivio non cambiano codice.</p>
+        <table><thead><tr><th>Data</th><th>Tipo</th><th>Cosa</th><th>Perché / come</th></tr></thead><tbody>
+          ${REGISTRO_AGGIUNTE.map(v => html`<tr><td>${v.data}</td><td>${v.tipo}</td><td>${v.cosa}</td><td class="nota">${v.perche}</td></tr>`)}</tbody></table>
+      </details>
       <form method="post" action="/impostazioni/componenti/scarto" class="blocco stretto-form">
         <h2>Scarto negli acquisti</h2>
         <label>Famiglie dei passivi <input name="famigliePassive" value="${rs.famigliePassive.join(', ')}"></label>

@@ -5,6 +5,9 @@
  *   MOUSER_API_KEY                             mouser.it → My Mouser → APIs → Search API
  *   FARNELL_API_KEY (FARNELL_STORE, default it.farnell.com)   partner.element14.com
  *   TME_APP_TOKEN, TME_APP_SECRET              developers.tme.eu (API v2, OAuth client credentials)
+ *   ARROW_LOGIN, ARROW_API_KEY                 developers.arrow.com → Request API Key (aggiunto 1/11/2026, da verificare con le prime chiavi)
+ * Ogni P/N si cerca presso TUTTI i distributori collegati, in parallelo; un errore su un P/N non ferma gli altri
+ * (si riprova una volta; ci si ferma solo se le chiavi sono sbagliate, se il limite è finito o dopo 3 errori di fila).
  * Ogni risposta resta in fornitori_cache per 24 ore (stesso P/N = nessuna nuova chiamata).
  * TME: lettura secondo la documentazione ufficiale v2 (src/engine/tme.ts). Farnell: lettura tollerante, campi da confermare con le prime chiavi vere.
  */
@@ -13,6 +16,8 @@ import { leggiPrezzo, type Fornitore, type Offerta } from '../engine/acquisti.js
 import { pnKey } from '../engine/codifica/bom.js';
 import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
 import { elementiTme, offerteTme } from '../engine/tme.js';
+import { offerteArrow } from '../engine/arrow.js';
+import { cambioBce } from './autofatture-servizio.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
 const ORE_CACHE = 24;
@@ -20,13 +25,13 @@ const TIMEOUT = 20_000;
 
 export interface RisultatoFornitore { offerte: Offerta[]; prodotto?: ProdottoDigiKey | null; errore?: string }
 
-export class ErroreFornitore extends Error {}
+export class ErroreFornitore extends Error { constructor(msg: string, public tipo: string = 'altro') { super(msg); } }
 
 export function fornitoriConfigurati(): Record<Fornitore, boolean> {
   const e = process.env;
   return {
     digikey: !!(e.DIGIKEY_CLIENT_ID && e.DIGIKEY_CLIENT_SECRET), mouser: !!e.MOUSER_API_KEY,
-    farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET),
+    farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET), arrow: !!(e.ARROW_LOGIN && e.ARROW_API_KEY),
   };
 }
 
@@ -34,7 +39,7 @@ async function http(url: string, opz: RequestInit & { nome: string }): Promise<a
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   // ogni richiesta conta per il limite giornaliero del distributore (Impostazioni → Servizi)
   const servizio = opz.nome.toLowerCase();
-  const fallita = (tipo: string, msg: string) => { conta(servizio, 'prezzi', { chiamate: 1, errori: 1 }); erroreServizio(servizio, tipo, msg); return new ErroreFornitore(msg); };
+  const fallita = (tipo: string, msg: string) => { conta(servizio, 'prezzi', { chiamate: 1, errori: 1 }); erroreServizio(servizio, tipo, msg); return new ErroreFornitore(msg, tipo); };
   try {
     let r: Response, testo: string;
     try { r = await fetch(url, { ...opz, signal: ctrl.signal }); testo = await r.text(); }
@@ -76,7 +81,7 @@ async function tokenDigikey(): Promise<string> {
     nome: 'DigiKey', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: process.env.DIGIKEY_CLIENT_ID!, client_secret: process.env.DIGIKEY_CLIENT_SECRET!, grant_type: 'client_credentials' }),
   });
-  if (!r?.access_token) throw new ErroreFornitore('DigiKey: token non ricevuto');
+  if (!r?.access_token) throw new ErroreFornitore('DigiKey: token non ricevuto', 'chiave');
   tokenDk = { valore: r.access_token, scade: Date.now() + (Number(r.expires_in ?? 600) - 60) * 1000 };
   return tokenDk.valore;
 }
@@ -181,6 +186,18 @@ async function farnellPn(pn: string): Promise<RisultatoFornitore> {
   return { offerte: (ritorno.products ?? []).filter((p: any) => pnKey(p.translatedManufacturerPartNumber) === k).map(offertaFarnell).filter((o: Offerta) => o.scaglioni.length) };
 }
 
+/** Ricerca per parola su Farnell (varianti dello stesso P/N). */
+async function farnellParola(parole: string): Promise<Offerta[]> {
+  const u = new URL('https://api.element14.com/catalog/products');
+  const par: Record<string, string> = { term: `any:${parole.trim()}`, 'storeInfo.id': process.env.FARNELL_STORE ?? 'it.farnell.com',
+    'resultsSettings.offset': '0', 'resultsSettings.numberOfResults': '20', 'resultsSettings.responseGroup': 'large',
+    'callInfo.responseDataFormat': 'JSON', 'callInfo.apiKey': process.env.FARNELL_API_KEY! };
+  for (const [k, v] of Object.entries(par)) u.searchParams.set(k, v);
+  const r = await http(u.toString(), { nome: 'Farnell', headers: { Accept: 'application/json' } });
+  const ritorno = r?.keywordSearchReturn ?? r?.manufacturerPartNumberSearchReturn ?? {};
+  return (ritorno.products ?? []).map(offertaFarnell).filter((o: Offerta) => o.scaglioni.length);
+}
+
 // ───────────────────────────── TME (API v2) ─────────────────────────────
 let tokenTme: { valore: string; scade: number } | null = null;
 async function tokenTmeValido(): Promise<string> {
@@ -188,7 +205,7 @@ async function tokenTmeValido(): Promise<string> {
   const basic = Buffer.from(`${process.env.TME_APP_TOKEN}:${process.env.TME_APP_SECRET}`).toString('base64');
   const r = await http('https://api.tme.eu/auth/token', { nome: 'TME', method: 'POST',
     headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'client_credentials' }) });
-  if (!r?.access_token) throw new ErroreFornitore('TME: token non ricevuto');
+  if (!r?.access_token) throw new ErroreFornitore('TME: token non ricevuto', 'chiave');
   tokenTme = { valore: r.access_token, scade: Date.now() + (Number(r.expires_in ?? 300) - 30) * 1000 };
   return tokenTme.valore;
 }
@@ -207,6 +224,59 @@ async function tmePn(pns: string[]): Promise<Map<string, RisultatoFornitore>> {
   return new Map(pns.map(pn => [pn, { offerte: offerte.get(pn) ?? [] }]));
 }
 
+// ───────────────────────────── Arrow ─────────────────────────────
+let cambioUsd: { giorno: string; valore: number | null } | null = null;
+/** Prezzi Arrow in dollari → euro al cambio BCE del giorno (sceltaMigliore usa solo offerte in euro). */
+async function inEuro(offerte: Offerta[]): Promise<Offerta[]> {
+  const oggi = new Date().toISOString().slice(0, 10);
+  const daCambiare = offerte.filter(o => o.valuta !== 'EUR');
+  if (!daCambiare.length) return offerte;
+  if (cambioUsd?.giorno !== oggi) cambioUsd = { giorno: oggi, valore: await cambioBce('USD', oggi) };
+  const c = cambioUsd.valore;
+  if (!c) return offerte;
+  return offerte.map(o => o.valuta !== 'USD' ? o : { ...o, valuta: 'EUR', scaglioni: o.scaglioni.map(s => ({ qta: s.qta, prezzo: s.prezzo / c })),
+    ciclo: [o.ciclo, `prezzo convertito da USD (cambio BCE ${c})`].filter(Boolean).join(' · ') });
+}
+async function arrowCerca(pn: string, varianti = false): Promise<Offerta[]> {
+  const u = new URL('https://api.arrow.com/itemservice/v4/en/search/token');
+  for (const [k, v] of Object.entries({ login: process.env.ARROW_LOGIN!, apikey: process.env.ARROW_API_KEY!, search_token: pn.trim(), rows: '10' })) u.searchParams.set(k, v);
+  const r = await http(u.toString(), { nome: 'Arrow', headers: { Accept: 'application/json' } });
+  return inEuro(offerteArrow(pn, r, { varianti }));
+}
+async function arrowPn(pn: string): Promise<RisultatoFornitore> { return { offerte: await arrowCerca(pn) }; }
+
+// ───────────────────────────── varianti e sostituti (P/N non trovato esatto) ─────────────────────────────
+/**
+ * Varianti dello stesso P/N (confezione o suffisso diverso: -TR, /R7, #PBF…) presso TUTTI i distributori che hanno la ricerca per parola
+ * (DigiKey, Mouser, Farnell, Arrow; TME v2 cerca solo per codice esatto). Restituisce P/N → offerte trovate (le altre si chiedono dopo).
+ */
+export async function cercaVarianti(pn: string): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[] }> {
+  const attivi = fornitoriConfigurati(); const k = pnKey(pn) ?? '';
+  const varianti = new Map<string, { mpn: string; produttore: string; descrizione: string }>(), errori: string[] = [];
+  const variante = (mpn: string) => { const x = pnKey(mpn); return !!x && k.length >= 6 && x !== k && (x.startsWith(k) || (x.length >= 6 && k.startsWith(x))); };
+  const aggiungi = (mpn: string, produttore: string, descrizione: string) => { if (variante(mpn) && !varianti.has(pnKey(mpn)!)) varianti.set(pnKey(mpn)!, { mpn, produttore, descrizione }); };
+  if (k.length < 6) return { varianti, errori };
+  await Promise.all([
+    attivi.digikey && digikeyParametri(pn).then(xs => { for (const x of xs) aggiungi(x.prodotto.ManufacturerProductNumber ?? '', x.prodotto.Manufacturer?.Name ?? '', x.offerte[0]?.descrizione ?? ''); })
+      .catch(e => { errori.push(`DigiKey: ${e.message}`); }),
+    attivi.mouser && mouserParametri(pn).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Mouser: ${e.message}`); }),
+    attivi.farnell && farnellParola(pn).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Farnell: ${e.message}`); }),
+    attivi.arrow && arrowCerca(pn, true).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Arrow: ${e.message}`); }),
+  ]);
+  return { varianti, errori };
+}
+
+/** Sostituto proposto da DigiKey per un P/N (anche obsoleto): tipo come lo scrive DigiKey (Direct, Parametric Equivalent, Similar, Upgrade…). */
+export interface SostitutoDk { mpn: string; produttore: string; descrizione: string; tipo: string }
+export async function digikeySostituti(pn: string): Promise<SostitutoDk[]> {
+  if (!fornitoriConfigurati().digikey) return [];
+  const r = await http(`https://api.digikey.com/products/v4/search/${encodeURIComponent(pn.trim())}/substitutions`, {
+    nome: 'DigiKey', headers: { Authorization: `Bearer ${await tokenDigikey()}`, 'X-DIGIKEY-Client-Id': process.env.DIGIKEY_CLIENT_ID!, 'X-DIGIKEY-Locale-Site': 'IT',
+      'X-DIGIKEY-Locale-Language': 'en', 'X-DIGIKEY-Locale-Currency': 'EUR', Accept: 'application/json' } });
+  return (r?.ProductSubstitutes ?? []).map((x: any) => ({ mpn: String(x.ManufacturerProductNumber ?? ''), produttore: String(x.Manufacturer?.Name ?? ''),
+    descrizione: String(x.Description?.ProductDescription ?? x.Description ?? ''), tipo: String(x.SubstituteType ?? '') })).filter((x: SostitutoDk) => x.mpn);
+}
+
 // ───────────────────────────── ricerca per elenco di P/N ─────────────────────────────
 export interface EsitoRicerca { perPn: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>; errori: Partial<Record<Fornitore, string>> }
 
@@ -216,7 +286,23 @@ async function aLotti<T>(elementi: T[], insieme: number, fn: (x: T) => Promise<v
 }
 const pausa = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-/** Prezzi e disponibilità per una lista di P/N presso tutti i distributori configurati. */
+/** Errori: un errore su un P/N non ferma il distributore; si ferma con chiavi sbagliate, limite finito o 3 errori di fila. */
+class Guardia {
+  private diFila = 0; fermo: string | null = null;
+  constructor(private f: Fornitore, private errori: Partial<Record<Fornitore, string>>) {}
+  ok() { this.diFila = 0; }
+  errore(e: any) {
+    this.errori[this.f] = e?.message ?? String(e);
+    if (e?.tipo === 'chiave' || e?.tipo === 'limite' || ++this.diFila >= 3) this.fermo = this.errori[this.f]!;
+  }
+}
+/** Una chiamata con un secondo tentativo (dopo una pausa) se l'errore non è di chiavi o di limite. */
+async function conRiprova<T>(fn: () => Promise<T>): Promise<T> {
+  try { return await fn(); }
+  catch (e: any) { if (e?.tipo === 'chiave' || e?.tipo === 'limite') throw e; await pausa(1500); return fn(); }
+}
+
+/** Prezzi e disponibilità per una lista di P/N presso TUTTI i distributori configurati (in parallelo, nessuno si ferma al primo). */
 export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
   const attivi = fornitoriConfigurati();
   const unici = [...new Map(pns.filter(Boolean).map(p => [pnKey(p)!, p.trim()])).entries()].filter(([k]) => k);
@@ -225,7 +311,7 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
   let fatti = 0;
   const segna = (k: string, f: Fornitore, r: RisultatoFornitore) => { perPn.get(k)![f] = r; };
   // prima la cache
-  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [] };
+  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [], arrow: [] };
   for (const f of Object.keys(daCercare) as Fornitore[]) {
     if (!attivi[f]) continue;
     for (const [k, pn] of unici) {
@@ -234,39 +320,39 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
     }
   }
   const lavori: Promise<void>[] = [];
-  if (daCercare.digikey.length) lavori.push(aLotti(daCercare.digikey, 3, async ([k, pn]) => {
-    if (errori.digikey) return;
-    try { const r = await digikeyPn(pn); segna(k, 'digikey', r); await inCache('digikey', k, r); }
-    catch (e: any) { errori.digikey = e.message; }
-    opz.avanzamento?.(++fatti);
-  }));
-  if (daCercare.mouser.length) lavori.push((async () => {
-    for (let i = 0; i < daCercare.mouser.length && !errori.mouser; i += 10) {
-      const lotto = daCercare.mouser.slice(i, i + 10);
-      try {
-        const r = await mouserPn(lotto.map(x => x[1]));
-        for (const [k, pn] of lotto) { const x = r.get(pn) ?? { offerte: [] }; segna(k, 'mouser', x); await inCache('mouser', k, x); }
-      } catch (e: any) { errori.mouser = e.message; }
-      fatti += lotto.length; opz.avanzamento?.(fatti);
-      await pausa(2100); // 30 richieste al minuto
-    }
-  })());
-  if (daCercare.farnell.length) lavori.push(aLotti(daCercare.farnell, 2, async ([k, pn]) => {
-    if (errori.farnell) return;
-    try { const r = await farnellPn(pn); segna(k, 'farnell', r); await inCache('farnell', k, r); }
-    catch (e: any) { errori.farnell = e.message; }
-    opz.avanzamento?.(++fatti); await pausa(300);
-  }));
-  if (daCercare.tme.length) lavori.push((async () => {
-    for (let i = 0; i < daCercare.tme.length && !errori.tme; i += 50) {
-      const lotto = daCercare.tme.slice(i, i + 50);
-      try {
-        const r = await tmePn(lotto.map(x => x[1]));
-        for (const [k, pn] of lotto) { const x = r.get(pn) ?? { offerte: [] }; segna(k, 'tme', x); await inCache('tme', k, x); }
-      } catch (e: any) { errori.tme = e.message; }
-      fatti += lotto.length; opz.avanzamento?.(fatti);
-    }
-  })());
+  /** distributori che cercano un P/N per volta */
+  const unoAllaVolta = (f: Fornitore, insieme: number, cerca: (pn: string) => Promise<RisultatoFornitore>, attesa = 0) => {
+    if (!daCercare[f].length) return;
+    const g = new Guardia(f, errori);
+    lavori.push(aLotti(daCercare[f], insieme, async ([k, pn]) => {
+      if (g.fermo) return;
+      try { const r = await conRiprova(() => cerca(pn)); segna(k, f, r); await inCache(f, k, r); g.ok(); }
+      catch (e: any) { g.errore(e); }
+      opz.avanzamento?.(++fatti); if (attesa) await pausa(attesa);
+    }));
+  };
+  /** distributori che cercano più P/N in una chiamata */
+  const aGruppi = (f: Fornitore, quanti: number, cerca: (pns: string[]) => Promise<Map<string, RisultatoFornitore>>, attesa = 0) => {
+    if (!daCercare[f].length) return;
+    const g = new Guardia(f, errori);
+    lavori.push((async () => {
+      for (let i = 0; i < daCercare[f].length && !g.fermo; i += quanti) {
+        const lotto = daCercare[f].slice(i, i + quanti);
+        try {
+          const r = await conRiprova(() => cerca(lotto.map(x => x[1])));
+          for (const [k, pn] of lotto) { const x = r.get(pn) ?? { offerte: [] }; segna(k, f, x); await inCache(f, k, x); }
+          g.ok();
+        } catch (e: any) { g.errore(e); }
+        fatti += lotto.length; opz.avanzamento?.(fatti);
+        if (attesa) await pausa(attesa);
+      }
+    })());
+  };
+  unoAllaVolta('digikey', 3, digikeyPn);
+  aGruppi('mouser', 10, mouserPn, 2100); // 30 richieste al minuto
+  unoAllaVolta('farnell', 2, farnellPn, 300);
+  aGruppi('tme', 50, tmePn);
+  unoAllaVolta('arrow', 2, arrowPn, 200);
   await Promise.all(lavori);
   return { perPn, errori };
 }
@@ -280,6 +366,7 @@ export async function provaFornitore(f: Fornitore, pn = 'RC0603FR-072K2L'): Prom
     if (f === 'mouser') offerte = (await mouserPn([pn])).get(pn)?.offerte ?? [];
     if (f === 'farnell') offerte = (await farnellPn(pn)).offerte;
     if (f === 'tme') offerte = (await tmePn([pn])).get(pn)?.offerte ?? [];
+    if (f === 'arrow') offerte = (await arrowPn(pn)).offerte;
     if (!offerte.length) return `collegato, ma ${pn} non trovato`;
     const o = offerte[0];
     return `OK: ${o.mpn} ${o.codiceFornitore}, ${o.stock} pz, da ${o.scaglioni[0]?.prezzo} ${o.valuta}`;

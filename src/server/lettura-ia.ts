@@ -52,3 +52,32 @@ export function leggiJson(testo: string): any[] {
   if (a < 0 || b <= a) return [];
   try { const v = JSON.parse(testo.slice(a, b + 1)); return Array.isArray(v) ? v : []; } catch { return []; }
 }
+
+// ───────────────────────────── compatibili proposti dall'IA (1/11/2026) ─────────────────────────────
+export interface RigaCompatibile { riga: number; pn: string; produttore: string; descrizione: string; famiglia: string; case: string }
+export interface ProposteIa { mpn: string; produttore: string; motivo: string }
+
+const ISTRUZIONI_COMPATIBILI = `Sei l'ufficio acquisti di Casteltech, assemblaggio di schede elettroniche. Per ogni componente ricevuto il P/N
+non si trova presso nessun distributore. Proponi fino a 3 codici di altri produttori (o della stessa serie) che lo sostituiscono SENZA
+modificare la scheda: stesso package e stessa impronta, stessa piedinatura (pin-to-pin, drop-in), stessa funzione, valori e limiti
+uguali o migliori. Solo codici reali e attuali che conosci con certezza; se non ne conosci, lista vuota. Non proporre lo stesso P/N.
+Rispondi SOLO con un array JSON: [{"riga": <numero>, "compatibili": [{"mpn": "...", "produttore": "...", "motivo": "<breve, in italiano>"}]}]`;
+
+/** Equivalenti pin-to-pin proposti dall'IA: contano solo se poi un distributore li vende (li controlla il portale). */
+export async function proponiCompatibiliIa(righe: RigaCompatibile[]): Promise<Map<number, ProposteIa[]>> {
+  const out = new Map<number, ProposteIa[]>();
+  if (!iaConfigurata() || !righe.length) return out;
+  for (let i = 0; i < righe.length; i += 30) {
+    const lotto = righe.slice(i, i + 30);
+    const testo = lotto.map(r => `${r.riga}: P/N=${r.pn}${r.produttore ? ` | produttore=${r.produttore}` : ''}${r.descrizione ? ` | ${r.descrizione}` : ''}${r.case ? ` | case=${r.case}` : ''}`).join('\n');
+    const risposta = await chiediTestoIa('compatibili dei componenti', { max_tokens: 6000, system: ISTRUZIONI_COMPATIBILI,
+      messages: [{ role: 'user', content: `Componenti non trovati:\n${testo}` }] }, 90_000);
+    for (const x of leggiJson(risposta)) {
+      const lista = (Array.isArray(x?.compatibili) ? x.compatibili : []).slice(0, 3)
+        .map((c: any) => ({ mpn: String(c?.mpn ?? '').trim().toUpperCase(), produttore: String(c?.produttore ?? '').trim(), motivo: String(c?.motivo ?? '').slice(0, 200) }))
+        .filter((c: ProposteIa) => /^[A-Z0-9][A-Z0-9\-+/.#,]{2,}$/.test(c.mpn));
+      if (lista.length) out.set(Number(x?.riga), lista);
+    }
+  }
+  return out;
+}

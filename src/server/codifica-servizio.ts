@@ -20,8 +20,8 @@ import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandida
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
-import { cercaPn, digikeyParametri, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
-import { iaConfigurata, leggiConIa } from './lettura-ia.js';
+import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
+import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -43,6 +43,8 @@ export interface RigaBom {
   nonControllati?: Fornitore[];
   /** alternative al P/N della BOM e quella scelta dall'operatore (si compra quella al posto del P/N) */
   alternative?: Alternativa[]; alternativaScelta?: string | null;
+  /** compatibile scelto dal portale per dare il prezzo quando il P/N non si trova: DA VERIFICARE finché l'operatore non lo conferma (1/11/2026) */
+  alternativaProposta?: string | null;
   /** prezzo €/pz scritto dall'operatore: vale al posto di quello dei distributori (Adriano 28/10/2026) */
   prezzoManuale?: number | null;
 }
@@ -51,13 +53,18 @@ export const PREZZO_A_MANO = 'manuale' as const;
 /** Nome da mostrare per chi vende: distributore o prezzo scritto a mano. */
 export const nomeFornitore = (f: Fornitore | typeof PREZZO_A_MANO) => f === PREZZO_A_MANO ? 'prezzo a mano' : NOMI_FORNITORI[f];
 
-export const FONTI_ALTERNATIVA = { STESSE: 'stesse caratteristiche', VARIANTE: 'variante dello stesso P/N', MANO: 'scritta a mano' } as const;
+export const FONTI_ALTERNATIVA = { STESSE: 'stesse caratteristiche', VARIANTE: 'variante dello stesso P/N', MANO: 'scritta a mano',
+  SOSTITUTO: 'sostituto indicato da DigiKey', IA: 'proposta dall\'IA (pin-to-pin)' } as const;
 export interface Alternativa {
   mpn: string; produttore: string; descrizione: string;
   fonte: typeof FONTI_ALTERNATIVA[keyof typeof FONTI_ALTERNATIVA];
   /** stesse caratteristiche controllate con il codice di produzione: true sì, false no, null da controllare a mano */
   identica: boolean | null;
   offerte: Offerta[];
+  /** come è stata trovata, in parole (tipo di sostituto DigiKey, motivo dell'IA) */
+  nota?: string;
+  /** sostituto DigiKey "diretto" (Direct, Parametric Equivalent, MFG Recommended): compatibile al 100% in teoria */
+  diretto?: boolean;
 }
 
 // ───────────────────────────── lettura del file ─────────────────────────────
@@ -477,8 +484,8 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
   }
 }
 
-// ───────────────────────────── alternative ─────────────────────────────
-const MAX_ALTERNATIVE = 5, MAX_RIGHE_ALTERNATIVE = 30;
+// ───────────────────────────── alternative e compatibili ─────────────────────────────
+const MAX_ALTERNATIVE = 6, MAX_RIGHE_ALTERNATIVE = 30;
 /** Famiglie il cui codice di produzione dice tutte le caratteristiche (senza P/N dentro): lì "stesso codice" = componente identico. */
 const SENZA_PN = (fam: string | null) => !!fam && !!FAMIGLIE[fam] && !FAMIGLIE[fam].prod.some(c => c === 'RID' || c === 'PN');
 
@@ -503,47 +510,42 @@ function paroleAlternative(r: RigaBom): string | null {
   return r.descrizione.split(/\s+/).filter(w => !k || pnKey(w) !== k).join(' ').trim() || null;
 }
 
+/** Sostituti DigiKey "al 100%" (in teoria): stesso componente o equivalente nei parametri; "Similar" e "Upgrade" restano solo da controllare. */
+export const SOSTITUTO_DIRETTO = /DIRECT|PARAMETRIC EQUIVALENT|MFG RECOMMENDED|MANUFACTURER RECOMMENDED|DROP.?IN/i;
+
+type Candidata = Omit<Alternativa, 'offerte'>;
+
 /**
- * Alternative per una riga il cui P/N non si trova da nessuna parte (Adriano, 28/10/2026):
- *  1. varianti dello stesso P/N (confezione o suffisso diverso, es. -TR, /R7) cercate per parola;
- *  2. componenti con le stesse caratteristiche (stesso codice di produzione), cercati per parametri.
- * Ognuna poi si prezza presso TUTTI i distributori; si tengono solo quelle che qualcuno vende, le più economiche prima.
+ * Candidati per una riga il cui P/N non si trova da nessuna parte (Adriano 28/10 e 1/11/2026), senza prezzi:
+ *  1. varianti dello stesso P/N (confezione o suffisso diverso, es. -TR, /R7) cercate presso TUTTI i distributori con la ricerca per parola;
+ *  2. sostituti indicati da DigiKey (funziona anche con i P/N obsoleti che DigiKey ha ancora in elenco);
+ *  3. componenti con le stesse caratteristiche (stesso codice di produzione), cercati per parametri.
  */
-export async function cercaAlternative(r: RigaBom, qta: number): Promise<Alternativa[]> {
+async function candidateAlternative(r: RigaBom): Promise<Map<string, Candidata>> {
   const attivi = fornitoriConfigurati();
-  const k = pnKey(r.pn ?? r.mpnAcquisto);
-  const candidate = new Map<string, Omit<Alternativa, 'offerte'>>();
-  const aggiungi = (a: Omit<Alternativa, 'offerte'>) => {
+  const pn = r.pn ?? r.mpnAcquisto;
+  const k = pnKey(pn);
+  const candidate = new Map<string, Candidata>();
+  const aggiungi = (a: Candidata) => {
     const ka = pnKey(a.mpn);
     if (!ka || ka === k || candidate.has(ka) || a.identica === false) return;
     candidate.set(ka, a);
   };
-  const variante = (mpn: string) => { const x = pnKey(mpn); return !!k && !!x && k.length >= 6 && x.length >= 6 && (x.startsWith(k) || k.startsWith(x)); };
-  // 1. varianti dello stesso P/N
-  if (k && k.length >= 6) {
-    const pn = (r.pn ?? r.mpnAcquisto)!;
-    if (attivi.digikey) {
-      try {
-        for (const x of await digikeyParametri(pn)) {
-          const mpn = x.prodotto.ManufacturerProductNumber ?? '';
-          if (!variante(mpn) || !x.offerte.length) continue;
-          const d = daDigikey(x.prodotto);
-          aggiungi({ mpn, produttore: x.prodotto.Manufacturer?.Name ?? '', descrizione: x.offerte[0].descrizione, fonte: FONTI_ALTERNATIVA.VARIANTE,
-            identica: stesseCaratteristiche(r, d.famiglia, d.attributi, mpn) || null });
-          await memorizza('digikey', mpn, { offerte: x.offerte, prodotto: x.prodotto });
-        }
-      } catch (e: any) { r.note.push(`ricerca delle varianti su DigiKey non riuscita: ${e.message}`); }
-    }
-    if (attivi.mouser) {
-      try {
-        for (const o of await mouserParametri(pn)) {
-          if (!variante(o.mpn)) continue;
-          aggiungi({ mpn: o.mpn, produttore: o.produttore, descrizione: o.descrizione, fonte: FONTI_ALTERNATIVA.VARIANTE, identica: null });
-        }
-      } catch (e: any) { r.note.push(`ricerca delle varianti su Mouser non riuscita: ${e.message}`); }
-    }
+  if (pn && k && k.length >= 6) {
+    // 1. varianti
+    const v = await cercaVarianti(pn);
+    for (const x of v.varianti.values()) aggiungi({ ...x, fonte: FONTI_ALTERNATIVA.VARIANTE, identica: null, nota: 'stesso P/N con confezione o suffisso diverso' });
+    if (v.errori.length) r.note.push(`ricerca delle varianti: ${v.errori.join('; ')}`);
+    // 2. sostituti DigiKey
+    try {
+      for (const x of await digikeySostituti(pn)) {
+        const diretto = SOSTITUTO_DIRETTO.test(x.tipo);
+        aggiungi({ mpn: x.mpn, produttore: x.produttore, descrizione: x.descrizione, fonte: FONTI_ALTERNATIVA.SOSTITUTO, identica: null,
+          nota: `DigiKey: ${x.tipo || 'sostituto'}${diretto ? '' : ' (simile, non uguale)'}`, diretto });
+      }
+    } catch (e: any) { r.note.push(`sostituti DigiKey non letti: ${e.message}`); }
   }
-  // 2. stesse caratteristiche (solo dove il codice di produzione le dice tutte)
+  // 3. stesse caratteristiche (solo dove il codice di produzione le dice tutte)
   const parole = paroleAlternative(r);
   if (parole && (r.codiceProduzione || r.codiceGestionale)) {
     if (attivi.digikey) {
@@ -568,12 +570,22 @@ export async function cercaAlternative(r: RigaBom, qta: number): Promise<Alterna
       } catch (e: any) { r.note.push(`ricerca delle alternative su Mouser non riuscita: ${e.message}`); }
     }
   }
-  if (!candidate.size) return [];
-  // prezzi e disponibilità da tutti i distributori
-  const es = await cercaPn([...candidate.values()].map(a => a.mpn));
-  const alternative = [...candidate.entries()].map(([ka, a]) => ({ ...a, offerte: Object.values(es.perPn.get(ka) ?? {}).flatMap(x => x?.offerte ?? []) }))
+  return candidate;
+}
+
+/** Candidati → alternative con le offerte di TUTTI i distributori; restano solo quelle che qualcuno vende, le migliori prima. */
+function conOfferte(candidate: Map<string, Candidata>, perPn: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>, qta: number): Alternativa[] {
+  const alternative = [...candidate.entries()].map(([ka, a]) => ({ ...a, offerte: Object.values(perPn.get(ka) ?? {}).flatMap(x => x?.offerte ?? []) }))
     .filter(a => a.offerte.length);
   return ordinaAlternative(alternative, qta).slice(0, MAX_ALTERNATIVE);
+}
+
+/** Alternative di una riga, già con i prezzi (usata anche dalla pagina della riga). */
+export async function cercaAlternative(r: RigaBom, qta: number): Promise<Alternativa[]> {
+  const candidate = await candidateAlternative(r);
+  if (!candidate.size) return [];
+  const es = await cercaPn([...candidate.values()].map(a => a.mpn));
+  return conOfferte(candidate, es.perPn, qta);
 }
 
 /** Prima quelle con le stesse caratteristiche e disponibili, poi le più economiche per la quantità. */
@@ -584,7 +596,26 @@ export function ordinaAlternative(alternative: Alternativa[], qta: number): Alte
     .map(x => x.a);
 }
 
-/** Alternative per le righe non trovate (o non disponibili) da nessun distributore; aggiorna i prezzi di quelle già scelte o scritte a mano. */
+/**
+ * Il compatibile da usare per il prezzo quando il P/N esatto non si trova (Adriano 1/11/2026: "deve darmi il prezzo di un altro componente
+ * compatibile al 100%, almeno in teoria, e deve essere indicato"). Valgono solo quelle "al 100%" in teoria: variante dello stesso P/N,
+ * stesso codice di produzione, sostituto diretto DigiKey, proposta dell'IA (pin-to-pin) trovata dai distributori. In quest'ordine,
+ * prima quelle disponibili nella quantità, poi la più economica. Mai una con caratteristiche diverse o un sostituto solo "simile".
+ */
+const ORDINE_FONTE: Record<string, number> = { [FONTI_ALTERNATIVA.VARIANTE]: 0, [FONTI_ALTERNATIVA.STESSE]: 1, [FONTI_ALTERNATIVA.SOSTITUTO]: 2, [FONTI_ALTERNATIVA.IA]: 3 };
+export function compatibileProposto(alternative: Alternativa[], qta: number): Alternativa | null {
+  const valide = alternative.filter(a => a.identica !== false && a.fonte !== FONTI_ALTERNATIVA.MANO && a.offerte.length
+    && (a.fonte !== FONTI_ALTERNATIVA.SOSTITUTO || a.diretto));
+  const valuta = (a: Alternativa) => { const s = sceltaMigliore(a.offerte, Math.max(1, qta)); return { disp: !!s?.disponibile, tot: s?.acquisto.totale ?? Infinity }; };
+  return valide.map(a => ({ a, v: valuta(a) })).sort((x, y) => Number(y.v.disp) - Number(x.v.disp)
+    || (ORDINE_FONTE[x.a.fonte] ?? 9) - (ORDINE_FONTE[y.a.fonte] ?? 9) || x.v.tot - y.v.tot)[0]?.a ?? null;
+}
+
+/**
+ * Alternative per le righe non trovate (o non disponibili) da nessun distributore; aggiorna i prezzi di quelle già scelte o scritte a mano.
+ * Se nessuna regola trova un compatibile, l'IA propone equivalenti pin-to-pin (tutte le righe insieme, una chiamata), che contano solo
+ * se un distributore li vende. Il migliore diventa il "compatibile da verificare" che dà il prezzo alla riga.
+ */
 async function alternativeRighe(righe: RigaBom[], forza?: boolean) {
   if (!Object.values(fornitoriConfigurati()).some(Boolean)) return;
   // quelle già presenti (scritte a mano o scelte): prezzi aggiornati
@@ -593,19 +624,43 @@ async function alternativeRighe(righe: RigaBom[], forza?: boolean) {
     const es = await cercaPn(unico(tenute.map(a => a.mpn)), { forza });
     for (const a of tenute) a.offerte = Object.values(es.perPn.get(pnKey(a.mpn)!) ?? {}).flatMap(x => x?.offerte ?? []);
   }
+  const daCercare: { r: RigaBom; qta: number; candidate: Map<string, Candidata> }[] = [];
   let cercate = 0;
   for (const r of righe) {
+    r.alternativaProposta = null;
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.pn || r.mpnAcquisto)) continue;
     if (r.alternativaScelta || r.reperibilita?.livello !== 'critico') continue;
     if (cercate++ >= MAX_RIGHE_ALTERNATIVE) { r.note.push('alternative non cercate (troppe righe non trovate): scrivila a mano dalla riga'); continue; }
-    const qta = Math.max(0, ...r.acquisti.map(x => x.lorda));
+    try { daCercare.push({ r, qta: Math.max(0, ...r.acquisti.map(x => x.lorda)), candidate: await candidateAlternative(r) }); }
+    catch (e: any) { r.note.push(`ricerca delle alternative non riuscita: ${e.message}`); }
+  }
+  // l'IA solo per le righe senza nessun candidato al 100%
+  const perIa = daCercare.filter(x => ![...x.candidate.values()].some(c => c.fonte !== FONTI_ALTERNATIVA.SOSTITUTO || c.diretto));
+  if (perIa.length && iaConfigurata()) {
     try {
-      const trovate = await cercaAlternative(r, qta);
-      const giaQui = new Set((r.alternative ?? []).map(a => pnKey(a.mpn)));
-      r.alternative = [...trovate.filter(a => !giaQui.has(pnKey(a.mpn))), ...(r.alternative ?? [])];
-      if (trovate.length) r.note.push(`${trovate.length === 1 ? '1 alternativa trovata' : `${trovate.length} alternative trovate`}: scegli dalla riga`);
-      else r.note.push('nessuna alternativa trovata dai distributori: puoi scriverne una a mano dalla riga');
-    } catch (e: any) { r.note.push(`ricerca delle alternative non riuscita: ${e.message}`); }
+      const proposte = await proponiCompatibiliIa(perIa.map(({ r }) => ({ riga: r.n, pn: (r.pn ?? r.mpnAcquisto)!, produttore: r.produttore ?? '',
+        descrizione: r.descrizione ?? r.descrizioneBom ?? '', famiglia: r.famiglia ?? '', case: r.attributi.case ?? '' })));
+      for (const x of perIa) for (const p of proposte.get(x.r.n) ?? []) {
+        const ka = pnKey(p.mpn);
+        if (ka && ka !== pnKey(x.r.pn ?? x.r.mpnAcquisto) && !x.candidate.has(ka))
+          x.candidate.set(ka, { mpn: p.mpn, produttore: p.produttore, descrizione: '', fonte: FONTI_ALTERNATIVA.IA, identica: null, nota: p.motivo });
+      }
+    } catch (e: any) { for (const x of perIa) x.r.note.push(`compatibili dall'IA non letti: ${e.message}`); }
+  }
+  // prezzi di tutti i candidati in una volta, presso tutti i distributori
+  const tutti = unico(daCercare.flatMap(x => [...x.candidate.values()].map(c => c.mpn)));
+  const es = tutti.length ? await cercaPn(tutti) : null;
+  for (const { r, qta, candidate } of daCercare) {
+    const trovate = es ? conOfferte(candidate, es.perPn, qta) : [];
+    // le descrizioni delle proposte dell'IA si prendono dai distributori
+    for (const a of trovate) if (!a.descrizione) { a.descrizione = a.offerte[0]?.descrizione ?? ''; a.produttore ||= a.offerte[0]?.produttore ?? ''; }
+    const giaQui = new Set((r.alternative ?? []).map(a => pnKey(a.mpn)));
+    r.alternative = [...trovate.filter(a => !giaQui.has(pnKey(a.mpn))), ...(r.alternative ?? [])];
+    const proposta = compatibileProposto(r.alternative, qta);
+    r.alternativaProposta = proposta?.mpn ?? null;
+    if (proposta) r.note.push(`P/N non trovato: prezzo del compatibile ${proposta.mpn} (${proposta.fonte}), DA VERIFICARE`);
+    else if (trovate.length) r.note.push(`${trovate.length === 1 ? '1 alternativa trovata' : `${trovate.length} alternative trovate`} (nessuna sicuramente uguale): scegli dalla riga`);
+    else r.note.push('nessuna alternativa trovata dai distributori: puoi scriverne una a mano dalla riga');
   }
 }
 
@@ -655,13 +710,17 @@ export async function scegliAlternativa(id: number, n: number, dati: { usa?: str
   } else if (dati.usa) {
     const alt = r.alternative?.find(x => x.mpn === dati.usa);
     if (!alt) return 'Alternativa non trovata.';
-    r.alternativaScelta = alt.mpn; messaggio = `Si compra ${alt.mpn} al posto di ${pnRiga ?? 'quello della BOM'}.`;
+    const conferma = r.alternativaProposta === alt.mpn;
+    r.alternativaScelta = alt.mpn; r.alternativaProposta = null;
+    messaggio = conferma ? `Compatibile ${alt.mpn} verificato: si compra al posto di ${pnRiga ?? 'quello della BOM'}.` : `Si compra ${alt.mpn} al posto di ${pnRiga ?? 'quello della BOM'}.`;
   } else if (dati.togli) {
     r.alternative = (r.alternative ?? []).filter(x => x.mpn !== dati.togli);
     if (r.alternativaScelta === dati.togli) r.alternativaScelta = null;
+    if (r.alternativaProposta === dati.togli) r.alternativaProposta = null;
     messaggio = `Alternativa ${dati.togli} tolta.`;
   }
-  if (dati.originale || (!r.alternativaScelta && (dati.togli || dati.originale))) {
+  if (dati.originale) r.alternativaProposta = null; // l'operatore non vuole il compatibile proposto
+  if (dati.originale || (!r.alternativaScelta && !r.alternativaProposta && (dati.togli || dati.originale))) {
     r.alternativaScelta = null;
     if (pnRiga) {
       const es = await cercaPn([pnRiga]);
@@ -682,7 +741,9 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
   const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f]);
   for (const r of righe) {
     const pn = r.pn ?? r.mpnAcquisto ?? null;
-    const alt = r.alternativaScelta ? r.alternative?.find(x => x.mpn === r.alternativaScelta) : undefined;
+    const daVerificare = !r.alternativaScelta && !!r.alternativaProposta;
+    const alt = r.alternativaScelta ? r.alternative?.find(x => x.mpn === r.alternativaScelta)
+      : r.alternativaProposta ? r.alternative?.find(x => x.mpn === r.alternativaProposta) : undefined;
     if (alt) { r.offerte = alt.offerte; r.nonControllati = []; }
     else if (perPnDist && pn) {
       const trovati = perPnDist.get(pnKey(pn)!) ?? {};
@@ -712,7 +773,10 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
     const max = Math.max(0, ...r.acquisti.map(x => x.lorda));
     if (!Object.values(fornitoriConfigurati()).some(Boolean)) continue; // nessun distributore collegato: niente giudizio
     r.reperibilita = r.pn || r.mpnAcquisto || alt ? reperibilita(r.offerte, max, r.nonControllati ?? []) : { livello: 'attenzione', motivi: ['senza P/N: nessun equivalente trovato, prezzo non disponibile'] };
-    if (alt) r.reperibilita.motivi.unshift(`si compra l'alternativa ${alt.mpn} al posto di ${pn ?? 'quello della BOM'}`);
+    if (alt && daVerificare) {
+      r.reperibilita.motivi.unshift(`${pn ?? 'il P/N della BOM'} non si trova: prezzo del compatibile ${alt.mpn} (${alt.fonte}), DA VERIFICARE`);
+      if (r.reperibilita.livello === 'ok') r.reperibilita.livello = 'attenzione';
+    } else if (alt) r.reperibilita.motivi.unshift(`si compra l'alternativa ${alt.mpn} al posto di ${pn ?? 'quello della BOM'}`);
     if (r.prezzoManuale != null) r.reperibilita = { livello: 'ok', motivi: [`prezzo scritto a mano: ${r.prezzoManuale} €/pz`, ...r.reperibilita.motivi.filter(m => !m.startsWith('senza P/N'))] };
   }
 }
@@ -756,6 +820,7 @@ export function problemiBom(righe: RigaBom[], costo: { senzaPrezzo: number; nonD
   const daCompletare = attive.filter(r => r.esito === ESITI.INC || r.esito === ESITI.DB_INC).length;
   const daValidare = attive.filter(r => r.esito === ESITI.NUOVO_VER || r.note?.some(n => n.startsWith(NOTA_DA_VALIDARE))).length;
   const critici = attive.filter(r => r.reperibilita?.livello === 'critico').length;
+  const compatibili = attive.filter(r => r.alternativaProposta && !r.alternativaScelta).length;
   const n = (x: number, uno: string, piu: string) => x ? `${x} ${x === 1 ? uno : piu}` : '';
   return [
     n(daCompletare, 'riga da completare', 'righe da completare'),
@@ -763,6 +828,7 @@ export function problemiBom(righe: RigaBom[], costo: { senzaPrezzo: number; nonD
     n(costo.senzaPrezzo, 'riga senza prezzo', 'righe senza prezzo'),
     n(costo.nonDisponibili, 'componente non disponibile', 'componenti non disponibili'),
     n(critici, 'componente con reperibilità critica', 'componenti con reperibilità critica'),
+    n(compatibili, 'codice compatibile da verificare', 'codici compatibili da verificare'),
   ].filter(Boolean);
 }
 

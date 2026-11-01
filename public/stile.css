@@ -298,6 +298,9 @@ td.codice, b.codice { font-family: var(--mono); font-size: .82rem; white-space: 
 /* alternative al P/N (Componenti → riga della BOM) */
 .alternativa-scelta { color: var(--positivo); font-weight: 600; }
 a.alternative-pronte { font-size: .85em; font-weight: 600; }
+a.compatibile-da-verificare { font-size: .85em; color: var(--attenzione, #b26a00); }
+a.compatibile-da-verificare b { text-transform: uppercase; font-size: .9em; }
+.blocco.compatibili { border-left: 4px solid var(--attenzione, #e0a800); }
 #alternative tr.scelta td { background: #ddf3e5; }
 table.confronto tr.migliore td { background: #ddf3e5; }
 .totali.materiali { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 1rem; }
