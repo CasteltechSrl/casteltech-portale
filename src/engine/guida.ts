@@ -499,11 +499,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'fatture-differite', area: 'amministrazione', titolo: 'Fatture differite: i DDT da fatturare entro il 15',
-    parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla',
+    parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla già fatturato anticipo proforma valore zero',
     testo: [
       'I DDT di vendita e reso lavorato emessi in un mese si fatturano entro il 15 del mese dopo (fattura differita, tipo TD24: il portale lo sceglie da solo all\'emissione quando la fattura cita DDT con data precedente).',
       'Amministrazione → Fatture differite mostra tutti i DDT emessi e non ancora fatturati, raggruppati per cliente, con il termine: giallo se scade in questo mese, rosso se è già passato. "Fattura tutti i DDT" prepara una bozza con le righe di tutti i DDT del cliente; "Fattura tutti i clienti in scadenza" ne prepara una per cliente.',
       'Il cruscotto generale lo ricorda in "Da fare oggi": giallo dal 1° del mese per i DDT del mese prima, rosso dal 16 se non sono ancora fatturati. Le bozze si controllano (prezzi, pagamento) e si emettono una per una.',
+      'Non sono "da fatturare": i DDT di reso non lavorato, garanzia, conto visione, conto lavorazione, campioni, prestito, reso riparato e completamento fornitura, e i DDT dello storico di Fatture in Cloud a valore zero (merce già fatturata con anticipo o proforma).',
+      'Un DDT già fatturato in altro modo (anticipo, proforma, fattura di Fatture in Cloud senza collegamento) si toglie dall\'elenco con "Già fatturato": nella pagina del DDT, o spuntando più DDT in Documenti emessi → DDT. Si rimette con "Rimetti tra i da fatturare" nella pagina del DDT.',
     ],
     passi: ['Amministrazione → Fatture differite (o il pulsante nel cruscotto).', 'Per un cliente: "Fattura tutti i DDT"; oppure in alto "Fattura tutti i clienti in scadenza".', 'Nella bozza controlla prezzi e pagamento, poi Emetti e Invia allo SdI.'],
     pagine: [['/amministrazione/differite', 'Fatture differite'], ['/amministrazione/documenti', 'Documenti emessi']],
@@ -558,6 +560,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'I DDT di Casteltech in PDF si caricano come gli ordini (Da acquisire o cartella Drive). L\'IA li riconosce e abbina ogni riga alla riga d\'ordine aperta del cliente con lo stesso codice.',
       'Alla conferma le quantità si sommano allo spedito: quando tutto è spedito la riga risulta evasa.',
+      'Se il DDT spedisce più schede di quante ne restano sulla riga d\'ordine: se il cliente ha un\'altra riga dello stesso codice in consegna entro 60 giorni, la quantità si divide tra le righe (prima si riempie la più vecchia); altrimenti resta tutta sulla stessa riga, che risulta evasa (più PCB per pannello, ordine variato di qualche scheda). Prima di confermare si può sempre cambiare la riga d\'ordine a mano.',
     ],
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
@@ -581,6 +584,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Il Gantt parte dalla data di consegna e va all\'indietro: ogni barra è una consegna da fare, lunga quanto le ore ciclo dell\'ultimo preventivo del prodotto diviso le ore al giorno (Impostazioni → Ordini).',
       'Il Gantt è a giorni e occupa tutta la larghezza dello schermo. In alto si sceglie il periodo: 1 mese (5 settimane, quello standard), Settimana o 3 mesi; parte sempre dal lunedì della settimana in corso. Le frecce ‹ › spostano avanti o indietro di un periodo, "Oggi" riporta alla settimana attuale.',
       'Cliccando una barra o un nome si apre l\'ordine. Le lavorazioni in ritardo già finite prima del periodo restano visibili come un piccolo segno rosso sul bordo sinistro.',
+      'Una barra è rossa (in ritardo) se doveva già cominciare o se la lavorazione finisce dopo la data di consegna richiesta (per esempio perché il materiale arriva tardi): nell\'elenco sotto il Gantt c\'è scritto "finisce dopo la consegna".',
       '"Fatture senza ordine" elenca le fatture in cui nessuna riga è collegata a un ordine.',
     ],
     pagine: [['/ordini/cruscotto', 'Cruscotto'], ['/ordini/gantt', 'Gantt'], ['/ordini/fatture', 'Fatture senza ordine']],
@@ -782,8 +786,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'nota-credito', area: 'amministrazione', titolo: 'Stornare una fattura (nota di credito)',
-    parole: 'nota credito storno stornare annullare fattura sbagliata errore',
-    testo: ['Una fattura emessa non si elimina: si apre la fattura e si preme "Crea nota di credito". Righe e collegamento alla fattura si compilano da soli.'],
+    parole: 'nota credito storno stornare annullare fattura sbagliata errore compensazione compensato da incassare',
+    testo: ['Una fattura emessa non si elimina: si apre la fattura e si preme "Crea nota di credito". Righe e collegamento alla fattura si compilano da soli.',
+      'La nota di credito aperta toglie dal "da incassare" del cliente (cruscotti e scheda del cliente): fattura da 1.000 € e nota da 200 € = il cliente deve 800 €. Quando la fattura risulta tutta incassata, la nota di credito si chiude da sola con modo "Compensato con fattura" e la scritta "Compensazione con fattura n. …".'],
     pagine: [['/amministrazione/documenti', 'Documenti emessi']],
   },
   {

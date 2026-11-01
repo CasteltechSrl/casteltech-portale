@@ -47,14 +47,25 @@ test('Indirizzo su più righe; la nazione solo se estera', () => {
 });
 
 test('DDT da fatturare: vendita e reso lavorato sì; resi non lavorati, garanzie, conto visione, conto lavorazione, campioni no', () => {
-  for (const c of ['VENDITA', 'RESO LAVORATO', 'Reso lavorato', 'Sale', 'Vente de biens', '', null, undefined, 'Completamento Fornitura', 'RESO RIPARATO'])
+  for (const c of ['VENDITA', 'RESO LAVORATO', 'Reso lavorato', 'Sale', 'Vente de biens', '', null, undefined, 'RIPARAZIONE'])
     assert.equal(causaleDaFatturare(c), true, String(c));
-  for (const c of ['RESO NON LAVORATO', 'Returned unworked', 'RIPARAZIONE IN GARANZIA', 'reso riparato in garanzia', 'WARRANTY REPAIR', 'CONTO VISIONE',
+  // Adriano 1/11/2026: anche riparati e completamenti di fornitura non si fatturano
+  for (const c of ['Completamento Fornitura', 'RESO RIPARATO', 'RESO RIPARAZIONE', 'RESO NON LAVORATO', 'Returned unworked', 'RIPARAZIONE IN GARANZIA', 'reso riparato in garanzia', 'WARRANTY REPAIR', 'CONTO VISIONE',
     'Resp conto visione', 'CONTO LAVORAZIONE', 'IN CONTO LAVORO', 'C/LAVORAZIONE', 'Conto prova', 'CAMPIONI GRATUITI', "RESO DI PRESTITO D'USO",
     'SOSTITUZIONE SCHEDE', 'C/RIPARAZIONE'])
     assert.equal(causaleDaFatturare(c), false, c);
   // la condizione SQL usa la stessa espressione
   assert.ok(SQL_CAUSALE_DA_FATTURARE.includes(CAUSALI_NON_DA_FATTURARE));
+});
+
+test('DDT da fatturare: storico FIC a valore zero e DDT segnati "Già fatturato" esclusi (Adriano 1/11/2026)', async () => {
+  const { ddtDaFatturareRegola, SQL_DDT_DA_FATTURARE } = await import('../src/engine/ddt.js');
+  assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'fic', valore: 1200 }), true);
+  assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'fic', valore: 0 }), false);        // merce fatturata prima (anticipo)
+  assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'portale', valore: 0 }), true);    // il prezzo si scrive in fattura
+  assert.equal(ddtDaFatturareRegola({ causale: 'RESO LAVORATO', origine: 'fic', valore: 500, fatturatoAltrove: 'Già fatturato' }), false);
+  assert.equal(ddtDaFatturareRegola({ causale: 'RESO RIPARATO', origine: 'fic', valore: 96 }), false);
+  assert.ok(SQL_DDT_DA_FATTURARE.includes('fatturato_altrove IS NULL'));
 });
 
 // ── Filiera commessa → DDT → fattura (1/11/2026) ──

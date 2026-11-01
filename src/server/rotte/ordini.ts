@@ -181,7 +181,7 @@ export function rotteOrdini() {
         <tbody>${barre.map(b => { const x = perId.get(b.id)!; return html`<tr class="cliccabile" data-href="/ordini/${x.ordineId}">
           <td><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a></td><td>${b.etichetta}</td><td class="n">${num(daFare[b.id - 1].quantita, 0)}</td>
           <td class="n">${b.ore == null ? html`<span class="nota">senza preventivo</span>` : num(b.ore, 1)}</td><td>${data(b.inizio)}</td><td>${data(b.fine)}</td><td>${data(b.consegna)}</td>
-          <td>${b.inRitardo ? html`<span class="ritardo">in ritardo</span>` : ''}</td></tr>`; })}</tbody></table></div>`));
+          <td>${b.inRitardo ? html`<span class="ritardo" title="${b.oltreConsegna ? 'La lavorazione finisce dopo la consegna richiesta' : 'Doveva già cominciare'}">${b.oltreConsegna ? 'finisce dopo la consegna' : 'in ritardo'}</span>` : ''}</td></tr>`; })}</tbody></table></div>`));
   });
 
   // ── Fatture senza ordine ──

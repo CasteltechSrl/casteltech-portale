@@ -41,7 +41,7 @@ import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
-import { documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, scriviXml, segnaIncassate } from '../azioni-documenti-servizio.js';
+import { compensaNoteCredito, documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, rimettiDaFatturare, scriviXml, segnaGiaFatturati, segnaIncassate } from '../azioni-documenti-servizio.js';
 
 // schede nell'ordine scelto da Adriano (1/11/2026): DDT, Fatture, Autofatture, Note di credito
 const NOMI: Record<string, { uno: string; tanti: string }> = Object.fromEntries(SCHEDE_DOCUMENTI.map(s => [s.tipo, { uno: s.uno, tanti: s.tanti }]));
@@ -403,6 +403,10 @@ export function rotteAmministrazione() {
           const n = await eliminaBozze(si.map(d => d.id));
           return torna(`${n === 1 ? '1 bozza eliminata' : `${n} bozze eliminate`}. ${esclusi}`.trim());
         }
+        case 'gia_fatturato': {
+          const n = await segnaGiaFatturati(si.map(d => d.id), req.session.utente?.nome ?? 'ufficio');
+          return torna(`${n === 1 ? '1 DDT segnato già fatturato' : `${n} DDT segnati già fatturati`}: non sono più tra i DDT da fatturare. ${esclusi}`.trim());
+        }
         case 'annulla': {
           let n = 0; const errori: string[] = [];
           for (const d of si) { const e = await annullaDdt(d.id); if (e) errori.push(`${d.etichetta}: ${e}`); else n++; }
@@ -548,6 +552,18 @@ export function rotteAmministrazione() {
     res.send(String(stampaDdt(d, righe, azienda, dest)));
   });
 
+  r.post('/documenti/:id/gia-fatturato', async (req, res) => {
+    const id = Number(req.params.id);
+    const n = await segnaGiaFatturati([id], req.session.utente?.nome ?? 'ufficio');
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(n ? 'DDT segnato già fatturato: non è più tra i DDT da fatturare.' : 'Il DDT è già fatturato o già segnato.')}`);
+  });
+
+  r.post('/documenti/:id/da-fatturare', async (req, res) => {
+    const id = Number(req.params.id);
+    await rimettiDaFatturare(id);
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent('Il DDT è di nuovo tra i DDT da fatturare.')}`);
+  });
+
   r.post('/documenti/:id/annulla', async (req, res) => {
     const id = Number(req.params.id);
     const errore = await annullaDdt(id);
@@ -583,7 +599,8 @@ export function rotteAmministrazione() {
       <p><strong>${intestatario}</strong> · ${data(d.data)}
         ${d.origine_numero ? html` · ${d.tipo_sdi === 'TD05' ? 'aumenta' : 'storna'} la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>` : ''}
         ${d.ricevuto_id ? html` · ${TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi} sulla <a href="/amministrazione/ricevuti/${d.ricevuto_id}">fattura del fornitore n. ${d.ricevuto_numero} del ${data(d.ricevuto_data)}</a>` : ''}
-        ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>` : ' · da fatturare') : ''}</p>`;
+        ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>`
+          : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>`;
 
     if (d.stato !== 'bozza') {
       const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
@@ -613,6 +630,11 @@ export function rotteAmministrazione() {
             <form method="post" action="/amministrazione/documenti/${id}/annulla" class="inline"
               data-conferma="Annullare il DDT n. ${d.numero}? Usalo solo se la merce non è partita: il numero resta usato e il DDT resta nell'elenco come annullato.">
               <button class="pericolo">Annulla DDT</button></form>` : ''}
+          ${d.tipo === 'ddt' && d.numero != null && !['bozza', 'annullato'].includes(d.stato) && !d.fattura_id ? (d.fatturato_altrove
+            ? html`<form method="post" action="/amministrazione/documenti/${id}/da-fatturare" class="inline"><button>Rimetti tra i da fatturare</button></form>`
+            : html`<form method="post" action="/amministrazione/documenti/${id}/gia-fatturato" class="inline"
+                data-conferma="Segnare il DDT n. ${d.numero} come già fatturato (anticipo, proforma o Fatture in Cloud)? Esce dai DDT da fatturare.">
+                <button title="Merce già fatturata prima (anticipo, proforma) o in Fatture in Cloud senza collegamento">Già fatturato</button></form>`) : ''}
           ${d.tipo === 'fattura' && d.cliente_id && !['scartato', 'annullato'].includes(d.stato) ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-credito" class="inline"
             data-conferma="Creare una nota di credito (bozza) che storna questa fattura?"><button>Crea nota di credito</button></form>
             ${d.tipo_sdi !== 'TD05' ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-debito" class="inline"
@@ -1009,7 +1031,9 @@ export function rotteAmministrazione() {
     const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3, modo = $4 WHERE id = $1 RETURNING documento_id`,
       [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null, annulla ? null : modoPagamento(req.body.modo)]);
     const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
-    res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.`)}`
+    // fattura tutta incassata: le sue note di credito aperte si chiudono come "Compensato con fattura"
+    const compensate = s && sezione === 'documenti' && !annulla ? await compensaNoteCredito([s.documento_id]) : 0;
+    res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}`)}`
       : '/amministrazione');
   });
 

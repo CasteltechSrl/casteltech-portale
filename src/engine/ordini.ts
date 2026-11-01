@@ -241,7 +241,8 @@ export interface DaPianificare {
 export interface Barra {
   id: number; etichetta: string; inizio: string; fine: string; giorni: number; ore: number | null;
   stimata: boolean;            // nessun preventivo: durata di un giorno
-  inRitardo: boolean;          // l'inizio calcolato è già passato
+  inRitardo: boolean;          // l'inizio calcolato è già passato, o la lavorazione finisce dopo la consegna
+  oltreConsegna: boolean;      // la lavorazione finisce dopo la consegna richiesta (Adriano 1/11/2026: anche questa è in ritardo)
   consegna: string | null;
 }
 
@@ -264,7 +265,9 @@ export function pianifica(righe: DaPianificare[], oggi: string, oreGiorno = 8): 
       fine = piuLavorativi(lavorativoVicino(r.consegna, true), r.consegna && lavorativo(r.consegna) ? -1 : 0);
       inizio = piuLavorativi(fine, -(giorni - 1));
     }
-    out.push({ id: r.id, etichetta: r.etichetta, inizio, fine, giorni, ore: ore == null ? null : arrotonda(ore), stimata: ore == null, inRitardo: inizio < oggi, consegna: r.consegna });
+    const oltreConsegna = fine > r.consegna;
+    out.push({ id: r.id, etichetta: r.etichetta, inizio, fine, giorni, ore: ore == null ? null : arrotonda(ore), stimata: ore == null,
+      inRitardo: inizio < oggi || oltreConsegna, oltreConsegna, consegna: r.consegna });
   }
   return out.sort((a, b) => a.inizio.localeCompare(b.inizio) || a.fine.localeCompare(b.fine));
 }

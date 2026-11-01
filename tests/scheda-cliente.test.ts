@@ -24,3 +24,8 @@ test('scheda cliente: incassi scaduti e a scadere, giorni medi di incasso', () =
   assert.equal(giorniMediIncasso([{ dataFattura: '2026-01-01', pagataIl: '2026-03-02' }, { dataFattura: '2026-02-01', pagataIl: '2026-03-03' }, { dataFattura: '2026-05-01', pagataIl: null }]), 45);
   assert.equal(giorniMediIncasso([{ dataFattura: '2026-05-01', pagataIl: null }]), null);
 });
+
+test('scheda cliente: la nota di credito aperta toglie dal credito ma non conta come rata (Adriano 1/11/2026)', () => {
+  const r = situazioneIncassi([{ data: '2026-10-01', importo: 1000, pagata: false }, { data: '2026-10-01', importo: -200, pagata: false }], '2026-11-02');
+  assert.deepEqual(r, { scaduto: 800, scaduteN: 1, aScadere: 0, aScadereN: 0 });
+});

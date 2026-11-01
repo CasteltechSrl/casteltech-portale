@@ -21,13 +21,22 @@ export function fasciaScadenza(data: string, oggi: string): Fascia {
 
 export interface ScadenzaAperta { data: string; importo: number }
 
-/** Totale e numero delle scadenze aperte per fascia. */
+/**
+ * Note di credito nel "da incassare" (Adriano 1/11/2026): la rata aperta di una nota di credito toglie dal credito verso il cliente,
+ * nella fascia della prima rata ancora aperta della fattura che storna (se non ce n'è, alla sua data). Si chiude da sola
+ * ("Compensato con fattura") quando la fattura è tutta incassata. Espressioni SQL con gli alias `s` (documenti_scadenze) e `d` (documenti).
+ */
+export const SQL_IMPORTO_DA_INCASSARE = `CASE WHEN d.tipo = 'nota_credito' THEN -s.importo ELSE s.importo END`;
+export const SQL_DATA_DA_INCASSARE = `CASE WHEN d.tipo = 'nota_credito' THEN coalesce((SELECT min(s2.data) FROM documenti_scadenze s2
+  WHERE s2.documento_id = d.documento_origine_id AND s2.pagata_il IS NULL), s.data) ELSE s.data END`;
+
+/** Totale e numero delle scadenze aperte per fascia (le note di credito tolgono dal totale ma non contano come rate). */
 export function riepilogoScadenze(scadenze: ScadenzaAperta[], oggi: string) {
   const fasce = Object.fromEntries((Object.keys(NOMI_FASCE) as Fascia[]).map(f => [f, { totale: 0, quante: 0 }])) as Record<Fascia, { totale: number; quante: number }>;
   for (const s of scadenze) {
     const f = fasce[fasciaScadenza(s.data, oggi)];
     f.totale = Math.round((f.totale + s.importo) * 100) / 100;
-    f.quante++;
+    if (s.importo > 0) f.quante++;
   }
   const totale = Math.round(scadenze.reduce((t, s) => t + s.importo, 0) * 100) / 100;
   return { totale, fasce };

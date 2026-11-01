@@ -229,3 +229,52 @@ export function abbinaDdt(righe: RigaDdtLetta[], aperte: RigaAperta[], rifOrdine
     return scelta.id;
   });
 }
+
+/** Entro quanti giorni dalla data del DDT un'altra riga d'ordine dello stesso codice è "a breve" (regola di Adriano, 1/11/2026). */
+export const GIORNI_CONSEGNA_A_BREVE = 60;
+const giornoUtc = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
+
+/**
+ * Come `abbinaDdt`, ma una riga del DDT con più pezzi di quanti ne restano sulla riga d'ordine proposta si divide tra le righe aperte
+ * dello stesso codice (Adriano 1/11/2026). Solo se c'è un'altra riga aperta in consegna a breve (entro 60 giorni dal DDT): altrimenti
+ * resta tutta sulla prima riga, che risulta evasa (più PCB per pannello, ordine variato di qualche scheda). L'eccedenza che avanza dopo
+ * aver riempito le righe va sull'ultima. Le righe già abbinate dall'ufficio (`rigaId` numero o null) restano come sono.
+ */
+export function dividiDdt<R extends RigaDdtLetta & { rigaId?: number | null }>(righe: R[], aperte: RigaAperta[], rifOrdine = '', dataDdt: string | null = null): R[] {
+  const resta = new Map(aperte.map(a => [a.id, a.residuo]));
+  const rif = chiave(rifOrdine);
+  const out: R[] = [];
+  for (const r of righe) {
+    if (r.rigaId !== undefined) {
+      if (r.rigaId) resta.set(r.rigaId, (resta.get(r.rigaId) ?? 0) - r.quantita);
+      out.push(r); continue;
+    }
+    const k = chiave(r.codice);
+    const candidate = aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
+      .sort((a, b) => Number((resta.get(b.id) ?? 0) > 0) - Number((resta.get(a.id) ?? 0) > 0)
+        || Number(!!rif && chiave(b.rifCliente) === rif) - Number(!!rif && chiave(a.rifCliente) === rif)
+        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999'));
+    const prima = candidate[0];
+    if (!prima) { out.push({ ...r, rigaId: null }); continue; }
+    const restaPrima = resta.get(prima.id) ?? 0;
+    const riferimento = dataDdt ?? prima.consegna;
+    const aBreve = candidate.slice(1).filter(a => (resta.get(a.id) ?? 0) > 0 && a.consegna && riferimento
+      && (giornoUtc(a.consegna) - giornoUtc(riferimento)) / 86400000 <= GIORNI_CONSEGNA_A_BREVE);
+    if (r.quantita <= restaPrima || restaPrima <= 0 || !aBreve.length) {
+      resta.set(prima.id, restaPrima - r.quantita);
+      out.push({ ...r, rigaId: prima.id }); continue;
+    }
+    // divisione: la prima riga si riempie, poi le altre a breve in ordine; quel che avanza va sull'ultima
+    let rimasti = r.quantita;
+    const pezzi: { id: number; q: number }[] = [];
+    for (const a of [prima, ...aBreve]) {
+      const q = Math.min(rimasti, resta.get(a.id) ?? 0);
+      if (q <= 0) continue;
+      pezzi.push({ id: a.id, q }); rimasti -= q;
+      if (rimasti <= 0) break;
+    }
+    if (rimasti > 0) pezzi[pezzi.length - 1].q += rimasti;
+    for (const p of pezzi) { resta.set(p.id, (resta.get(p.id) ?? 0) - p.q); out.push({ ...r, quantita: p.q, rigaId: p.id }); }
+  }
+  return out;
+}

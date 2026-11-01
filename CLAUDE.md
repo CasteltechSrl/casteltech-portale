@@ -367,6 +367,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    fatturato e da incassare; riferimento ordine oltre 20 caratteri = errore; lettera d'intento scritta a mano con l'anno come l'import (dicembre → anno dopo) e valida
    solo se protocollata entro la data della fattura. Rientro dell'ufficio: le righe del telefono si aggiornano (stesso id) e quelle ancora aperte restano;
    telefono: "Aperta per sbaglio: annulla l'apertura", una sola apertura per fase (migrazione 057). Prodotto già usato: il cliente non si cambia.
+   Punti aperti decisi da Adriano (1/11/2026 sera; test in `tests/ddt.test.ts`, `azioni-documenti`, `cruscotto-amministrazione`, `scheda-cliente`, `ordini`, `acquisizioni`):
+   DDT "da fatturare" = `SQL_DDT_DA_FATTURARE`/`ddtDaFatturareRegola` (fuori anche "riparato" e "completamento fornitura", DDT dello storico FIC a valore zero e quelli
+   segnati "Già fatturato" = `documenti.fatturato_altrove`, migrazione 061, tasto nella pagina del DDT e azione dell'elenco); nota di credito aperta toglie dal "da incassare"
+   (`SQL_IMPORTO_DA_INCASSARE`/`SQL_DATA_DA_INCASSARE`, nella fascia della fattura) e si chiude da sola con "Compensato con fattura" + "Compensazione con fattura n. X" quando la
+   fattura è tutta incassata (`compensaNoteCredito`); Gantt: barra che finisce dopo la consegna = in ritardo (`oltreConsegna`); DDT letti da PDF oltre la riga d'ordine
+   divisi tra le righe dello stesso codice in consegna entro 60 gg, altrimenti tutto sulla prima (`dividiDdt`). PIN del reparto restano a 4 cifre.
    Ordine con conferma emessa non si elimina. Pagina Prodotti leggera (una sola tendina clienti, `clienti-al-clic`). Niente doppio invio dei moduli (`conferma.js`).
    Limite 20 domande/ora alla guida IA. Pulizia sessioni dopo il login (non con un timer). Id non numerici negli indirizzi = pagina non trovata (non errore).
    ✅ Scorciatoie e elenchi (proposta della revisione, gruppo A, Adriano 1/11/2026 "applica i suggerimenti"; test in `tests/scorciatoie-elenchi.test.ts`):

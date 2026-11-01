@@ -93,6 +93,18 @@ test('ordini: Gantt all\'indietro dalla consegna con le ore del preventivo, cari
   assert.equal(pianifica([{ id: 4, etichetta: 'W', quantita: 10, consegna: null }], '2026-10-25').length, 0);
 });
 
+test('ordini: Gantt, lavorazione che finisce dopo la consegna = in ritardo anche se non è ancora iniziata (Adriano 1/11/2026)', () => {
+  // materiale in arrivo tardi: lavorazione dal 20/11, 2 giorni, consegna richiesta il 20/11
+  const [b] = pianifica([{ id: 1, etichetta: 'X', quantita: 200, consegna: '2026-11-20', lavorazione: '2026-11-20', secondiPerScheda: 216 }], '2026-10-25');
+  assert.equal(b.fine, '2026-11-23');
+  assert.equal(b.oltreConsegna, true);
+  assert.equal(b.inRitardo, true);
+  // pianificata all'indietro: finisce prima della consegna, non è in ritardo
+  const [c] = pianifica([{ id: 2, etichetta: 'Y', quantita: 200, consegna: '2026-11-30', secondiPerScheda: 216 }], '2026-10-25');
+  assert.equal(c.oltreConsegna, false);
+  assert.equal(c.inRitardo, false);
+});
+
 test('ordini: i servizi non sono da evadere da soli (Adriano, 28/10/2026)', () => {
   assert.ok(eServizio('007', 'PROGRAMMAZIONE ATTREZZATURE'));
   assert.ok(eServizio(null, 'Costi una tantum avvio produzione'));

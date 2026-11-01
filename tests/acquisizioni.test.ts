@@ -94,3 +94,21 @@ test('acquisizioni: DDT in PDF letto e abbinato alle righe d\'ordine aperte', as
   assert.deepEqual(abbinaDdt(d.righe, aperte, d.rifOrdine), [2, 1, 3]);
   assert.deepEqual(abbinaDdt([{ codice: 'NESSUNO', descrizione: '', quantita: 1 }], aperte), [null]);
 });
+
+test('acquisizioni: DDT con più pezzi della riga d\'ordine, divisi solo se c\'è un\'altra riga a breve (Adriano 1/11/2026)', async () => {
+  const { dividiDdt } = await import('../src/engine/acquisizioni.js');
+  const riga = (id: number, residuo: number, consegna: string | null) => ({ id, codice: 'A1', codiceCliente: null, descrizione: null, rifCliente: null, residuo, consegna });
+  const ddt: { codice: string; descrizione: string; quantita: number; rigaId?: number | null }[] = [{ codice: 'A1', descrizione: '', quantita: 150 }];
+  // seconda riga in consegna dopo 30 giorni: 100 + 50
+  assert.deepEqual(dividiDdt(ddt, [riga(1, 100, '2026-11-10'), riga(2, 100, '2026-12-01')], '', '2026-11-05').map(r => [r.rigaId, r.quantita]), [[1, 100], [2, 50]]);
+  // seconda riga lontana (fra 5 mesi): tutto sulla prima, che risulta evasa (ordine variato di qualche scheda)
+  assert.deepEqual(dividiDdt(ddt, [riga(1, 100, '2026-11-10'), riga(2, 100, '2027-04-01')], '', '2026-11-05').map(r => [r.rigaId, r.quantita]), [[1, 150]]);
+  // nessun'altra riga: tutto sulla prima
+  assert.deepEqual(dividiDdt(ddt, [riga(1, 140, '2026-11-10')], '', '2026-11-05').map(r => [r.rigaId, r.quantita]), [[1, 150]]);
+  // più pezzi di tutte le righe a breve: l'eccedenza va sull'ultima
+  assert.deepEqual(dividiDdt([{ codice: 'A1', descrizione: '', quantita: 230, rigaId: undefined as number | null | undefined }], [riga(1, 100, '2026-11-10'), riga(2, 100, '2026-11-20')], '', '2026-11-05')
+    .map(r => [r.rigaId, r.quantita]), [[1, 100], [2, 130]]);
+  // riga già abbinata dall'ufficio: resta com'è
+  assert.deepEqual(dividiDdt([{ codice: 'A1', descrizione: '', quantita: 150, rigaId: 2 }], [riga(1, 100, '2026-11-10'), riga(2, 100, '2026-11-20')], '', '2026-11-05')
+    .map(r => [r.rigaId, r.quantita]), [[2, 150]]);
+});

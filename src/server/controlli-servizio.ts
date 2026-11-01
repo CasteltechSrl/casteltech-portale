@@ -1,6 +1,6 @@
 /** Letture per Amministrazione → Controlli (regole in engine/controlli.ts). Una lettura sola quando si apre la pagina: niente timer (Neon). */
 import { q } from './db.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
 
 import { GIORNI_PREVENTIVO_FERMO, GIORNI_TEMPO_APERTO, type DatiControlli } from '../engine/controlli.js';
 
@@ -10,7 +10,7 @@ export async function datiControlli(oggi: string): Promise<DatiControlli> {
   const [ddt, ordini, prodotti, clienti, fornitori, preventivi, commesse, tempi] = await Promise.all([
     q<DatiControlli['ddtDaFatturare'][number]>(`SELECT d.id, d.numero::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_CLIENTE} AS cliente
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE d.tipo = 'ddt' AND d.stato = 'emesso' AND d.fattura_id IS NULL AND d.data >= $1 AND ${SQL_CAUSALE_DA_FATTURARE}
+      WHERE d.tipo = 'ddt' AND d.stato = 'emesso' AND d.fattura_id IS NULL AND d.data >= $1 AND ${SQL_DDT_DA_FATTURARE}
       ORDER BY d.data, d.id`, [INIZIO_DDT_DA_FATTURARE]),
     q<DatiControlli['ordiniSenzaConsegna'][number]>(`SELECT o.id, o.numero::text AS numero, coalesce(c.ragione_sociale, o.cliente_nome, '') AS cliente, count(*)::int AS righe
       FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id LEFT JOIN clienti c ON c.id = o.cliente_id
