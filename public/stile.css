@@ -815,3 +815,18 @@ nav.pagine .nota { margin-left: auto; }
 .solleciti .livello-secondo td:first-child { box-shadow: inset 4px 0 0 #e0a400; }
 .testo-sollecito { width: 100%; min-height: 20rem; font-family: inherit; }
 button.collegamento { background: none; border: 0; padding: 0; color: var(--accento, #1f55a6); text-decoration: underline; cursor: pointer; font: inherit; }
+
+/* Errori accanto al campo (public/errori-campo.js) */
+.con-errore { border-color: #c0392b !important; background: #fff6f5; }
+.errore-campo { display: block; color: #a93226; font-size: .85rem; margin: .2rem 0 .4rem; font-weight: 600; }
+td > .errore-campo { white-space: normal; }
+.nota-formato-date { display: block; color: #6b6b6b; margin-top: .2rem; }
+
+/* Vista Semplice / Completo del preventivo (src/engine/preventivo-semplice.ts) */
+.vista-preventivo { display: inline-flex; border: 1px solid var(--bordo, #cfd8dc); border-radius: 6px; overflow: hidden; margin-right: .6rem; vertical-align: middle; }
+.vista-preventivo button { border: 0; background: #fff; padding: .35rem .8rem; cursor: pointer; font: inherit; }
+.vista-preventivo button.attiva { background: var(--accento, #1f6f8b); color: #fff; }
+form.vista-semplice .campi-parametri > label:not(.campo-semplice):not(.scelta-provenienza) { display: none; }
+form.vista-semplice details.senza-semplici, form.vista-semplice details.materiali-consumo { display: none; }
+.campi-nascosti { grid-column: 1 / -1; color: #6b6b6b; font-size: .85rem; }
+form:not(.vista-semplice) .campi-nascosti { display: none; }

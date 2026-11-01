@@ -4,6 +4,7 @@
  * Nei preventivi cliente e codice si scelgono SOLO da qui. Tutto in maiuscolo.
  */
 import express, { Router, type Request } from 'express';
+import { conCampo } from '../../engine/errori-campo.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from '../db.js';
@@ -306,8 +307,8 @@ export function rotteAnagrafiche() {
     q1(`SELECT 1 FROM clienti WHERE upper(ragione_sociale) = $1 AND id <> $2`, [nome, escludi]);
   r.post('/clienti', async (req, res) => {
     const nome = maiuscolo(req.body.ragione_sociale);
-    if (!nome) return res.redirect(torna('Scrivi la ragione sociale.'));
-    if (await duplicatoCliente(nome)) return res.redirect(torna(`${nome} esiste già.`));
+    if (!nome) return res.redirect(conCampo(torna('Scrivi la ragione sociale.'), 'ragione_sociale', 'c-nuovo'));
+    if (await duplicatoCliente(nome)) return res.redirect(conCampo(torna(`${nome} esiste già.`), 'ragione_sociale', 'c-nuovo'));
     await q(`INSERT INTO clienti (ragione_sociale, partita_iva) VALUES ($1, nullif($2, ''))`, [nome, maiuscolo(req.body.partita_iva)]);
     res.redirect(torna(`${nome} aggiunto.`));
   });
@@ -363,8 +364,8 @@ export function rotteAnagrafiche() {
 
   r.post('/clienti/:id', async (req, res) => {
     const nome = maiuscolo(req.body.ragione_sociale), id = Number(req.params.id);
-    if (!nome) return res.redirect(torna('La ragione sociale non può essere vuota.'));
-    if (await duplicatoCliente(nome, id)) return res.redirect(torna(`${nome} esiste già.`));
+    if (!nome) return res.redirect(conCampo(torna('La ragione sociale non può essere vuota.'), 'ragione_sociale', `c-${id}`));
+    if (await duplicatoCliente(nome, id)) return res.redirect(conCampo(torna(`${nome} esiste già.`), 'ragione_sociale', `c-${id}`));
     await q(`UPDATE clienti SET ragione_sociale = $2, partita_iva = nullif($3, ''), aggiornato_il = now() WHERE id = $1`, [id, nome, maiuscolo(req.body.partita_iva)]);
     // aggiorna il nome nei preventivi collegati
     await q(`UPDATE preventivi SET intestazione = jsonb_set(intestazione, '{cliente}', to_jsonb($2::text)) WHERE cliente_id = $1`, [id, nome]);
@@ -378,14 +379,14 @@ export function rotteAnagrafiche() {
   const dopoProdotto = (body: any, cliente: number | null) => `&cliente=${body.filtro !== undefined ? Number(body.filtro) || 0 : cliente ?? 0}`;
   r.post('/prodotti', async (req, res) => {
     const codice = maiuscolo(req.body.codice), descrizione = maiuscolo(req.body.descrizione), cliente = idCliente(req.body.cliente_id);
-    if (!codice || !descrizione) return res.redirect(torna('Servono codice e descrizione.', '/prodotti'));
+    if (!codice || !descrizione) return res.redirect(conCampo(torna('Servono codice e descrizione.', '/prodotti'), codice ? 'descrizione' : 'codice', 'p-nuovo'));
     const senza = erroreClienteProdotto(cliente);
-    if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
-    if (await duplicatoProdotto(codice, cliente)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
+    if (senza) return res.redirect(conCampo(torna(senza, '/prodotti', dopoProdotto(req.body, null)), 'cliente_id', 'p-nuovo'));
+    if (await duplicatoProdotto(codice, cliente)) return res.redirect(conCampo(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'), 'codice', 'p-nuovo'));
     const prezzo = leggiPrezzo(req.body.prezzo);
-    if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
+    if (Number.isNaN(prezzo)) return res.redirect(conCampo(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)), 'prezzo', 'p-nuovo'));
     const sc = leggiScaglioni(req.body.scaglioni);
-    if (sc.errori.length) return res.redirect(torna(`Scaglioni non salvati: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)));
+    if (sc.errori.length) return res.redirect(conCampo(torna(`Scaglioni non salvati: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)), 'scaglioni', 'p-nuovo'));
     const nuovo = await q1<{ id: number }>(`INSERT INTO prodotti (codice, descrizione, cliente_id, prezzo_vendita, prezzo_fonte, prezzo_data, prezzo_nota)
       VALUES ($1,$2,$3,$4::numeric, CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'manuale' END, CASE WHEN $4::numeric IS NULL THEN NULL ELSE current_date END,
         CASE WHEN $4::numeric IS NULL THEN NULL ELSE 'Scritto a mano nel portale' END) RETURNING id`, [codice, descrizione, cliente, prezzo]);
@@ -395,10 +396,10 @@ export function rotteAnagrafiche() {
   r.post('/prodotti/:id', async (req, res) => {
     const id = Number(req.params.id);
     const codice = maiuscolo(req.body.codice), descrizione = maiuscolo(req.body.descrizione), cliente = idCliente(req.body.cliente_id);
-    if (!codice || !descrizione) return res.redirect(torna('Servono codice e descrizione.', '/prodotti'));
+    if (!codice || !descrizione) return res.redirect(conCampo(torna('Servono codice e descrizione.', '/prodotti'), codice ? 'descrizione' : 'codice', `p-${id}`));
     const senza = erroreClienteProdotto(cliente);
-    if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
-    if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
+    if (senza) return res.redirect(conCampo(torna(senza, '/prodotti', dopoProdotto(req.body, null)), 'cliente_id', `p-${id}`));
+    if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(conCampo(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'), 'codice', `p-${id}`));
     // il cliente di un codice già usato non si cambia: i preventivi, le commesse e gli ordini di quel cliente resterebbero con un codice di un altro
     const attuale = await q1<{ cliente_id: number | null; usi: number }>(`SELECT p.cliente_id,
         (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id)
@@ -407,9 +408,9 @@ export function rotteAnagrafiche() {
     if (attuale?.cliente_id && cliente && attuale.cliente_id !== cliente && attuale.usi > 0)
       return res.redirect(torna(`${codice} è già usato in ${attuale.usi} tra preventivi, commesse e ordini: il cliente non si cambia. Se serve, crea un nuovo codice per l'altro cliente.`, '/prodotti'));
     const prezzo = leggiPrezzo(req.body.prezzo);
-    if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
+    if (Number.isNaN(prezzo)) return res.redirect(conCampo(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)), 'prezzo', `p-${id}`));
     const sc = leggiScaglioni(req.body.scaglioni);
-    if (sc.errori.length) return res.redirect(torna(`${codice} non salvato: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)));
+    if (sc.errori.length) return res.redirect(conCampo(torna(`${codice} non salvato: ${sc.errori.join(' ')}`, '/prodotti', dopoProdotto(req.body, cliente)), 'scaglioni', `p-${id}`));
     await q(`UPDATE prodotti SET codice = $2, descrizione = $3, cliente_id = $4 WHERE id = $1`, [id, codice, descrizione, cliente]);
     // prezzo cambiato a mano: da qui in poi vale quello (il caricamento da FIC non lo tocca più); casella vuotata = di nuovo senza prezzo
     if (req.body.prezzo !== undefined) await q(`UPDATE prodotti SET prezzo_vendita = $2::numeric,
