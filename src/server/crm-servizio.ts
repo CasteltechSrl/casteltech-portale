@@ -6,7 +6,8 @@ import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
 import { q, transazione } from './db.js';
 import { maiuscolo } from './anagrafiche-servizio.js';
-import { chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, statoDopoImport, TIPI_ATTIVITA, trovaCliente, unisciElenco, type ClientePerCollegamento, type StatoCrm } from '../engine/crm.js';
+import { completaAzienda, CAMPI_COMPLETABILI, type PropostaCompletamento } from '../engine/crm-completamento.js';
+import { chiavePiva, chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, statoDopoImport, TIPI_ATTIVITA, trovaCliente, unisciElenco, type ClientePerCollegamento, type StatoCrm } from '../engine/crm.js';
 
 type Db = Pick<pg.PoolClient, 'query'>;
 
@@ -195,6 +196,56 @@ export async function importaCrm(f: FileCrm, opz: { anteprima: boolean }) {
         note = coalesce(crm_contatti.note, EXCLUDED.note)`, [JSON.stringify(contatti)]);
 
     await allineaClienti(c);
+    return esito;
+  });
+}
+
+// ───────────── dati mancanti cercati online (Adriano, 1/11/2026; regole in engine/crm-completamento.ts) ─────────────
+export interface FileCompletamento { tipo?: string; data?: string; aziende: PropostaCompletamento[] }
+
+export function leggiFileCompletamento(contenuto: Buffer): FileCompletamento {
+  const testo = contenuto[0] === 0x1f && contenuto[1] === 0x8b ? gunzipSync(contenuto).toString('utf8') : contenuto.toString('utf8');
+  const f = JSON.parse(testo) as FileCompletamento;
+  if (!Array.isArray(f.aziende) || f.aziende.some(a => !a.codice)) throw new Error('servono "aziende" con il codice (es. AZ00001)');
+  if (f.tipo !== 'completamento') throw new Error('non è il file dei dati cercati online (crm_completamento.json.gz)');
+  return f;
+}
+
+/** Riempie solo i campi vuoti (P.IVA, email, telefono, sito) e scrive nelle note da dove viene ogni dato. */
+export async function completaCrm(f: FileCompletamento, opz: { anteprima: boolean }) {
+  return transazione(async c => {
+    const righe: { id: number; codice: string; ragione_sociale: string; partita_iva: string | null; email: string | null; telefono: string | null; sito: string | null; note: string | null }[] =
+      (await c.query(`SELECT id, codice, ragione_sociale, partita_iva, email, telefono, sito, note FROM crm_aziende WHERE codice IS NOT NULL`)).rows;
+    const perCodice = new Map(righe.map(r => [r.codice, r]));
+    const pive = new Map<string, string>();
+    for (const r of righe) { const p = chiavePiva(r.partita_iva); if (p) pive.set(p, r.codice); }
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(String(f.data ?? '')) ? f.data!.split('-').reverse().join('/') : new Date().toLocaleDateString('it-IT');
+    const riempiti: Record<string, number> = Object.fromEntries(CAMPI_COMPLETABILI.map(k => [k, 0]));
+    const aggiornare: { id: number; partita_iva: string | null; email: string | null; telefono: string | null; sito: string | null; note: string | null }[] = [];
+    const sconosciute: string[] = [];
+    const scartati: string[] = [];
+    let conDubbi = 0;
+    for (const p of f.aziende) {
+      const a = perCodice.get(p.codice);
+      if (!a) { sconosciute.push(p.codice); continue; }
+      const e = completaAzienda(a, p, piva => pive.get(piva) ?? null, data);
+      for (const k of Object.keys(e.campi)) riempiti[k]++;
+      if (e.campi.partita_iva) pive.set(e.campi.partita_iva, a.codice);   // due righe del file con la stessa P.IVA: entra solo la prima
+      for (const s of e.scartati) scartati.push(`${a.ragione_sociale} (${a.codice}): ${s}`);
+      if (e.nota?.includes('Da verificare')) conDubbi++;
+      const note = e.nota ? unisciElenco(a.note, e.nota, '\n') : a.note;
+      if (Object.keys(e.campi).length || note !== a.note)
+        aggiornare.push({ id: a.id, partita_iva: e.campi.partita_iva ?? null, email: e.campi.email ?? null, telefono: e.campi.telefono ?? null, sito: e.campi.sito ?? null, note });
+    }
+    const esito = { righe: f.aziende.length, aziende: aggiornare.length, riempiti, conDubbi, sconosciute, scartati };
+    if (opz.anteprima || !aggiornare.length) return esito;
+    // coalesce: se nel frattempo qualcuno ha scritto il campo nel portale, resta il suo
+    await c.query(`
+      UPDATE crm_aziende a SET partita_iva = coalesce(a.partita_iva, x.partita_iva), email = coalesce(a.email, x.email),
+        telefono = coalesce(a.telefono, x.telefono), sito = coalesce(a.sito, x.sito), note = x.note, aggiornato_il = now()
+      FROM jsonb_to_recordset($1) AS x(id int, partita_iva text, email text, telefono text, sito text, note text)
+      WHERE a.id = x.id`, [JSON.stringify(aggiornare)]);
+    await allineaClienti(c);   // con la P.IVA nuova un'azienda può riconoscere il suo cliente in anagrafica
     return esito;
   });
 }

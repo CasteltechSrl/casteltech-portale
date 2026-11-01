@@ -738,11 +738,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── CRM ──
   {
     id: 'crm-aziende', area: 'crm', titolo: 'Cercare un\'azienda e registrare un contatto',
-    parole: 'crm azienda contatto telefonata email visita offerta fiera nota attività prossima azione richiamare referente lead commerciale',
+    parole: 'crm azienda contatto telefonata email visita offerta fiera nota attività prossima azione richiamare referente lead commerciale dati mancanti completare partita iva sito telefono ricerca online',
     testo: [
       'La ricerca trova per nome, città, referenti, telefoni, email e P.IVA. Nella scheda dell\'azienda ci sono recapiti, referenti e lo storico delle attività.',
       'Ogni attività (telefonata, email, visita, offerta, fiera, nota) può avere una prossima azione con data: quelle scadute compaiono in rosso nella prima pagina del CRM.',
       'Le aziende del CRM non sono l\'anagrafica: i clienti dell\'anagrafica entrano nel CRM da soli (con la fascia di fatturato), le altre aziende sono contatti commerciali. Un cliente in anagrafica non si elimina dal CRM.',
+      'Dati mancanti (P.IVA, email, telefono, sito): Claude li cerca sul sito di ogni azienda e prepara il file crm_completamento.json.gz, da caricare in Impostazioni → CRM → "Dati mancanti cercati online". Riempie solo i campi vuoti; nelle note dell\'azienda resta scritto da dove viene il dato ("Ricerca online del …") e i casi dubbi come "Da verificare", da controllare a mano.',
     ],
     passi: ['CRM → cerca l\'azienda (o scrivila in "Nuova azienda").', 'Nella scheda: Registra un\'attività con la prossima azione.'],
     pagine: [['/crm', 'CRM']],
