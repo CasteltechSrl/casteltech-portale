@@ -353,6 +353,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (2019–2021 "bilancino" del vecchio studio, conti 5xxxx): file costi_personale.json.gz fuori dal repository (Project Files → dipendenti). Nota spese come il
    "Modulo rimborso km" Excel (km andata × 2 × tariffa + altre spese; tariffa copiata nella nota; import del modulo con la tariffa del mese da C4), destinazioni con i km,
    persone e auto, pagamenti e "da pagare" per anno, stampa da firmare. Dati delle persone SOLO nel database.
+   Buste paga come dati (Adriano 1/11/2026; `engine/cedolini.ts`, `server/testo-pdf.ts` con pdfjs-dist, migrazione 060 `cedolini`, test in `tests/cedolini.test.ts`):
+   un cedolino per persona, mese e mensilità (chiave codice fiscale|anno-mese|mensilità) letto dal TESTO del PDF, MAI dall'IA: modello U.P.A. (dal 2022) e
+   Zucchetti (2019–2021, qualifiche tradotte con `qualificaZucchetti`); voci divise competenze/ritenute dalla colonna, cedolino su due pagine unito,
+   avvisi se voci ≠ totali. Cedolini nuovi dalla cartella "Da acquisire" letti da soli (`leggiDocumentoPaghe`); storico 2019-04 → 2026-09 (736 cedolini)
+   nel file cedolini.json.gz (Project Files → dipendenti, preparato con `tools/cedolini-da-pdf.ts` + pdftotext), stesso pulsante "Storico dall'archivio".
+   Area riservata: tabella persone × mesi (netto), pagina persona (`/riservata/persona?p=`), pagina cedolino con le voci.
 4l. ✅ Revisione e collaudo di tutto il portale (notte 31/10–1/11/2026; PR della revisione): portale provato in locale con i dati veri (storico FIC, ordini, CRM),
    3.000 pagine e tutti i flussi (preventivo → commessa → rientro → reparto, fattura → XML/PDF, DDT, conferma, acconto, ordine a fornitore). Regole nuove:
    DDT con causale reso non lavorato / garanzia / conto visione / conto lavorazione / campioni / prestito NON contano tra i "DDT da fatturare"

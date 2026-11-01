@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
 import { leggiF24ConIa, leggiNotaContabileConIa } from './lettura-paghe-ia.js';
+import { testoPdf } from './testo-pdf.js';
+import { cedoliniValidi, chiaveCedolino, leggiCedolini, type CedolinoLetto } from '../engine/cedolini.js';
 import { periodoDaNome, righeCostiValide, tipoDocumentoPaghe, type CostoQualifica, type TipoPaghe } from '../engine/dipendenti.js';
 
 export { tipoDocumentoPaghe };
@@ -47,9 +49,17 @@ export async function salvaCostiMese(anno: number, mese: number, qualifiche: Cos
 /** Legge con l'IA la nota contabile (costi del mese) o l'F24 (scadenza e totale). Cedolini e riepiloghi non si leggono. */
 export async function leggiDocumentoPaghe(id: number): Promise<void> {
   const d = await q1(`SELECT id, tipo, nome_file, contenuto FROM paghe_documenti WHERE id = $1`, [id]);
-  if (!d?.contenuto || !['nota_contabile', 'f24'].includes(d.tipo)) return;
+  if (!d?.contenuto || !['nota_contabile', 'f24', 'cedolini'].includes(d.tipo)) return;
   try {
-    if (d.tipo === 'nota_contabile') {
+    if (d.tipo === 'cedolini') {
+      // buste paga: lette dal testo del PDF nel portale, MAI all'IA (dati delle singole persone)
+      const cedolini = leggiCedolini(await testoPdf(d.contenuto), d.nome_file);
+      if (!cedolini.length) throw new Error('nessun cedolino riconosciuto nel PDF (modello dello studio paghe diverso?)');
+      await salvaCedolini(cedolini, { origine: 'documento', documentoId: id, file: d.nome_file });
+      const primo = cedolini[0];
+      await q(`UPDATE paghe_documenti SET stato = 'letto', anno = $2, mese = $3, lettura = $4, errore = NULL WHERE id = $1`,
+        [id, primo.anno, primo.mese, JSON.stringify({ cedolini: cedolini.length, avvisi: cedolini.flatMap(c => c.avvisi.map(a => `${c.nome}: ${a}`)) })]);
+    } else if (d.tipo === 'nota_contabile') {
       const n = await leggiNotaContabileConIa(d.contenuto, d.nome_file);
       if (n === 'non_nota') throw new Error('non sembra una nota contabile delle paghe: se è un ordine o una nota di credito, caricalo in Ordini → Da acquisire');
       await salvaCostiMese(n.anno, n.mese, n.qualifiche, 'nota_contabile', { documentoId: id, file: d.nome_file });
@@ -79,6 +89,47 @@ export async function caricaStoricoCosti(x: unknown, opz: { anteprima: boolean }
   if (opz.anteprima) return { ...esito, anteprima: true };
   for (const [, rr] of daCaricare)
     await salvaCostiMese(rr[0].anno, rr[0].mese, rr.map(r => ({ ...r, netto: r.netto ?? null })), 'archivio', { file: rr[0].file ?? null });
+  return { ...esito, anteprima: false };
+}
+
+// ───────────────────────────── buste paga come dati ─────────────────────────────
+
+/** Salva (o aggiorna) i cedolini letti: uno per persona, mese e mensilità; un cedolino rifatto sostituisce quello di prima. */
+export async function salvaCedolini(cedolini: (CedolinoLetto & { file?: string })[], opz: { origine: 'archivio' | 'documento'; documentoId?: number; file?: string }) {
+  await transazione(async c => {
+    for (const x of cedolini) {
+      await c.query(`INSERT INTO cedolini (chiave, anno, mese, mensilita, modello, matricola, nome, codice_fiscale, qualifica, livello, mansione,
+          data_assunzione, data_cessazione, ore_lavorate, giorni_lavorati, paga_oraria, retribuzione, lordo, ritenute, contributi_dipendente, irpef,
+          addizionali, netto, voci, avvisi, origine, documento_id, file)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+        ON CONFLICT (chiave) DO UPDATE SET modello = EXCLUDED.modello, matricola = EXCLUDED.matricola, nome = EXCLUDED.nome, qualifica = EXCLUDED.qualifica,
+          livello = EXCLUDED.livello, mansione = EXCLUDED.mansione, data_assunzione = EXCLUDED.data_assunzione, data_cessazione = EXCLUDED.data_cessazione,
+          ore_lavorate = EXCLUDED.ore_lavorate, giorni_lavorati = EXCLUDED.giorni_lavorati, paga_oraria = EXCLUDED.paga_oraria, retribuzione = EXCLUDED.retribuzione,
+          lordo = EXCLUDED.lordo, ritenute = EXCLUDED.ritenute, contributi_dipendente = EXCLUDED.contributi_dipendente, irpef = EXCLUDED.irpef,
+          addizionali = EXCLUDED.addizionali, netto = EXCLUDED.netto, voci = EXCLUDED.voci, avvisi = EXCLUDED.avvisi, origine = EXCLUDED.origine,
+          documento_id = EXCLUDED.documento_id, file = EXCLUDED.file, aggiornato_il = now()`,
+        [chiaveCedolino(x), x.anno, x.mese, x.mensilita, x.modello, x.matricola, x.nome, x.codice_fiscale, x.qualifica, x.livello, x.mansione,
+          x.data_assunzione, x.data_cessazione, x.ore_lavorate, x.giorni_lavorati, x.paga_oraria, x.retribuzione, x.lordo, x.ritenute,
+          x.contributi_dipendente, x.irpef, x.addizionali, x.netto, JSON.stringify(x.voci), JSON.stringify(x.avvisi), opz.origine,
+          opz.documentoId ?? null, x.file ?? opz.file ?? null]);
+    }
+  });
+}
+
+/**
+ * Storico delle buste paga dall'archivio (file cedolini.json.gz preparato con `tools/cedolini-da-pdf.ts`, fuori dal repository):
+ * anteprima, poi conferma. I cedolini già letti dal portale dai PDF arrivati (più recenti) non si toccano.
+ */
+export async function caricaStoricoCedolini(x: unknown, opz: { anteprima: boolean }) {
+  const cedolini = cedoliniValidi(x);
+  const daDocumenti = new Set((await q<{ chiave: string }>(`SELECT chiave FROM cedolini WHERE origine = 'documento'`)).map(r => r.chiave));
+  const daCaricare = cedolini.filter(c => !daDocumenti.has(chiaveCedolino(c)));
+  const periodi = cedolini.map(c => c.anno * 100 + c.mese);
+  const esito = { cedolini: cedolini.length, caricati: daCaricare.length, saltati: cedolini.length - daCaricare.length,
+    persone: new Set(cedolini.map(c => c.codice_fiscale ?? c.nome)).size, mesi: new Set(periodi).size,
+    dal: periodi.length ? Math.min(...periodi) : null, al: periodi.length ? Math.max(...periodi) : null };
+  if (opz.anteprima) return { ...esito, anteprima: true };
+  for (let i = 0; i < daCaricare.length; i += 100) await salvaCedolini(daCaricare.slice(i, i + 100), { origine: 'archivio' });
   return { ...esito, anteprima: false };
 }
 
