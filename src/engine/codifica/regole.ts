@@ -7,6 +7,8 @@
  * Nessun accesso al database: il progressivo finale lo assegna il database (src/server/codifica-servizio.ts).
  */
 
+import { CASE_AGGIUNTI, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
+
 export const OK = 'OK', VER = 'DA VERIFICARE', MAN = 'MANUALE';
 export type Stato = typeof OK | typeof VER | typeof MAN;
 
@@ -112,7 +114,7 @@ const IC_FAM: Record<string, string> = { SOIC: 'SO', SO: 'SO', TSSOP: 'TS', SSOP
   WQFN: 'QN', VQFN: 'QN', UQFN: 'QN', TFQFN: 'QN', TQFN: 'QN', VFQFPN: 'QN', UFQFN: 'QN',
   VSSOP: 'MS', SOP: 'SO', LGA: 'LG', VFDFN: 'DN', TDFN: 'DN', XDFN: 'DN', UFDN: 'DN',
   BGA: 'BG', HTSSOP: 'TS', TSOP: 'TP' };
-const IC_BIG: Record<string, string> = { LQ: 'L', TQ: 'Q', SO: 'S', QN: 'N', BG: 'B', LG: 'G', TP: 'P', DN: 'D', TS: 'T', MS: 'M', SS: 'S', QS: 'Q' };
+const IC_BIG: Record<string, string> = { LQ: 'L', TQ: 'Q', SO: 'S', QN: 'N', BG: 'B', LG: 'G', TP: 'P', DN: 'D', TS: 'T', MS: 'M', SS: 'S', QS: 'Q', WL: 'W' };
 
 type Case = [codice: string | null, tecnologia: string | null, stato: Stato, nota: string];
 
@@ -123,15 +125,19 @@ export function caseLookup(raw: unknown): Case {
   if (c in CASE_FIX) return [CASE_FIX[c], 'S', OK, ''];
   if (c in THT_CASE) return [THT_CASE[c], 'T', OK, ''];
   if (c in CASE_VER) return [CASE_VER[c][0], 'S', VER, CASE_VER[c][1]];
+  // regole aggiunte dopo il programma Python (registro in aggiunte.ts, 1/11/2026)
+  if (c in CASE_AGGIUNTI) { const [cod, t, st, nota] = CASE_AGGIUNTI[c]; return [cod, t, st === 'OK' ? OK : VER, nota]; }
   const m = c.match(/^(\d+)([A-Z]+)$/) ?? c.match(/^([A-Z]+)(\d+)$/);
   if (m) {
     const [a, b] = [m[1], m[2]];
     const [n, f] = soloCifre(a) ? [a, b] : [b, a];
-    if (f in IC_FAM) {
-      const fam = IC_FAM[f], k = parseInt(n, 10);
-      if (k < 100) return [`${fam}${zfill(String(k), 2)}`, 'S', OK, ''];
-      return [`${IC_BIG[fam]}${k}`, 'S', OK, ''];
+    if (f in IC_FAM || f in IC_FAM_AGGIUNTE) {
+      const fam = IC_FAM[f] ?? IC_FAM_AGGIUNTE[f][0], k = parseInt(n, 10);
+      const [st, nota] = f in IC_FAM ? [OK, ''] as const : [VER, IC_FAM_AGGIUNTE[f][1]] as const;
+      if (k < 100) return [`${fam}${zfill(String(k), 2)}`, 'S', st, nota];
+      return [`${IC_BIG[fam]}${k}`, 'S', st, nota];
     }
+    if (DIP_THT.includes(f) && parseInt(n, 10) < 100) return [`DP${zfill(String(parseInt(n, 10)), 2)}`, 'T', VER, `${f}-${parseInt(n, 10)} come il DIP-6 già in tabella (DP06)`];
   }
   return [null, null, MAN, `case "${raw}" non in tabella: da definire`];
 }
@@ -287,6 +293,11 @@ export const FAMIGLIE: Record<string, Famiglia> = {
   PO: { nome: 'Potenziometri', breve: 'POT', prod: ['case', 'valore', 'RID'], kind: 'R' },
   FE: { nome: 'Filtri EMI', breve: 'FILTRO EMI', prod: ['case', 'RID'], kind: null },
   TF: { nome: 'Trasformatori', breve: 'TRASF', prod: ['case', 'RID'], kind: null },
+  // famiglie aggiunte l'1/11/2026 (registro in aggiunte.ts): codici costruiti come quelli delle famiglie vicine
+  CF: { nome: 'Condensatori film', breve: 'CAP FILM', prod: ['case', 'valore', 'tolleranza', 'tensione'], kind: 'C' },
+  NT: { nome: 'Termistori NTC/PTC', breve: 'TERMISTORE', prod: ['case', 'valore', 'tolleranza'], kind: 'R' },
+  BT: { nome: 'Batterie e portabatterie', breve: 'BATTERIA', prod: ['tipo', 'PN'], kind: null },
+  AN: { nome: 'Antenne', breve: 'ANTENNA', prod: ['tipo', 'PN'], kind: null },
 };
 export const ETICHETTE: Record<Attr, string> = { case: 'Case/Formato', valore: 'Valore', tolleranza: 'Tolleranza %', tensione: 'Tensione',
   dielettrico: 'Dielettrico', potenza: 'Potenza', corrente: 'Corrente', dcr: 'R serie (DCR)', colore: 'Colore', tipo: 'Tipo',
@@ -439,6 +450,17 @@ function caseGest(fam: string, a: Attributi): Case {
     if (tipo in CNT) return [CNT[tipo], tech, OK, ''];
     return [null, tech, MAN, `tipo connettore "${a.tipo ?? 'None'}" non in tabella`];
   }
+  if (fam === 'BT' || fam === 'AN') { // batterie e antenne: il "case" del gestionale è il tipo (come i connettori)
+    const tipo = String(a.tipo ?? '').replace(/\s/g, '').toUpperCase();
+    const tab = fam === 'BT' ? TIPI_BATTERIE : TIPI_ANTENNE;
+    const tech = cr === 'THT' || a.tecnologia === 'T' ? 'T' : 'S';
+    if (tipo in tab) return [tab[tipo], tech, OK, ''];
+    return [null, tech, MAN, `tipo "${a.tipo ?? 'None'}" non in tabella: ${Object.keys(tab).join(', ')}`];
+  }
+  if (fam === 'CF') { // film THT: il formato è il passo dei piedini (P150 = 15 mm)
+    const m = cr.match(/^P(\d{2,3})$/);
+    if (m) return [`P${zfill(m[1], 3)}`, 'T', OK, ''];
+  }
   if (!cr) return [null, null, MAN, 'case non indicato'];
   if (['THT', 'ASS', 'RAD'].includes(cr) && fam !== 'DL') return [null, 'T', MAN, 'componente THT: indicare il formato (passo/dimensione)'];
   if (fam === 'CE') {
@@ -474,7 +496,7 @@ export function codiceGestionaleRadice(fam: string, a: Attributi, pn: unknown): 
   let V: string | null = null;
   const val = a.valore;
   const pv = (x: unknown, k: Tipo) => { try { return parseValue(x, k); } catch (e) { if (e instanceof ErroreValore) throw new ErroreValore(String(x)); throw e; } };
-  if (['RS', 'RR', 'PO'].includes(fam)) {
+  if (['RS', 'RR', 'PO', 'NT'].includes(fam)) {
     const v = pv(val, 'R');
     if (v == null) flag(MAN, 'valore mancante');
     else {
@@ -484,7 +506,7 @@ export function codiceGestionaleRadice(fam: string, a: Attributi, pn: unknown): 
       if (!t) { t = 'X'; note.push('tolleranza non indicata: X'); }
       V = s + t;
     }
-  } else if (['CC', 'CE', 'CT'].includes(fam)) {
+  } else if (['CC', 'CE', 'CT', 'CF'].includes(fam)) {
     const v = pv(val, 'C');
     let [vl] = voltLetter(a.tensione);
     if (v == null) flag(MAN, 'capacità mancante');

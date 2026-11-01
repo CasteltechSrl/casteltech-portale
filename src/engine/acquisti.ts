@@ -12,8 +12,8 @@
  *  - Reperibilità: si cerca da tutti i distributori; critico solo se il componente non si trova da nessuna parte (Adriano, 28/10/2026).
  */
 
-export type Fornitore = 'digikey' | 'mouser' | 'farnell' | 'tme';
-export const NOMI_FORNITORI: Record<Fornitore, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME' };
+export type Fornitore = 'digikey' | 'mouser' | 'farnell' | 'tme' | 'arrow';
+export const NOMI_FORNITORI: Record<Fornitore, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME', arrow: 'Arrow' };
 
 export interface Scaglione { qta: number; prezzo: number }
 export interface Offerta {

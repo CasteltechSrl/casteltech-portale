@@ -30,28 +30,40 @@ export function parametriDk(p: ProdottoDigiKey): Record<string, string> {
   return out;
 }
 
+/**
+ * Famiglia dalla categoria DigiKey. Si guarda prima la categoria più specifica (foglia), poi le madri:
+ * la madre "Crystals, Oscillators, Resonators" contiene tutte e tre le parole, "TVS" contiene i varistori,
+ * "Potentiometers, Variable Resistors" contiene "Resistors" (correzione 1/11/2026, registro in aggiunte.ts).
+ */
+export const REGOLE_CATEGORIE: [string, string][] = [
+  ['RESISTOR NETWORKS', 'RR'], ['POTENTIOMETER', 'PO'], ['TRIMMER', 'PO'], ['THERMISTOR', 'NT'], ['INRUSH CURRENT LIMITER', 'NT'],
+  ['CHIP RESISTOR', 'RS'], ['THROUGH HOLE RESISTORS', 'RS'], ['RESISTORS', 'RS'],
+  ['CERAMIC CAPACITORS', 'CC'], ['ALUMINUM ELECTROLYTIC', 'CE'], ['ALUMINUM - POLYMER', 'CE'], ['ELECTRIC DOUBLE LAYER', 'CE'], ['SUPERCAPACITOR', 'CE'],
+  ['TANTALUM', 'CT'], ['FILM CAPACITORS', 'CF'], ['FERRITE BEADS', 'FR'], ['COMMON MODE CHOKES', 'FE'], ['FIXED INDUCTORS', 'ID'], ['INDUCTORS', 'ID'],
+  ['PTC RESETTABLE FUSES', 'FS'], ['FUSES', 'FS'], ['ZENER', 'DZ'], ['VARISTORS', 'VR'], ['TVS', 'SP'],
+  ['OPTOISOLATORS', 'IC'], ['DIGITAL ISOLATORS', 'IC'], ['ISOLATORS', 'IC'],
+  ['LED INDICATION', 'DL'], ['LED ', 'DL'], ['FETS, MOSFETS', 'TM'], ['BIPOLAR (BJT)', 'TB'],
+  ['THYRISTORS', 'TS'], ['SCRS', 'TS'], ['TRIACS', 'TS'], ['OSCILLATORS', 'OS'], ['RESONATORS', 'RI'], ['CRYSTALS', 'QZ'],
+  ['RELAYS', 'RL'], ['DIP SWITCHES', 'DW'], ['SWITCHES', 'IT'],
+  ['BATTERY HOLDERS', 'BT'], ['BATTERIES', 'BT'], ['BATTERY PRODUCTS', 'BT'], ['RF ANTENNAS', 'AN'], ['ANTENNAS', 'AN'],
+  ['DC DC CONVERTERS', 'CV'], ['AC DC CONVERTERS', 'CV'], ['TRANSFORMERS', 'TF'], ['EMI/RFI FILTERS', 'FE'],
+  ['TERMINAL BLOCKS', 'CN'], ['CONNECTORS', 'CN'], ['INTEGRATED CIRCUITS', 'IC'], ['RF TRANSCEIVER', 'IC'],
+  ['SENSORS', 'MI'], ['BUZZERS', 'MI'], ['AUDIO PRODUCTS', 'MI'],
+];
+
 export function famigliaDaDk(cats: string[], par: Record<string, string>, descr: string): string | null {
   const t = cats.join(' | ').toUpperCase(), d = descr.toUpperCase();
   const tipoDiodo = `${par['Diode Type'] ?? ''} ${par['Technology'] ?? ''}`.toUpperCase();
-  const regole: [string, string][] = [
-    ['RESISTOR NETWORKS', 'RR'], t.includes('RESISTOR') ? ['ARRAYS', 'RR'] : ['@@', ''],
-    ['CHIP RESISTOR', 'RS'], ['THROUGH HOLE RESISTORS', 'RS'], ['RESISTORS', 'RS'],
-    ['CERAMIC CAPACITORS', 'CC'], ['ALUMINUM ELECTROLYTIC', 'CE'], ['ALUMINUM - POLYMER', 'CE'],
-    ['TANTALUM', 'CT'], ['FERRITE BEADS', 'FR'], ['FIXED INDUCTORS', 'ID'], ['INDUCTORS', 'ID'],
-    ['PTC RESETTABLE FUSES', 'FS'], ['FUSES', 'FS'], ['ZENER', 'DZ'], ['TVS', 'SP'], ['VARISTORS', 'VR'],
-    ['LED INDICATION', 'DL'], ['LED ', 'DL'], ['FETS, MOSFETS', 'TM'], ['BIPOLAR (BJT)', 'TB'],
-    ['THYRISTORS', 'TS'], ['SCRS', 'TS'], ['TRIACS', 'TS'], ['CRYSTALS', 'QZ'], ['RESONATORS', 'RI'],
-    ['OSCILLATORS', 'OS'], ['RELAYS', 'RL'], ['DIP SWITCHES', 'DW'], ['SWITCHES', 'IT'],
-    ['TERMINAL BLOCKS', 'CN'], ['CONNECTORS', 'CN'], ['INTEGRATED CIRCUITS', 'IC'], ['RF TRANSCEIVER', 'IC'],
-    ['SENSORS', 'MI'], ['BUZZERS', 'MI'], ['AUDIO PRODUCTS', 'MI'],
-  ];
   if (t.includes('DIODES') || t.includes('RECTIFIERS')) {
     if (t.includes('ZENER')) return 'DZ';
     if (t.includes('TVS')) return 'SP';
     if (tipoDiodo.includes('SCHOTTKY') || d.includes('SCHOTTKY')) return 'DS';
     return 'DI';
   }
-  for (const [chiave, fam] of regole) if (t.includes(chiave)) return fam || null;
+  for (const c of [...cats].reverse().map(x => x.toUpperCase())) {
+    if (c.includes('RESISTOR') && c.includes('ARRAYS')) return 'RR';
+    for (const [chiave, fam] of REGOLE_CATEGORIE) if (c.includes(chiave)) return fam;
+  }
   return null;
 }
 
@@ -79,7 +91,11 @@ const g = (x: number) => String(Number(x.toPrecision(6)));
 
 function caseDk(par: Record<string, string>, fam: string): string | null {
   const sdp = par['Supplier Device Package'] ?? '', pc = par['Package / Case'] ?? '';
-  if (['RS', 'RR', 'CC', 'CT', 'FR', 'FS', 'ID', 'DL', 'VR'].includes(fam)) { const m = pc.match(/^\s*(\d{4,5})\s*\(/); if (m) return m[1]; }
+  if (fam === 'CF') { // film THT: passo dei piedini (P150 = 15 mm); SMD: case chip come i ceramici
+    const p = (par['Lead Spacing'] ?? '').match(/\(([\d.]+)mm\)/);
+    if (p) return `P${String(Math.round(Number(p[1]) * 10)).padStart(3, '0')}`;
+  }
+  if (['RS', 'RR', 'CC', 'CT', 'FR', 'FS', 'ID', 'DL', 'VR', 'NT', 'CF'].includes(fam)) { const m = pc.match(/^\s*(\d{4,5})\s*\(/); if (m) return m[1]; }
   if (fam === 'CE') { const d = mm(par['Size / Dimension']); if (d) return `D${g(d[0])}`; }
   if (['ID', 'QZ', 'OS', 'RI'].includes(fam) && (!pc || pc.toUpperCase().includes('NONSTANDARD') || pc.toUpperCase().includes('SMD'))) {
     const d = mm(par['Size / Dimension']);
@@ -166,6 +182,17 @@ export function daDigikey(p: ProdottoDigiKey): { famiglia: string | null; attrib
     if (mt.includes('THROUGH HOLE')) a.case = 'THT';
   } else if (fam === 'IT') {
     a.tensione = (x('Contact Rating @ Voltage') ?? '').replace(/ /g, '').toUpperCase() || null;
+  } else if (fam === 'CF') {
+    a.valore = unita(x('Capacitance'), 'F'); a.tolleranza = tol || null; a.tensione = primo(x('Voltage Rating - DC') || x('Voltage - Rated'));
+  } else if (fam === 'NT') {
+    a.valore = ohm(x('Resistance @ 25°C') || x('Resistance in Ohms @ 25°C') || x('Resistance'));
+    a.tolleranza = primo(x('Resistance Tolerance') || x('Tolerance')).replace(/%/g, '').trim() || null;
+  } else if (fam === 'BT') {
+    const c = cats.join(' ').toUpperCase();
+    a.tipo = c.includes('HOLDER') ? 'PORTABATTERIA' : c.includes('CONTACT') ? 'CONTATTO' : 'BATTERIA';
+  } else if (fam === 'AN') {
+    const tipo = `${x('Antenna Type') ?? ''} ${x('Mounting Type') ?? ''}`.toUpperCase();
+    a.tipo = tipo.includes('CHIP') ? 'CHIP' : tipo.includes('PCB') || tipo.includes('FLEX') ? 'PCB' : tipo.includes('WHIP') || tipo.includes('CONNECTOR') ? 'ESTERNA' : null;
   } else if (fam === 'MI') {
     a.tipo = (cats.length ? cats[cats.length - 1] : '').toUpperCase().replace(/ /g, '').slice(0, 14) || null;
   }

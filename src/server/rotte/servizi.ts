@@ -14,7 +14,7 @@ const ETICHETTA: Record<StatoServizio, [classe: string, testo: string]> = {
 };
 const nf = (x: number, dec = 2) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: dec, minimumFractionDigits: dec }).format(x);
 const quando = (iso: string) => new Date(iso).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-const NOMI_SERVIZI: Record<string, string> = { ia: 'IA', render: 'Render', drive: 'Google Drive', gmail: 'Gmail', digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME' };
+const NOMI_SERVIZI: Record<string, string> = { ia: 'IA', render: 'Render', drive: 'Google Drive', gmail: 'Gmail', digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME', arrow: 'Arrow' };
 
 export function rotteServizi(pagina: Pagina) {
   const r = Router();

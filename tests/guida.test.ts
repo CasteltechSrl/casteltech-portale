@@ -32,6 +32,8 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.deepEqual(primi('nota di credito'), ['nota-credito']);
   assert.ok(primi('data di consegna al cliente', 2).includes('data-consegna'));
   assert.ok(primi('togliere una riga sbagliata dalla bom', 2).includes('codifica-bom'));
+  assert.ok(primi('codici compatibili da verificare', 2).includes('alternative-componenti'));
+  assert.ok(primi('famiglia condensatori film', 2).includes('codifica-bom'));
   assert.ok(primi('pasta saldante dai gerber', 2).includes('documenti-cliente'));
   assert.ok(primi('prezzo di vendita del prodotto', 2).includes('prezzi-anagrafiche'));
   assert.ok(primi('ultimo prezzo di acquisto componente', 2).includes('prezzi-anagrafiche'));

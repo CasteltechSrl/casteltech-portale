@@ -240,7 +240,7 @@ function statoCollegamenti() {
   const f = fornitoriConfigurati();
   const attivi = (Object.keys(f) as (keyof typeof f)[]).filter(k => f[k]).map(k => NOMI_FORNITORI[k]);
   return html`<p class="nota collegamenti">Distributori collegati: <b>${attivi.length ? attivi.join(', ') : 'nessuno'}</b> · lettura con l'IA:
-    <b>${iaConfigurata() ? 'attiva' : 'non attiva'}</b>${attivi.length < 4 || !iaConfigurata() ? html` · <a href="/impostazioni/componenti">come collegarli</a>` : ''}</p>`;
+    <b>${iaConfigurata() ? 'attiva' : 'non attiva'}</b>${attivi.length < Object.keys(f).length || !iaConfigurata() ? html` · <a href="/impostazioni/componenti">come collegarli</a>` : ''}</p>`;
 }
 
 function badgeEsito(r: RigaBom) {
@@ -307,6 +307,7 @@ function paginaAnalisi(a: any): Raw {
   </details>` : ''}
   ${righe.length ? html`
   ${avvisoNonMontati(righe)}
+  ${bloccoCompatibili(a, righe)}
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
     <button data-filtro="manca">Da completare (${righe.filter(r => CLASSE_ESITO[r.esito] === 'manca').length})</button>
     <button data-filtro="nuovo verifica">Nuovi (${righe.filter(r => ['nuovo', 'verifica'].includes(CLASSE_ESITO[r.esito])).length})</button>
@@ -317,6 +318,7 @@ function paginaAnalisi(a: any): Raw {
     ${righe.map(r => html`<tr id="riga-${r.n}" data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}">
       <td>${r.n}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
         ${r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
+          : r.alternativaProposta ? html`<br><a class="compatibile-da-verificare" href="#compatibili" title="P/N non trovato: il prezzo è quello di un compatibile, da verificare">→ ${r.alternativaProposta} <b>compatibile da verificare</b></a>`
           : r.alternative?.length ? html`<br><a class="alternative-pronte" href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative.length === 1 ? '1 alternativa' : `${r.alternative.length} alternative`}: scegli</a>` : ''}
         ${!r.pn && (r.valore || r.descrizioneBom) ? html`<br><small class="nota">${[r.valore, r.footprint].filter(Boolean).join(' · ') || r.descrizioneBom}</small>` : ''}</td>
       <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r)}</td>
@@ -363,6 +365,34 @@ export function tabellaConfronto(offerte: Offerta[], qta: number) {
   </tbody></table></div>`;
 }
 
+/**
+ * Sezione "Codici compatibili da verificare" (Adriano 1/11/2026): righe il cui P/N non si trova da nessun distributore. Il portale prezza
+ * la riga con un compatibile "al 100%" in teoria e lo segna; qui si vedono tutti insieme e si confermano, o si sceglie un'altra alternativa.
+ */
+function bloccoCompatibili(a: any, righe: RigaBom[]): Raw {
+  const elenco = righe.filter(r => r.esito !== ESITI.NON_MONTATO && !r.clienteFornisce
+    && (r.alternativaProposta || (!r.alternativaScelta && r.alternative?.length && r.reperibilita?.livello === 'critico')));
+  const verificati = righe.filter(r => r.alternativaScelta).length;
+  if (!elenco.length) return verificati ? html`<p class="nota" id="compatibili">${verificati === 1 ? '1 riga compra' : `${verificati} righe comprano`} un'alternativa scelta al posto del P/N della BOM (→ nella colonna P/N).</p>` : html``;
+  return html`<section class="blocco compatibili" id="compatibili"><h2>Codici compatibili da verificare <small class="nota">${elenco.length}</small></h2>
+    <p class="nota">Questi P/N non si trovano presso nessun distributore collegato. Dove c'è un compatibile al 100% (in teoria: stesso P/N con altra
+      confezione, stesse caratteristiche, sostituto diretto DigiKey o proposta pin-to-pin dell'IA trovata dai distributori) il prezzo della riga è il suo,
+      ma va controllato sul datasheet: "Confermo" lo rende definitivo, "altre" apre tutte le alternative della riga.</p>
+    <div class="tabella-scorre"><table><thead><tr><th>Riga</th><th>P/N della BOM</th><th>Compatibile proposto</th><th>Come è stato trovato</th>
+      <th>Prezzo</th><th class="n">Alternative</th><th></th></tr></thead><tbody>
+      ${elenco.map(r => {
+        const p = r.alternative?.find(x => x.mpn === r.alternativaProposta);
+        const x = r.acquisti[0]?.scelta;
+        const azione = `/quotazioni/bom/${a.id}/riga/${r.n}/alternativa`;
+        return html`<tr><td><a href="#riga-${r.n}">${r.n}</a></td><td><b>${r.pn ?? r.mpnAcquisto}</b><br><small class="nota">${r.descrizione ?? r.descrizioneBom ?? ''}</small></td>
+          <td>${p ? html`<b>${p.mpn}</b> <small>${p.produttore}</small><br><small class="nota">${p.descrizione}</small>` : html`<span class="livello critico">nessuno sicuramente uguale</span>`}</td>
+          <td>${p ? html`${p.fonte}${p.nota ? html`<br><small>${p.nota}</small>` : ''}` : ''}</td>
+          <td>${p && x ? html`${nomeFornitore(x.fornitore)} · ${euro4(x.prezzo)} €/pz${!x.disponibile ? ' · NON DISPONIBILE' : ''}` : ''}</td>
+          <td class="n"><a href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative?.length ?? 0} altre</a></td>
+          <td>${p ? html`<form method="post" action="${azione}" class="inline"><button name="usa" value="${p.mpn}" class="primario" title="Controllato sul datasheet: si compra questo">Confermo</button></form>` : ''}</td></tr>`; })}
+    </tbody></table></div></section>`;
+}
+
 /** Alternative al P/N: proposte dal portale e scritte a mano; l'operatore sceglie quale comprare (Adriano 28/10/2026). */
 function bloccoAlternative(a: any, r: RigaBom, qta: number): Raw {
   if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce) return html``;
@@ -372,6 +402,9 @@ function bloccoAlternative(a: any, r: RigaBom, qta: number): Raw {
   return html`<section class="blocco" id="alternative"><h2>Alternative</h2>
     ${r.alternativaScelta ? html`<div class="riga-campi">Si compra <b>${r.alternativaScelta}</b> al posto di ${r.pn ?? r.mpnAcquisto ?? 'quello della BOM'}.
       <form method="post" action="${azione}" class="inline"><button name="originale" value="1">Torna al P/N della BOM</button></form></div>`
+      : r.alternativaProposta ? html`<div class="avviso">Il P/N non si trova da nessun distributore: il prezzo è quello del compatibile <b>${r.alternativaProposta}</b>,
+        DA VERIFICARE sul datasheet. <form method="post" action="${azione}" class="inline"><button name="usa" value="${r.alternativaProposta}" class="primario">Confermo</button></form>
+        <form method="post" action="${azione}" class="inline"><button name="originale" value="1">Non va bene</button></form></div>`
       : critico ? html`<p class="nota">Il P/N non si trova da nessun distributore: scegli un'alternativa o scrivila qui sotto.</p>` : ''}
     ${alternative.length ? html`<div class="tabella-scorre"><table><thead><tr><th>P/N</th><th>Produttore</th><th>Descrizione</th><th>Come è stata trovata</th>
       <th class="n">Disponibili</th><th>Miglior offerta per ${num(qta, 0)}</th><th></th></tr></thead><tbody>
@@ -379,7 +412,7 @@ function bloccoAlternative(a: any, r: RigaBom, qta: number): Raw {
         const s = sceltaMigliore(x.offerte, Math.max(1, qta));
         const stock = Math.max(0, ...x.offerte.map(o => o.stock));
         return html`<tr class="${x.mpn === r.alternativaScelta ? 'scelta' : ''}"><td><b>${x.mpn}</b></td><td>${x.produttore}</td><td class="taglia" title="${x.descrizione}">${x.descrizione}</td>
-          <td>${x.fonte}${x.identica === true ? html` <span class="livello ok" title="Stesso codice di produzione della riga">stesse caratteristiche</span>`
+          <td>${x.fonte}${x.nota ? html`<br><small>${x.nota}</small>` : ''}${x.mpn === r.alternativaProposta ? html` <span class="livello attenzione">prezzo in uso, da verificare</span>` : ''}${x.identica === true ? html` <span class="livello ok" title="Stesso codice di produzione della riga">stesse caratteristiche</span>`
             : x.identica === false ? html` <span class="livello critico">caratteristiche diverse</span>` : html` <span class="livello attenzione">da controllare</span>`}</td>
           <td class="n">${num(stock, 0)}</td>
           <td>${s ? html`${NOMI_FORNITORI[s.offerta.fornitore]} · ${euro4(s.acquisto.prezzo)} €/pz → <b>${euro2(s.acquisto.totale)}</b>${s.disponibile ? '' : ' · NON DISPONIBILE'}` : html`<small class="nota">nessun prezzo</small>`}</td>

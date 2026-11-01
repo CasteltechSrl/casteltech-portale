@@ -11,8 +11,8 @@ export const LIMITE_MEMORIA_MB = Number(process.env.RENDER_MEMORIA_MB) || 512;
 export const LIMITE_DATABASE_MB = Number(process.env.NEON_SPAZIO_MB) || 512;
 export const LIMITE_GMAIL_GIORNO = 2000;
 /** Richieste al giorno dei distributori (piani gratuiti): DigiKey e Farnell 1000, Mouser 1000 (e 30 al minuto); TME nessun limite giornaliero noto. */
-export const LIMITI_DISTRIBUTORI: Record<string, number | null> = { digikey: 1000, mouser: 1000, farnell: 1000, tme: null };
-export const NOMI_DISTRIBUTORI: Record<string, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME' };
+export const LIMITI_DISTRIBUTORI: Record<string, number | null> = { digikey: 1000, mouser: 1000, farnell: 1000, tme: null, arrow: null };
+export const NOMI_DISTRIBUTORI: Record<string, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME', arrow: 'Arrow' };
 
 export const modelloIa = () => process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5-5';
 
@@ -118,7 +118,7 @@ export function datiInMemoria(): DatiServizi {
   const g = oggi(), m = inizioMese();
   const e = process.env;
   const conf: Record<string, boolean> = { digikey: !!(e.DIGIKEY_CLIENT_ID && e.DIGIKEY_CLIENT_SECRET), mouser: !!e.MOUSER_API_KEY,
-    farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET) };
+    farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET), arrow: !!(e.ARROW_LOGIN && e.ARROW_API_KEY) };
   const errIa = ultimiErrori.get('ia') ?? null;
   const c = ia.credito;
   const creditoSpeso = c ? c.spesoPrima + (totale('ia', c.dal > c.contaDa ? c.dal : c.contaDa).costoUsd ?? 0) : 0;

@@ -226,6 +226,15 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    scelte e alternative a mano restano dopo Rielabora. BOM senza colonna P/N (Adriano 29/10/2026, `engine/codifica/candidati-pn.ts`): codici cercati in Valore e Descrizione,
    si compra quello che i distributori hanno; due codici diversi = stesso codice / JEDEC equivalente / "codice da validare"; dati BOM diversi dal codice
    (valore, case, tensione più bassa) = da validare; celle DNP / "Excluded from BOM" = non montato. Prezzo a mano per riga (`prezzoManuale`, POST `.../riga/:n/prezzo`): vale al posto di quello proposto.
+   Ricerca e compatibili (Adriano 1/11/2026; `cercaPn`, `cercaVarianti`, `digikeySostituti` in `fornitori.ts`, `compatibileProposto` in `codifica-servizio.ts`,
+   `proponiCompatibiliIa` in `lettura-ia.ts`, test in `tests/codifica-aggiunte.test.ts`): ogni P/N presso TUTTI i distributori in parallelo, un errore non ferma il
+   distributore (si riprova; stop solo chiavi, limite, 3 errori di fila). P/N non trovato → `alternativaProposta` = compatibile "al 100% in teoria" che dà il prezzo
+   (variante dello stesso P/N > stesso codice di produzione > sostituto DigiKey diretto > pin-to-pin dell'IA venduto da un distributore; mai "simile"/"upgrade"),
+   reperibilità "attenzione", sezione "Codici compatibili da verificare" in cima alla BOM, "Confermo" = `alternativaScelta`. Arrow (`engine/arrow.ts`,
+   ARROW_LOGIN + ARROW_API_KEY da developers.arrow.com, USD → EUR cambio BCE): lettura da confermare con la prima Prova.
+   Codifica, regole aggiunte (registro `REGISTRO_AGGIUNTE` in `engine/codifica/aggiunte.ts`, visibile in Impostazioni → Componenti; ogni aggiunta nuova va lì):
+   famiglie CF film, NT termistori, BT batterie, AN antenne; case nuovi/sinonimi (`CASE_AGGIUNTI`, `IC_FAM_AGGIUNTE`, DIP); categorie DigiKey dalla più specifica.
+   I componenti in archivio non cambiano codice; le aggiunte toccano solo casi che il Python lasciava "da completare" (`tools/verifica-codifica.ts` da rifare con i dati veri).
    Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
