@@ -99,6 +99,11 @@ test('servizi: riavvio inatteso solo se la versione è la stessa dell\'avvio pri
   assert.equal(riavvioInatteso(null, 'abc'), false);
 });
 
+test('servizi: riavvio dopo un arresto regolare di Render (variabile cambiata) non è inatteso', () => {
+  assert.equal(riavvioInatteso('abc', 'abc', true), false);
+  assert.equal(riavvioInatteso('abc', 'abc', false), true);
+});
+
 test('servizi: i consumi in memoria fanno scattare l\'avviso in cima alle pagine (senza database)', async () => {
   process.env.ANTHROPIC_API_KEY ??= 'prova';
   const s = await import('../src/server/stato-servizi.js');

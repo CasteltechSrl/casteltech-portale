@@ -73,7 +73,12 @@ export async function avviaConsumiServizi() {
       .catch(err => console.error('Errore del servizio non salvato:', err?.message ?? err));
   });
   // salvare quello che resta quando Render ferma il portale (pubblicazione, riavvio)
-  process.once('SIGTERM', () => { salvaConsumi().catch(() => {}).finally(() => process.exit(0)); });
+  // e segnare che è stato fermato in modo regolare: al prossimo avvio non è un riavvio per memoria esaurita
+  process.once('SIGTERM', () => {
+    const arresto = q(`INSERT INTO eventi_servizi (servizio, tipo, messaggio) VALUES ('render', 'arresto', 'fermato da Render in modo regolare')`).catch(() => {});
+    const fine = setTimeout(() => process.exit(0), 10_000);
+    Promise.all([salvaConsumi().catch(() => {}), arresto]).finally(() => { clearTimeout(fine); process.exit(0); });
+  });
   try {
     const righe = await q(`SELECT giorno::text AS giorno, servizio, voce, chiamate, errori, token_ingresso::float AS ti, token_uscita::float AS tu, costo_usd::float AS costo
       FROM consumi_servizi WHERE giorno >= $1`, [inizioMese()]);
@@ -84,9 +89,14 @@ export async function avviaConsumiServizi() {
     const versione = process.env.RENDER_GIT_COMMIT ?? null;
     if (versione) {
       const prima = await q1<{ v: string }>(`SELECT dati->>'versione' AS v FROM eventi_servizi WHERE servizio = 'render' AND tipo = 'avvio' ORDER BY il DESC LIMIT 1`);
-      const inatteso = riavvioInatteso(prima?.v, versione);
+      // l'ultimo evento di Render è un arresto regolare (Render ferma il vecchio portale prima di avviare il nuovo: c'è il disco)
+      const ultimo = await q1<{ tipo: string }>(`SELECT tipo FROM eventi_servizi WHERE servizio = 'render' AND tipo IN ('avvio','arresto') ORDER BY il DESC, id DESC LIMIT 1`);
+      const fermatoBene = ultimo?.tipo === 'arresto';
+      const inatteso = riavvioInatteso(prima?.v, versione, fermatoBene);
+      const stessa = !!prima?.v && prima.v === versione;
       await q(`INSERT INTO eventi_servizi (servizio, tipo, messaggio, dati) VALUES ('render', 'avvio', $1, $2)`,
-        [inatteso ? 'riavvio senza pubblicazione (probabile memoria esaurita)' : 'avvio dopo una pubblicazione', JSON.stringify({ versione, inatteso })]);
+        [inatteso ? 'riavvio senza pubblicazione (probabile memoria esaurita)' : stessa ? 'riavvio regolare (variabile cambiata o riavvio da Render)' : 'avvio dopo una pubblicazione',
+          JSON.stringify({ versione, inatteso })]);
     }
     memoria.riavviiInattesi = (await q<{ il: string }>(`SELECT il FROM eventi_servizi WHERE servizio = 'render' AND tipo = 'avvio'
       AND (dati->>'inatteso')::boolean AND il > now() - interval '7 days' ORDER BY il DESC`)).map(r => new Date(r.il).toISOString());
@@ -158,7 +168,7 @@ export async function datiPaginaServizi(): Promise<PaginaServizi> {
     spazioDatabaseMb(),
     q<{ nome: string; mb: number }>(`SELECT relname AS nome, pg_total_relation_size(relid)::float / 1048576 AS mb FROM pg_catalog.pg_statio_user_tables ORDER BY 2 DESC LIMIT 6`),
     oreNeon(), spesaAnthropicMese(),
-    q(`SELECT il, servizio, tipo, messaggio FROM eventi_servizi WHERE tipo <> 'avvio' OR (dati->>'inatteso')::boolean ORDER BY il DESC LIMIT 15`),
+    q(`SELECT il, servizio, tipo, messaggio FROM eventi_servizi WHERE tipo NOT IN ('avvio','arresto') OR (dati->>'inatteso')::boolean ORDER BY il DESC LIMIT 15`),
     q(`SELECT to_char(giorno, 'YYYY-MM') AS mese, sum(chiamate)::int AS chiamate, sum(costo_usd)::float AS costo, sum(token_ingresso)::float AS ti, sum(token_uscita)::float AS tu
       FROM consumi_servizi WHERE servizio = 'ia' AND giorno >= (date_trunc('month', now()) - interval '5 months') GROUP BY 1 ORDER BY 1 DESC`),
   ]);
