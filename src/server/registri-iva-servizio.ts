@@ -16,7 +16,7 @@ import {
 } from '../engine/registri-iva.js';
 
 /** Blocchi DatiRiepilogo del file XML, estratti dal database (non si legge tutto il file). */
-const RIEPILOGO_XML = (colonna: string) => `(SELECT string_agg(m[1], '') FROM regexp_matches(coalesce(${colonna}, ''), '(<DatiRiepilogo>.*?</DatiRiepilogo>)', 'g') AS m)`;
+const RIEPILOGO_XML = (colonna: string) => `(SELECT string_agg(m[1], '') FROM regexp_matches(coalesce(${colonna}, ''), '(<(?:\\w+:)?DatiRiepilogo>.*?</(?:\\w+:)?DatiRiepilogo>)', 'g') AS m)`;
 
 export interface DatiRegistri {
   periodo: Periodo; vendite: RigaRegistro[]; acquisti: RigaRegistro[]; autofatture: RigaRegistro[];

@@ -4,6 +4,22 @@ document.querySelectorAll('select.invia-subito').forEach(s => s.addEventListener
 document.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('input', () => {
   const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p, p);
 }));
+// Prodotti: la tendina del cliente di ogni riga ha solo il cliente attuale; l'elenco completo si copia dal modello
+// al primo clic (o focus da tastiera), così la pagina resta leggera anche con molti prodotti
+const modelloClienti = document.getElementById('modello-clienti');
+function riempiClienti(sel) {
+  if (!modelloClienti || sel.dataset.piena) return;
+  const attuale = sel.value;
+  sel.replaceChildren(modelloClienti.content.cloneNode(true));
+  sel.value = attuale;
+  if (sel.value !== attuale) sel.selectedIndex = 0;
+  sel.dataset.piena = '1';
+}
+document.querySelectorAll('select.clienti-al-clic').forEach(sel => {
+  sel.addEventListener('pointerdown', () => riempiClienti(sel));
+  sel.addEventListener('focus', () => riempiClienti(sel));
+  sel.addEventListener('keydown', () => riempiClienti(sel));
+});
 const controlla = document.getElementById('carica-anagrafiche');
 const conferma = document.getElementById('conferma-anagrafiche');
 const out = document.getElementById('esito-anagrafiche');

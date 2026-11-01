@@ -11,7 +11,7 @@ import {
 } from '../conferme-ordine-servizio.js';
 import { controlliEmissione, importoRigaConferma, totaleConferma } from '../../engine/conferme-ordine.js';
 import { pagina } from './ordini.js';
-import { html, data, euro, raw } from '../views/html.js';
+import { html, data, euro, raw, numCampo } from '../views/html.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 
@@ -48,8 +48,8 @@ export function rotteConferme() {
     const rigaModulo = (x: any, i: number) => html`<tr>
       <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
       <td class="largo">${cellaDescrizione(x, i, prodotti, 'maiuscolo')}</td>
-      <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
-      <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
       <td><input type="date" name="righe[${i}][consegna]" value="${x.consegna ?? ''}"></td>
       <td class="n">${x.quantita != null ? html`<span class="nota">${euro(importoRigaConferma(x))}</span>` : ''}</td>
       <td><input type="checkbox" name="righe[${i}][togli]" title="Togli questa riga al salvataggio"></td>

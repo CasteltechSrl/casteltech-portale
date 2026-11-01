@@ -167,6 +167,8 @@ export function avviaBackupNotturno() {
     const feriale = !['Sat', 'Sun'].includes(p.weekday);
     if (feriale && p.hour === '20' && Number(p.minute) >= 30 && giorno !== ultimoGiorno) {
       ultimoGiorno = giorno;
+      // il portale è ripartito dopo le 20:30 (pubblicazione serale): la copia di oggi c'è già
+      if (elencoBackup().some(b => b.nome.startsWith(`casteltech-backup-${giorno}`))) return;
       void backupNotturno();
     }
   }, 10 * 60_000).unref();

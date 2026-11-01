@@ -65,9 +65,11 @@ app.use('/calendario', rotteCalendario());
 
 const segreto = process.env.SESSION_SECRET;
 if (!segreto && process.env.NODE_ENV === 'production') throw new Error('Manca SESSION_SECRET');
+// pulizia delle sessioni scadute: non con un timer (sveglierebbe Neon di notte e nel weekend) ma dopo un login, al massimo una volta al giorno
+const archivioSessioni = new (pgSession(session))({ pool, createTableIfMissing: true, tableName: 'sessioni', pruneSessionInterval: false });
+let ultimaPuliziaSessioni = 0;
 app.use(session({
-  // pulizia sessioni scadute ogni 12 ore (non ogni 15 minuti), per non tenere sveglio il database
-  store: new (pgSession(session))({ pool, createTableIfMissing: true, tableName: 'sessioni', pruneSessionInterval: 12 * 60 * 60 }),
+  store: archivioSessioni,
   secret: segreto ?? 'solo-per-sviluppo-locale',
   resave: false, saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 12 },
@@ -120,7 +122,9 @@ const paginaLogin = (errore?: string, torna = '/') => String(layout({
 }));
 app.get('/login', (req, res) => res.send(paginaLogin(undefined, String(req.query.torna ?? '/'))));
 app.post('/login', async (req, res) => {
-  const ip = req.ip ?? '';
+  // tentativi contati per indirizzo + email (chi cambia indirizzo non riparte da zero sulla stessa email); le voci scadute si tolgono
+  for (const [k, v] of tentativi) if (v.fino <= Date.now()) tentativi.delete(k);
+  const ip = `${req.ip ?? ''}|${String(req.body.email ?? '').trim().toLowerCase()}`;
   const t = tentativi.get(ip);
   if (t && t.n >= 8 && t.fino > Date.now()) return res.status(429).send(paginaLogin('Troppi tentativi: riprova tra qualche minuto.'));
   const u = await q1(`SELECT * FROM utenti WHERE email = lower($1) AND attivo`, [String(req.body.email ?? '').trim()]);
@@ -130,6 +134,7 @@ app.post('/login', async (req, res) => {
     return res.status(401).send(paginaLogin('Email o password non corretti.'));
   }
   tentativi.delete(ip);
+  if (Date.now() - ultimaPuliziaSessioni > 24 * 3600_000) { ultimaPuliziaSessioni = Date.now(); archivioSessioni.pruneSessions(e => { if (e) console.error('Pulizia sessioni:', e); }); }
   req.session.regenerate(() => {
     req.session.utente = { id: u.id, nome: u.nome, ruolo: u.ruolo };
     const torna = String(req.body.torna ?? '/');
@@ -172,15 +177,19 @@ app.use('/r', rotteReparto());
 // QR stampato sulla scheda di produzione: in reparto (operatore entrato con il PIN) apre la scelta della fase,
 // all'ufficio apre la commessa; chi non è entrato va all'accesso del reparto
 app.get('/c/:codice', async (req, res) => {
+  const reparto = `/r/c/${encodeURIComponent(req.params.codice)}`;
+  // senza accesso non si interroga il database (il QR è pubblico sulla carta): prima si entra, poi si torna qui
+  if (!req.session.operatore && !req.session.utente) return res.redirect('/r/accesso?torna=' + encodeURIComponent(reparto));
+  if (req.session.operatore) return res.redirect(reparto);
   const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE codice_qr = $1`, [req.params.codice]);
   if (!c) return res.status(404).send('Commessa non trovata');
-  const reparto = `/r/c/${encodeURIComponent(req.params.codice)}`;
-  if (req.session.operatore) return res.redirect(reparto);
   if (req.session.utente?.ruolo === 'ufficio') return res.redirect(`/commesse/${c.id}`);
   res.redirect('/r/accesso?torna=' + encodeURIComponent(reparto));
 });
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // indirizzo con un id non numerico (es. /preventivi/abc/stampa): PostgreSQL rifiuta il valore → è una pagina che non esiste, non un guasto
+  if (err?.code === '22P02') return res.status(404).send('Pagina non trovata.');
   console.error(err);
   res.status(500).send('Si è verificato un errore. Riprova; se continua, segnala l\'ora e la pagina.');
 });

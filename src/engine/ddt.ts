@@ -14,6 +14,20 @@ export const PORTI = ['FRANCO', 'ASSEGNATO'] as const;
  */
 export const INIZIO_DDT_DA_FATTURARE = '2025-01-01';
 
+/**
+ * Causali dei DDT che di regola NON si fatturano (revisione del 1/11/2026: nello storico FIC 2025-26 erano 133 i DDT senza fattura,
+ * ma solo una quarantina di vendita o reso lavorato; il resto sono resi di materiale non lavorato, riparazioni in garanzia,
+ * conto visione, materiale mandato in conto lavorazione, campioni gratuiti, prestiti d'uso). Stessa espressione per JavaScript e
+ * per PostgreSQL (sintassi POSIX semplice), applicata alla causale in MAIUSCOLO.
+ */
+export const CAUSALI_NON_DA_FATTURARE =
+  'NON LAVORAT|UNWORKED|GARANZIA|WARRANTY|VISIONE|CONTO LAVOR|C/LAVOR|CONTO PROVA|CAMPION|PRESTITO|SOSTITUZIONE|C/RIPARAZ';
+const espressioneNonDaFatturare = new RegExp(CAUSALI_NON_DA_FATTURARE);
+/** true se un DDT con questa causale va proposto da fatturare (vendita, reso lavorato, causale vuota o sconosciuta). */
+export const causaleDaFatturare = (causale: string | null | undefined) => !espressioneNonDaFatturare.test((causale ?? '').toUpperCase());
+/** Condizione SQL equivalente, da usare nelle query con l'alias `d` sulla tabella documenti. */
+export const SQL_CAUSALE_DA_FATTURARE = `upper(coalesce(d.dati_trasporto->>'causale', '')) !~ '${CAUSALI_NON_DA_FATTURARE}'`;
+
 /** Dati del trasporto salvati in documenti.dati_trasporto (stesse chiavi dello storico di FIC: causale, colli, peso, trasportatore, destinazione). */
 export interface DatiTrasporto {
   causale?: string; a_cura?: string; trasportatore?: string; porto?: string; colli?: string; peso?: string; aspetto?: string;

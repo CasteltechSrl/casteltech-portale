@@ -42,6 +42,14 @@ export interface ClienteXml {
 
 const SOSTITUZIONI: [RegExp, string][] = [[/€/g, 'EUR'], [/[‘’‚′]/g, "'"], [/[“”„″]/g, '"'], [/[–—−]/g, '-'], [/…/g, '...'], [/[•·]/g, '-']];
 
+/** Telefono per l'XML (massimo 12 caratteri): senza spazi e punti; se è ancora lungo si toglie il +39; se non ci sta, meglio nessun numero che uno tagliato. */
+function telefonoXml(t: string | null | undefined): string {
+  let s = String(t ?? '').replace(/[\s.\/-]/g, '');
+  if (s.length > 12 && s.startsWith('+39')) s = s.slice(3);
+  return s.length > 12 ? '' : testoXml(s, 12);
+}
+/** Numero scritto all'italiana ("10.000,00") o con il punto decimale ("10000.00"): con la virgola i punti sono migliaia, altrimenti è il decimale. */
+const numeroItaliano = (s: string) => Number(/,/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/\s/g, ''));
 /** Testo con i soli caratteri ammessi (latino di base + Latin-1), spazi uniformi, protetto per l'XML, al massimo `max` caratteri. */
 export function testoXml(v: unknown, max = 1000): string {
   return proteggi(pulisci(v).slice(0, max));
@@ -99,6 +107,7 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
   const split = !!cliente.split_payment;
   const daIncassare = importoDaIncassare(totali, split);
   if (doc.numero == null) errori.push('Il documento non ha ancora un numero.');
+  if (pulisci(doc.riferimento_esterno).length > 20) errori.push(`Il riferimento dell'ordine del cliente "${pulisci(doc.riferimento_esterno)}" supera i 20 caratteri ammessi nella fattura elettronica: accorcialo.`);
   const usaIntento = totali.riepilogo.some(g => g.natura === 'N3.5');
   if (usaIntento && !doc.intento) errori.push('Righe con lettera d\'intento ma il cliente non ha una lettera d\'intento per l\'anno del documento.');
   if (Math.abs(arrotonda2(doc.scadenze.reduce((s, x) => s + x.importo, 0)) - daIncassare) > 0.005 && doc.scadenze.length)
@@ -138,10 +147,10 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
 
   const rea = azienda.rea_ufficio && azienda.rea_numero
     ? `<IscrizioneREA>${el('Ufficio', azienda.rea_ufficio)}${el('NumeroREA', testoXml(azienda.rea_numero, 20))}`
-      + `${azienda.capitale_sociale ? el('CapitaleSociale', importoXml(Number(azienda.capitale_sociale.replace(/\./g, '').replace(',', '.')))) : ''}`
+      + `${azienda.capitale_sociale ? el('CapitaleSociale', importoXml(numeroItaliano(azienda.capitale_sociale))) : ''}`
       + `${el('SocioUnico', azienda.socio_unico)}<StatoLiquidazione>LN</StatoLiquidazione></IscrizioneREA>` : '';
   const contatti = azienda.telefono || azienda.email
-    ? `<Contatti>${el('Telefono', testoXml(azienda.telefono, 12))}${el('Email', testoXml(azienda.email, 256))}</Contatti>` : '';
+    ? `<Contatti>${el('Telefono', telefonoXml(azienda.telefono))}${el('Email', testoXml(azienda.email, 256))}</Contatti>` : '';
 
   // DDT citati: numero/data → linee che ne fanno parte
   const ddt = new Map<string, { numero: string; data: string; linee: number[] }>();

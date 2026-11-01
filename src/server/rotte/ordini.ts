@@ -284,9 +284,11 @@ export function rotteOrdini() {
         : `${righe.length === 1 ? '1 riga torna' : `${righe.length} righe tornano`} allo stato calcolato dai DDT.`);
     }
     if (azione === 'elimina') {
-      const nomi: string[] = [];
-      for (const id of ordini) { const o = await eliminaOrdine(id); if (o) nomi.push(`${o.numero}/${o.anno}`); }
-      return torna(nomi.length === 1 ? `Ordine ${nomi[0]} eliminato.` : `Eliminati ${nomi.length} ordini: ${nomi.join(', ')}.`);
+      const nomi: string[] = [], bloccati: string[] = [];
+      await salvaBackupSuDisco('prima-di-eliminare-ordini').catch(() => null);   // una copia sola per tutti, non una per ordine
+      for (const id of ordini) { const o = await eliminaOrdine(id, { senzaBackup: true }); if (o?.bloccato) bloccati.push(`${o.numero}/${o.anno} ${o.bloccato}`); else if (o) nomi.push(`${o.numero}/${o.anno}`); }
+      const coda = bloccati.length ? ` Non eliminati: ${bloccati.join('; ')}.` : '';
+      return torna((nomi.length === 1 ? `Ordine ${nomi[0]} eliminato.` : nomi.length ? `Eliminati ${nomi.length} ordini: ${nomi.join(', ')}.` : 'Nessun ordine eliminato.') + coda);
     }
     torna('Azione non riconosciuta.');
   });
@@ -323,6 +325,7 @@ export function rotteOrdini() {
   r.post('/:id/elimina', async (req, res) => {
     const o = await eliminaOrdine(Number(req.params.id));
     if (!o) return res.redirect('/ordini?vista=tutti');
+    if (o.bloccato) return res.redirect(`/ordini/${req.params.id}?msg=${encodeURIComponent(`Ordine non eliminato: ${o.bloccato}.`)}`);
     res.redirect(`/ordini?vista=tutti&msg=${encodeURIComponent(`Ordine ${o.numero}/${o.anno} eliminato.`)}`);
   });
 
@@ -338,10 +341,13 @@ export function rotteOrdini() {
 }
 
 /** Elimina un ordine con righe e consegne (DDT e fatture restano, senza ordine). Prima un backup. */
-async function eliminaOrdine(id: number): Promise<{ numero: number; anno: number } | null> {
+async function eliminaOrdine(id: number, opz: { senzaBackup?: boolean } = {}): Promise<{ numero: number; anno: number; bloccato?: string } | null> {
   const o = await q1<{ numero: number; anno: number }>(`SELECT numero, anno FROM ordini WHERE id = $1`, [id]);
   if (!o) return null;
-  await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
+  // una conferma d'ordine emessa (numerata, con PDF) si raggiunge solo dall'ordine: prima si annulla quella
+  const conferme = await q<{ numero: number; anno: number }>(`SELECT numero, anno FROM documenti WHERE ordine_id = $1 AND tipo = 'conferma_ordine' AND stato = 'emesso'`, [id]);
+  if (conferme.length) return { ...o, bloccato: `ha la conferma d'ordine n. ${conferme.map(x => `${x.numero}/${x.anno}`).join(', ')} emessa: annullala prima` };
+  if (!opz.senzaBackup) await salvaBackupSuDisco('prima-di-eliminare-ordine').catch(() => null);
   await transazione(async c => {
     // ordine nato da un documento letto dall'IA: il documento torna "da confermare" (si corregge o si scarta)
     await c.query(`UPDATE acquisizioni SET stato = 'da_confermare', ordine_id = NULL, confermato_da = NULL WHERE ordine_id = $1 AND proposta IS NOT NULL`, [id]);

@@ -192,24 +192,37 @@ export async function salvaRientro(opz: {
     // e quelle ancora aperte si possono chiudere dal telefono (con i loro promemoria)
     const chiave = (fase: string, op: string | null | undefined, data: string | null | undefined, inizio: string | null | undefined) =>
       [fase, (op ?? '').trim().toUpperCase(), data ?? '', inizio ?? ''].join('|');
-    const daTelefono = new Map<string, { aperta_il: Date | null; chiusa_il: Date | null }[]>();
-    for (const t of (await c.query(`SELECT fase_codice, operatore_nome, to_char(data, 'YYYY-MM-DD') AS data, to_char(ora_inizio, 'HH24:MI') AS inizio, aperta_il, chiusa_il
-        FROM rilevazioni WHERE commessa_id = $1 AND origine = 'tablet'`, [opz.commessaId])).rows) {
+    // Le righe del telefono NON si cancellano e reinseriscono (perderebbero l'id usato dai promemoria e dai link "Chiudi"):
+    // quelle presenti nel modulo si aggiornano, quelle chiuse e tolte dal modulo si eliminano, quelle ancora APERTE restano sempre
+    // (un operatore può averle aperte mentre l'ufficio aveva la pagina davanti: il suo tempo non va perso; revisione 1/11/2026).
+    const daTelefono = new Map<string, { id: number; aperta_il: Date | null; chiusa_il: Date | null }[]>();
+    for (const t of (await c.query(`SELECT id, fase_codice, operatore_nome, to_char(data, 'YYYY-MM-DD') AS data, to_char(ora_inizio, 'HH24:MI') AS inizio, aperta_il, chiusa_il
+        FROM rilevazioni WHERE commessa_id = $1 AND origine = 'tablet' ORDER BY id`, [opz.commessaId])).rows) {
       const k = chiave(t.fase_codice, t.operatore_nome, t.data, t.inizio);
-      daTelefono.set(k, [...(daTelefono.get(k) ?? []), { aperta_il: t.aperta_il, chiusa_il: t.chiusa_il }]);
+      daTelefono.set(k, [...(daTelefono.get(k) ?? []), { id: t.id, aperta_il: t.aperta_il, chiusa_il: t.chiusa_il }]);
     }
-    await c.query(`DELETE FROM rilevazioni WHERE commessa_id = $1`, [opz.commessaId]);
+    await c.query(`DELETE FROM rilevazioni WHERE commessa_id = $1 AND origine <> 'tablet'`, [opz.commessaId]);
+    const tenute = new Set<number>();
     for (const [i, r] of opz.righe.entries()) {
       const tel = daTelefono.get(chiave(r.fase, r.operatore, r.data, r.inizio))?.shift();
       const chiusa = tel && (tel.chiusa_il ?? (r.fine || r.durataMin ? new Date() : null));
-      await c.query(`INSERT INTO rilevazioni (commessa_id, fase_codice, operatore_nome, data, ora_inizio, ora_fine, durata_min, totale_scritto_min,
-          persone, pezzi, tipo, causa, materiale, resp, note, riga, origine, confermata_da, confermata_il, aperta_il, chiusa_il)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
-        [opz.commessaId, r.fase, r.operatore || null, r.data || null, r.inizio || null, r.fine || null, r.durataMin ?? null, r.totaleScrittoMin ?? null,
+      const valori = [r.fase, r.operatore || null, r.data || null, r.inizio || null, r.fine || null, r.durataMin ?? null, r.totaleScrittoMin ?? null,
          r.persone ?? 1, r.pezzi ?? null, r.tipo, r.tipo === 'P' ? (r.causa || null) : null, r.materiale || null, r.resp || null,
-         r.tipo === 'P' ? null : (r.note || null), i, tel ? 'tablet' : 'manuale',
-         righeConfermate ? opz.utenteId : null, righeConfermate ? new Date() : null, tel?.aperta_il ?? null, chiusa ?? null]);
+         r.tipo === 'P' ? null : (r.note || null), i, righeConfermate ? opz.utenteId : null, righeConfermate ? new Date() : null];
+      if (tel) {
+        tenute.add(tel.id);
+        await c.query(`UPDATE rilevazioni SET fase_codice = $2, operatore_nome = $3, data = $4, ora_inizio = $5, ora_fine = $6, durata_min = $7, totale_scritto_min = $8,
+            persone = $9, pezzi = $10, tipo = $11, causa = $12, materiale = $13, resp = $14, note = $15, riga = $16, confermata_da = $17, confermata_il = $18, chiusa_il = $19
+          WHERE id = $1`, [tel.id, ...valori, chiusa ?? null]);
+      } else {
+        await c.query(`INSERT INTO rilevazioni (commessa_id, fase_codice, operatore_nome, data, ora_inizio, ora_fine, durata_min, totale_scritto_min,
+            persone, pezzi, tipo, causa, materiale, resp, note, riga, confermata_da, confermata_il, origine)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'manuale')`, [opz.commessaId, ...valori]);
+      }
     }
+    // righe del telefono tolte dal modulo: via se chiuse; se ancora aperte restano (si chiudono dal telefono o dal pulsante "aperta per sbaglio")
+    const daTogliere = [...daTelefono.values()].flat().filter(t => !tenute.has(t.id) && t.chiusa_il).map(t => t.id);
+    if (daTogliere.length) await c.query(`DELETE FROM rilevazioni WHERE id = ANY($1::int[])`, [daTogliere]);
     await c.query(`UPDATE commesse SET consumi = $2, spedizioni = $3, aggiornato_il = now(),
         stato = CASE WHEN $4 THEN 'rientrata' WHEN stato = 'aperta' AND $5 THEN 'in_produzione' ELSE stato END,
         rientrata_il = CASE WHEN $4 THEN now() ELSE rientrata_il END, rientrata_da = CASE WHEN $4 THEN $6::int ELSE rientrata_da END

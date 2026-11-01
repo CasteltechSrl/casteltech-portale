@@ -23,6 +23,9 @@ test('ordine a fornitore: pezzi arrivati scritti a mano ("1.200" = milleduecento
   assert.match(arriviDaModulo({ 1: 'tanti' }, righe).errori[0], /Riga 1/);
   // "Tutto arrivato": le quantità arrivano già come numeri (anche con decimali)
   assert.deepEqual([...arriviDaModulo({ 1: 0.5 }, righe).arrivi], [[1, 0.5]]);
+  // scritti a mano con i decimali: "2,5" kg di stagno e "2.5" valgono 2,5 (non 25), come le quantità dell'ordine
+  assert.deepEqual([...arriviDaModulo({ p2: '2,5' }, righe).arrivi], [[2, 2.5]]);
+  assert.deepEqual([...arriviDaModulo({ p2: '2.5' }, righe).arrivi], [[2, 2.5]]);
 });
 
 test("ordine a fornitore: per emettere servono il fornitore dell'anagrafica e almeno una riga (la consegna no)", () => {

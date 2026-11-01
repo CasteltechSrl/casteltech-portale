@@ -6,6 +6,7 @@
  * Solo calcoli e testi: niente database e niente rete.
  */
 import { arrotonda2 } from './amministrazione.js';
+import { numeroDa } from './acquisizioni.js';
 import type { RigaConferma } from './conferme-ordine.js';
 
 /** Riga dell'ordine a fornitore: come quella della conferma d'ordine, più i pezzi arrivati. */
@@ -33,7 +34,7 @@ export function arriviDaModulo(input: Record<string, unknown>, righe: { posizion
     const testo = String(v ?? '').trim();
     if (!testo) continue;
     // scritto a mano: "1.200" sono milleduecento pezzi, la virgola i decimali; un numero arriva già pronto ("Tutto arrivato")
-    const n = typeof v === 'number' ? v : Number(testo.replace(/\./g, '').replace(',', '.'));
+    const n = typeof v === 'number' ? v : (numeroDa(testo) ?? NaN);
     const nome = r.codice ?? r.descrizione;
     if (!Number.isFinite(n) || n < 0) { errori.push(`Riga ${r.posizione} (${nome}): i pezzi arrivati devono essere un numero.`); continue; }
     if (n > r.quantita) avvisi.push(`Riga ${r.posizione} (${nome}): arrivati ${n} pezzi su ${r.quantita} ordinati.`);

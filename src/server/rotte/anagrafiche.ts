@@ -158,6 +158,9 @@ export function rotteAnagrafiche() {
     const senzaCliente = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM prodotti WHERE cliente_id IS NULL`))!.n;
     const avvisoCodici = avvisoSenzaCliente(senzaCliente);
     // "— senza cliente —" solo per mostrare i codici ancora da assegnare: non si può salvare
+    // la tendina completa dei clienti sta UNA volta sola nella pagina (modello): con centinaia di prodotti e di clienti
+    // una tendina per riga pesava decine di MB (revisione 1/11/2026); anagrafiche.js la copia nella riga al primo clic
+    const nomeCliente = new Map(clienti.map(c => [c.id, c.ragione_sociale] as const));
     const opzClienti = (sel: number | null, conVuoto = true) => html`
       ${conVuoto ? html`<option value="" disabled ${sel === null ? raw('selected') : ''}>— scegli il cliente —</option>` : ''}
       ${clienti.map(c => html`<option value="${c.id}" ${c.id === sel ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}`;
@@ -171,6 +174,7 @@ export function rotteAnagrafiche() {
         <noscript><button>Filtra</button></noscript>
       </form>
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length)}
+      <template id="modello-clienti">${opzClienti(null)}</template>
       <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>
           <th title="Facoltativi: prezzi diversi per quantità, es. 1-5=10; 6-20=8; 21+=7">Scaglioni di quantità</th><th class="n">Preventivi</th><th></th></tr></thead>
@@ -186,7 +190,7 @@ export function rotteAnagrafiche() {
           ${prodotti.map(p => html`<tr class="${p.cliente_id === null ? 'senza-cliente' : ''}" title="${p.cliente_id === null ? 'Codice senza cliente: assegnalo a un cliente o eliminalo' : ''}">
             <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo"></td>
             <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
-            <td><select name="cliente_id" form="p-${p.id}" required>${opzClienti(p.cliente_id)}</select></td>
+            <td><select name="cliente_id" form="p-${p.id}" required class="clienti-al-clic"><option value="${p.cliente_id ?? ''}" selected>${p.cliente_id === null ? '— scegli il cliente —' : nomeCliente.get(p.cliente_id) ?? ''}</option></select></td>
             <td><input name="prezzo" form="p-${p.id}" class="prezzo" inputmode="decimal" value="${p.prezzo == null ? '' : num(p.prezzo, 5)}"
               title="${testoPrezzo(p)}"></td>
             <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"
@@ -359,6 +363,13 @@ export function rotteAnagrafiche() {
     const senza = erroreClienteProdotto(cliente);
     if (senza) return res.redirect(torna(senza, '/prodotti', dopoProdotto(req.body, null)));
     if (await duplicatoProdotto(codice, cliente, id)) return res.redirect(torna(`Il codice ${codice} esiste già per questo cliente.`, '/prodotti'));
+    // il cliente di un codice già usato non si cambia: i preventivi, le commesse e gli ordini di quel cliente resterebbero con un codice di un altro
+    const attuale = await q1<{ cliente_id: number | null; usi: number }>(`SELECT p.cliente_id,
+        (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id)
+        + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id)
+        + (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id) AS usi FROM prodotti p WHERE p.id = $1`, [id]);
+    if (attuale?.cliente_id && cliente && attuale.cliente_id !== cliente && attuale.usi > 0)
+      return res.redirect(torna(`${codice} è già usato in ${attuale.usi} tra preventivi, commesse e ordini: il cliente non si cambia. Se serve, crea un nuovo codice per l'altro cliente.`, '/prodotti'));
     const prezzo = leggiPrezzo(req.body.prezzo);
     if (Number.isNaN(prezzo)) return res.redirect(torna('Prezzo non valido: scrivi un numero, es. 12,50.', '/prodotti', dopoProdotto(req.body, cliente)));
     const sc = leggiScaglioni(req.body.scaglioni);

@@ -16,7 +16,7 @@ import { importoRigaConferma, totaleConferma } from '../../engine/conferme-ordin
 import { nomeFornitore } from '../codifica-servizio.js';
 import { pagina } from './ordini.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { html, data, euro, num, raw } from '../views/html.js';
+import { html, data, euro, num, raw, numCampo } from '../views/html.js';
 
 const STATI: Record<string, [string, string]> = {
   bozza: ['bozza', ''], emesso: ['emesso', 'accettato'], inviato: ['inviato', 'inviato'], annullato: ['annullato', 'rifiutato'],
@@ -158,8 +158,8 @@ export function rotteOrdiniFornitore() {
       <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo cerca-componente" list="componenti-trovati" autocomplete="off"
         title="Scrivi il P/N o il codice: il menu propone i componenti dell'archivio (Anagrafiche → Componenti)"></td>
       <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo"></td>
-      <td><input name="righe[${i}][quantita]" value="${x.quantita ?? ''}" class="corto" inputmode="decimal"></td>
-      <td><input name="righe[${i}][prezzo]" value="${x.prezzo ?? ''}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
+      <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
       <td><input type="date" name="righe[${i}][consegna]" value="${x.consegna ?? ''}"></td>
       <td class="n">${x.quantita != null ? html`<span class="nota">${euro(importoRigaConferma(x))}</span>` : ''}</td>
       <td><input type="checkbox" name="righe[${i}][togli]" title="Togli questa riga al salvataggio"></td>

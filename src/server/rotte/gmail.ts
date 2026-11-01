@@ -40,7 +40,7 @@ export async function clientePerMittente(mittente: string): Promise<number | nul
       UNION SELECT c.id FROM clienti c WHERE lower(c.email_amministrazione) = $1 OR lower(c.pec) = $1
     ) x`, [ind]);
   if (uguali.length === 1) return uguali[0].id;
-  const dominio = dominioAziendale(ind);
+  const dominio = dominioAziendale(ind)?.replace(/[\\%_]/g, '\\$&'); // _ e % sono caratteri speciali del LIKE
   if (!dominio) return null;
   const perDominio = await q<{ id: number }>(`
     SELECT DISTINCT cliente_id AS id FROM (

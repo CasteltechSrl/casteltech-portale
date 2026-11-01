@@ -102,8 +102,16 @@ export async function salvaOrdineFornitore(id: number, b: any): Promise<string[]
     if (!d.numero) fornitore = (await c.query(`SELECT id FROM fornitori_anagrafica WHERE id = $1`, [Number(b.fornitore_id) || 0])).rows[0]?.id ?? null;
     const commessa = (await c.query(`SELECT id FROM commesse WHERE id = $1`, [Number(b.commessa_id) || 0])).rows[0]?.id ?? null;
     const prima = (await c.query(`SELECT posizione, codice, arrivati, arrivati_il FROM documenti_righe WHERE documento_id = $1`, [id])).rows;
+    // gli arrivi già segnati seguono la loro riga: prima stessa posizione e stesso codice, poi stesso codice tra le righe non ancora
+    // abbinate (due righe con lo stesso codice, es. due consegne, non si copiano gli arrivi a vicenda)
+    const libere = [...prima];
+    const prendi = (r: RigaOrdineFornitore) => {
+      const i = libere.findIndex((x: any) => x.posizione === r.posizione && (x.codice ?? '') === (r.codice ?? ''));
+      const j = i >= 0 ? i : libere.findIndex((x: any) => x.codice && x.codice === r.codice);
+      return j >= 0 ? libere.splice(j, 1)[0] : undefined;
+    };
     const conArrivi: RigaOrdineFornitore[] = righe.map(r => {
-      const v = prima.find((x: any) => x.codice && x.codice === r.codice) ?? prima.find((x: any) => x.posizione === r.posizione && !x.codice && !r.codice);
+      const v = prendi(r);
       return { ...r, arrivati: Number(v?.arrivati ?? 0), arrivati_il: v?.arrivati_il ?? null };
     });
     await c.query(`UPDATE documenti SET data = $2, anno = $3, fornitore_id = $4, condizione_pagamento = (SELECT codice FROM condizioni_pagamento WHERE codice = $5),

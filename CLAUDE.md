@@ -318,6 +318,16 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (2019–2021 "bilancino" del vecchio studio, conti 5xxxx): file costi_personale.json.gz fuori dal repository (Project Files → dipendenti). Nota spese come il
    "Modulo rimborso km" Excel (km andata × 2 × tariffa + altre spese; tariffa copiata nella nota; import del modulo con la tariffa del mese da C4), destinazioni con i km,
    persone e auto, pagamenti e "da pagare" per anno, stampa da firmare. Dati delle persone SOLO nel database.
+4l. ✅ Revisione e collaudo di tutto il portale (notte 31/10–1/11/2026; PR della revisione): portale provato in locale con i dati veri (storico FIC, ordini, CRM),
+   3.000 pagine e tutti i flussi (preventivo → commessa → rientro → reparto, fattura → XML/PDF, DDT, conferma, acconto, ordine a fornitore). Regole nuove:
+   DDT con causale reso non lavorato / garanzia / conto visione / conto lavorazione / campioni / prestito NON contano tra i "DDT da fatturare"
+   (`causaleDaFatturare` in `engine/ddt.ts`, test in `tests/ddt.test.ts`; nella bozza stanno sotto "Altri DDT senza fattura"); in fattura entrano solo DDT emessi;
+   all'emissione l'IVA "predefinita" viene scritta sulle righe (fotografia); nota di credito/debito solo su fatture non scartate; fatture scartate fuori da
+   fatturato e da incassare; riferimento ordine oltre 20 caratteri = errore; lettera d'intento scritta a mano con l'anno come l'import (dicembre → anno dopo) e valida
+   solo se protocollata entro la data della fattura. Rientro dell'ufficio: le righe del telefono si aggiornano (stesso id) e quelle ancora aperte restano;
+   telefono: "Aperta per sbaglio: annulla l'apertura", una sola apertura per fase (migrazione 057). Prodotto già usato: il cliente non si cambia.
+   Ordine con conferma emessa non si elimina. Pagina Prodotti leggera (una sola tendina clienti, `clienti-al-clic`). Niente doppio invio dei moduli (`conferma.js`).
+   Limite 20 domande/ora alla guida IA. Pulizia sessioni dopo il login (non con un timer). Id non numerici negli indirizzi = pagina non trovata (non errore).
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).
