@@ -84,7 +84,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
         ${ddt.length ? html`<p class="nota">${ddtTotale} DDT di ${ddt.length} clienti (vendite e resi lavorati${ddtAltri ? html`; altri ${ddtAltri} DDT senza fattura sono resi non lavorati, garanzie, conto visione o conto lavorazione e non si contano` : ''}).</p>
           <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Cliente</th><th class="num">DDT</th><th>Ultimo</th></tr></thead>
           <tbody>${ddt.slice(0, MOSTRATE).map(x => html`<tr><td>${x.nome}</td><td class="num">${x.quanti}</td><td>${data(x.ultimo)}</td></tr>`)}</tbody></table></div>
-          <p class="nota"><a href="/amministrazione/documenti?tipo=ddt">Elenco dei DDT →</a> · si fatturano da "+ Nuova fattura" scegliendo il cliente.</p>`
+          <p class="nota"><a href="/amministrazione/differite"><b>Fatture differite: fattura tutti i DDT di un cliente in un clic →</b></a> · <a href="/amministrazione/documenti?tipo=ddt">Elenco dei DDT</a></p>`
           : html`<p class="vuoto">Nessun DDT da fatturare.</p>`}</section>
       <section><h2>Bozze da finire</h2>
         ${bozze.length ? html`<ul>${bozze.map(b => html`<li><a href="/amministrazione/documenti/${b.id}">${({ nota_credito: 'Nota di credito', autofattura: 'Autofattura' } as Record<string, string>)[b.tipo] ?? 'Fattura'}

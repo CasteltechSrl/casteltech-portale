@@ -13,6 +13,7 @@ import { imponibilePerMese, riepilogoScadenze, variazione } from '../engine/crus
 import { numeroCompleto } from '../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
+import { contaDifferite } from '../engine/fatture-differite.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
 const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -53,7 +54,7 @@ export async function datiCruscottoGenerale(oggi: string) {
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY s.data, d.numero`),
     q<{ data: string; importo: number }>(`SELECT s.data, s.importo FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura'`),
-    q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti d
+    q<{ data: string }>(`SELECT d.data::text AS data FROM documenti d
       WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
         AND ${SQL_CAUSALE_DA_FATTURARE}`),
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti WHERE stato = 'bozza' AND tipo IN ('fattura', 'nota_credito', 'autofattura', 'ddt')`),
@@ -99,11 +100,13 @@ export async function datiCruscottoGenerale(oggi: string) {
   // ── Acquisti ──
   const ofAperti = ordiniFornitore.filter(o => !['bozza', 'annullato'].includes(o.stato) && o.arrivo !== 'arrivato');
 
+  const differite = contaDifferite(ddt, oggi);
   const daFare = cosaDaFare({
     sdiScartate: sdiConto('scartato'), sdiNonConsegnate: sdiConto('non_consegnato'), consegneInRitardo: inRitardo.length,
     preventiviDaValidare: prev('da_validare')?.quanti ?? 0, ordiniDaAcquisire, acquisizioniInErrore: acq(a => a.stato === 'errore'),
-    ddtDaFatturare: ddt[0]?.quanti ?? 0, schedeScansionate, tempiAperti: tempiAperti[0]?.quanti ?? 0, crmScadute: crm[0]?.scadute ?? 0,
+    ddtDaFatturare: ddt.length, schedeScansionate, tempiAperti: tempiAperti[0]?.quanti ?? 0, crmScadute: crm[0]?.scadute ?? 0,
     incassiScaduti: inc.fasce.scaduta.quante, pagamentiScaduti: pag.fasce.scaduta.quante, bozzeDocumenti: bozze[0]?.quanti ?? 0,
+    differiteScadute: differite.scaduti, differiteInScadenza: differite.inScadenza,
   }, {
     'sdi-scartate': sdiUltimo('scartato') ? `/amministrazione/documenti/${sdiUltimo('scartato')}` : undefined,
     'sdi-non-consegnate': sdiUltimo('non_consegnato') ? `/amministrazione/documenti/${sdiUltimo('non_consegnato')}` : undefined,
@@ -136,7 +139,7 @@ export async function datiCruscottoGenerale(oggi: string) {
       bozze: ordiniFornitore.filter(o => o.stato === 'bozza').length, elenco: ofAperti.slice(0, MOSTRATE),
     },
     amministrazione: {
-      fatturatoMese, scadutoClienti: inc.fasce.scaduta.totale, ddtDaFatturare: ddt[0]?.quanti ?? 0,
+      fatturatoMese, scadutoClienti: inc.fasce.scaduta.totale, ddtDaFatturare: ddt.length, differite,
       sdi: sdiUltimi, sdiInAttesa: sdiConto('inviato'), ricevutiSdi: ricevutiSdi[0]?.quanti ?? 0, incassiScaduti,
     },
     sistema: {

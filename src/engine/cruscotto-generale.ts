@@ -14,6 +14,8 @@ export interface ContiDaFare {
   sdiScartate: number; sdiNonConsegnate: number; consegneInRitardo: number; preventiviDaValidare: number; ordiniDaAcquisire: number;
   acquisizioniInErrore: number; ddtDaFatturare: number; schedeScansionate: number; tempiAperti: number; crmScadute: number;
   incassiScaduti: number; pagamentiScaduti: number; bozzeDocumenti: number;
+  /** fatture differite (1/11/2026): DDT dei mesi prima non fatturati, con il termine del 15 superato o nel mese in corso */
+  differiteScadute?: number; differiteInScadenza?: number;
 }
 
 const plurale = (n: number, uno: string, tanti: string) => (n === 1 ? uno : tanti);
@@ -30,10 +32,14 @@ export function cosaDaFare(c: ContiDaFare, diretti: Partial<Record<string, strin
       testo: plurale(c.sdiNonConsegnate, 'fattura non recapitata (avvisare il cliente)', 'fatture non recapitate (avvisare i clienti)') },
     { chiave: 'consegne-ritardo', quanti: c.consegneInRitardo, livello: 'urgente', link: '/ordini',
       testo: plurale(c.consegneInRitardo, 'consegna in ritardo', 'consegne in ritardo') },
+    { chiave: 'differite-scadute', quanti: c.differiteScadute ?? 0, livello: 'urgente', link: '/amministrazione/differite',
+      testo: plurale(c.differiteScadute ?? 0, 'DDT da fatturare oltre il 15 (fattura differita in ritardo)', 'DDT da fatturare oltre il 15 (fatture differite in ritardo)') },
     { chiave: 'incassi-scaduti', quanti: c.incassiScaduti, livello: 'urgente', link: '/amministrazione',
       testo: plurale(c.incassiScaduti, 'incasso scaduto', 'incassi scaduti') },
     { chiave: 'pagamenti-scaduti', quanti: c.pagamentiScaduti, livello: 'controllare', link: '/amministrazione/ricevuti?da_pagare=1',
       testo: plurale(c.pagamentiScaduti, 'pagamento scaduto', 'pagamenti scaduti') },
+    { chiave: 'differite-in-scadenza', quanti: c.differiteInScadenza ?? 0, livello: 'controllare', link: '/amministrazione/differite',
+      testo: plurale(c.differiteInScadenza ?? 0, 'DDT del mese scorso da fatturare entro il 15', 'DDT del mese scorso da fatturare entro il 15') },
     { chiave: 'preventivi-da-validare', quanti: c.preventiviDaValidare, livello: 'controllare', link: '/preventivi',
       testo: plurale(c.preventiviDaValidare, 'preventivo da validare', 'preventivi da validare') },
     { chiave: 'da-acquisire', quanti: c.ordiniDaAcquisire, livello: 'controllare', link: '/ordini/acquisire',

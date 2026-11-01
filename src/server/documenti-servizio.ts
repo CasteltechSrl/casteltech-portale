@@ -10,6 +10,7 @@ import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliq
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
+import type { DdtAperto } from '../engine/fatture-differite.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_CAUSALE_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
@@ -219,6 +220,25 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
 }
 
 /** DDT del cliente non ancora fatturati (né già messi in un'altra bozza). */
+/** Tutti i DDT emessi di vendita/reso lavorato non ancora fatturati, con il cliente (pagina Fatture differite e cruscotto). */
+export const ddtDaFatturareTutti = () => q<DdtAperto>(
+  `SELECT d.id, d.numero, d.sezionale, d.data::text AS data, d.cliente_id AS "clienteId", coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', '') AS cliente,
+     (SELECT count(*)::int FROM documenti_righe x WHERE x.documento_id = d.id AND NOT x.solo_descrizione) AS righe,
+     (SELECT coalesce(sum(x.quantita * x.prezzo * (1 - coalesce(x.sconto, 0) / 100)), 0)::float FROM documenti_righe x WHERE x.documento_id = d.id AND NOT x.solo_descrizione) AS totale
+   FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
+   WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.numero IS NOT NULL AND d.cliente_id IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
+     AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') AND ${SQL_CAUSALE_DA_FATTURARE}
+     AND NOT EXISTS (SELECT 1 FROM documenti_righe y JOIN documenti f ON f.id = y.documento_id WHERE y.ddt_id = d.id AND f.stato = 'bozza')
+   ORDER BY d.data, d.numero`);
+
+/** Una fattura (bozza) con tutti i DDT da fatturare del cliente: diventa TD24 da sola all'emissione se i DDT sono di date precedenti. */
+export async function fatturaTuttiIDdt(clienteId: number, ddtIds: number[], creatoDa: number | null): Promise<number> {
+  if (!ddtIds.length) throw new Error('Nessun DDT da fatturare per questo cliente.');
+  const id = await creaBozza('fattura', clienteId, creatoDa);
+  await aggiungiDdt(id, ddtIds);
+  return id;
+}
+
 export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; numero: number; data: string; righe: number; causale: string | null; daFatturare: boolean }>(
   `SELECT d.id, d.numero, d.data, (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id) AS righe, d.dati_trasporto->>'causale' AS causale,
      (${SQL_CAUSALE_DA_FATTURARE}) AS "daFatturare"

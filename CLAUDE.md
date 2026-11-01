@@ -414,6 +414,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    d'intento, `/amministrazione/lettere-intento`, avviso nella bozza `riquadroPlafond`: fatture N3.5 dell'anno dalla data della prima lettera, giallo dall'80 %).
    ✅ Acquisti per fornitore e mese (`/amministrazione/ricevuti/mesi`, `acquistiPerFornitore` in `engine/cruscotto-amministrazione.ts`): tabella fornitori × mesi
    dalle fatture ricevute, clic = fatture del mese con descrizione, righe dell'autofattura e ordine a fornitore collegato (al posto degli ordini "di traccia" di FIC).
+   ✅ Fatture differite (proposta della revisione, Adriano 1/11/2026; `engine/fatture-differite.ts`, `ddtDaFatturareTutti` + `fatturaTuttiIDdt` in
+   `documenti-servizio.ts`, `/amministrazione/differite`, test in `tests/fatture-differite.test.ts`): DDT da fatturare per cliente con il termine (15 del mese
+   dopo il DDT più vecchio), "Fattura tutti i DDT" = una bozza per cliente (TD24 da sola all'emissione), "Fattura tutti i clienti in scadenza"; nel cruscotto
+   generale voce "Da fare oggi" gialla dal 1° (DDT del mese prima) e rossa dal 16 (`differiteScadute` / `differiteInScadenza` in `cosaDaFare`); voce nel menu Amministrazione.
    ✅ Altri tipi di fattura e PA (Adriano 31/10/2026; `engine/tipi-fattura.ts`, migrazione 050): TD24 differita scelta da sola se la fattura cita DDT con
    data precedente (termine il 15 del mese dopo), TD02 acconto ("Fattura d'acconto" nella pagina dell'ordine; sul saldo "Scala gli acconti" = riga negativa per aliquota,
    `documenti_righe.acconto_id`, DatiFattureCollegate), TD26 beni ammortizzabili (menu "Tipo di fattura"), TD05 nota di debito ("Crea nota di debito" dalla fattura

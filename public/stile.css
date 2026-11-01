@@ -779,3 +779,9 @@ kbd { font: inherit; font-size: .85em; padding: 0 .35em; border: 1px solid var(-
   .testata .utente .nome-utente { display: none; }
 }
 @media (max-width: 1300px) { .testata { flex-wrap: wrap; } .testata form.cerca-globale { flex: 1 1 9rem; } }
+/* fatture differite (1/11/2026): un blocco per cliente, bordo giallo se il termine del 15 è nel mese, rosso se superato */
+.blocco.differite { margin-bottom: 1rem; }
+.blocco.differite.in-scadenza { border-left: 4px solid #d9a400; }
+.blocco.differite.scaduto { border-left: 4px solid #c0392b; }
+.blocco.differite h2 { font-size: 1.05rem; margin: 0; }
+.blocco.differite h2 small { font-weight: 400; margin-left: .5rem; }

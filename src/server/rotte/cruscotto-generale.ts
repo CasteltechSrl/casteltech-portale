@@ -2,6 +2,7 @@
  * Cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026): "Da fare oggi", sei numeri chiave e un riquadro per area.
  * Ogni numero e ogni riga portano alla pagina dove si lavora. Letture in cruscotto-generale-servizio.ts (una volta, all'apertura).
  */
+import { testoDifferite } from '../../engine/fatture-differite.js';
 import { Router } from 'express';
 import { datiCruscottoGenerale, type DatiCruscottoGenerale } from '../cruscotto-generale-servizio.js';
 import { euroBreve, saluto } from '../../engine/cruscotto-generale.js';
@@ -128,6 +129,7 @@ function amministrazione(d: DatiCruscottoGenerale) {
   if (x.ricevutiSdi) sdi.push(riga(`${x.ricevutiSdi} ${x.ricevutiSdi === 1 ? 'fattura fornitore arrivata' : 'fatture fornitori arrivate'} dallo SdI`, 'ultimi 7 gg', { link: '/amministrazione/ricevuti' }));
   return riquadro('Amministrazione', '/amministrazione', 'Cruscotto', html`
     ${mini([['Fatturato del mese', euroBreve(x.fatturatoMese)], ['Scaduto clienti', euroBreve(x.scadutoClienti), x.scadutoClienti > 0], ['DDT da fatturare', x.ddtDaFatturare]])}
+    ${testoDifferite(x.differite) ? html`<p class="nota ${x.differite.scaduti ? 'negativo' : ''}"><a href="/amministrazione/differite">${testoDifferite(x.differite)} → Fattura tutti</a></p>` : ''}
     <div class="tit">SdI</div>
     ${elenco(sdi, 'Nessuna fattura in attesa di esito, nessuno scarto.')}
     <div class="tit">Incassi scaduti più vecchi</div>

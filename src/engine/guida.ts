@@ -366,6 +366,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
   },
   {
+    id: 'fatture-differite', area: 'amministrazione', titolo: 'Fatture differite: i DDT da fatturare entro il 15',
+    parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla',
+    testo: [
+      'I DDT di vendita e reso lavorato emessi in un mese si fatturano entro il 15 del mese dopo (fattura differita, tipo TD24: il portale lo sceglie da solo all\'emissione quando la fattura cita DDT con data precedente).',
+      'Amministrazione → Fatture differite mostra tutti i DDT emessi e non ancora fatturati, raggruppati per cliente, con il termine: giallo se scade in questo mese, rosso se è già passato. "Fattura tutti i DDT" prepara una bozza con le righe di tutti i DDT del cliente; "Fattura tutti i clienti in scadenza" ne prepara una per cliente.',
+      'Il cruscotto generale lo ricorda in "Da fare oggi": giallo dal 1° del mese per i DDT del mese prima, rosso dal 16 se non sono ancora fatturati. Le bozze si controllano (prezzi, pagamento) e si emettono una per una.',
+    ],
+    passi: ['Amministrazione → Fatture differite (o il pulsante nel cruscotto).', 'Per un cliente: "Fattura tutti i DDT"; oppure in alto "Fattura tutti i clienti in scadenza".', 'Nella bozza controlla prezzi e pagamento, poi Emetti e Invia allo SdI.'],
+    pagine: [['/amministrazione/differite', 'Fatture differite'], ['/amministrazione/documenti', 'Documenti emessi']],
+  },
+  {
     id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT e stamparlo',
     parole: 'ddt nuovo emettere fare bolla documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
     testo: [
