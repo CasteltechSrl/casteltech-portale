@@ -74,7 +74,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'tasti-rapidi', area: 'inizio', titolo: 'Tasti rapidi: fare prima con la tastiera',
     parole: 'tasti rapidi scorciatoie tastiera shortcut alt n nuovo esc escape punto interrogativo elenco tasti ctrl s salva barra slash ricerca veloce',
     testo: [
-      'In tutte le pagine dell\'ufficio funzionano alcuni tasti: / (barra) o Ctrl+K vanno alla ricerca in alto; Alt+N preme il pulsante "+ Nuovo…" della pagina in cui sei (nuovo preventivo in Preventivi, nuova fattura in Documenti emessi, nuovo fornitore in Anagrafiche…); Ctrl+S salva la bozza che stai scrivendo; Esc chiude tendine e finestre.',
+      'In tutte le pagine dell\'ufficio funzionano alcuni tasti: / (barra) o Ctrl+K vanno alla ricerca in alto; Alt+N preme il pulsante "+ Nuovo…" della pagina in cui sei (nuovo preventivo in Preventivi, nuovo DDT o nuova fattura nella scheda aperta di Documenti emessi, nuovo fornitore in Anagrafiche…); Ctrl+S salva la bozza che stai scrivendo; Esc chiude tendine e finestre.',
       'Premendo ? (Shift+7 sulla tastiera italiana, fuori dalle caselle di testo) compare l\'elenco dei tasti rapidi; Esc o un clic fuori lo chiude.',
     ],
     passi: ['Apri la pagina dell\'elenco (es. Preventivi).', 'Premi Alt+N: si apre il modulo del nuovo preventivo.', 'Premi ? se non ricordi un tasto.'],
@@ -789,7 +789,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'azioni-documenti', area: 'amministrazione', titolo: 'Più documenti insieme: spunte nell\'elenco (elimina, XML, Excel, incassi)',
     parole: 'spunta spunte casella selezionare tutti elimina eliminare cancellare bozza bozze scarica xml zip excel incassate incassare incasso duplica copia annulla ddt fatturare piu insieme elenco',
     testo: [
-      'In Amministrazione → Documenti emessi (Fatture, Note di credito, Autofatture, DDT) ogni riga ha una casella a sinistra: spunta i documenti (la casella in alto li spunta tutti) e usa i pulsanti in alto a destra.',
+      'In Amministrazione → Documenti emessi (schede in quest\'ordine: DDT, Fatture, Autofatture, Note di credito; si apre sui DDT) ogni riga ha una casella a sinistra: spunta i documenti (la casella in alto li spunta tutti) e usa i pulsanti in alto a destra.',
       'Elimina toglie solo le bozze: un documento emesso non si elimina mai (la numerazione non deve avere buchi). Una fattura emessa si storna con "Crea nota di credito", un DDT emesso che non è partito si annulla con "Annulla DDT" (il numero resta usato). Il portale dice quali righe spuntate non ha toccato e perché.',
       'Fatture: "Stampa / PDF" e "Duplica" (copia come bozza di oggi, senza DDT e acconti) e "Crea nota di credito" valgono per un documento alla volta; "Scarica XML" (più di uno: file zip), "Excel" e "Segna incassate" per quanti ne spunti. "Segna incassate" apre una pagina con le rate ancora aperte: scegli data e modo di pagamento (e la banca) e conferma.',
       'DDT: "Fattura i DDT" prepara una fattura con tutti i DDT emessi spuntati, se sono dello stesso cliente.',

@@ -10,6 +10,18 @@
 
 export type TipoDocumentoElenco = 'fattura' | 'nota_credito' | 'autofattura' | 'ddt';
 
+/**
+ * Schede di Amministrazione → Documenti emessi, nell'ordine del lavoro e dell'uso (Adriano 1/11/2026):
+ * prima il DDT (la merce parte), poi la fattura, poi le autofatture, per ultime le note di credito.
+ * La prima scheda è quella che si apre cliccando "Documenti emessi".
+ */
+export const SCHEDE_DOCUMENTI: { tipo: TipoDocumentoElenco; uno: string; tanti: string }[] = [
+  { tipo: 'ddt', uno: 'DDT', tanti: 'DDT' },
+  { tipo: 'fattura', uno: 'Fattura', tanti: 'Fatture' },
+  { tipo: 'autofattura', uno: 'Autofattura', tanti: 'Autofatture' },
+  { tipo: 'nota_credito', uno: 'Nota di credito', tanti: 'Note di credito' },
+];
+
 /** Il minimo di un documento dell'elenco che serve per decidere. */
 export interface DocumentoElenco {
   id: number;
