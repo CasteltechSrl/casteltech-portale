@@ -148,12 +148,12 @@ export async function salvaBackupSuDisco(motivo: string): Promise<string | null>
   return nome;
 }
 
-export function elencoBackup(): { nome: string; kb: number }[] {
+export function elencoBackup(): { nome: string; kb: number; byte: number }[] {
   const cartella = process.env.BACKUP_DIR;
   if (!cartella) return [];
   try {
     return readdirSync(cartella).filter(f => f.startsWith('casteltech-backup-')).sort().reverse()
-      .map(nome => ({ nome, kb: Math.round(statSync(join(cartella, nome)).size / 1024) }));
+      .map(nome => { const byte = statSync(join(cartella, nome)).size; return { nome, kb: Math.round(byte / 1024), byte }; });
   } catch { return []; }
 }
 
