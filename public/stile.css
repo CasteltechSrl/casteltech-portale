@@ -830,3 +830,23 @@ form.vista-semplice .campi-parametri > label:not(.campo-semplice):not(.scelta-pr
 form.vista-semplice details.senza-semplici, form.vista-semplice details.materiali-consumo { display: none; }
 .campi-nascosti { grid-column: 1 / -1; color: #6b6b6b; font-size: .85rem; }
 form:not(.vista-semplice) .campi-nascosti { display: none; }
+
+/* Avviso margine nella bozza di fattura (engine/avviso-margine.ts) */
+tr.riga-margine td { background: #fff8e1; }
+tr.riga-margine.critico td { background: #fff1c2; }
+.avviso-margine { display: block; color: #8a6100; font-size: .78rem; white-space: nowrap; }
+.avviso.margine { font-size: .9rem; }
+
+/* Controlli settimanali (engine/controlli.ts) */
+.riepilogo-controlli { font-size: 1.05rem; }
+.controllo h2 { display: flex; align-items: center; gap: .5rem; font-size: 1.05rem; }
+.controllo h2 .conta { background: var(--accento-chiaro); color: var(--accento); border-radius: 999px; padding: .05rem .55rem; font-size: .85rem; }
+.controllo.urgente { border-left: 4px solid #c0392b; }
+.controllo.controllare { border-left: 4px solid #e0a800; }
+.controllo.normale { border-left: 4px solid var(--bordo); }
+.etichetta.urgente { background: #fbe2e0; color: #a93226; }
+.etichetta.controllare { background: #fff2cc; color: #8a6100; }
+.elenco-controllo { margin: .3rem 0 0; padding-left: 1.2rem; columns: 2; column-gap: 2rem; }
+.elenco-controllo li { break-inside: avoid; padding: .15rem 0; }
+.elenco-controllo small { color: #6b6b6b; }
+@media (max-width: 800px) { .elenco-controllo { columns: 1; } }

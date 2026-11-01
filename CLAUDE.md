@@ -371,6 +371,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    dell'operatore di oggi, aperte prima; totale ore; "Riapri" = POST apri della stessa fase all'ora attuale) e "Le tue commesse degli ultimi giorni" (7 gg, senza QR);
    chiusa una fase il redirect porta `?dopo=<fase>` e la pagina della commessa propone la "Prossima fase" (`faseSuccessiva`: prima prevista dopo quella chiusa non
    ancora fatta né aperta da nessuno, altrimenti la prima saltata) con "Apri adesso". Avviso Telegram resta "Da chiarire" nei Suggerimenti.
+   ✅ Gruppo E delle proposte (Adriano 1/11/2026; test `tests/controlli.test.ts`): avviso margine nella bozza di fattura (`engine/avviso-margine.ts`, `riferimentiPreventivi`
+   in `controlli-servizio.ts`: ultimo preventivo del codice per quel cliente; prezzo netto sotto il prezzo a scheda di oltre l'1 % = riga gialla "sotto il preventivo",
+   margine del preventivo < 10 % = "margine basso"; solo avviso, si emette comunque). Pagina Amministrazione → Controlli settimanali (`/amministrazione/controlli`,
+   `engine/controlli.ts` `elencoControlli`: commesse oltre consegna, DDT da fatturare da 20+ gg, fasi aperte da 2+ gg, ordini senza data, prodotti in ordine senza prezzo,
+   clienti fatturati senza SDI/PEC, fatture fornitori senza scadenza, preventivi bozza fermi 30+ gg; letto solo all'apertura; link nel riquadro Amministrazione del cruscotto).
+   Un controllo nuovo = una voce in `elencoControlli` + la sua lettura in `datiControlli`. Backup su Drive NON fatto: punto aperto, decide Adriano.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

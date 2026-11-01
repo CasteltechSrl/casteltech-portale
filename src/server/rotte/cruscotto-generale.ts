@@ -137,7 +137,8 @@ function amministrazione(d: DatiCruscottoGenerale) {
     ${elenco(sdi, 'Nessuna fattura in attesa di esito, nessuno scarto.')}
     <div class="tit">Incassi scaduti più vecchi</div>
     ${elenco(x.incassiScaduti.map(s => riga(`${s.nome} · fatt. ${s.numero} · ${euro(s.importo)}`, `da ${s.giorni} gg`, { link: `/amministrazione/documenti/${s.documento_id}`, rosso: true })),
-      'Nessun incasso scaduto.')}`);
+      'Nessun incasso scaduto.')}
+    <p class="nota"><a href="/amministrazione/controlli">Controlli settimanali</a> · le cose lasciate a metà (DDT vecchi, ordini senza data, prodotti senza prezzo, clienti senza SDI…)</p>`);
 }
 
 function sistema(d: DatiCruscottoGenerale) {
