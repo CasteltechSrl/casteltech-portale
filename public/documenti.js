@@ -14,7 +14,7 @@ document.getElementById('aggiungi-riga')?.addEventListener('click', () => {
   nuova.querySelectorAll('option[data-libero]').forEach(o => o.remove());
   nuova.querySelectorAll('input, select').forEach(el => {
     el.name = el.name.replace(/righe\[\d+\]/, `righe[${indice}]`);
-    if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    if (el.tagName === 'SELECT') { el.selectedIndex = 0; if (el.dataset.predefinita) el.value = el.dataset.predefinita; }
     else if (el.type === 'checkbox') el.checked = false; else el.value = '';
     el.readOnly = false; delete el.dataset.listino;
   });

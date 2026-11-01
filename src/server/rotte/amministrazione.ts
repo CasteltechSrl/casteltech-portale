@@ -4,6 +4,7 @@
  * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
  * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
+import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
@@ -130,7 +131,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
     <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
     <td>${cellaDescrizione(x, i, prodotti, 'maiuscolo')}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
-    <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo maiuscolo"></td>
+    <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
     <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
     <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo"></td>
   </tr>`;
@@ -671,7 +672,7 @@ export function rotteAmministrazione() {
         <input type="hidden" name="righe[${i}][acconto_id]" value="${x.acconto_id ?? ''}"></td>
       <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
-      <td><input name="righe[${i}][um]" value="${x.um ?? ''}" class="cortissimo"></td>
+      <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
       <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal">${avvisiMargine.has(i) ? html`<small class="avviso-margine" title="${avvisiMargine.get(i)!.testo}">⚠ ${avvisiMargine.get(i)!.livello === 'critico' ? 'sotto il preventivo' : 'margine basso'}</small>` : ''}</td>
       <td><input name="righe[${i}][sconto]" value="${x.sconto || ''}" class="cortissimo" inputmode="decimal"></td>
       <td><select name="righe[${i}][aliquota_iva]"><option value="">predefinita</option>${aliquote.map(a =>

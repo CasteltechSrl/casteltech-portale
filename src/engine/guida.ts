@@ -512,7 +512,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT e stamparlo',
-    parole: 'ddt nuovo emettere fare bolla documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
+    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
     testo: [
       'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
@@ -760,11 +760,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Amministrazione ──
   {
     id: 'nuova-fattura', area: 'amministrazione', titolo: 'Fare una fattura',
-    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa codice menu tendina riga righe',
+    parole: 'fattura fatturare emettere nuova xml fatturapa sdi elettronica ddt numero bozza iva pdf cortesia copia stampa codice menu tendina riga righe unità misura um pz nr kg metri testo',
     testo: [
       'Il PDF per il cliente: "PDF di cortesia" sulla fattura o nota di credito emessa (in bozza "Anteprima di stampa", con la scritta BOZZA) apre la copia da stampare o salvare in PDF con "Stampa / salva PDF". La fattura valida resta l\'XML mandato allo SdI: lo dice il piede del PDF.',
       'La fattura nasce come bozza: cliente dall\'anagrafica, righe, e i DDT ancora da fatturare di quel cliente si aggiungono con un clic (solo DDT già emessi). I DDT di resi non lavorati, riparazioni in garanzia, conto visione o conto lavorazione di solito non si fatturano: stanno a parte sotto "Altri DDT senza fattura" e non contano nel numero "DDT da fatturare" del cruscotto. L\'IVA predefinita è quella del cliente (lettera d\'intento, estero…) o il 22%; all\'emissione resta scritta sulle righe, così la copia di cortesia e le note di credito future non cambiano se cambia l\'IVA del cliente.',
       'Nelle righe il Codice si sceglie dal menu, che mostra solo i prodotti di quel cliente in anagrafica: la descrizione e il prezzo per la quantità arrivano da soli. Se il prodotto non c\'è, scegli "+ Nuovo prodotto…" in fondo al menu: scrivi codice e descrizione e va subito in anagrafica. Per una riga senza codice (trasporto, servizi) scegli "— senza codice —" e scrivi la descrizione. Vale anche per note di credito e di debito, DDT e conferme d\'ordine.',
+      'L\'unità di misura (U.M.) si sceglie dal menu a tendina: PZ (pezzi), NR (numero), poi le unità internazionali KG, G, T, M, CM, MM, M2, M3, L, ML, H (ore), MIN; sulle righe nuove è già scelto PZ. Vale per fatture, note di credito e DDT. Un valore vecchio scritto in un altro modo ("pz.", "mt") viene riconosciuto; se non si riconosce resta com\'era.',
+      'La spunta "Testo" in fondo alla riga la rende una riga di sola descrizione (es. "Rif. vostra mail del…"): niente quantità né prezzo.',
       'Con "Emetti" il portale assegna il numero, calcola la scadenza dalla condizione di pagamento, prepara l\'XML della fattura elettronica e segna i DDT come fatturati. Se ci sono errori non si emette e il numero non si consuma.',
       'Prima di emettere puoi scaricare l\'"XML di prova" (numero 0) per controllarlo. Il PDF della fattura è in preparazione.',
     ],
