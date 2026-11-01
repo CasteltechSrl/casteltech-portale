@@ -10,6 +10,8 @@ import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
+import { gruppiSolleciti, inviaSollecito, propostaSollecito, registraSollecito } from '../solleciti-servizio.js';
+import { NOMI_LIVELLO, giorniRitardo } from '../../engine/solleciti.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
@@ -193,6 +195,69 @@ export function rotteAmministrazione() {
   r.use('/vies', rotteVies());
 
   // ── Fatture differite (1/11/2026): DDT da fatturare per cliente, "Fattura tutti" = una bozza per cliente (TD24 da sola all'emissione) ──
+  // ── Solleciti incassi (proposta della revisione, Adriano 1/11/2026) ──
+  r.get('/solleciti', async (req, res) => {
+    const oggi = oggiRoma();
+    const gruppi = await gruppiSolleciti(oggi);
+    const totale = gruppi.reduce((s, g) => s + g.totale, 0);
+    res.send(pagina(req, 'Solleciti incassi', html`
+      <div class="intestazione-pagina"><h1>Solleciti incassi · rate scadute per cliente</h1><div class="azioni"><a class="bottone" href="/amministrazione">Cruscotto</a></div></div>
+      <p class="nota">Tutte le rate scadute e non incassate delle fatture emesse, un gruppo per cliente. <b>Prepara il sollecito</b> scrive l'email con l'elenco delle fatture, gli importi e l'IBAN:
+        la controlli e la mandi (con Gmail quando la delega è attiva, altrimenti con la tua posta). Il tono sale con il ritardo: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso.
+        Una rata incassata si segna dalla fattura (o da Documenti emessi → Segna incassate) e sparisce da qui.</p>
+      ${gruppi.length ? html`<p class="nota">${gruppi.length} clienti, ${euro(totale)} scaduti.</p>
+      <div class="tabella-scorre"><table class="elenco solleciti"><thead><tr><th>Cliente</th><th class="n">Rate</th><th class="n">Scaduto</th><th class="n">Ritardo max</th><th>Livello</th><th>Email</th><th></th></tr></thead>
+        <tbody>${gruppi.map(g => html`<tr class="livello-${g.livello}">
+          <td><a href="/anagrafiche/clienti/${g.clienteId}">${g.cliente}</a></td><td class="n">${g.rate.length}</td><td class="n"><b>${euro(g.totale)}</b></td>
+          <td class="n">${g.giorniMax} gg</td><td>${NOMI_LIVELLO[g.livello]}</td><td>${g.email ?? html`<span class="nota">manca (Dati fiscali del cliente)</span>`}</td>
+          <td><a class="bottone ${g.livello === 'ultimo' ? 'primario' : ''}" href="/amministrazione/solleciti/${g.clienteId}">Prepara il sollecito</a></td></tr>`)}</tbody></table></div>`
+        : html`<p class="vuoto">Nessuna rata scaduta: niente da sollecitare.</p>`}`));
+  });
+  r.get('/solleciti/:cliente', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.cliente)) return next();
+    const oggi = oggiRoma();
+    const p = await propostaSollecito(Number(req.params.cliente), oggi);
+    if (!p) return res.redirect(`/amministrazione/solleciti?msg=${encodeURIComponent('Il cliente non ha rate scadute.')}`);
+    const g = p.gruppo;
+    res.send(pagina(req, `Sollecito · ${g.cliente}`, html`
+      <div class="intestazione-pagina"><h1>Sollecito incassi · ${g.cliente} <small class="nota">${NOMI_LIVELLO[g.livello]}</small></h1>
+        <div class="azioni"><a class="bottone" href="/amministrazione/solleciti">Tutti i clienti</a> <a class="bottone" href="/anagrafiche/clienti/${g.clienteId}">Scheda cliente</a></div></div>
+      ${p.ultimo ? html`<div class="avviso info">Ultimo sollecito registrato nel CRM il ${data(p.ultimo.data)}: ${p.ultimo.descrizione}</div>` : ''}
+      <table class="elenco"><thead><tr><th>Fattura</th><th>Data</th><th>Scadenza</th><th class="n">Ritardo</th><th class="n">Importo</th></tr></thead>
+        <tbody>${g.rate.map(r => html`<tr><td><a href="/amministrazione/documenti/${r.documentoId}">n. ${r.numero}</a></td><td>${data(r.dataFattura)}</td><td>${data(r.scadenza)}</td>
+          <td class="n">${giorniRitardo(r.scadenza, oggi)} gg</td><td class="n">${euro(r.importo)}</td></tr>`)}</tbody>
+        <tfoot><tr><td colspan="4">Totale scaduto</td><td class="n"><b>${euro(g.totale)}</b></td></tr></tfoot></table>
+      <form method="post" action="/amministrazione/solleciti/${g.clienteId}/invia" class="blocco" data-conferma="Mandare il sollecito al cliente?">
+        <h2>Email al cliente</h2>
+        <div class="riga-campi">
+          <label class="largo">A <input name="a" value="${p.a}" placeholder="amministrazione@cliente.it (più indirizzi separati da virgola)"></label>
+          <label>Cc <input name="cc" value=""></label>
+        </div>
+        <label>Oggetto <input name="oggetto" value="${p.oggetto}"></label>
+        <label>Testo <textarea name="testo" class="testo-sollecito">${p.testo}</textarea></label>
+        <div class="barra-azioni">
+          <span class="nota">${p.attivo ? html`Parte da ${p.mittente}; il sollecito resta registrato nel CRM del cliente.`
+            : html`<b>Invio con Gmail non ancora attivo</b> (manca la delega di Google Workspace per info@): usa <a href="${p.mailto}">Apri nella posta</a> o <button type="button" class="collegamento" data-copia-sollecito>Copia il testo</button>, poi <button formaction="/amministrazione/solleciti/${g.clienteId}/registra" formnovalidate data-conferma="Segnare nel CRM che il sollecito è stato mandato dalla tua posta?">Segna come mandato</button>.`}</span>
+          <button class="primario" ${p.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
+        </div>
+      </form>`, msg(req), 'solleciti.js'));
+  });
+  r.post('/solleciti/:cliente/invia', async (req, res) => {
+    try {
+      const a = await inviaSollecito(Number(req.params.cliente), req.body ?? {}, req.session.utente?.id ?? null, oggiRoma());
+      res.redirect(`/amministrazione/solleciti?msg=${encodeURIComponent(`Sollecito inviato a ${a}.`)}`);
+    } catch (e: any) {
+      res.redirect(`/amministrazione/solleciti/${req.params.cliente}?msg=${encodeURIComponent(`Sollecito non inviato: ${e?.message ?? e}`)}`);
+    }
+  });
+  r.post('/solleciti/:cliente/registra', async (req, res) => {
+    const oggi = oggiRoma();
+    const p = await propostaSollecito(Number(req.params.cliente), oggi);
+    if (!p) return res.redirect('/amministrazione/solleciti');
+    const fatto = await registraSollecito(p.gruppo.clienteId, p.gruppo, String(req.body?.a ?? p.a ?? 'posta'), req.session.utente?.id ?? null, oggi);
+    res.redirect(`/amministrazione/solleciti?msg=${encodeURIComponent(fatto ? `Sollecito a ${p.gruppo.cliente} registrato nel CRM.` : 'Il cliente non è nel CRM: niente da registrare.')}`);
+  });
+
   r.get('/differite', async (req, res) => {
     const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
     const gruppi = differitePerCliente(await ddtDaFatturareTutti(), oggi);

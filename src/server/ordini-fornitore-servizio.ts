@@ -14,6 +14,7 @@ import {
   arriviDaModulo, controlliEmissioneOrdine, csvCarrello, emailOrdineFornitore, fornitorePerDistributore, nomeFilePdfOrdine, righeOrdineDaBom, statoArrivo,
   type RigaOrdineFornitore, type StatoArrivo,
 } from '../engine/ordini-fornitore.js';
+import { cosaManca, quantitaBomPerCommessa, type EsitoManca, type RigaDaOrdinare, type RigaOrdinata } from '../engine/cosa-manca.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const CAMPI_FORNITORE = `f.ragione_sociale, f.partita_iva, f.codice_fiscale, f.indirizzo, f.cap, f.comune, f.provincia, f.paese, f.email, f.pec, f.codice_sdi`;
@@ -318,3 +319,77 @@ export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: str
 /** Ultimo numero della serie per l'anno (per l'avviso di allineamento con Fatture in Cloud). */
 export const ultimoNumeroOrdini = async (anno: number) =>
   (await q1<{ ultimo_numero: number }>(`SELECT ultimo_numero FROM numerazioni WHERE tipo = 'ordine_fornitore' AND sezionale = '' AND anno = $1`, [anno]))?.ultimo_numero ?? 0;
+
+// ───────────────────────────── "Cosa manca" per la commessa (proposta della revisione, Adriano 1/11/2026) ─────────────────────────────
+
+export interface MancantiCommessa {
+  commessa: { id: number; numero: string; quantita: number; cliente: string; preventivoId: number | null; preventivoNumero: string | null };
+  bom: { id: number; nome: string; quantita: number[] } | null;
+  schede: number | null; senzaPrezzo: string[];
+  righe: EsitoManca[]; conta: Record<string, number>; mancanti: number;
+  ordini: { id: number; numero: number | null; anno: number; stato: string; fornitore: string | null; arrivo: StatoArrivo }[];
+  gruppi: { distributore: string; righe: RigaOrdineFornitore[]; totale: number; fornitore: { id: number; ragione_sociale: string } | null }[];
+  fornitori: { id: number; ragione_sociale: string }[];
+}
+
+/** Componenti della BOM del preventivo della commessa, confrontati con gli ordini a fornitore già fatti per la BOM o per la commessa. */
+export async function mancantiCommessa(commessaId: number): Promise<MancantiCommessa | null> {
+  const c = await q1<any>(`SELECT c.id, c.numero, c.quantita, cl.ragione_sociale AS cliente, p.id AS preventivo_id, p.numero AS preventivo_numero, p.bom_id
+    FROM commesse c JOIN clienti cl ON cl.id = c.cliente_id LEFT JOIN preventivi p ON p.id = c.preventivo_id WHERE c.id = $1`, [commessaId]);
+  if (!c) return null;
+  const commessa = { id: c.id, numero: c.numero, quantita: Number(c.quantita), cliente: c.cliente, preventivoId: c.preventivo_id ?? null, preventivoNumero: c.preventivo_numero ?? null };
+  const vuoto = { commessa, bom: null, schede: null, senzaPrezzo: [], righe: [], conta: {}, mancanti: 0, ordini: [], gruppi: [], fornitori: [] };
+  if (!c.bom_id) return vuoto;
+  const a = await q1<any>(`SELECT id, nome, quantita, righe FROM bom_analisi WHERE id = $1`, [c.bom_id]);
+  if (!a) return vuoto;
+  const quantita: number[] = (a.quantita ?? []).map(Number);
+  const schede = quantitaBomPerCommessa(quantita, commessa.quantita);
+  const { gruppi: gruppiBom, senzaPrezzo } = schede ? righeOrdineDaBom(a.righe ?? [], schede) : { gruppi: [], senzaPrezzo: [] };
+  const daOrdinare: RigaDaOrdinare[] = gruppiBom.flatMap(g => g.righe.map(r => ({ codice: r.codice, descrizione: r.descrizione, quantita: r.quantita, prezzo: r.prezzo, distributore: g.distributore })));
+  const docs = await q<any>(`SELECT d.id, d.numero, d.anno, d.stato, f.ragione_sociale AS fornitore FROM documenti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+    WHERE d.tipo = 'ordine_fornitore' AND d.stato <> 'annullato' AND (d.bom_id = $1 OR d.commessa_id = $2) ORDER BY d.id`, [a.id, commessaId]);
+  const ordinate: RigaOrdinata[] = [];
+  const ordini: MancantiCommessa['ordini'] = [];
+  for (const d of docs) {
+    const righe = (await q<any>(`SELECT codice, descrizione, quantita, arrivati FROM documenti_righe WHERE documento_id = $1`, [d.id]))
+      .map(r => ({ codice: r.codice, descrizione: r.descrizione, quantita: Number(r.quantita), arrivati: Number(r.arrivati) }));
+    const nome = d.numero ? `${d.numero}/${d.anno}` : `bozza ${d.id}`;
+    ordini.push({ id: d.id, numero: d.numero, anno: d.anno, stato: d.stato, fornitore: d.fornitore, arrivo: statoArrivo(righe) });
+    for (const r of righe) ordinate.push({ ...r, documento: nome });
+  }
+  const esito = cosaManca(daOrdinare, ordinate);
+  const fornitori = await fornitoriPerOrdini();
+  const perDistributore = new Map<string, MancantiCommessa['gruppi'][number]>();
+  for (const x of esito.righe) {
+    if (x.mancante <= 0) continue;
+    const g = perDistributore.get(x.riga.distributore) ?? { distributore: x.riga.distributore, righe: [], totale: 0, fornitore: fornitorePerDistributore(x.riga.distributore, fornitori) };
+    g.righe.push({ posizione: g.righe.length + 1, codice: x.riga.codice, descrizione: x.riga.descrizione, quantita: x.mancante, prezzo: x.riga.prezzo, consegna: null, prodotto_id: null, riga_ordine_id: null });
+    g.totale = Math.round((g.totale + x.mancante * x.riga.prezzo) * 100) / 100;
+    perDistributore.set(x.riga.distributore, g);
+  }
+  return { commessa, bom: { id: a.id, nome: a.nome, quantita }, schede, senzaPrezzo, righe: esito.righe, conta: esito.conta, mancanti: esito.mancanti,
+    ordini, gruppi: [...perDistributore.values()].sort((x, y) => y.totale - x.totale), fornitori };
+}
+
+/** Bozze di ordine a fornitore con i soli componenti mancanti (una per distributore spuntato), collegate a BOM e commessa. */
+export async function ordinaMancanti(commessaId: number, b: any, utenteId: number | null): Promise<{ ids: number[]; errori: string[] }> {
+  const x = await mancantiCommessa(commessaId);
+  if (!x?.bom) return { ids: [], errori: ['La commessa non ha una BOM quotata collegata al preventivo.'] };
+  const scelti = [b.distributore ?? []].flat().map(String);
+  const errori: string[] = [];
+  const daFare = x.gruppi.filter(g => scelti.includes(g.distributore)).map(g => {
+    const id = Number(b[`fornitore_${g.distributore}`]) || 0;
+    const f = x.fornitori.find(k => k.id === id) ?? null;
+    if (!f) errori.push(`Scegli il fornitore dell'anagrafica per ${g.distributore === 'manuale' ? 'le righe con il prezzo scritto a mano' : g.distributore}.`);
+    return { g, f };
+  });
+  if (!daFare.length) errori.push('Spunta almeno un distributore.');
+  if (errori.length) return { ids: [], errori };
+  const ids = await transazione(async c => {
+    const out: number[] = [];
+    for (const { g, f } of daFare)
+      out.push(await nuovaBozza(c, { fornitoreId: f!.id, utenteId, bomId: x.bom!.id, commessaId, note: `Componenti mancanti per la commessa ${x.commessa.numero} (BOM ${x.bom!.nome}, ${x.schede} schede).` }, g.righe));
+    return out;
+  });
+  return { ids, errori: [] };
+}

@@ -347,7 +347,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
           <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>
           <button form="ddt-commessa" class="${['rientrata', 'analizzata', 'chiusa'].includes(salvata.stato) && !ddt.length ? 'primario' : ''}"
-            title="Prepara il DDT con le schede della commessa (quelle del rientro, o tutte), cliente e ordine già compilati">Crea DDT</button>` : ''}
+            title="Prepara il DDT con le schede della commessa (quelle del rientro, o tutte), cliente e ordine già compilati">Crea DDT</button>
+          <a class="bottone" href="/ordini/fornitori/commessa/${salvata.id}" title="Componenti della BOM quotata non ancora ordinati né arrivati → bozza di ordine a fornitore">Cosa manca</a>` : ''}
         <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
         ${salvata ? html`<button form="elimina-commessa" class="pericolo" title="Elimina la commessa creata per errore"
           data-conferma="${confermaEliminaCommessa({ numero: salvata.numero, stato: STATI_TESTO[salvata.stato] ?? salvata.stato, tempi: nTempi })}">Elimina</button>` : ''}

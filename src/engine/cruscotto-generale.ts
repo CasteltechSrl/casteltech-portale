@@ -34,7 +34,7 @@ export function cosaDaFare(c: ContiDaFare, diretti: Partial<Record<string, strin
       testo: plurale(c.consegneInRitardo, 'consegna in ritardo', 'consegne in ritardo') },
     { chiave: 'differite-scadute', quanti: c.differiteScadute ?? 0, livello: 'urgente', link: '/amministrazione/differite',
       testo: plurale(c.differiteScadute ?? 0, 'DDT da fatturare oltre il 15 (fattura differita in ritardo)', 'DDT da fatturare oltre il 15 (fatture differite in ritardo)') },
-    { chiave: 'incassi-scaduti', quanti: c.incassiScaduti, livello: 'urgente', link: '/amministrazione',
+    { chiave: 'incassi-scaduti', quanti: c.incassiScaduti, livello: 'urgente', link: '/amministrazione/solleciti',
       testo: plurale(c.incassiScaduti, 'incasso scaduto', 'incassi scaduti') },
     { chiave: 'pagamenti-scaduti', quanti: c.pagamentiScaduti, livello: 'controllare', link: '/amministrazione/ricevuti?da_pagare=1',
       testo: plurale(c.pagamentiScaduti, 'pagamento scaduto', 'pagamenti scaduti') },

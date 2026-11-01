@@ -9,12 +9,13 @@ import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import { riquadriSceltaProdotto } from '../views/scelta-prodotto.js';
 import {
   anteprimaOrdiniDaBom, collegaFattura, commessePerOrdini, creaOrdineFornitore, csvOrdine, duplicaOrdineFornitore, elencoOrdiniFornitore, eliminaOAnnullaOrdine,
-  emettiOrdineFornitore, fattureCollegabili, fornitoriPerOrdini, inviaOrdineFornitore, leggiOrdineFornitore, ordiniDaBom, pdfOrdineFornitore, propostaEmailOrdine,
+  emettiOrdineFornitore, fattureCollegabili, fornitoriPerOrdini, inviaOrdineFornitore, leggiOrdineFornitore, mancantiCommessa, ordinaMancanti, ordiniDaBom, pdfOrdineFornitore, propostaEmailOrdine,
   salvaOrdineFornitore, segnaArrivi, ultimoNumeroOrdini,
 } from '../ordini-fornitore-servizio.js';
 import { controlliEmissioneOrdine, avvisoNumerazione, NOMI_ARRIVO, type StatoArrivo } from '../../engine/ordini-fornitore.js';
 import { importoRigaConferma, totaleConferma } from '../../engine/conferme-ordine.js';
 import { nomeFornitore } from '../codifica-servizio.js';
+import { NOMI_STATO_MANCA } from '../../engine/cosa-manca.js';
 import { pagina } from './ordini.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, euro, num, raw, numCampo } from '../views/html.js';
@@ -137,6 +138,50 @@ export function rotteOrdiniFornitore() {
     if (e.errori.length) return res.redirect(msg(`/ordini/fornitori/bom/${req.params.bom}`, e.errori.join(' ')) + `&schede=${Number(req.body.schede) || ''}`);
     if (e.ids.length === 1) return res.redirect(msg(`/ordini/fornitori/${e.ids[0]}`, 'Bozza creata dalla BOM: controlla e poi Emetti.'));
     res.redirect(msg('/ordini/fornitori', `Create ${e.ids.length} bozze dalla BOM, una per distributore.`));
+  });
+
+  // ── "Cosa manca" per la commessa (proposta della revisione, Adriano 1/11/2026) ──
+  r.get('/commessa/:id', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const x = await mancantiCommessa(Number(req.params.id));
+    if (!x) return res.status(404).send('Commessa non trovata');
+    const testa = html`<div class="intestazione-pagina"><h2>Cosa manca per la commessa ${x.commessa.numero} · ${x.commessa.cliente}</h2>
+      <a class="bottone" href="/commesse/${x.commessa.id}">← Commessa</a></div>`;
+    if (!x.bom) return res.send(pagina(req.session.utente, `Cosa manca · ${x.commessa.numero}`, 'fornitori', html`${testa}
+      <p class="vuoto">La commessa non ha una BOM quotata collegata${x.commessa.preventivoId ? html`: aprila dal <a href="/preventivi/${x.commessa.preventivoId}">preventivo ${x.commessa.preventivoNumero}</a> (gruppo ACQUISTI → BOM collegata, oppure la spunta Componenti) e poi torna qui` : ''}.
+        Senza BOM il portale non sa quali componenti servono.</p>`));
+    res.send(pagina(req.session.utente, `Cosa manca · ${x.commessa.numero}`, 'fornitori', html`${testa}
+      <p>BOM <a href="/quotazioni/bom/${x.bom.id}">${x.bom.nome}</a>, quantità quotata <b>${num(x.schede ?? 0, 0)} schede</b> per una commessa da ${num(x.commessa.quantita, 0)}${x.schede !== x.commessa.quantita ? html` <span class="nota">(la quantità della BOM più vicina)</span>` : ''}.
+        Confronto con ${x.ordini.length ? html`${x.ordini.length} ordin${x.ordini.length === 1 ? 'e' : 'i'} a fornitore: ${x.ordini.map((o, k) => html`${k ? ', ' : ''}<a href="/ordini/fornitori/${o.id}">${o.numero ? `${o.numero}/${o.anno}` : `bozza ${o.id}`}</a> ${o.fornitore ?? ''} (${NOMI_ARRIVO[o.arrivo]})`)}` : 'nessun ordine a fornitore ancora fatto per questa BOM o commessa'}.</p>
+      <div class="cifre">
+        <div class="cifra ${x.conta.da_ordinare ? 'allarme' : ''}"><span>Da ordinare</span><b>${x.conta.da_ordinare ?? 0}</b></div>
+        <div class="cifra"><span>Ordinati, da ricevere</span><b>${x.conta.ordinato ?? 0}</b></div>
+        <div class="cifra"><span>In parte</span><b>${x.conta.parziale ?? 0}</b></div>
+        <div class="cifra"><span>Arrivati</span><b>${x.conta.arrivato ?? 0}</b></div>
+      </div>
+      ${x.senzaPrezzo.length ? html`<div class="avviso info">${x.senzaPrezzo.length} righe della BOM senza prezzo non si possono controllare: ${x.senzaPrezzo.slice(0, 12).join(', ')}${x.senzaPrezzo.length > 12 ? '…' : ''}.</div>` : ''}
+      ${x.gruppi.length ? html`<form method="post" class="blocco">
+        <h3>Ordina quello che manca</h3>
+        <table class="elenco"><thead><tr><th></th><th>Distributore</th><th class="n">Righe</th><th class="n">Totale</th><th>Fornitore in anagrafica</th></tr></thead>
+        <tbody>${x.gruppi.map(g => html`<tr>
+          <td><input type="checkbox" name="distributore" value="${g.distributore}" ${g.distributore === 'manuale' ? '' : raw('checked')}></td>
+          <td>${nomeFornitore(g.distributore as any)}</td><td class="n">${g.righe.length}</td><td class="n">${euro(g.totale)}</td>
+          <td><select name="fornitore_${g.distributore}"><option value="">— scegli —</option>${x.fornitori.map(f =>
+            html`<option value="${f.id}" ${g.fornitore?.id === f.id ? raw('selected') : ''}>${f.ragione_sociale}</option>`)}</select></td></tr>`)}</tbody></table>
+        <div class="barra-azioni"><span class="nota">Una bozza per distributore, collegata alla BOM e alla commessa: la controlli, la emetti e la mandi.</span>
+          <button class="primario">Crea le bozze con i componenti mancanti</button></div>
+      </form>` : html`<p class="nota positivo">Niente da ordinare: tutti i componenti con prezzo sono già ordinati o arrivati.</p>`}
+      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Codice</th><th>Descrizione</th><th>Distributore</th><th class="n">Servono</th><th class="n">Ordinati</th><th class="n">Arrivati</th><th class="n">Mancano</th><th>Stato</th><th>Ordini</th></tr></thead>
+        <tbody>${x.righe.map(e => html`<tr class="${e.stato === 'da_ordinare' ? 'scaduta' : e.stato === 'arrivato' ? 'evaso' : ''}">
+          <td class="nowrap">${e.riga.codice ?? ''}</td><td class="taglia">${e.riga.descrizione}</td><td>${nomeFornitore(e.riga.distributore as any)}</td>
+          <td class="n">${num(e.riga.quantita, 0)}</td><td class="n">${num(e.ordinata, 0)}</td><td class="n">${num(e.arrivata, 0)}</td><td class="n">${e.mancante ? html`<b>${num(e.mancante, 0)}</b>` : ''}</td>
+          <td><span class="stato ${e.stato}">${NOMI_STATO_MANCA[e.stato]}</span></td><td class="nota">${e.ordini.join(', ')}</td></tr>`)}</tbody></table></div>`));
+  });
+  r.post('/commessa/:id', async (req, res) => {
+    const e = await ordinaMancanti(Number(req.params.id), req.body, req.session.utente?.id ?? null);
+    if (e.errori.length) return res.redirect(msg(`/ordini/fornitori/commessa/${req.params.id}`, e.errori.join(' ')));
+    if (e.ids.length === 1) return res.redirect(msg(`/ordini/fornitori/${e.ids[0]}`, 'Bozza creata con i componenti mancanti: controlla e poi Emetti.'));
+    res.redirect(msg('/ordini/fornitori', `Create ${e.ids.length} bozze con i componenti mancanti, una per distributore.`));
   });
 
   // ── un ordine ──

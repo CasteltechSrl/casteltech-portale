@@ -101,6 +101,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cruscotto', 'Cruscotto generale']],
   },
   {
+    id: 'ordine-da-preventivo', area: 'preventivi', titolo: 'Il cliente ha confermato: creare l\'ordine dal preventivo',
+    parole: 'ordine dal preventivo crea ordine cliente conferma confermato accettato righe quantità prezzo consegna proposta una tantum',
+    testo: [
+      'Quando il cliente conferma un preventivo non serve riscrivere l\'ordine: nel preventivo salvato il pulsante "Crea ordine" apre l\'ordine cliente già compilato con la riga delle schede (codice, descrizione, quantità e prezzo a scheda del preventivo) e, se è il primo lotto, una riga di servizio per ogni costo una tantum (programmazioni, lamine…).',
+      'La consegna richiesta è proposta dal portale come nella pagina "Data di consegna" (carico del Gantt e ore ciclo del preventivo), ma si può cambiare. Si scrivono il numero e la data dell\'ordine del cliente, si correggono righe e prezzi se serve e si preme "Crea l\'ordine".',
+      'L\'ordine nasce in Ordini clienti con origine "preventivo" e numero della serie 9001 (come quelli letti dalle email), entra nel Gantt e nel cruscotto; il preventivo passa ad "accettato". Da lì si fanno conferma d\'ordine, commessa e DDT come sempre.',
+    ],
+    passi: ['Apri il preventivo confermato dal cliente.', 'Premi "Crea ordine" accanto a "Crea commessa".', 'Controlla righe, prezzi e consegna, scrivi il numero d\'ordine del cliente, poi "Crea l\'ordine".'],
+    pagine: [['/preventivi', 'Preventivi'], ['/ordini', 'Ordini clienti']],
+  },
+  {
     id: 'cruscotto-generale', area: 'inizio', titolo: 'La prima pagina: il cruscotto generale',
     parole: 'cruscotto generale homepage pagina iniziale home riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
     testo: [
@@ -404,6 +415,28 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi.', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
     pagine: [['/ordini/acquisire', 'Ordini → Da acquisire']],
+  },
+  {
+    id: 'cosa-manca', area: 'commesse', titolo: 'Cosa manca per la commessa: componenti da ordinare',
+    parole: 'cosa manca commessa componenti mancanti da ordinare ordinati arrivati bom bozza materiale acquisti',
+    testo: [
+      'Nella pagina della commessa il pulsante "Cosa manca" confronta i componenti della BOM quotata collegata al preventivo (per la quantità di schede della commessa) con gli ordini a fornitore già fatti per quella BOM o per la commessa: per ogni componente vedi quanti ne servono, quanti sono ordinati, quanti arrivati e lo stato (da ordinare, ordinato, in parte, arrivato).',
+      'Con "Crea le bozze con i componenti mancanti" nasce una bozza di ordine a fornitore per ogni distributore (con il fornitore dell\'anagrafica proposto), con le sole quantità che mancano, collegata alla BOM e alla commessa: la controlli, la emetti e la mandi come gli altri ordini a fornitore.',
+      'Se la commessa non ha una BOM quotata, la pagina lo dice: si collega dal preventivo (gruppo ACQUISTI o spunta Componenti). Le righe della BOM senza prezzo non si possono controllare e sono elencate a parte.',
+    ],
+    passi: ['Apri la commessa e premi "Cosa manca".', 'Guarda le righe rosse (da ordinare) e quelle in parte.', 'Spunta i distributori e premi "Crea le bozze con i componenti mancanti".'],
+    pagine: [['/commesse', 'Commesse'], ['/ordini/fornitori', 'Ordini a fornitore']],
+  },
+  {
+    id: 'solleciti-incassi', area: 'amministrazione', titolo: 'Solleciti incassi: email al cliente per le fatture scadute',
+    parole: 'sollecito solleciti incassi pagamento fatture scadute scaduto email cliente gmail iban ritardo ultimo avviso crm',
+    testo: [
+      'Amministrazione → Solleciti incassi elenca le rate scadute e non incassate delle fatture emesse, un gruppo per cliente, con il totale, il ritardo massimo e il livello: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso. Ci si arriva anche dal pulsante rosso "incassi scaduti" del cruscotto e dalla scheda del cliente.',
+      '"Prepara il sollecito" scrive l\'email: elenco delle fatture con data, scadenza, giorni di ritardo e importo, totale scaduto, IBAN dell\'azienda (da Impostazioni → Amministrazione). Il destinatario proposto è l\'email amministrativa del cliente (Dati fiscali). Si corregge tutto prima di mandarla.',
+      'Con Gmail attivo (delega di Google Workspace per info@) il pulsante "Invia con Gmail" la manda e la registra nel CRM del cliente come attività email. Finché la delega non c\'è: "Apri nella posta" o "Copia il testo", poi "Segna come mandato" per registrarla nel CRM. Una rata incassata si segna dalla fattura e sparisce dall\'elenco.',
+    ],
+    passi: ['Apri Amministrazione → Solleciti incassi.', 'Premi "Prepara il sollecito" sul cliente.', 'Controlla destinatario e testo, poi "Invia con Gmail" (o "Apri nella posta" e "Segna come mandato").'],
+    pagine: [['/amministrazione/solleciti', 'Solleciti incassi'], ['/amministrazione', 'Cruscotto amministrazione']],
   },
   {
     id: 'bozze-autosalvataggio', area: 'amministrazione', titolo: 'Le bozze si salvano da sole',

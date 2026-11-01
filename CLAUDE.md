@@ -352,6 +352,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    della ricerca, Ctrl+S delle bozze); elenchi lunghi a pagine da 100 (`engine/paginazione.ts` + `views/paginazione.ts`: `paginata(righe, req.query)` → righe, barra;
    preventivi, commesse, ordini, documenti emessi e ricevuti); pulsante Excel con lo stesso filtro su preventivi, commesse, ordini, clienti, prodotti, fornitori,
    CRM, fatture fornitori (`server/excel.ts`: `excelSemplice` + `inviaExcel`; un elenco nuovo aggiunge la sua rotta `/elenco.xlsx` con le stesse righe filtrate).
+   ✅ Gruppo B delle proposte (Adriano 1/11/2026): ordine dal preventivo (`engine/ordine-da-preventivo.ts`, `ordine-da-preventivo-servizio.ts`, GET/POST
+   `/preventivi/:id/ordine`, migrazione 058 `ordini.preventivo_id` + origine 'preventivo', test `tests/ordine-da-preventivo.test.ts`): "Crea ordine" nel preventivo
+   salvato → riga schede al prezzo del preventivo + una tantum come servizi se primo lotto, consegna proposta da `stimaConsegna`, numero serie 9001, preventivo →
+   accettato. "Cosa manca" nella commessa (`engine/cosa-manca.ts`, `mancantiCommessa`/`ordinaMancanti` in `ordini-fornitore-servizio.ts`, `/ordini/fornitori/commessa/:id`,
+   test `tests/cosa-manca.test.ts`): BOM del preventivo per la quantità quotata più vicina contro gli ordini a fornitore con `bom_id`/`commessa_id` (chiave = codice
+   distributore, poi P/N), bozze dei mancanti per distributore. Solleciti incassi (`engine/solleciti.ts`, `solleciti-servizio.ts`, `/amministrazione/solleciti[/:cliente]`,
+   test `tests/solleciti.test.ts`): rate scadute per cliente, livello primo/secondo/ultimo (30/60 gg), email con fatture e IBAN, "Invia con Gmail" (delega) o mailto/copia +
+   "Segna come mandato"; registrato in `crm_attivita` tipo email; "incassi scaduti" del cruscotto e la scheda cliente portano qui.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).
