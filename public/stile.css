@@ -731,3 +731,14 @@ body.sola-lettura .menu-destra .etichetta { align-self: center; }
 .sugg-risposta { margin-top: 4px; font-size: .85em; color: #8a5a00; }
 .sugg-risposta-blocco { border-left: 4px solid #e0a800; background: #fffaf0; }
 .chiave-intera { user-select: all; word-break: break-all; }
+
+/* Qualità (Adriano 31/10/2026) */
+form.modulo-qualita { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem 1rem; max-width: 60rem; }
+form.modulo-qualita label.largo, form.modulo-qualita button { grid-column: 1 / -1; }
+form.modulo-qualita button { justify-self: start; }
+.etichetta.rischio-alto { background: #fbe2e0; color: var(--negativo); }
+.etichetta.rischio-medio { background: #fff4d6; color: #7a5a00; }
+.etichetta.q-aperta, .etichetta.q-negativo { background: #fbe2e0; color: var(--negativo); }
+.etichetta.q-in_corso, .etichetta.q-da_ripetere, .etichetta.q-in_revisione, .etichetta.q-con_rilievi { background: #fff4d6; color: #7a5a00; }
+.etichetta.q-chiusa, .etichetta.q-positivo, .etichetta.q-in_vigore { background: #ddf3e5; color: var(--positivo); }
+.carica-qualita { margin-top: 1rem; }
