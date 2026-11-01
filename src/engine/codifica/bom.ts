@@ -34,6 +34,34 @@ export function rigaIntestazione(righe: string[][]): number {
   return 0;
 }
 
+/**
+ * Righe da non analizzare (suggerimento di Adriano Croci, 27/10/2026: "non deve tenere conto delle intestazioni"):
+ * l'intestazione ripetuta a ogni pagina (almeno 2 celle uguali ai nomi di colonna, nella stessa posizione) e le righe di solo testo
+ * (una sola cella scritta: titolo, "Totale", "Pagina 2", note in fondo) quando la BOM ha almeno 3 colonne.
+ */
+export function pulisciRigheBom<T extends { n: number; celle: unknown[] }>(intestazione: unknown[], dati: T[]): { tenute: T[]; tolte: { n: number; motivo: string }[] } {
+  const nomi = intestazione.map(normH);
+  const colonneScritte = nomi.filter(Boolean).length;
+  const tenute: T[] = [], tolte: { n: number; motivo: string }[] = [];
+  for (const r of dati) {
+    const celle = r.celle.map(normH);
+    const uguali = celle.filter((c, i) => c && c === nomi[i]).length;
+    const scritte = celle.filter(Boolean).length;
+    if (uguali >= 2 && uguali >= scritte / 2) tolte.push({ n: r.n, motivo: 'intestazione ripetuta' });
+    else if (colonneScritte >= 3 && scritte === 1) tolte.push({ n: r.n, motivo: 'riga di solo testo' });
+    else tenute.push(r);
+  }
+  return { tenute, tolte };
+}
+
+/** Circuito stampato nella BOM (suggerimento di Adriano Croci): non è un componente da montare, il PCB si quota a parte. */
+export function rigaPcb(r: { designatori?: string | null; valore?: string | null; descrizioneBom?: string | null; pn?: string | null }): boolean {
+  const des = String(r.designatori ?? '').trim();
+  if (/^(PCB|PWB|CS)\d*$/i.test(des)) return true;
+  if (des && !/^(PCB|PWB)/i.test(des)) return false; // un componente con designatore (es. J1 "PCB mount") resta
+  return /\b(PCB|PWB|CIRCUITO STAMPATO|BARE BOARD|SCHEDA NUDA|PRINTED CIRCUIT BOARD)\b/i.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''}`);
+}
+
 /** Nomi di colonna unici ("Valore", "Valore (2)"). */
 export function nomiColonne(intestazione: string[]): string[] {
   const visti: Record<string, number> = {};

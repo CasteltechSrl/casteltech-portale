@@ -182,10 +182,12 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
 
   // piazzole per lato: dal rame, o dalla pasta se il rame di quel lato manca
   const piazzole: Partial<Record<'TOP' | 'BOT', Piazzola[]>> = {};
+  const pasta: Partial<Record<'TOP' | 'BOT', Piazzola[]>> = {};
   for (const lato of ['TOP', 'BOT'] as const) {
     const di = (ruolo: string) => strati.filter(s => s.ruolo === ruolo && s.lato === lato).flatMap(s => s.piazzole);
     const v = di('rame').length ? di('rame') : di('pasta');
     if (v.length) piazzole[lato] = v;
+    if (di('pasta').length) pasta[lato] = di('pasta');
   }
   // pick and place con un'altra origine: si sposta sulle piazzole del rame (stesso spostamento per tutti i file e i lati)
   const pp = pickPlace.flatMap(p => p.lettura.posizioni);
@@ -203,7 +205,7 @@ export async function elaboraPacchetto(caricati: FileCaricato[], nomePacchetto =
   const contorno = veroContorno ?? riquadroSensato(unione(strati.filter(s => s.ruolo === 'rame').map(s => s.riquadro)), pickPlace);
   const analisi = analizzaScheda({
     bom, pickPlace, cad, forature,
-    strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno, piazzole,
+    strati: strati.map(s => ({ nome: s.nome, ruolo: s.ruolo, lato: s.lato })), contorno, contornoStimato: !veroContorno, piazzole, pasta,
   });
   // codice, descrizione e revisione proposti dai file (da convalidare in ufficio)
   analisi.prodotto = propostaProdotto({ nomePacchetto, nomiFile: file.map(f => f.nome), bomIntestazione: bom?.intestazione, gerber: inizioGerber, gencad: inizioGenCad });

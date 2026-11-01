@@ -209,6 +209,9 @@ export function rotteSchedeCliente() {
           <h3>Consumi a scheda <small class="nota">(indicativi)</small></h3>
           <table class="dati-scheda"><tbody>
             <tr><th>Pasta saldante</th><td>${num(a.consumi.pastaGrammi, 2)} g <small class="nota">${num(CONSUMI.pastaGrammi, 1)} g ogni ${CONSUMI.pastaOgniComponenti} componenti</small></td></tr>
+            ${a.consumi.pastaDaGerber ? html`<tr><th>Pasta dai Gerber</th><td>${num(a.consumi.pastaDaGerber.grammi, 2)} g
+              <small class="nota" title="Massimo teorico: lamina piena. Quella che resta sulla scheda è un po' meno.">${num(a.consumi.pastaDaGerber.areaMm2, 0)} mm² di aperture (${a.consumi.pastaDaGerber.aperture}${a.consumi.pastaDaGerber.stimate ? `, ${a.consumi.pastaDaGerber.stimate} stimate` : ''}, ${a.consumi.pastaDaGerber.lati.join('+')})
+              × lamina ${num(CONSUMI.laminaSpessoreMm, 2)} mm = ${num(a.consumi.pastaDaGerber.volumeMm3, 1)} mm³ × ${num(CONSUMI.pastaDensita, 1)} g/cm³</small></td></tr>` : ''}
             ${a.consumi.stagnoOndaGrammi ? html`<tr><th>Stagno saldatrice</th><td>${num(a.consumi.stagnoOndaGrammi, 2)} g <small class="nota">${num(CONSUMI.ondaGrammiForo, 3)} g a foro + ${CONSUMI.ondaScorie * 100}% scorie</small></td></tr>` : ''}
             ${a.consumi.filoGrammi ? html`<tr><th>Filo di stagno</th><td>${num(a.consumi.filoGrammi, 2)} g <small class="nota">${num(CONSUMI.filoGrammiPiedino, 3)} g a piedino</small></td></tr>` : ''}
           </tbody></table>

@@ -21,7 +21,29 @@ export const CONSUMI = {
   filoGrammiPiedino: 0.125,
   pastaGrammi: 1.5,
   pastaOgniComponenti: 450, // "ogni 400–500 componenti": si usa il valore di mezzo
+  // stima dai Gerber della pasta (suggerimento di Adriano Croci, 29/10/2026): area delle aperture × spessore lamina × densità della pasta
+  laminaSpessoreMm: 0.12,   // lamina standard
+  pastaDensita: 4.2,        // g/cm³ di pasta SAC305 (lega ~7,4 g/cm³ + flussante, circa metà e metà in volume): dal datasheet della pasta
 } as const;
+
+/** Area di un'apertura della pasta in mm² (tonda = ellisse). */
+const areaPiazzola = (p: Piazzola) => p.tonda ? Math.PI * p.w * p.h / 4 : p.w * p.h;
+
+export interface StimaPasta { areaMm2: number; volumeMm3: number; grammi: number; aperture: number; stimate: number; lati: Lato[] }
+
+/**
+ * Pasta saldante dai Gerber della pasta (lamina): somma delle aree delle aperture × spessore della lamina = volume; × densità = peso.
+ * È il massimo teorico (la lamina piena): quella che resta davvero sulla scheda è un po' meno.
+ */
+export function stimaPastaDaGerber(pasta: Partial<Record<Lato, Piazzola[]>>, spessoreMm: number = CONSUMI.laminaSpessoreMm, densita: number = CONSUMI.pastaDensita): StimaPasta | null {
+  const lati = (Object.keys(pasta) as Lato[]).filter(l => pasta[l]?.length);
+  if (!lati.length) return null;
+  const tutte = lati.flatMap(l => pasta[l]!).filter(p => p.w > 0 && p.h > 0 && p.w < 30 && p.h < 30); // niente contorni o zone piene
+  const areaMm2 = tutte.reduce((s, p) => s + areaPiazzola(p), 0);
+  const volumeMm3 = areaMm2 * spessoreMm;
+  return { areaMm2: arrot(areaMm2, 2), volumeMm3: arrot(volumeMm3, 3), grammi: arrot(volumeMm3 * densita / 1000, 3),
+    aperture: tutte.length, stimate: tutte.filter(p => p.stimata).length, lati };
+}
 
 export type Livello = 'errore' | 'avviso' | 'info';
 export interface Segnalazione { livello: Livello; testo: string; refs?: string[]; accettata?: { da: string; il: string } } // accettata: "Va bene" dell'ufficio (accettate.ts)
@@ -75,7 +97,7 @@ export interface AnalisiScheda {
     saldaturaTht: 'onda' | 'mano' | null;
     motivo: string;
   };
-  consumi: { pastaGrammi: number; stagnoOndaGrammi: number; filoGrammi: number };
+  consumi: { pastaGrammi: number; stagnoOndaGrammi: number; filoGrammi: number; pastaDaGerber?: StimaPasta | null };
   dimensioni: { larghezza: number; altezza: number; stima: boolean } | null;
   noteCliente: { refs: string[]; nota: string }[];
   segnalazioni: Segnalazione[];
@@ -207,6 +229,7 @@ export interface IngressoAnalisi {
   contorno?: { x0: number; y0: number; x1: number; y1: number } | null;
   contornoStimato?: boolean; // true = non c'è lo strato del contorno: misure prese dal rame
   piazzole?: Partial<Record<Lato, Piazzola[]>>; // piazzole del rame (o della pasta) per lato, per il controllo del case
+  pasta?: Partial<Record<Lato, Piazzola[]>>;    // aperture del Gerber della pasta per lato, per stimare i grammi
 }
 
 export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
@@ -407,6 +430,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     pastaGrammi: arrot(smd.length * CONSUMI.pastaGrammi / CONSUMI.pastaOgniComponenti, 3),
     stagnoOndaGrammi: saldaturaTht === 'onda' && refori != null ? arrot(refori * CONSUMI.ondaGrammiForo * (1 + CONSUMI.ondaScorie), 3) : 0,
     filoGrammi: saldaturaTht === 'mano' && refori != null ? arrot(refori * CONSUMI.filoGrammiPiedino, 3) : 0,
+    pastaDaGerber: ing.pasta ? stimaPastaDaGerber(ing.pasta) : null,
   };
 
   // ── note del cliente sulla BOM (es. "MONTARE FUSIBILE T10A 250V") ──
