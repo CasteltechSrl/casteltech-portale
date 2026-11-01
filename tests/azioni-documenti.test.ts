@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, motivoEscluso, motivoNonEliminabile, pulsantiDocumenti, type DocumentoElenco } from '../src/engine/azioni-documenti.js';
+import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, motivoEscluso, motivoNonEliminabile, pulsantiDocumenti, type DocumentoElenco } from '../src/engine/azioni-documenti.js';
 import { moduloAzioni } from '../src/server/views/azioni-elenco.js';
 
 const doc = (x: Partial<DocumentoElenco>): DocumentoElenco => ({ id: 1, tipo: 'fattura', numero: 10, stato: 'emesso', origine: 'portale', cliente_id: 5, ha_xml: true, ...x });
@@ -62,4 +62,9 @@ test('documenti emessi: messaggio delle righe escluse si accorcia oltre 5', () =
   const no = Array.from({ length: 7 }, (_, i) => ({ doc: doc({ numero: i + 1 }), motivo: 'è emesso' }));
   assert.match(frasiEscluse(no), /e altri 2\.$/);
   assert.equal(frasiEscluse([]), '');
+});
+
+test('documenti emessi: schede nell\'ordine del lavoro (Adriano 1/11/2026), si apre sui DDT', () => {
+  assert.deepEqual(SCHEDE_DOCUMENTI.map(s => s.tanti), ['DDT', 'Fatture', 'Autofatture', 'Note di credito']);
+  assert.equal(SCHEDE_DOCUMENTI[0].tipo, 'ddt');
 });

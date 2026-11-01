@@ -40,13 +40,11 @@ import { marginePreventivo } from '../../engine/analisi.js';
 import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
+import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
 import { documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, scriviXml, segnaIncassate } from '../azioni-documenti-servizio.js';
 
-const NOMI: Record<string, { uno: string; tanti: string }> = {
-  fattura: { uno: 'Fattura', tanti: 'Fatture' }, nota_credito: { uno: 'Nota di credito', tanti: 'Note di credito' },
-  autofattura: { uno: 'Autofattura', tanti: 'Autofatture' }, ddt: { uno: 'DDT', tanti: 'DDT' },
-};
+// schede nell'ordine scelto da Adriano (1/11/2026): DDT, Fatture, Autofatture, Note di credito
+const NOMI: Record<string, { uno: string; tanti: string }> = Object.fromEntries(SCHEDE_DOCUMENTI.map(s => [s.tipo, { uno: s.uno, tanti: s.tanti }]));
 const STATI: Record<string, string> = { bozza: 'Bozza', emesso: 'Emesso', inviato: 'Inviato allo SdI', consegnato: 'Consegnato',
   non_consegnato: 'Non consegnato', scartato: 'Scartato', annullato: 'Annullato' };
 const RIGHE_VUOTE = 3;
@@ -327,7 +325,7 @@ export function rotteAmministrazione() {
   });
 
   r.get('/documenti', async (req, res) => {
-    const tipo = String(req.query.tipo ?? 'fattura');
+    const tipo = String(req.query.tipo ?? SCHEDE_DOCUMENTI[0].tipo);
     const anno = Number(req.query.anno) || new Date().getFullYear();
     const cerca = String(req.query.q ?? '').trim();
     const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.imponibile, d.totale, d.fattura_id,
