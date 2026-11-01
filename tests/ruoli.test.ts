@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contabilitaPuo, paginaIniziale, ruoloDaModulo } from '../src/engine/ruoli.js';
+import { contabilitaPuo, paginaDopoAccesso, paginaIniziale, ruoloDaModulo } from '../src/engine/ruoli.js';
 import { acquistiPerFornitore } from '../src/engine/cruscotto-amministrazione.js';
 import { layout } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
@@ -20,10 +20,11 @@ test('profilo Contabilità (commercialista, Sonia di HTS): solo lettura dell\'Am
   assert.equal(ruoloDaModulo('amministratore'), 'produzione');
 });
 
-test('profilo Contabilità: nel menu solo Amministrazione e Guida, con la scritta "sola lettura"', () => {
+test('profilo Contabilità: nel menu solo pagine dell\'Amministrazione e Guida, con la scritta "sola lettura"', () => {
   const p = String(layout({ titolo: 'Prova', utente: { id: 1, nome: 'Commercialista', ruolo: 'contabilita' }, contenuto: html`` }));
   const gruppi = [...p.matchAll(/class="titolo-gruppo[^"]*"[^>]*>([^<]+)</g)].map(m => m[1]);
-  assert.deepEqual(gruppi, ['Amministrazione']);
+  assert.deepEqual(gruppi, []); // dal 1/11/2026 niente tendine: le pagine dell'Amministrazione in fila (tests/menu.test.ts)
+  assert.match(p, /<nav class="menu menu-piatto">/);
   assert.match(p, /sola lettura/);
   assert.match(p, /<body class="sola-lettura">/);
   assert.doesNotMatch(p, /Impostazioni/);
@@ -45,4 +46,16 @@ test('guida: accesso del commercialista e acquisti del mese', () => {
   for (const [q, id] of [['accesso commercialista', 'accesso-contabilita'], ['utente sola lettura', 'accesso-contabilita'],
     ['cosa ho comprato a marzo', 'acquisti-mese'], ['acquisti per fornitore', 'acquisti-mese']])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === id), q);
+});
+
+test('dopo l\'accesso il commercialista va al cruscotto dell\'Amministrazione (Adriano 1/11/2026)', () => {
+  assert.equal(paginaDopoAccesso('contabilita', '/'), '/amministrazione');
+  assert.equal(paginaDopoAccesso('contabilita', undefined), '/amministrazione');
+  assert.equal(paginaDopoAccesso('contabilita', '/cruscotto'), '/amministrazione');
+  assert.equal(paginaDopoAccesso('contabilita', '/preventivi?x=1'), '/amministrazione');
+  assert.equal(paginaDopoAccesso('contabilita', '/amministrazione/registri?anno=2026'), '/amministrazione/registri?anno=2026');
+  assert.equal(paginaDopoAccesso('contabilita', '//sito-esterno.it'), '/amministrazione');
+  assert.equal(paginaDopoAccesso('ufficio', '/'), '/cruscotto');
+  assert.equal(paginaDopoAccesso('ufficio', '/preventivi/3'), '/preventivi/3');
+  assert.equal(paginaDopoAccesso('produzione', '/'), '/r');
 });

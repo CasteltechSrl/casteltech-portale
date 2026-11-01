@@ -29,6 +29,18 @@ const GRUPPO_DI: Record<string, string> = {
   crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
   acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
 };
+/**
+ * Menu del profilo Contabilità (Adriano 1/11/2026): niente tendine, le pagine dell'Amministrazione in fila nella barra in alto
+ * (c'è spazio, il commercialista ha solo questo gruppo). Nomi corti; la voce della pagina aperta la accende public/menu.js.
+ * Il menu dell'ufficio e della produzione non cambia.
+ */
+export const MENU_CONTABILITA: [string, string][] = [
+  ['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti'],
+  ['Acquisti per mese', '/amministrazione/ricevuti/mesi'], ['Registri IVA', '/amministrazione/registri'], ['DDT da fatturare', '/amministrazione/differite'],
+  ['Spese', '/amministrazione/spese'], ['Bollo', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'],
+  ['VIES', '/amministrazione/vies'], ['Solleciti', '/amministrazione/solleciti'], ['Controlli', '/amministrazione/controlli'], ['Analisi', '/amministrazione/analisi'],
+];
+
 export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
 
 export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string | string[]; avviso?: string; largo?: boolean }) {
@@ -47,12 +59,12 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
-  <nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
-    ${(opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI : opz.utente.ruolo === 'contabilita' ? MENU_GRUPPI.filter(g => g.chiave === 'amministrazione') : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
+  ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${MENU_CONTABILITA.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
+    ${(opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
       <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
     </div>`)}
-  </nav>
+  </nav>`}
   ${opz.utente.ruolo === 'produzione' ? '' : html`<form class="cerca-globale" method="get" action="/cerca" role="search" autocomplete="off">
     <input name="q" type="search" placeholder="Cerca…  /" title="Ricerca unica: cliente, codice, commessa, numero di ordine o fattura (tasto / oppure Ctrl+K)" aria-label="Cerca nel portale" autocomplete="off">
     <div class="suggerimenti-ricerca" hidden></div>

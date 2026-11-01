@@ -36,6 +36,10 @@ h2 { font-size: 1.1rem; margin: 1.6rem 0 .5rem; font-weight: 650; display: flex;
 .testata nav.menu-destra { flex: 0 0 auto; }
 .testata nav.menu-destra a { font-size: .92rem; padding: .4rem .6rem; }
 .testata .gruppo { position: relative; }
+/* profilo Contabilità: pagine dell'Amministrazione in fila, senza tendine (Adriano 1/11/2026) */
+.testata:has(nav.menu-piatto) { flex-wrap: wrap; row-gap: .35rem; }
+.testata nav.menu-piatto { order: 10; flex: 1 0 100%; flex-wrap: wrap; gap: .15rem; margin: 0 -.6rem; padding-top: .35rem; border-top: 1px solid var(--bordo); }
+.testata nav.menu-piatto a { padding: .38rem .6rem; font-size: .92rem; white-space: nowrap; }
 .testata .gruppo .tendina { display: none; position: absolute; top: 100%; left: 0; min-width: 15rem; padding: .35rem; margin-top: 4px;
   background: var(--carta); border: 1px solid var(--bordo); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 20; }
 /* ponte invisibile sopra la tendina (Adriano 31/10/2026: i sottomenu sparivano troppo facilmente):

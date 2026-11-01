@@ -871,6 +871,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Il commercialista e chi aiuta con la contabilità (es. Sonia di HTS) possono entrare nel portale con il profilo "Contabilità (sola lettura)": vedono tutta l\'Amministrazione (cruscotto, documenti emessi, fatture fornitori, acquisti del mese, registri IVA, controllo VIES), scaricano Excel, file XML e stampe, leggono la Guida.',
       'Non possono modificare nulla: niente bozze, emissioni, invii allo SdI, pagamenti segnati. I pulsanti che modificano non compaiono e il portale rifiuta comunque ogni modifica. Le altre sezioni (preventivi, commesse, ordini, impostazioni…) non le vedono.',
+      'Dopo l\'accesso entrano direttamente nel cruscotto dell\'Amministrazione. In alto, al posto della tendina, hanno tutte le pagine in fila (Cruscotto, Documenti emessi, Fatture fornitori, Registri IVA…); il menu dell\'ufficio resta com\'è.',
       'L\'utente lo crea l\'ufficio in Impostazioni → Utenti: nome, email, profilo "Contabilità (sola lettura)" e una password di almeno 10 caratteri da comunicare alla persona. Per bloccare l\'accesso si toglie la spunta Attivo.',
     ],
     passi: ['Impostazioni → Utenti.', 'Nell\'ultima riga scrivi nome ed email, scegli "Contabilità (sola lettura)" e una password.', 'Premi Aggiungi e manda indirizzo del portale, email e password alla persona.'],
