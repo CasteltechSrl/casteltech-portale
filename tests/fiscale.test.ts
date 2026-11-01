@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { bolloPerTrimestre, scadenzaBollo, spesaDaModulo, testoPlafond, usoPlafond } from '../src/engine/fiscale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -53,4 +54,11 @@ test('guida: bollo, lettere d\'intento, spese senza fattura elettronica', () => 
   for (const [q, id] of [['bollo virtuale', 'bollo-virtuale'], ['codice tributo 2521', 'bollo-virtuale'], ['plafond lettera d\'intento', 'lettere-intento'],
     ['esportatore abituale', 'lettere-intento'], ['scontrino', 'spese-non-elettroniche'], ['affitto', 'spese-non-elettroniche']])
     assert.ok(cercaGuida(q).slice(0, 2).some(r => r.argomento.id === id), q);
+});
+
+test('plafond delle lettere d\'intento 2026 dalle ricevute dell\'Agenzia (Adriano 1/11/2026): LPS 70.000, GALILEO 20.000, solo dove è vuoto', () => {
+  const mig = readFileSync('db/migrazioni/059_plafond_lettere_2026.sql', 'utf8');
+  assert.match(mig, /SET plafond = 70000\s+WHERE regexp_replace\(protocollo, '\\D', '', 'g'\) = '26021609544759358000006' AND plafond IS NULL/);
+  assert.match(mig, /SET plafond = 20000\s+WHERE regexp_replace\(protocollo, '\\D', '', 'g'\) = '25121712334638233000006' AND plafond IS NULL/);
+  assert.match(mig, /'01799760358'/);
 });
