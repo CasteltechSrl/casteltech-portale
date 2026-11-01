@@ -367,6 +367,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    scheda all'altra, classe `campo-semplice`, pulsanti accanto a Salva, scelta in localStorage `preventivo-vista`, all'inizio Completo; i campi nascosti contano comunque).
    Numeri e date (`public/formati.js`): nelle caselle `inputmode="decimal"` il punto diventa virgola uscendo (solo "12.5", mai "1.000"); browser non in italiano =
    nota sotto la prima casella data; niente `type="number"` nel portale.
+   ✅ Gruppo D delle proposte (Adriano 1/11/2026; `engine/reparto-oggi.ts`, test `tests/reparto-oggi.test.ts`): sul telefono `/r` "Le tue fasi di oggi" (righe `rilevazioni`
+   dell'operatore di oggi, aperte prima; totale ore; "Riapri" = POST apri della stessa fase all'ora attuale) e "Le tue commesse degli ultimi giorni" (7 gg, senza QR);
+   chiusa una fase il redirect porta `?dopo=<fase>` e la pagina della commessa propone la "Prossima fase" (`faseSuccessiva`: prima prevista dopo quella chiusa non
+   ancora fatta né aperta da nessuno, altrimenti la prima saltata) con "Apri adesso". Avviso Telegram resta "Da chiarire" nei Suggerimenti.
 5. ⬜ Analisi commessa, prezzo corretto, storico prodotto e interrogazioni. Se al rientro i tempi peggiorano in modo
    importante: ricalcolo del preventivo e nuova proposta commerciale per il lotto successivo, da inviare con mOKa.
 6. ~~Collegamento mOKa~~: superato (Adriano, 26/10/2026: niente mOKa né Fatture in Cloud, che scade il 10/11/2026).

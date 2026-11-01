@@ -57,3 +57,10 @@ details summary { cursor: pointer; padding: .8rem 0; color: var(--accento); font
 .modulo-reparto label small.lettura-tempo.errata { color: #b42318; }
 /* "Aperta per sbaglio": tasto discreto sotto il modulo di chiusura, abbastanza grande per il dito */
 form.modulo-reparto button.link { display: block; width: 100%; padding: .8rem; margin-top: .2rem; font-size: 1rem; text-align: center; }
+
+/* Le mie fasi di oggi e Prossima fase (engine/reparto-oggi.ts) */
+.riquadro.oggi h2 small { font-weight: normal; margin-left: .4rem; }
+.riquadro.prossima { border-color: var(--accento); background: var(--accento-chiaro); }
+.riga-oggi { display: flex; align-items: center; gap: .8rem; padding: .85rem .2rem; min-height: 2.6rem; }
+.riga-oggi > span { flex: 1; display: flex; flex-direction: column; }
+.riga-oggi button { white-space: nowrap; }

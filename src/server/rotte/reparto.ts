@@ -17,6 +17,7 @@ import { annullaFase, fasiAperte, pianificaFase } from '../promemoria.js';
 import { hhmm, minutiDelGiorno, partiRoma } from '../../engine/promemoria.js';
 import { VERSIONE } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
+import { commesseRecenti, faseSuccessiva, riepilogoOggi, type RigaOggi } from '../../engine/reparto-oggi.js';
 
 declare module 'express-session' { interface SessionData { operatore?: { sigla: string; nome: string } } }
 
@@ -137,7 +138,8 @@ export function rotteReparto() {
       [f.id, fine, intero(req.body.pezzi) ?? null, tipo, tipo === 'P' ? note : null, tipo === 'P' ? null : (note || null), intero(req.body.persone) || null]);
     annullaFase(f.id);
     const msg = `Fase ${f.numero} chiusa: ${hhmm(minutiDelGiorno(fine) - minutiDelGiorno(f.inizio))}`;
-    res.redirect(req.session.operatore ? `/r/c/${f.codice_qr}?ok=${encodeURIComponent(msg)}` : `/commesse/${f.commessa_id}`);
+    // la pagina della commessa propone la fase successiva (engine/reparto-oggi.ts)
+    res.redirect(req.session.operatore ? `/r/c/${f.codice_qr}?ok=${encodeURIComponent(msg)}&dopo=${encodeURIComponent(f.fase_codice)}` : `/commesse/${f.commessa_id}`);
   });
 
   // Fase aperta per sbaglio (tasto premuto due volte, fase sbagliata): si toglie la riga invece di chiuderla con un tempo finto.
@@ -163,10 +165,33 @@ export function rotteReparto() {
       RETURNING id, testo, link, creato_il`, [op.sigla]);
     const commesse = await q<{ numero: string; codice_qr: string; intestazione: any }>(`
       SELECT numero, codice_qr, intestazione FROM commesse WHERE stato = ANY($1) ORDER BY creato_il DESC LIMIT 15`, [STATI_APERTI]);
+    // le mie fasi di oggi e le commesse toccate negli ultimi 7 giorni (engine/reparto-oggi.ts)
+    const oggi = partiRoma(new Date()).data;
+    const mie = await q<RigaOggi & { data: string; intestazione: any; numero_commessa: string }>(`
+      SELECT r.id, c.numero AS commessa, c.codice_qr, c.intestazione, r.fase_codice, f.numero, f.nome, to_char(r.data, 'YYYY-MM-DD') AS data,
+             to_char(r.ora_inizio, 'HH24:MI') AS inizio, to_char(r.ora_fine, 'HH24:MI') AS fine,
+             CASE WHEN r.ora_fine IS NOT NULL AND r.ora_inizio IS NOT NULL THEN extract(epoch FROM (r.ora_fine - r.ora_inizio)) / 60
+                  WHEN r.aperta_il IS NOT NULL AND r.chiusa_il IS NULL THEN extract(epoch FROM (now() - r.aperta_il)) / 60
+                  ELSE coalesce(r.durata_min, 0) END::float AS minuti,
+             r.pezzi, (r.aperta_il IS NOT NULL AND r.chiusa_il IS NULL) AS aperta
+      FROM rilevazioni r JOIN commesse c ON c.id = r.commessa_id JOIN fasi f ON f.codice = r.fase_codice
+      WHERE r.operatore_nome = $1 AND r.data >= ($2::date - 7)
+      ORDER BY r.data DESC, r.ora_inizio DESC NULLS LAST, r.id DESC`, [op.sigla, oggi]);
+    const giornata = riepilogoOggi(mie.filter(r => r.data === oggi));
+    const recenti = commesseRecenti(mie.filter(r => r.data !== oggi), 5).filter(r => !giornata.righe.some(g => g.codice_qr === r.codice_qr));
     res.send(pagina({ titolo: 'Reparto', req, avviso: req.query.errore ? String(req.query.errore) : undefined, ok: req.query.ok ? String(req.query.ok) : undefined, contenuto: html`
       <h1>Ciao ${op.nome.split(' ')[0]}</h1>
       ${avvisi.map(a => html`<div class="promemoria">🔔 ${a.testo}</div>`)}
       ${elencoAperte(aperte)}
+      ${giornata.righe.length ? html`<section class="riquadro oggi"><h2>Le tue fasi di oggi <small class="nota">${giornata.chiuse} chiuse · ${hhmm(giornata.totaleMin)}</small></h2>
+        <ul class="elenco-tocco">${giornata.righe.map(r => html`<li class="${r.aperta ? 'aperta' : ''}">
+          ${r.aperta ? html`<a href="/r/chiudi/${r.id}"><b class="num-fase">${r.numero}</b><span>${r.nome}<small>${r.commessa} · dalle ${r.inizio ?? ''} · in corso</small></span><span class="bottone primario piccolo">Chiudi</span></a>`
+          : html`<form method="post" action="/r/c/${r.codice_qr}/f/${r.fase_codice}/apri" class="riga-oggi"><b class="num-fase">${r.numero}</b>
+              <span>${r.nome}<small>${[r.commessa, r.inizio ? `${r.inizio}${r.fine ? `–${r.fine}` : ''}` : 'tempo totale', hhmm(r.minuti), r.pezzi != null ? `${num(r.pezzi, 0)} pz` : ''].filter(Boolean).join(' · ')}</small></span>
+              <button class="bottone piccolo" title="Riapre la stessa fase adesso">Riapri</button></form>`}</li>`)}</ul></section>` : ''}
+      ${recenti.length ? html`<section class="riquadro"><h2>Le tue commesse degli ultimi giorni</h2>
+        <ul class="elenco-tocco">${recenti.map(c => html`<li><a href="/r/c/${c.codice_qr}"><b>${c.commessa}</b>
+          <span>${c.intestazione?.codice ?? ''} · ${c.intestazione?.cliente ?? ''}</span></a></li>`)}</ul></section>` : ''}
       <section class="riquadro">
         <h2>Scansiona il QR della scheda</h2>
         <p class="nota">Con la fotocamera del telefono inquadra il QR in alto a destra della scheda di produzione, oppure scrivi il numero della commessa.</p>
@@ -194,6 +219,13 @@ export function rotteReparto() {
     const { c, previste, altre } = x;
     const aperte = await fasiAperte({ commessaId: c.id });
     const mie = aperte.filter(f => f.sigla === req.session.operatore!.sigla);
+    // appena chiusa una fase (?dopo=codice): si propone la successiva ancora da fare (engine/reparto-oggi.ts)
+    const dopo = typeof req.query.dopo === 'string' ? req.query.dopo : '';
+    let prossima: { codice: string; numero: string; nome: string } | null = null;
+    if (dopo) {
+      const fatte = await q<{ fase_codice: string }>(`SELECT DISTINCT fase_codice FROM rilevazioni WHERE commessa_id = $1 AND (aperta_il IS NULL OR chiusa_il IS NOT NULL)`, [c.id]);
+      prossima = faseSuccessiva(previste, dopo, fatte.map(f => f.fase_codice), aperte.map(f => f.fase_codice));
+    }
     const daAltri = new Map<string, string[]>();
     for (const f of aperte.filter(f => f.sigla !== req.session.operatore!.sigla)) daAltri.set(f.fase_codice, [...(daAltri.get(f.fase_codice) ?? []), f.sigla]);
     const voce = (f: { codice: string; numero: string; nome: string; cicloSec?: number }) => html`<li data-cerca="${`${f.numero} ${f.nome}`.toLowerCase()}">
@@ -204,6 +236,12 @@ export function rotteReparto() {
       ${testataCommessa(c)}
       ${!STATI_APERTI.includes(c.stato) ? html`<div class="avviso">Commessa già rientrata in ufficio: i nuovi tempi vanno comunicati all'ufficio.</div>` : ''}
       ${elencoAperte(mie)}
+      ${dopo ? (prossima ? html`<section class="riquadro prossima"><h2>Prossima fase</h2>
+        <form method="post" action="/r/c/${c.codice_qr}/f/${prossima.codice}/apri" class="riga-oggi">
+          <b class="num-fase">${prossima.numero}</b><span>${prossima.nome}<small>la prima ancora da fare dopo quella chiusa</small></span>
+          <button class="primario">Apri adesso</button></form>
+        <p class="nota"><a href="/r/c/${c.codice_qr}/f/${prossima.codice}">Scrivi l'ora o il tempo totale</a> · oppure scegli un'altra fase qui sotto.</p></section>`
+        : html`<section class="riquadro prossima"><h2>Prossima fase</h2><p>Tutte le fasi previste di questa commessa sono state fatte o sono aperte. Se manca qualcosa, scegli la fase qui sotto.</p></section>`) : ''}
       <section class="riquadro">
         <h2>Scegli la fase</h2>
         <input type="search" id="filtro-fasi" placeholder="Cerca numero o nome della fase" inputmode="search" autocomplete="off">
