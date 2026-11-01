@@ -727,3 +727,7 @@ body.sola-lettura .menu-destra .etichetta { align-self: center; }
 .commenti-analisi .attenzione .pallino { color: #d08a00; }
 .commenti-analisi .bene .pallino { color: var(--accento, #0f6b5a); }
 .commenti-analisi .consiglio { margin-top: .3rem; color: var(--tenue); font-size: .92em; }
+.stato.sugg-da_chiarire { background: #fff1c9; color: #8a5a00; }
+.sugg-risposta { margin-top: 4px; font-size: .85em; color: #8a5a00; }
+.sugg-risposta-blocco { border-left: 4px solid #e0a800; background: #fffaf0; }
+.chiave-intera { user-select: all; word-break: break-all; }

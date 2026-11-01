@@ -8,12 +8,13 @@ import bcrypt from 'bcryptjs';
 import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
 import { layout } from '../views/layout.js';
-import { html, raw, type Raw } from '../views/html.js';
+import { html, data, raw, type Raw } from '../views/html.js';
 import { elencoBackup, nomeFileBackup, salvaBackupSuDisco, scriviBackup } from '../backup.js';
 import { leggiOperatori } from '../../engine/operatori.js';
 import { caricaOperatori } from '../commesse-servizio.js';
 import { caricaPin } from './reparto.js';
 import { fasiAperte, inviaAdesso, orariPromemoria, ricaricaPromemoria } from '../promemoria.js';
+import { calcolaEventiRitardi, dimenticaCopiaCalendario, indirizzoCalendario, leggiChiaveCalendario, nuovaChiaveCalendario } from './calendario.js';
 import { leggiOrari } from '../../engine/promemoria.js';
 import { caricaOreGiorno, importaOrdini, leggiFileOrdini } from '../ordini-servizio.js';
 import { importaCrm, importaFatturato, leggiFileCrm, leggiFileFatturato } from '../crm-servizio.js';
@@ -290,7 +291,29 @@ export function rotteImpostazioni() {
     const ultime = await q(`SELECT sigla, tipo, testo, canale, esito, letta_il, creato_il FROM notifiche ORDER BY creato_il DESC LIMIT 50`);
     const TIPI: Record<string, string> = { durata: 'aperta da troppo', fine_giornata: 'fine giornata', giorno_dopo: 'giorno dopo' };
     const quando = (d: Date) => new Date(d).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const chiaveCal = await leggiChiaveCalendario();
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const eventi = req.query.anteprima === '1' ? await calcolaEventiRitardi(oggi) : null;
     res.send(pag(req, 'Promemoria', html`
+      <div class="blocco" id="calendario">
+        <h2>Calendario dei ritardi (Google Calendar)</h2>
+        <p class="nota">Promemoria nel calendario di info@ per le lavorazioni che vanno in ritardo: consegne scadute, lavorazioni che secondo il Gantt
+          dovevano già partire o finire, avviso 2 giorni lavorativi prima dell'inizio, giorni con più ore di lavoro che ore disponibili,
+          commesse aperte oltre la consegna o oltre le ore del preventivo. Si aggiorna da solo: Google lo rilegge ogni qualche ora.</p>
+        ${chiaveCal ? html`
+          <p><strong>Indirizzo da aggiungere in Google Calendar:</strong><br><code class="chiave-intera">${indirizzoCalendario(chiaveCal)}</code></p>
+          <ol class="nota"><li>Apri Google Calendar con l'account info@casteltech.net.</li>
+            <li>A sinistra, accanto a "Altri calendari", premi + → "Da URL".</li>
+            <li>Incolla l'indirizzo qui sopra e premi "Aggiungi calendario". Si fa una volta sola (anche su altri account, se serve).</li></ol>
+          <p class="nota">Chi ha l'indirizzo vede i ritardi: non darlo fuori dall'azienda. Se è uscito, creane uno nuovo (il vecchio smette di funzionare).</p>
+          <div class="barra-azioni"><a class="bottone" href="/impostazioni/promemoria?anteprima=1#calendario">Mostra cosa c'è adesso nel calendario</a>
+          <form method="post" action="/impostazioni/promemoria/calendario" data-conferma="Creare un indirizzo nuovo? Quello aggiunto in Google Calendar smette di funzionare.">
+            <button>Crea un indirizzo nuovo</button></form></div>`
+        : html`<form method="post" action="/impostazioni/promemoria/calendario"><button class="primario">Crea l'indirizzo del calendario</button></form>`}
+        ${eventi ? eventi.length ? html`<table class="tabella"><thead><tr><th>Giorno</th><th>Promemoria</th><th>Dettaglio</th></tr></thead><tbody>
+            ${eventi.map(e => html`<tr><td>${data(e.data)}</td><td><a href="${e.link}">${e.titolo}</a></td><td class="nota">${e.descrizione}</td></tr>`)}</tbody></table>`
+          : html`<p class="nota">Nessun ritardo o rischio in questo momento.</p>` : ''}
+      </div>
       <form method="post" class="blocco stretto-form">
         <p class="nota">Promemoria per le fasi aperte dal telefono e non chiuse. Per ora i messaggi compaiono sul telefono dell'operatore
           (pagina del reparto) e qui sotto; SMS / WhatsApp / Telegram si aggiungeranno quando sceglieremo la piattaforma.</p>
@@ -313,7 +336,12 @@ export function rotteImpostazioni() {
       ${ultime.length ? html`<table class="tabella"><thead><tr><th>Quando</th><th>A</th><th>Tipo</th><th>Messaggio</th><th>Letto</th></tr></thead><tbody>
         ${ultime.map(n => html`<tr><td>${quando(n.creato_il)}</td><td>${n.sigla}</td><td>${TIPI[n.tipo] ?? n.tipo}</td><td>${n.testo}</td>
           <td>${n.letta_il ? quando(n.letta_il) : '—'}</td></tr>`)}</tbody></table>` : html`<p class="nota">Ancora nessuno.</p>`}`,
-      req.query.ok ? 'Orari salvati.' : req.query.inviati ? 'Promemoria inviati.' : undefined));
+      req.query.ok ? 'Orari salvati.' : req.query.inviati ? 'Promemoria inviati.' : req.query.calendario ? 'Indirizzo del calendario creato: aggiungilo in Google Calendar.' : undefined));
+  });
+  r.post('/promemoria/calendario', async (_req, res) => {
+    await nuovaChiaveCalendario();
+    dimenticaCopiaCalendario();
+    res.redirect('/impostazioni/promemoria?calendario=1#calendario');
   });
   r.post('/promemoria/invia', async (req, res) => {
     await inviaAdesso(req.body.tipo === 'giorno_dopo' ? 'giorno_dopo' : 'fine_giornata');

@@ -139,3 +139,8 @@ test('guida: spunte nell\'elenco dei documenti emessi', () => {
   assert.ok(primi('eliminare più bozze di fattura insieme', 3).includes('azioni-documenti'));
   assert.ok(primi('scaricare xml di più fatture', 3).includes('azioni-documenti'));
 });
+
+test('guida: calendario dei ritardi e domande sui suggerimenti', () => {
+  assert.ok(primi('commesse in ritardo nel calendario google', 3).includes('calendario-ritardi'));
+  assert.ok(primi('rispondere alla domanda su un suggerimento', 3).includes('suggerimento'));
+});
