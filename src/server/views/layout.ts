@@ -21,11 +21,13 @@ export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string]
   { chiave: 'produzione', nome: 'Produzione', voci: [['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt']] },
   { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['Documenti emessi', '/amministrazione/documenti'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Spese senza fattura elettronica', '/amministrazione/spese'], ['Bollo virtuale', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'], ['Analisi', '/amministrazione/analisi']] },
   { chiave: 'qualita', nome: 'Qualità', voci: [['Cruscotto della qualità', '/qualita'], ['Non conformità e reclami', '/qualita/non_conformita'], ['Strumenti e tarature', '/qualita/strumenti'], ['Piano delle manutenzioni', '/qualita/manutenzioni'], ['Verifiche ESD', '/qualita/esd'], ['Documenti del sistema', '/qualita/documenti'], ['Formazione', '/qualita/formazione'], ['Audit', '/qualita/audit'], ['Rischi e opportunità', '/qualita/rischi'], ['Codifica dei difetti', '/qualita/difetti']] },
+  // Dipendenti (Adriano 1/11/2026): costo del personale, nota spese, persone; buste paga nell'area riservata con password
+  { chiave: 'dipendenti', nome: 'Dipendenti', voci: [['Costo del personale', '/dipendenti'], ['Nota spese', '/dipendenti/note-spese'], ['Persone e auto', '/dipendenti/persone'], ['Buste paga (riservato)', '/dipendenti/riservata']] },
 ];
 /** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
 const GRUPPO_DI: Record<string, string> = {
   crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
-  acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita',
+  acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
 };
 export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
 
