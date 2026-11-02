@@ -392,6 +392,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    distributore, poi P/N), bozze dei mancanti per distributore. Solleciti incassi (`engine/solleciti.ts`, `solleciti-servizio.ts`, `/amministrazione/solleciti[/:cliente]`,
    test `tests/solleciti.test.ts`): rate scadute per cliente, livello primo/secondo/ultimo (30/60 gg), email con fatture e IBAN, "Invia con Gmail" (delega) o mailto/copia +
    "Segna come mandato"; registrato in `crm_attivita` tipo email; "incassi scaduti" del cruscotto e la scheda cliente portano qui.
+   ✅ Crediti verso clienti (brief D, Adriano 31/10/2026; `engine/crediti.ts`, `/amministrazione/crediti`, test `tests/crediti.test.ts`): da incassare, scaduto
+   per fasce 1–30/31–60/61–90/oltre 90 (il giorno della scadenza non è scaduto), per cliente esposizione, ritardo max e giorni medi di incasso (rate pagate negli
+   ultimi 12 mesi, `giorniMediIncasso`), rate dei prossimi 14 giorni con "Segna incassata" (campo `torna`, solo pagine /amministrazione: `ritornoSicuro`);
+   note di credito aperte in negativo come nel cruscotto. Calcolata all'apertura, niente controlli periodici; "Sollecito" porta ai Solleciti incassi.
    ✅ Gruppo C delle proposte (Adriano 1/11/2026; test `tests/interfaccia-moduli.test.ts`): errori accanto al campo (`engine/errori-campo.ts`: `conCampo(url, campo, modulo?)`
    aggiunge `&campo=&modulo=` ai redirect con `?msg=`; `public/errori-campo.js` in ogni pagina salva i valori del modulo all'invio e, tornando con `campo=`, li rimette,
    scrive il messaggio sotto il campo e ci porta il cursore; password mai conservate; usato in Utenti, Fasi/Parametri/Voci, Clienti, Prodotti, attività CRM: un modulo

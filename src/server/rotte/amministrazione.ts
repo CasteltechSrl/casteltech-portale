@@ -13,13 +13,14 @@ import { layout } from '../views/layout.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
 import { gruppiSolleciti, inviaSollecito, propostaSollecito, registraSollecito } from '../solleciti-servizio.js';
 import { NOMI_LIVELLO, giorniRitardo } from '../../engine/solleciti.js';
+import { NOMI_FASCE_SCADUTO, riepilogoCrediti, ritornoSicuro, type FasciaScaduto, type RataCredito } from '../../engine/crediti.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
-import { acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
+import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { rotteAnalisi } from './analisi.js';
 import { riquadroPlafond, rotteFiscale } from './fiscale.js';
@@ -215,6 +216,56 @@ export function rotteAmministrazione() {
           <ul class="elenco-controllo">${c.righe.map(v => html`<li>${v.link ? html`<a href="${v.link}">${v.testo}</a>` : v.testo}${v.dettaglio ? html` <small>· ${v.dettaglio}</small>` : ''}</li>`)}</ul>
         </section>`)}`
         : html`<p class="avviso info"><b>Tutto a posto.</b> Nessun DDT vecchio da fatturare, nessuna commessa oltre la consegna, ordini con le date, prodotti con il prezzo, clienti con il recapito SdI, fatture fornitori con la scadenza, nessuna bozza di preventivo ferma.</p>`}`));
+  });
+
+  // ── Crediti verso clienti (brief D, Adriano 31/10/2026): calcolati solo all'apertura della pagina, conti in engine/crediti.ts ──
+  r.get('/crediti', async (req, res) => {
+    const oggi = oggiRoma();
+    const righe = await q<any>(`SELECT s.id, d.id AS documento_id, d.tipo, d.numero, d.sezionale, d.anno, d.data::text AS data_fattura,
+        (${SQL_DATA_DA_INCASSARE})::text AS scadenza, (${SQL_IMPORTO_DA_INCASSARE})::float AS importo, s.pagata_il::text AS pagata_il, d.cliente_id,
+        coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '?') AS cliente
+      FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+      WHERE d.tipo IN ('fattura', 'nota_credito') AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
+        AND (s.pagata_il IS NULL OR (d.tipo = 'fattura' AND s.pagata_il >= $1::date - 366))`, [oggi]);
+    const rate: RataCredito[] = righe.map(x => ({
+      scadenzaId: x.id, documentoId: x.documento_id, numero: `${x.tipo === 'nota_credito' ? 'NC ' : ''}${numeroCompleto(x.numero, x.sezionale)}/${x.anno}`,
+      dataFattura: x.data_fattura, scadenza: x.scadenza, importo: Number(x.importo), clienteId: x.cliente_id, cliente: x.cliente, pagataIl: x.pagata_il,
+    }));
+    const c = riepilogoCrediti(rate, oggi);
+    const fasce = Object.keys(NOMI_FASCE_SCADUTO) as FasciaScaduto[];
+    const cifra = (v: number) => (Math.abs(v) < 0.005 ? html`<span class="nota">–</span>` : euro(v));
+    res.send(pagina(req, 'Crediti verso clienti', html`
+      <div class="intestazione-pagina"><h1>Crediti verso clienti</h1><div class="azioni"><a class="bottone" href="/amministrazione/crediti">Aggiorna</a>
+        <a class="bottone" href="/amministrazione/solleciti">Solleciti incassi</a></div></div>
+      <p class="nota">Rate non incassate delle fatture emesse (anche lo storico di Fatture in Cloud); le note di credito aperte tolgono dal credito.
+        Giorni medi di incasso = dalla data della fattura al pagamento, sulle rate pagate negli ultimi 12 mesi. Conti fatti all'apertura della pagina.</p>
+      <div class="cifre">
+        <div class="cifra"><span>Da incassare</span><b>${euro(c.totale)}</b><small>${c.clienti.length} clienti</small></div>
+        <div class="cifra"><span>Scaduto</span><b class="${c.scaduto > 0 ? 'negativo' : ''}">${euro(c.scaduto)}</b></div>
+        <div class="cifra"><span>A scadere</span><b>${euro(c.aScadere)}</b></div>
+      </div>
+      <div class="cifre">${fasce.map(f => html`<div class="cifra"><span>Scaduto ${NOMI_FASCE_SCADUTO[f].toLowerCase()}</span><b class="${c.fasce[f] > 0 && f !== 'f30' ? 'negativo' : ''}">${euro(c.fasce[f])}</b></div>`)}</div>
+      <h2>Per cliente</h2>
+      ${c.clienti.length ? html`<div class="tabella-scorre"><table class="elenco crediti"><thead><tr><th>Cliente</th><th class="n">Esposizione</th><th class="n">A scadere</th>
+        ${fasce.map(f => html`<th class="n">${NOMI_FASCE_SCADUTO[f]}</th>`)}<th class="n">Ritardo max</th><th class="n">Giorni medi di incasso</th><th></th></tr></thead>
+        <tbody>${c.clienti.map(k => html`<tr>
+          <td>${k.clienteId ? html`<a href="/anagrafiche/clienti/${k.clienteId}">${k.cliente}</a>` : k.cliente}</td>
+          <td class="n"><b>${euro(k.esposizione)}</b></td><td class="n">${cifra(k.aScadere)}</td>
+          ${fasce.map(f => html`<td class="n ${k.fasce[f] > 0 && f !== 'f30' ? 'negativo' : ''}">${cifra(k.fasce[f])}</td>`)}
+          <td class="n">${k.ritardoMax ? `${k.ritardoMax} gg` : ''}</td><td class="n">${k.giorniMediIncasso == null ? html`<span class="nota">–</span>` : `${k.giorniMediIncasso} gg`}</td>
+          <td>${k.scaduto > 0 && k.clienteId ? html`<a class="bottone piccolo" href="/amministrazione/solleciti/${k.clienteId}">Sollecito</a>` : ''}</td></tr>`)}</tbody></table></div>`
+        : html`<p class="vuoto">Nessun credito aperto.</p>`}
+      <h2>Scadenze dei prossimi 14 giorni</h2>
+      ${c.prossime.length ? html`<div class="tabella-scorre"><table class="elenco"><thead><tr><th>Scadenza</th><th>Cliente</th><th>Fattura</th><th class="n">Importo</th><th></th></tr></thead>
+        <tbody>${c.prossime.map(p => html`<tr><td>${data(p.scadenza)}</td><td>${p.cliente}</td><td><a href="/amministrazione/documenti/${p.documentoId}">${p.numero}</a> del ${data(p.dataFattura)}</td>
+          <td class="n"><b>${euro(p.importo)}</b></td>
+          <td><form method="post" action="/amministrazione/documenti/scadenze/${p.scadenzaId}" class="inline">
+            <input type="hidden" name="torna" value="/amministrazione/crediti">
+            <input type="date" name="pagata_il" value="${oggi}" required>
+            <select name="modo" required title="Come è stata incassata"><option value="">Modo di pagamento…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select>
+            <button>Segna incassata</button></form></td></tr>`)}</tbody></table></div>`
+        : html`<p class="vuoto">Nessuna rata in scadenza nei prossimi 14 giorni.</p>`}
+      <p class="nota">Le rate già scadute si segnano incassate dalla fattura o da Documenti emessi → Segna incassate.</p>`, msg(req)));
   });
 
   // ── Solleciti incassi (proposta della revisione, Adriano 1/11/2026) ──
@@ -1034,6 +1085,8 @@ export function rotteAmministrazione() {
     const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
     // fattura tutta incassata: le sue note di credito aperte si chiudono come "Compensato con fattura"
     const compensate = s && sezione === 'documenti' && !annulla ? await compensaNoteCredito([s.documento_id]) : 0;
+    const torna = ritornoSicuro(req.body.torna);
+    if (s && torna) return res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}`)}`);
     res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}`)}`
       : '/amministrazione');
   });
