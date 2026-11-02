@@ -7,7 +7,8 @@
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAzienda } from './amministrazione-servizio.js';
 import { pdfConfermaOrdine, MODELLO_ORDINE_FORNITORE, type DatiPdfConferma } from './pdf-conferma-ordine.js';
-import { gmailConfigurato, inviaGmail, mittenteGmail } from './gmail.js';
+import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
+import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { AZIENDA_PREDEFINITA } from './views/stampa-preventivo.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail, righeConfermaDaModulo, totaleConferma } from '../engine/conferme-ordine.js';
 import {
@@ -294,7 +295,7 @@ export async function propostaEmailOrdine(id: number) {
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
   const consegne = x.righe.map(r => r.consegna).filter((k): k is string => !!k).sort();
   const t = emailOrdineFornitore({ numero: x.d.numero ? `${x.d.numero}/${x.d.anno}` : 'bozza', data: x.d.data, rifFornitore: x.d.riferimento_esterno, azienda, consegna: consegne[0] });
-  return { a: indirizzoEmail(x.d.email) || indirizzoEmail(x.d.pec) || '', ...t, attivo: gmailConfigurato(), mittente: mittenteGmail() };
+  return { a: indirizzoEmail(x.d.email) || indirizzoEmail(x.d.pec) || '', ...t, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ordine_fornitore')) };
 }
 
 export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: string; oggetto?: string; testo?: string }): Promise<string> {
@@ -308,7 +309,7 @@ export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: str
   if (!oggetto || !testo) throw new Error("Servono l'oggetto e il testo dell'email.");
   const pdf = await pdfOrdineFornitore(id);
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
-  const messaggio = messaggioEmail({ da: `"${azienda.replace(/"/g, '')}" <${mittenteGmail()}>`, a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
+  const messaggio = messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ordine_fornitore')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } });
   const inviato = await inviaGmail(messaggio);
   await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, aggiornato_il = now() WHERE id = $1`,

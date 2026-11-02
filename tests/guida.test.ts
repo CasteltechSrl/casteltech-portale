@@ -156,3 +156,8 @@ test('guida: calendario dei ritardi e domande sui suggerimenti', () => {
   assert.ok(primi('commesse in ritardo nel calendario google', 3).includes('calendario-ritardi'));
   assert.ok(primi('rispondere alla domanda su un suggerimento', 3).includes('suggerimento'));
 });
+
+test('guida: da chi partono le email (alias per funzione)', () => {
+  assert.ok(primi('da quale indirizzo parte la mail', 3).includes('mittenti-email'));
+  assert.ok(primi('alias amministrazione ordini', 2).includes('mittenti-email'));
+});

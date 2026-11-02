@@ -6,6 +6,8 @@ import { Router, type Request } from 'express';
 import { html, type Raw } from '../views/html.js';
 import { datiPaginaServizi, righePagina, salvaImpostazioniServizi, type ImpostazioniServizi } from '../consumi-servizi.js';
 import type { StatoServizio } from '../../engine/servizi.js';
+import { gmailConfigurato, indirizziInvioCome, mittenteGmail, statoAlias } from '../gmail.js';
+import { FUNZIONI_EMAIL } from '../../engine/mittenti-email.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
 
@@ -23,6 +25,8 @@ export function rotteServizi(pagina: Pagina) {
     const p = await datiPaginaServizi();
     const righe = righePagina(p);
     const imp = p.impostazioni;
+    if (gmailConfigurato()) await indirizziInvioCome(req.query.alias === '1');
+    const alias = statoAlias();
     res.send(pagina(req, 'Servizi', html`
       <section class="blocco">
         <h2>Consumi e limiti</h2>
@@ -40,6 +44,20 @@ export function rotteServizi(pagina: Pagina) {
         <p class="nota">Token, costo dell'IA e richieste ai distributori li conta il portale a ogni risposta (Anthropic non dice quanto credito resta):
           il costo è una stima con il listino Anthropic e può differire di poco dalla fattura. Memoria: misurata dal portale stesso.</p>
       </section>
+
+      ${alias.length ? html`<section class="blocco">
+        <h2>Da chi partono le email</h2>
+        <p class="nota">Ogni documento parte dall'indirizzo della sua funzione, legato a ${mittenteGmail()}. Un indirizzo funziona solo dopo averlo
+          aggiunto nel Gmail di ${mittenteGmail()}: ⚙ Impostazioni → Visualizza tutte le impostazioni → Account → "Invia messaggio come" →
+          Aggiungi un altro indirizzo email (togli la spunta "Considera come alias" solo se vuoi le risposte separate). Finché non c'è, l'email parte da ${mittenteGmail()}.</p>
+        <table class="tabella"><thead><tr><th>Funzione</th><th>Indirizzo</th><th>Cosa parte da qui</th><th>Stato</th></tr></thead><tbody>
+          ${alias.map(a => html`<tr><td>${a.funzione}</td><td>${a.indirizzo}</td><td>${FUNZIONI_EMAIL.find(f => f.funzione === a.funzione)?.cosa ?? ''}</td>
+            <td>${a.attivo === true ? html`<span class="esito nuovo">attivo</span>`
+              : a.attivo === false ? html`<span class="esito verifica">non attivo: parte da ${mittenteGmail()}</span>`
+              : html`<span class="esito escluso">non controllato</span>`}</td></tr>`)}
+        </tbody></table>
+        <p><a class="bottone" href="/impostazioni/servizi?alias=1">Ricontrolla in Gmail</a></p>
+      </section>` : ''}
 
       <section class="blocco">
         <h2>IA: per cosa si spende</h2>

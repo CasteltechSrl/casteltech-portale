@@ -65,6 +65,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Ordine a fornitore: P/N proposti dall'archivio Componenti mentre si scrive (`/anagrafiche/componenti-cerca`), stessa domanda per l'ultimo acquisto. Preventivi e
   Da acquisire avevano già il menu; autofatture escluse (righe del fornitore estero).
 
+- Email dagli indirizzi per funzione (Adriano 2/11/2026; `engine/mittenti-email.ts` `FUNZIONI_EMAIL`, `mittentePer(tipo)` in `server/gmail.ts`, test in `tests/mittenti-email.test.ts`):
+  alias di info@ = amministrazione@ (DDT, fatture, NC, autofatture, solleciti), ordini@ (conferme d'ordine), preventivi@, acquisti@ (ordini a fornitore), produzione@.
+  La delega resta su GMAIL_MITTENTE (info@); l'alias si usa nel From solo se è tra gli "Invia messaggio come" del Gmail di info@ (letti con gmail.readonly,
+  `settings/sendAs`, in memoria 1 ora), altrimenti parte da info@. Stato in Impostazioni → Servizi → "Da chi partono le email". Un invio nuovo usa `mittentePer('<tipo>')`.
+
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).
   Se tocca formule economiche, preventivi salvati o anagrafiche, chiedi conferma ad Adriano prima di scrivere codice; il resto si fa e si pubblica dopo i test.

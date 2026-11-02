@@ -6,7 +6,8 @@
 import { q, q1 } from './db.js';
 import { caricaAzienda } from './amministrazione-servizio.js';
 import { AZIENDA_PREDEFINITA } from './views/stampa-preventivo.js';
-import { gmailConfigurato, inviaGmail, mittenteGmail } from './gmail.js';
+import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
+import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail } from '../engine/conferme-ordine.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
 import { euroIt, mailtoSollecito, oggettoSollecito, raggruppaScaduti, testoSollecito, type GruppoSollecito, type RataScaduta } from '../engine/solleciti.js';
@@ -36,7 +37,7 @@ export async function propostaSollecito(clienteId: number, oggi: string): Promis
   const testo = testoSollecito(g, { azienda, iban: a.iban, banca: a.banca, oggi, telefono: a.telefono || AZIENDA_PREDEFINITA.telefono });
   const ultimo = await q1<{ data: string; descrizione: string }>(`SELECT t.data::text AS data, t.descrizione FROM crm_attivita t JOIN crm_aziende z ON z.id = t.azienda_id
     WHERE z.cliente_id = $1 AND t.tipo = 'email' AND t.descrizione ILIKE 'Sollecito%' ORDER BY t.data DESC, t.id DESC LIMIT 1`, [clienteId]);
-  return { gruppo: g, a: g.email ?? '', oggetto, testo, attivo: gmailConfigurato(), mittente: mittenteGmail(), mailto: mailtoSollecito(g.email, oggetto, testo), ultimo: ultimo ?? null };
+  return { gruppo: g, a: g.email ?? '', oggetto, testo, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('sollecito')), mailto: mailtoSollecito(g.email, oggetto, testo), ultimo: ultimo ?? null };
 }
 
 /** Invia con Gmail e registra l'attività nel CRM (se il cliente è collegato a un'azienda del CRM). */
@@ -49,7 +50,7 @@ export async function inviaSollecito(clienteId: number, b: { a?: string; cc?: st
   const oggetto = String(b.oggetto ?? '').trim(), testo = String(b.testo ?? '').trim();
   if (!oggetto || !testo) throw new Error("Servono l'oggetto e il testo dell'email.");
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
-  await inviaGmail(messaggioEmail({ da: `"${azienda.replace(/"/g, '')}" <${mittenteGmail()}>`, a: a.indirizzi, cc: cc.indirizzi, oggetto, testo }));
+  await inviaGmail(messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('sollecito')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo }));
   await registraSollecito(clienteId, p.gruppo, a.indirizzi.join(', '), utenteId, oggi);
   return a.indirizzi.join(', ');
 }
