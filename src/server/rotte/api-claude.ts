@@ -62,6 +62,13 @@ export function rotteApiClaude() {
     res.json({ suggerimenti: req.query.tutti === '1' ? righe : righe.filter(s => !chiuso(s.stato)) });
   });
 
+  // Avvii e arresti del portale su Render degli ultimi 7 giorni (Adriano 2/11/2026): Claude controlla se un riavvio
+  // segnalato è memoria esaurita o un riavvio regolare. Solo lettura, niente dati dei clienti.
+  r.get('/eventi-render', async (_req, res) => {
+    res.json({ eventi: await q(`SELECT il, tipo, messaggio, dati FROM eventi_servizi WHERE servizio = 'render'
+      AND il > now() - interval '7 days' ORDER BY il DESC, id DESC LIMIT 60`) });
+  });
+
   r.post('/suggerimenti/:id', async (req, res) => {
     const id = Number(req.params.id);
     const { stato, risposta, nota, errore } = aggiornamentoDaClaude(req.body ?? {}, oggiIt());

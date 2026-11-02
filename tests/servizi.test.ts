@@ -121,3 +121,15 @@ test('servizi: i consumi in memoria fanno scattare l\'avviso in cima alle pagine
   assert.equal(s.avvisoServizi()!.livello, 'critico');
   s.ia.credito = null;
 });
+
+test('servizi: chiave dell\'avviso chiuso con la X cambia solo con un problema nuovo', async () => {
+  const { chiaveAvvisoServizi } = await import('../src/engine/servizi.js');
+  const t = ['il portale si è riavviato da solo una volta nelle ultime 24 ore (probabile memoria esaurita)'];
+  const a = chiaveAvvisoServizi(t, ['2026-11-01T22:10:00.000Z']);
+  assert.equal(a, chiaveAvvisoServizi([...t], ['2026-11-01T22:10:00.000Z']));
+  // stesso testo ma riavvio nuovo: ricompare
+  assert.notEqual(a, chiaveAvvisoServizi(t, ['2026-11-02T15:00:00.000Z', '2026-11-01T22:10:00.000Z']));
+  // altro servizio vicino al limite: ricompare
+  assert.notEqual(a, chiaveAvvisoServizi([...t, 'Credito dell\'IA all\'85%'], ['2026-11-01T22:10:00.000Z']));
+  assert.match(a, /^servizi-[0-9a-z]+$/);
+});

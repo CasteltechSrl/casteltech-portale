@@ -3,7 +3,7 @@
  * contatori del mese (caricati all'avvio da consumi-servizi.ts, poi aumentati a ogni chiamata), ultimi errori, memoria del server.
  * Il salvataggio nel database lo fa consumi-servizi.ts, qualche secondo dopo l'ultima chiamata.
  */
-import { avvisiServizi, costoIa, giornoRoma, righeServizi, type Conteggio, type DatiServizi, type ErroreRecente, type UsoIa } from '../engine/servizi.js';
+import { avvisiServizi, chiaveAvvisoServizi, costoIa, giornoRoma, righeServizi, type Conteggio, type DatiServizi, type ErroreRecente, type UsoIa } from '../engine/servizi.js';
 import { BUDGET, memoriaInUso } from './memoria.js';
 
 const MB = 1024 * 1024;
@@ -147,10 +147,11 @@ export function datiInMemoria(): DatiServizi {
 }
 
 /** Avviso in cima alle pagine dell'ufficio quando un servizio è vicino al limite o fermo (null se va tutto bene). */
-export function avvisoServizi(): { livello: 'attenzione' | 'critico'; testi: string[] } | null {
+export function avvisoServizi(): { livello: 'attenzione' | 'critico'; testi: string[]; chiave: string } | null {
   try {
     const a = avvisiServizi(righeServizi(datiInMemoria()));
     if (!a.length) return null;
-    return { livello: a.some(r => r.stato === 'critico') ? 'critico' : 'attenzione', testi: a.map(r => r.avviso ?? `${r.servizio}: controlla i consumi`) };
+    const testi = a.map(r => r.avviso ?? `${r.servizio}: controlla i consumi`);
+    return { livello: a.some(r => r.stato === 'critico') ? 'critico' : 'attenzione', testi, chiave: chiaveAvvisoServizi(testi, memoria.riavviiInattesi) };
   } catch { return null; }
 }

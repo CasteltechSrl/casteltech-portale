@@ -1085,11 +1085,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'servizi', area: 'impostazioni', titolo: 'Consumi e limiti dei servizi (credito IA, memoria, database)',
-    parole: 'consumi limiti token credito esaurito finito ricarica anthropic spesa costo dollari render memoria riavvio neon database spazio ore calcolo distributori richieste giorno gmail avviso servizi',
+    parole: 'consumi limiti token credito esaurito finito ricarica anthropic spesa costo dollari render memoria riavvio neon database spazio ore calcolo distributori richieste giorno gmail chiudi x avviso servizi',
     testo: [
       'In Impostazioni → Servizi c\'è il riquadro con quanto il portale usa dei servizi esterni e quanto manca ai limiti: IA di Anthropic (letture, token e costo del giorno e del mese, credito rimasto), Render (memoria del server e riavvii), Neon (spazio del database e ore di calcolo), DigiKey, Mouser, Farnell e TME (richieste del giorno), Google Drive, Gmail e Invoicetronic.',
       'Anthropic è prepagato e non dice quanto credito resta: scrivi nel riquadro "Credito dell\'IA" l\'importo caricato e da quale giorno, e aggiornalo dopo ogni ricarica. Il portale conta i token di ogni lettura, stima la spesa con il listino e avvisa quando ne resta meno del 20%.',
       'Quando un servizio supera l\'80% del limite, o si ferma (credito finito, tetto di spesa raggiunto, chiave non valida, il portale riavviato da Render per memoria esaurita; i riavvii regolari, per esempio dopo aver cambiato una variabile su Render, non contano), tutti gli utenti dell\'ufficio vedono un avviso giallo o rosso in cima alle pagine con il link al riquadro.',
+      'Letto l\'avviso, la X a destra lo chiude: in quel browser non si vede più finché non nasce un problema nuovo (un altro servizio al limite o un altro riavvio), e allora ricompare. Anche i messaggi gialli dopo un salvataggio ("Salvato.", "DDT corretto…") si chiudono con la X.',
       'Se un documento non viene letto per credito finito, nell\'acquisizione c\'è scritto il motivo: ricarica il credito su console.anthropic.com → Billing e premi "Rileggi con l\'IA".',
       'Facoltativo: con ANTHROPIC_ADMIN_KEY su Render il costo del mese diventa quello ufficiale di Anthropic; con NEON_API_KEY e NEON_PROJECT_ID si vedono le ore di calcolo del database.',
     ],

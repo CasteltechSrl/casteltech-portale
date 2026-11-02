@@ -249,6 +249,17 @@ export function righeServizi(d: DatiServizi, adesso = new Date()): RigaServizio[
 }
 
 /** Le righe da segnalare a tutti gli utenti dell'ufficio (prima le critiche). */
+/**
+ * Chiave dell'avviso dei servizi chiuso con la X (Adriano 2/11/2026): cambia quando cambia il testo o arriva un riavvio
+ * nuovo, così l'avviso ricompare solo per un problema nuovo.
+ */
+export function chiaveAvvisoServizi(testi: string[], riavviiInattesi: string[] = []): string {
+  const testo = [...testi, riavviiInattesi[0] ?? ''].join('|');
+  let h = 5381;
+  for (let i = 0; i < testo.length; i++) h = ((h * 33) ^ testo.charCodeAt(i)) >>> 0;
+  return 'servizi-' + h.toString(36);
+}
+
 export function avvisiServizi(righe: RigaServizio[]): RigaServizio[] {
   return righe.filter(r => r.stato === 'attenzione' || r.stato === 'critico').sort((a, b) => PESO[b.stato] - PESO[a.stato]);
 }
