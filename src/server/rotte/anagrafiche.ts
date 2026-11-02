@@ -13,6 +13,8 @@ import { html, num, raw, euro, data, type Raw } from '../views/html.js';
 import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from '../anagrafiche-servizio.js';
 import { avviaElaborazione, cercaComponenti, conteggiComponenti, creaCodificaSingola, FAMIGLIE } from '../codifica-servizio.js';
 import { pnKey } from '../../engine/codifica/bom.js';
+import { aggiungiComponenteCliente, caricaComponentiCliente, cercaComponentiCliente, cercaComponentiPerDdt, clientiConComponenti, elencoComponentiClienti,
+  eliminaComponenteCliente, leggiFileComponentiCliente, salvaComponenteCliente } from '../componenti-clienti-servizio.js';
 import { datiNuovoComponente, famigliaFiltro } from '../../engine/componenti-archivio.js';
 import { calcolaPagina, PER_PAGINA } from '../../engine/paginazione.js';
 import { barraPagine } from '../views/paginazione.js';
@@ -28,8 +30,9 @@ import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 
-export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti';
-const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti']];
+export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti';
+const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti'],
+  ['componenti-clienti', 'Componenti clienti']];
 
 /** Pagina della sezione: tasti in alto (con quanti sono) e il contenuto della scheda scelta. */
 export type PaginaAnagrafiche = (req: Request, scheda: SchedaAnagrafiche, contenuto: Raw, avviso?: string, script?: string) => Promise<string>;
@@ -37,7 +40,7 @@ const paginaAnagrafiche: PaginaAnagrafiche = async (req, scheda, contenuto, avvi
   const n = (await q1<Record<SchedaAnagrafiche | 'senza_cliente', number>>(`SELECT (SELECT count(*)::int FROM clienti) AS clienti,
     (SELECT count(*)::int FROM prodotti WHERE cliente_id IS NULL) AS senza_cliente,
     (SELECT count(*)::int FROM fornitori_anagrafica) AS fornitori, (SELECT count(*)::int FROM prodotti) AS prodotti,
-    (SELECT count(*)::int FROM componenti) AS componenti`))!;
+    (SELECT count(*)::int FROM componenti) AS componenti, (SELECT count(*)::int FROM componenti_clienti) AS "componenti-clienti"`))!;
   const titolo = SCHEDE.find(([s]) => s === scheda)![1];
   return String(layout({ titolo, utente: req.session.utente, attiva: 'anagrafiche', avviso, script: ['ricerca.js', ...(script ? [script] : [])], contenuto: html`
     <h1>Anagrafiche</h1>
@@ -164,6 +167,79 @@ export function rotteAnagrafiche() {
     } catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
   });
   r.get('/componenti-cerca', async (req, res) => res.json(await cercaComponentiPerOrdine(String(req.query.q ?? ''))));
+  // righe del DDT (Adriano 2/11/2026): nostri componenti con codice gestionale e descrizione "P/N (codice produzione)"; componenti del cliente del DDT
+  r.get('/componenti-ddt', async (req, res) => res.json(await cercaComponentiPerDdt(String(req.query.q ?? ''))));
+  r.get('/componenti-clienti-cerca', async (req, res) => res.json(await cercaComponentiCliente(Number(req.query.cliente) || 0, String(req.query.q ?? ''))));
+
+  // ── Componenti clienti: il materiale in conto lavoro con i codici del cliente (Adriano 2/11/2026) ──
+  r.get('/componenti-clienti', async (req, res) => {
+    const clienti = await clientiConComponenti();
+    const scelto = clienti.find(c => c.id === Number(req.query.cliente)) ?? null;
+    const righe = await elencoComponentiClienti(scelto?.id ?? null);
+    const conDati = clienti.filter(c => c.n);
+    const menuClienti = (nome: string, valore: number | null, vuota: string, classe = '') => html`<select name="${nome}" class="${classe}" ${classe ? '' : raw('required')}>
+      <option value="">${vuota}</option>${clienti.map(c => html`<option value="${c.id}" ${c.id === valore ? raw('selected') : ''}>${c.ragione_sociale}${c.n ? ` (${num(c.n, 0)})` : ''}</option>`)}</select>`;
+    res.send(await paginaAnagrafiche(req, 'componenti-clienti', html`
+      <p class="nota">Il materiale in conto lavoro che i clienti ci mandano, con i <b>loro</b> codici. Ogni codice ha il suo cliente; tutto in maiuscolo.
+        Nei DDT, scegliendo "Componente cliente" nella riga, si sceglie da qui (per esempio per restituire il materiale non montato).
+        ${conDati.length ? html`Clienti con componenti: ${conDati.map((c, i) => html`${i ? ', ' : ''}<a href="?cliente=${c.id}">${c.ragione_sociale}</a> (${num(c.n, 0)})`)}.` : ''}</p>
+      <form method="get" class="riga-campi">${menuClienti('cliente', scelto?.id ?? null, 'Tutti i clienti', 'invia-subito')}</form>
+      ${ricercaVeloce('componenti-clienti', 'Cerca codice, descrizione, famiglia…', righe.length)}
+      ${righe.length ? html`<div class="tabella-scorre"><table class="elenco" id="componenti-clienti"><thead><tr>${scelto ? '' : html`<th>Cliente</th>`}<th>Codice</th><th>Descrizione</th>
+          <th>Famiglia</th><th>Gruppo</th><th class="n" title="Righe di DDT che lo usano">Nei DDT</th><th></th></tr></thead><tbody>
+        ${righe.map(k => html`<tr>${scelto ? '' : html`<td class="taglia">${k.cliente}</td>`}<td class="codice">${k.codice}</td>
+          <td><input name="descrizione" value="${k.descrizione ?? ''}" class="maiuscolo" form="k-${k.id}"></td>
+          <td><input name="famiglia" value="${k.famiglia ?? ''}" class="maiuscolo" form="k-${k.id}"></td>
+          <td><input name="gruppo" value="${k.gruppo ?? ''}" class="maiuscolo" form="k-${k.id}"></td><td class="n">${k.usato || ''}</td>
+          <td class="nowrap"><form method="post" action="/anagrafiche/componenti-clienti/${k.id}?cliente=${scelto?.id ?? ''}" id="k-${k.id}" class="inline"><button>Salva</button></form>
+            ${k.usato ? '' : html`<form method="post" action="/anagrafiche/componenti-clienti/${k.id}/elimina?cliente=${scelto?.id ?? ''}" class="inline"
+              data-conferma="${`Eliminare il codice ${k.codice} di ${k.cliente}?`}"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
+        </tbody></table></div>` : html`<p class="vuoto">${scelto ? 'Nessun componente per questo cliente: aggiungili qui sotto o carica il loro elenco.' : 'Nessun componente dei clienti: carica l\'elenco di un cliente qui sotto.'}</p>`}
+      <form method="post" action="/anagrafiche/componenti-clienti" class="blocco stretto-form" id="k-nuovo">
+        <h2>+ Aggiungi componente del cliente</h2>
+        <label>Cliente ${menuClienti('cliente_id', scelto?.id ?? null, '— scegli il cliente —')}</label>
+        <div class="riga-campi"><label>Codice del cliente <input name="codice" class="maiuscolo" required autocomplete="off"></label>
+          <label class="largo">Descrizione <input name="descrizione" class="maiuscolo" autocomplete="off"></label>
+          <label>Famiglia <input name="famiglia" class="maiuscolo corto"></label></div>
+        <button class="primario">Aggiungi</button>
+      </form>
+      <details class="blocco" ${righe.length ? '' : raw('open')}>
+        <summary>Carica l'elenco di un cliente (Excel o CSV)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Il file del cliente con almeno codice e descrizione (le colonne si riconoscono dal titolo: Cod/Codice, Descrizione, Famiglia, Gruppo;
+            senza titoli la prima colonna è il codice e la seconda la descrizione). Aggiunge i codici nuovi e aggiorna le descrizioni di quelli che ci sono già;
+            non toglie nulla. Prima mostra un riepilogo e chiede conferma.</p>
+          <label>Cliente ${menuClienti('cliente', scelto?.id ?? null, '— scegli il cliente —', 'carica-cliente')}</label>
+          <label>File <input type="file" id="file-componenti-clienti" accept=".xlsx,.csv,.txt"></label>
+          <button class="primario" type="button" id="carica-componenti-clienti">Controlla il file</button>
+          <output id="esito-componenti-clienti"></output>
+          <button class="primario" type="button" id="conferma-componenti-clienti" hidden>Conferma e carica</button>
+        </div>
+      </details>`, msg(req), 'anagrafiche.js'));
+  });
+  r.post('/componenti-clienti', async (req, res) => {
+    const errore = await aggiungiComponenteCliente(req.body);
+    const cliente = Number(req.body.cliente_id) || '';
+    if (errore) return res.redirect(conCampo(torna(errore, '/componenti-clienti', `&cliente=${cliente}`), errore.includes('cliente.') ? 'cliente_id' : 'codice', 'k-nuovo'));
+    res.redirect(torna(`Componente ${String(req.body.codice ?? '').trim().toUpperCase()} aggiunto.`, '/componenti-clienti', `&cliente=${cliente}`));
+  });
+  r.post('/componenti-clienti/carica', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+    const clienteId = Number(req.query.cliente) || 0;
+    if (!clienteId || !(await q1(`SELECT 1 FROM clienti WHERE id = $1`, [clienteId]))) return res.status(400).json({ errore: 'Scegli prima il cliente.' });
+    try {
+      const letto = await leggiFileComponentiCliente(String(req.query.nome ?? 'elenco.xlsx'), req.body as Buffer);
+      if (!letto.componenti.length) return res.status(400).json({ errore: 'Nel file non ho trovato codici: serve almeno la colonna del codice.' });
+      res.json({ ...(await caricaComponentiCliente(clienteId, letto.componenti, req.query.conferma === '1')), scartate: letto.scartate });
+    } catch (e: any) { res.status(400).json({ errore: `File non letto: ${e?.message ?? e}` }); }
+  });
+  r.post('/componenti-clienti/:id', async (req, res) => {
+    await salvaComponenteCliente(Number(req.params.id), req.body);
+    res.redirect(torna('Salvato.', '/componenti-clienti', `&cliente=${Number(req.query.cliente) || ''}`));
+  });
+  r.post('/componenti-clienti/:id/elimina', async (req, res) => {
+    const errore = await eliminaComponenteCliente(Number(req.params.id));
+    res.redirect(torna(errore ?? 'Componente eliminato.', '/componenti-clienti', `&cliente=${Number(req.query.cliente) || ''}`));
+  });
   r.get('/componenti-prezzo', async (req, res) =>
     res.json({ domanda: await domandaPrezzoComponente(String(req.query.codice ?? ''), numeroQs(req.query.prezzo)) }));
   r.post('/componenti-prezzo', async (req, res) => {

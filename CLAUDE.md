@@ -45,6 +45,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Componenti (Adriano 2/11/2026; `engine/componenti-archivio.ts`, test in `tests/ddt-email.test.ts`): senza ricerca l'elenco di TUTTO l'archivio a pagine da 100 con filtro
   per famiglia; "+ Aggiungi componente" (anche precompilato dalla ricerca vuota) = P/N già presente → lo mostra, altrimenti codifica singola come Quotazioni → Codifica un P/N,
   poi "Salva nell'archivio" riporta qui. Non è un magazzino (giacenze non esistono nel portale).
+  Componenti clienti (Adriano 2/11/2026; migrazione 063 `componenti_clienti`, `engine/componenti-clienti.ts`, `componenti-clienti-servizio.ts`, test in `tests/componenti-clienti.test.ts`):
+  materiale in conto lavoro con i codici del cliente (Selea, Idea automazione), ogni codice col suo cliente, MAIUSCOLO; caricamento da Excel/CSV (anteprima → conferma,
+  aggiunge e aggiorna, non toglie; CSV in Windows-1252 letto). DDT: ogni riga ha "Da" = prodotto / componente nostro (codice = gestionale, descrizione = "P/N (codice produzione)",
+  ricerca su tutti e tre i codici) / componente cliente / libero (`documenti_righe.fonte`, `componente_id`, `componente_cliente_id`; `risolviFontiDdt` al salvataggio).
+  "Libero" vale SOLO nei DDT. Ordini a fornitore: la ricerca dei P/N trova anche gestionale e produzione a metà codice (`cercaComponentiPerOrdine`).
 - Prezzi in anagrafica (Adriano 31/10/2026; migrazione 051, `engine/prezzi-fic.ts`, `prezzi-servizio.ts`, test in `tests/prezzi-fic.test.ts`): Prodotti → colonna
   Prezzo € (vendita a scheda), Componenti → ultimo acquisto (prezzo, fornitore, data, pezzi). Da FIC con `tools/prezzi-da-fic.ts`: prodotto = il più recente tra
   ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice

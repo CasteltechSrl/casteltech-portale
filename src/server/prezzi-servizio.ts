@@ -113,6 +113,7 @@ export async function completaDaListino(clienteId: number | null, righe: any): P
   }
   for (const r of elenco as any[]) {
     if (!r || ['on', '1', true].includes(r.solo_descrizione)) continue;
+    if (r.fonte && r.fonte !== 'prodotto') continue;   // DDT: componenti e righe libere non hanno listino
     if (String(r.prezzo ?? '').trim() || !(String(r.codice ?? '').trim() || Number(r.prodotto_id))) continue;
     const quantita = Number(String(r.quantita ?? '').replace(',', '.')) || 1;
     const l = await prezzoListino(clienteId, { prodottoId: Number(r.prodotto_id) || null, codice: r.codice }, quantita);
@@ -163,15 +164,22 @@ export async function aggiornaPrezzoDaDocumento(id: number, quantita: number, pr
 
 // ── Ordini a fornitore: componenti dall'archivio (Anagrafiche → Componenti) ──
 
-/** Componenti che somigliano a quello che si scrive (P/N, codice gestionale o di produzione, descrizione). */
+/**
+ * Componenti che somigliano a quello che si scrive: P/N, codice gestionale, codice di produzione (anche in mezzo al codice,
+ * senza contare trattini e punti) o descrizione (Adriano 2/11/2026: "la ricerca punta a tutti e tre i codici"). Ordini a fornitore e DDT.
+ */
 export async function cercaComponentiPerOrdine(testo: string) {
   const t = testo.trim();
   if (t.length < 2) return [];
-  const k = pnKey(t) ?? '';
-  return q<{ pn: string | null; codice_gestionale: string | null; descrizione: string | null; prezzo: number | null; fornitore: string | null }>(
-    `SELECT pn, codice_gestionale, descrizione, prezzo_acquisto::float AS prezzo, prezzo_fornitore AS fornitore FROM componenti
-     WHERE ($2 <> '' AND pn_key LIKE $2 || '%') OR codice_gestionale ILIKE $1 || '%' OR codice_produzione ILIKE $1 || '%' OR descrizione ILIKE '%' || $1 || '%'
-     ORDER BY (pn_key = $2) DESC, pn LIMIT 20`, [t.replace(/[%_]/g, ''), k]);
+  const k = pnKey(t) ?? '', c = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return q<{ id: number; pn: string | null; codice_gestionale: string | null; codice_produzione: string | null; descrizione: string | null; prezzo: number | null; fornitore: string | null }>(
+    `SELECT id, pn, codice_gestionale, codice_produzione, descrizione, prezzo_acquisto::float AS prezzo, prezzo_fornitore AS fornitore FROM componenti
+     WHERE ($2 <> '' AND pn_key LIKE '%' || $2 || '%')
+        OR ($3 <> '' AND (regexp_replace(upper(coalesce(codice_gestionale, '')), '[^A-Z0-9]', '', 'g') LIKE '%' || $3 || '%'
+          OR regexp_replace(upper(coalesce(codice_produzione, '')), '[^A-Z0-9]', '', 'g') LIKE '%' || $3 || '%'))
+        OR descrizione ILIKE '%' || $1 || '%'
+     ORDER BY (pn_key = $2 OR upper(codice_gestionale) = upper($1) OR upper(codice_produzione) = upper($1)) DESC,
+       (pn_key LIKE $2 || '%') DESC, codice_gestionale NULLS LAST, pn LIMIT 25`, [t.replace(/[%_]/g, ''), k, c]);
 }
 
 /** Componente della riga dell'ordine: per P/N o codice gestionale / di produzione uguale. */

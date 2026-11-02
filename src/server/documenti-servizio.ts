@@ -9,6 +9,7 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
+import { risolviFontiDdt } from './componenti-clienti-servizio.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
 import type { DdtAperto } from '../engine/fatture-differite.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
@@ -187,8 +188,12 @@ export async function scalaAcconti(id: number, accontoIds: number[]): Promise<nu
 /** Salva intestazione e righe di una bozza. */
 export async function salvaBozza(id: number, b: any): Promise<string[]> {
   // codice e quantità senza prezzo: prezzo dal listino del cliente (scaglioni di quantità, Adriano 31/10/2026)
-  const cliente = (await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM documenti WHERE id = $1`, [id]))?.cliente_id ?? null;
-  const { righe, errori } = righeDaModulo(await completaDaListino(cliente, b.righe ?? []));
+  const doc = await q1<{ cliente_id: number | null; tipo: string }>(`SELECT cliente_id, tipo FROM documenti WHERE id = $1`, [id]);
+  const cliente = doc?.cliente_id ?? null;
+  // DDT: ogni riga dice da quale anagrafica viene il codice (prodotto, componente nostro, componente del cliente, libero; Adriano 2/11/2026)
+  const fonti = doc?.tipo === 'ddt' ? await risolviFontiDdt(cliente, b.righe ?? []) : { righe: b.righe ?? [], errori: [] as string[] };
+  const { righe, errori } = righeDaModulo(await completaDaListino(cliente, fonti.righe));
+  errori.unshift(...fonti.errori);
   const data = String(b.data ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errori.push('Data non valida.');
   if (errori.length) return errori;
@@ -209,12 +214,14 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
     await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
     if (righe.length) await c.query(
       `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id,
-         riga_ordine_id, acconto_id)
+         riga_ordine_id, acconto_id, fonte, componente_id, componente_cliente_id)
        SELECT $1, r.posizione, r.solo_descrizione, (SELECT id FROM prodotti WHERE id = r.prodotto_id), r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.sconto,
          (SELECT codice FROM aliquote_iva WHERE codice = r.aliquota_iva), (SELECT id FROM documenti WHERE id = r.ddt_id AND tipo = 'ddt'),
-         (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id), (SELECT id FROM documenti WHERE id = r.acconto_id AND tipo_sdi = 'TD02')
+         (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id), (SELECT id FROM documenti WHERE id = r.acconto_id AND tipo_sdi = 'TD02'),
+         CASE WHEN $3 THEN r.fonte END, (SELECT id FROM componenti WHERE id = r.componente_id), (SELECT id FROM componenti_clienti WHERE id = r.componente_cliente_id)
        FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, solo_descrizione boolean, prodotto_id int, codice text, descrizione text, quantita numeric,
-         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int)`, [id, JSON.stringify(righe)]);
+         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int, fonte text, componente_id int, componente_cliente_id int)`,
+      [id, JSON.stringify(righe), d.tipo === 'ddt']);
   });
   return [];
 }

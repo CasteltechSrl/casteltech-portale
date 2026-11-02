@@ -20,6 +20,8 @@ document.getElementById('aggiungi-riga')?.addEventListener('click', () => {
   });
   nuova.querySelectorAll('.nota').forEach(el => el.remove());
   tabella.appendChild(nuova);
+  const fonte = nuova.querySelector('select.fonte-riga');
+  if (fonte) mostraFonte(nuova, fonte.value);
   (nuova.querySelector('select.scelta-prodotto') ?? nuova.querySelector('input[name$="[codice]"]') ?? nuova.querySelector('input[name$="[descrizione]"]'))?.focus();
 });
 document.addEventListener('input', e => {
@@ -165,7 +167,7 @@ moduloDoc?.addEventListener('input', e => {
       ultimiTrovati.set(codice, c);
       const o = document.createElement('option');
       o.value = codice;
-      o.label = [c.codice_gestionale, c.descrizione, c.prezzo != null ? `ultimo ${String(c.prezzo).replace('.', ',')} €` : ''].filter(Boolean).join(' · ');
+      o.label = [c.codice_gestionale, c.codice_produzione, c.descrizione, c.prezzo != null ? `ultimo ${String(c.prezzo).replace('.', ',')} €` : ''].filter(Boolean).join(' · ');
       trovati.appendChild(o);
     }
   }, 250);
@@ -182,4 +184,73 @@ moduloDoc?.addEventListener('change', e => {
     prezzo.dataset.listino = '1';
     prezzo.title = `Ultimo acquisto${c.fornitore ? ' da ' + c.fornitore : ''}`;
   }
+});
+
+// ── DDT: da quale anagrafica viene il codice della riga (Adriano 2/11/2026) ──
+// Prodotto = menu dei prodotti del cliente; Componente nostro = archivio Componenti (P/N, gestionale, produzione);
+// Componente cliente = Anagrafiche → Componenti clienti del cliente del DDT; Libero = codice e descrizione a mano.
+const SEGNAPOSTO = { componente: 'cerca P/N, gestionale o produzione', componente_cliente: 'cerca codice o descrizione', libero: 'codice (facoltativo)' };
+const trovatiRiga = document.getElementById('trovati-riga');
+const ultimiRiga = new Map();
+function mostraFonte(riga, fonte) {
+  const perProdotto = riga.querySelector('.per-prodotto'), perTesto = riga.querySelector('.per-testo');
+  if (perProdotto) perProdotto.hidden = fonte !== 'prodotto';
+  if (perTesto) perTesto.hidden = fonte === 'prodotto';
+  const testo = campo(riga, 'codice_testo');
+  if (testo) testo.placeholder = SEGNAPOSTO[fonte] ?? '';
+}
+moduloDoc?.addEventListener('change', e => {
+  const sel = e.target;
+  if (!sel.classList?.contains('fonte-riga')) return;
+  const riga = sel.closest('tr');
+  mostraFonte(riga, sel.value);
+  // la riga cambia anagrafica: via i collegamenti di prima
+  ['componente_id', 'componente_cliente_id', 'codice_testo', 'codice'].forEach(n => { const el = campo(riga, n); if (el) el.value = ''; });
+  const prodotto = riga.querySelector('select.scelta-prodotto');
+  if (prodotto) prodotto.selectedIndex = 0;
+  const descr = campo(riga, 'descrizione');
+  if (descr?.readOnly) { descr.value = ''; descr.readOnly = false; descr.title = ''; }
+  (sel.value === 'prodotto' ? prodotto : campo(riga, 'codice_testo'))?.focus();
+});
+let attesaRiga = null;
+moduloDoc?.addEventListener('input', e => {
+  const el = e.target;
+  if (!trovatiRiga || !el.classList?.contains('cerca-riga')) return;
+  const riga = el.closest('tr'), fonte = campo(riga, 'fonte')?.value;
+  if (fonte !== 'componente' && fonte !== 'componente_cliente') { trovatiRiga.innerHTML = ''; return; }
+  clearTimeout(attesaRiga);
+  attesaRiga = setTimeout(async () => {
+    const t = el.value.trim();
+    if (t.length < 2) return;
+    const cliente = document.getElementById('righe-documento')?.dataset.cliente ?? '';
+    const url = fonte === 'componente' ? '/anagrafiche/componenti-ddt?q=' + encodeURIComponent(t)
+      : `/anagrafiche/componenti-clienti-cerca?cliente=${encodeURIComponent(cliente)}&q=${encodeURIComponent(t)}`;
+    const res = await fetch(url).catch(() => null);
+    const elenco = res?.ok ? await res.json().catch(() => []) : [];
+    trovatiRiga.innerHTML = '';
+    for (const c of elenco) {
+      if (!c.codice) continue;
+      ultimiRiga.set(fonte + '|' + c.codice, c);
+      const o = document.createElement('option');
+      o.value = c.codice;
+      o.label = c.descrizione || '';
+      trovatiRiga.appendChild(o);
+    }
+  }, 250);
+});
+moduloDoc?.addEventListener('change', e => {
+  const el = e.target;
+  if (!el.classList?.contains('cerca-riga')) return;
+  const riga = el.closest('tr'), fonte = campo(riga, 'fonte')?.value, descr = campo(riga, 'descrizione');
+  if (fonte === 'libero') return;
+  const c = ultimiRiga.get(fonte + '|' + el.value.trim().toUpperCase());
+  const id = campo(riga, fonte === 'componente' ? 'componente_id' : 'componente_cliente_id');
+  if (!c) {   // scritto a mano: il portale lo cerca per codice quando si salva
+    if (id) id.value = '';
+    if (descr?.readOnly) { descr.readOnly = false; descr.title = ''; }
+    return;
+  }
+  el.value = c.codice;
+  if (id) id.value = c.id;
+  if (descr) { descr.value = c.descrizione || c.codice; descr.readOnly = true; descr.title = "Descrizione dall'anagrafica"; }
 });

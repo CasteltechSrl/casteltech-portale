@@ -6,6 +6,7 @@
  * Il comportamento sta in public/documenti.js.
  */
 import { html, raw, type Raw } from './html.js';
+import { FONTI_RIGA, NOMI_FONTI, fonteRiga } from '../../engine/componenti-clienti.js';
 
 export interface ProdottoScelta { id: number; codice: string; descrizione: string | null }
 
@@ -55,4 +56,34 @@ export function riquadriSceltaProdotto(clienteId: number | null): Raw {
       <div class="azioni-riga"><button type="button" id="domanda-prezzo-si" class="primario">Sì, aggiorna l'anagrafica</button>
         <button type="button" id="domanda-prezzo-no">No, solo in questo documento</button><span id="domanda-prezzo-esito" class="nota"></span></div>
     </div>`;
+}
+
+// ───────────── DDT: da quale anagrafica viene il codice della riga (Adriano 2/11/2026) ─────────────
+
+const SEGNAPOSTO_FONTE: Record<string, string> = {
+  componente: 'cerca P/N, gestionale o produzione', componente_cliente: 'cerca codice o descrizione', libero: 'codice (facoltativo)',
+};
+
+/** Cella Codice del DDT: menu "Da" (prodotto, componente nostro, componente cliente, libero) + il campo giusto per la fonte. */
+export function cellaCodiceDdt(x: any, i: number, prodotti: ProdottoScelta[]): Raw {
+  const fonte = fonteRiga(x);
+  const prodotto = fonte === 'prodotto';
+  return html`<div class="codice-fonte">
+    <select name="righe[${i}][fonte]" class="fonte-riga" data-predefinita="prodotto" aria-label="Da quale anagrafica viene il codice">
+      ${FONTI_RIGA.map(f => html`<option value="${f}" ${f === fonte ? raw('selected') : ''}>${NOMI_FONTI[f]}</option>`)}</select>
+    <span class="per-prodotto" ${prodotto ? '' : raw('hidden')}>${cellaCodice(prodotto ? x : { prodotto_id: null, codice: null }, i, prodotti)}</span>
+    <span class="per-testo" ${prodotto ? raw('hidden') : ''}><input name="righe[${i}][codice_testo]" value="${prodotto ? '' : x.codice ?? ''}"
+      class="codice maiuscolo cerca-riga" list="trovati-riga" autocomplete="off" placeholder="${SEGNAPOSTO_FONTE[fonte] ?? ''}"></span>
+    <input type="hidden" name="righe[${i}][componente_id]" value="${x.componente_id ?? ''}">
+    <input type="hidden" name="righe[${i}][componente_cliente_id]" value="${x.componente_cliente_id ?? ''}">
+  </div>`;
+}
+
+/** Descrizione del DDT: dall'anagrafica (sola lettura) se la riga è collegata, libera altrimenti. */
+export function cellaDescrizioneDdt(x: any, i: number, prodotti: ProdottoScelta[]): Raw {
+  const fonte = fonteRiga(x);
+  const scelto = fonte === 'prodotto' ? prodottoDellaRiga(x, prodotti) : null;
+  const bloccata = !!scelto || (fonte === 'componente' && !!Number(x.componente_id)) || (fonte === 'componente_cliente' && !!Number(x.componente_cliente_id));
+  return html`<input name="righe[${i}][descrizione]" value="${x.descrizione || scelto?.descrizione || ''}" class="maiuscolo"
+    ${bloccata ? raw('readonly title="Descrizione dall\'anagrafica"') : ''}>`;
 }

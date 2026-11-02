@@ -36,7 +36,7 @@ test('prezzo per quantità: scaglione giusto, altrimenti prezzo unico', () => {
 
 test('fattura, nota di credito, DDT: la bozza prende il prezzo dal listino solo dove manca, tra i codici del cliente', () => {
   const doc = readFileSync(new URL('../src/server/documenti-servizio.ts', import.meta.url), 'utf8');
-  assert.match(doc, /righeDaModulo\(await completaDaListino\(cliente, b\.righe/);
+  assert.match(doc, /righeDaModulo\(await completaDaListino\(cliente, fonti\.righe/);
   const srv = readFileSync(new URL('../src/server/prezzi-servizio.ts', import.meta.url), 'utf8');
   const f = srv.slice(srv.indexOf('export async function completaDaListino'));
   assert.match(f, /if \(String\(r\.prezzo \?\? ''\)\.trim\(\)/);       // prezzo scritto = resta quello
