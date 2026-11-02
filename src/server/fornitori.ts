@@ -46,7 +46,12 @@ async function http(url: string, opz: RequestInit & { nome: string }): Promise<a
     catch (e: any) { throw fallita('rete', `${opz.nome} non raggiungibile: ${e?.name === 'AbortError' ? 'tempo scaduto' : e?.message ?? e}`); }
     let corpo: any = null; try { corpo = testo ? JSON.parse(testo) : null; } catch { corpo = null; }
     if (r.status === 429) throw fallita('limite', `${opz.nome}: limite di richieste raggiunto, riprova più tardi`);
-    if (r.status === 401 || r.status === 403) throw fallita('chiave', `${opz.nome}: accesso negato (${r.status}), controlla le chiavi su Render`);
+    if (r.status === 401 || r.status === 403) {
+      // Farnell (element14) risponde 403 anche quando finiscono le richieste del giorno o del secondo: lo dice l'intestazione
+      const motivo = [r.headers.get('x-error-detail-header'), r.headers.get('x-mashery-error-code'), testo.slice(0, 200)].filter(Boolean).join(' ');
+      if (/over|limit|rate|quota/i.test(motivo)) throw fallita('limite', `${opz.nome}: limite di richieste raggiunto (${motivo.slice(0, 120)}), riprova più tardi`);
+      throw fallita('chiave', `${opz.nome}: accesso negato (${r.status}${motivo ? `: ${motivo.slice(0, 120)}` : ''}), controlla le chiavi su Render`);
+    }
     if (!r.ok && r.status !== 404) throw fallita('altro', `${opz.nome}: errore ${r.status} ${testo.slice(0, 200)}`);
     conta(servizio, 'prezzi', { chiamate: 1 }); riuscito(servizio);
     return r.status === 404 ? null : corpo;
