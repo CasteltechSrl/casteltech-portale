@@ -39,7 +39,7 @@ import { rotteCalendario } from './rotte/calendario.js';
 import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
-import { contabilitaPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
+import { contabilitaPuo, esternoPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -93,6 +93,13 @@ app.use((req, res, next) => {
 
 export function soloUfficio(req: Request, res: Response, next: NextFunction) {
   if (!req.session.utente) return res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl));
+  // profilo Esterno (Adriano 2/11/2026): vede tutto in sola lettura, niente Impostazioni né buste paga (engine/ruoli.ts)
+  if (req.session.utente.ruolo === 'esterno') {
+    if (esternoPuo(req.method, req.baseUrl + req.path)) return next();
+    return res.status(403).send(String(layout({ titolo: 'Sola lettura', utente: req.session.utente, contenuto: html`<h1>Accesso in sola lettura</h1>
+      <p>Il tuo profilo può vedere le pagine del portale, scaricare Excel e stampe, ma non modificare nulla. Impostazioni e buste paga non sono visibili.</p>
+      <p><a href="/cruscotto">← Cruscotto</a></p>` })));
+  }
   if (req.session.utente.ruolo !== 'ufficio') return res.status(403).send(String(layout({ titolo: 'Accesso negato', utente: req.session.utente, contenuto: html`<h1>Pagina riservata all'ufficio</h1>` })));
   next();
 }
@@ -188,7 +195,7 @@ app.get('/c/:codice', async (req, res) => {
   if (req.session.operatore) return res.redirect(reparto);
   const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE codice_qr = $1`, [req.params.codice]);
   if (!c) return res.status(404).send('Commessa non trovata');
-  if (req.session.utente?.ruolo === 'ufficio') return res.redirect(`/commesse/${c.id}`);
+  if (req.session.utente?.ruolo === 'ufficio' || req.session.utente?.ruolo === 'esterno') return res.redirect(`/commesse/${c.id}`);
   res.redirect('/r/accesso?torna=' + encodeURIComponent(reparto));
 });
 

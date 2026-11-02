@@ -886,6 +886,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
   },
   {
+    id: 'accesso-esterni', area: 'amministrazione', titolo: 'Accesso per esterni: vede tutto, non modifica nulla',
+    parole: 'esterno esterni consulente ospite visitatore revisore auditor socio banca utente accesso password sola lettura profilo vedere tutto consultare',
+    testo: [
+      'Per chi da fuori deve vedere il portale senza toccare nulla (consulenti, revisori, auditor, ospiti) c\'è il profilo "Esterno (vede tutto, sola lettura)": stesso menu dell\'ufficio, entra nel cruscotto generale e apre tutte le pagine (anagrafiche, preventivi, commesse, ordini, acquisti, amministrazione, qualità, dipendenti, suggerimenti), scarica Excel e stampe e usa la ricerca in alto.',
+      'Non può modificare nulla: le caselle sono spente, i pulsanti Salva, Elimina, Emetti, Invia… e le spunte degli elenchi non compaiono, e il portale rifiuta comunque ogni modifica. In alto c\'è la scritta "sola lettura".',
+      'Restano fuori le Impostazioni (chiavi dei servizi, utenti, backup) e l\'area riservata delle buste paga; il costo del personale per mese invece si vede, come per l\'ufficio.',
+      'L\'utente lo crea l\'ufficio in Impostazioni → Utenti con il profilo "Esterno (vede tutto, sola lettura)" e una password di almeno 10 caratteri. Per chiudere l\'accesso si toglie la spunta Attivo.',
+    ],
+    passi: ['Impostazioni → Utenti.', 'Nell\'ultima riga scrivi nome ed email, scegli "Esterno (vede tutto, sola lettura)" e una password.', 'Premi Aggiungi e manda indirizzo del portale, email e password alla persona.', 'Finito il lavoro, togli la spunta Attivo.'],
+    pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
+  },
+  {
     id: 'acquisti-mese', area: 'amministrazione', titolo: 'Acquisti per fornitore e mese (cosa ho comprato)',
     parole: 'acquisti comprato comprati spesa spese mese mensile fornitore fornitori mouser digikey anthropic online traccia riepilogo',
     testo: [
