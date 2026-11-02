@@ -500,6 +500,7 @@ nav.tasti-anagrafiche .conta { font-size: .78rem; font-weight: 500; background: 
 nav.tasti-anagrafiche a.attiva .conta { background: rgba(255,255,255,.2); color: #fff; }
 .ricerca-veloce { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin-bottom: .8rem; }
 .ricerca-veloce input[type=search] { flex: 1 1 24rem; max-width: 40rem; font-size: 1.05rem; padding: .6rem .75rem; }
+.ricerca-veloce select { width: auto; max-width: 18rem; }
 .dentro-blocco { padding: 0 1rem 1rem; }
 
 /* Amministrazione: documenti */

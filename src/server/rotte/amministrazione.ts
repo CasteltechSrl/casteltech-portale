@@ -36,6 +36,7 @@ import {
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
 import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
 import { marginePreventivo } from '../../engine/analisi.js';
@@ -604,6 +605,25 @@ export function rotteAmministrazione() {
     res.send(String(stampaDdt(d, righe, azienda, dest)));
   });
 
+  // PDF del DDT (lo stesso che parte allegato all'email)
+  r.get('/documenti/:id/pdf', async (req, res) => {
+    const pdf = await pdfDelDdt(Number(req.params.id));
+    if (!pdf) return res.status(404).send('DDT non trovato');
+    res.type('application/pdf').setHeader('Content-Disposition', `inline; filename="${pdf.nome}"`);
+    res.send(pdf.dati);
+  });
+
+  // invio del DDT per email con Gmail (Adriano 2/11/2026)
+  r.post('/documenti/:id/email', async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const a = await inviaDdtEmail(id, req.body);
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`DDT mandato a ${a} con il PDF allegato.`)}`);
+    } catch (e: any) {
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`Email non inviata: ${e?.message ?? e}`)}`);
+    }
+  });
+
   r.post('/documenti/:id/gia-fatturato', async (req, res) => {
     const id = Number(req.params.id);
     const n = await segnaGiaFatturati([id], req.session.utente?.nome ?? 'ufficio');
@@ -657,6 +677,7 @@ export function rotteAmministrazione() {
     if (d.stato !== 'bozza') {
       const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
       const trasporto = d.dati_trasporto ?? {};
+      const email = d.tipo === 'ddt' && d.stato !== 'annullato' && d.numero != null ? await propostaEmailDdt(id) : null;
       return res.send(pagina(req, titolo, html`${testa}
         ${d.causale ? html`<p class="nota">${d.causale}</p>` : ''}
         ${d.tipo === 'ddt' && Object.keys(trasporto).length ? html`<p class="nota">${Object.entries(ETICHETTE_TRASPORTO).filter(([k]) => trasporto[k])
@@ -691,7 +712,22 @@ export function rotteAmministrazione() {
             data-conferma="Creare una nota di credito (bozza) che storna questa fattura?"><button>Crea nota di credito</button></form>
             ${d.tipo_sdi !== 'TD05' ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-debito" class="inline"
             data-conferma="Creare una nota di debito (bozza) che aumenta l'importo di questa fattura?"><button title="Per aggiungere importi a questa fattura (costi dimenticati, adeguamenti)">Crea nota di debito</button></form>` : ''}` : ''}
-        </div>`, msg(req)));
+        </div>
+        ${email ? html`<form method="post" action="/amministrazione/documenti/${id}/email" class="blocco" data-conferma="Mandare il DDT n. ${d.numero} per email con il PDF allegato?">
+          <h2>Invia il DDT per email</h2>
+          ${d.email_inviata_il ? html`<p class="nota">Già mandato a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}.</p>` : ''}
+          <div class="riga-campi">
+            <label class="largo">A <input name="a" value="${email.a}" placeholder="magazzino@cliente.it (più indirizzi separati da virgola)"></label>
+            <label>Cc <input name="cc" value=""></label>
+          </div>
+          <label>Oggetto <input name="oggetto" value="${email.oggetto}"></label>
+          <label>Testo <textarea name="testo" rows="7">${email.testo}</textarea></label>
+          <div class="barra-azioni">
+            <span class="nota">${email.attivo ? html`Parte da ${email.mittente} con allegato il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">PDF del DDT</a>.`
+              : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">PDF del DDT</a> e mandalo dalla posta.`}</span>
+            <button class="primario" ${email.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
+          </div>
+        </form>` : ''}`, msg(req)));
     }
 
     if (d.tipo === 'ddt') return res.send(pagina(req, titolo, html`${testa}${await moduloDdt(d, righe)}`, msg(req), ['documenti.js', 'autosalva.js']));

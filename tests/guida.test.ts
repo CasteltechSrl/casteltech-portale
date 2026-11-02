@@ -38,6 +38,9 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('prezzo di vendita del prodotto', 2).includes('prezzi-anagrafiche'));
   assert.ok(primi('ultimo prezzo di acquisto componente', 2).includes('prezzi-anagrafiche'));
   assert.ok(primi('prezzo a scaglioni di quantità', 2).includes('prezzi-anagrafiche'));
+  assert.ok(primi('mandare il ddt per email', 2).includes('ddt-emessi'));
+  assert.ok(primi('aggiungere un componente che manca', 2).includes('archivio-componenti'));
+  assert.ok(primi('elenco componenti disponibili', 2).includes('archivio-componenti'));
   assert.ok(primi('codice dal menu nella fattura', 3).includes('nuova-fattura'));
   assert.ok(primi('aggiornare il prezzo in anagrafica', 3).includes('prezzi-anagrafiche'));
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);
