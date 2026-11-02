@@ -552,12 +552,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT, stamparlo e mandarlo per email',
-    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare email mail inviare mandare gmail componente componenti conto lavoro restituire libero',
+    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare email mail inviare mandare gmail componente componenti conto lavoro restituire libero modificare correggere cambiare sbagliato errore',
     testo: [
       'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
-      'Con "Emetti" il DDT prende il numero successivo e non si modifica più. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
+      'Con "Emetti" il DDT prende il numero successivo. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
       'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
+      'Un DDT emesso si corregge con "Modifica DDT" (righe, quantità, trasporto, destinazione): numero e data restano gli stessi. Non si modifica più quando è in una fattura già mandata allo SdI (o fatta in Fatture in Cloud). Se il DDT è in una fattura non ancora mandata, correggi anche la fattura. Se lo avevi già mandato per email, rimandalo.',
       'Se la merce non parte, "Annulla DDT": il numero resta usato e il DDT resta nell\'elenco come annullato. Un DDT già messo in una fattura non si annulla.',
       'Per fatturarlo: "Fattura questo DDT" prepara la fattura con le sue righe; si possono aggiungere altri DDT dello stesso cliente.',
       'Ogni riga del DDT ha il menu "Da": Prodotto (i codici del cliente, come prima), Componente nostro (archivio Componenti: si cerca per P/N, codice gestionale o codice di produzione; sul DDT va il codice gestionale e in descrizione il P/N con il codice di produzione tra parentesi), Componente cliente (i codici del materiale in conto lavoro del cliente del DDT, Anagrafiche → Componenti clienti: per restituirlo non montato) oppure Libero (codice e descrizione scritti a mano, senza anagrafica).',

@@ -158,3 +158,21 @@ export function destinatarioDdt(c: { ultimoDdt?: string | null; amministrazione?
   for (const x of [c.ultimoDdt, c.amministrazione, c.crm, c.pec]) if (x && /@/.test(x)) return x.trim();
   return '';
 }
+
+/** Stati della fattura che vogliono dire "già allo SdI" (lo scartato si corregge e si rimanda). */
+export const STATI_FATTURA_ALLO_SDI = ['inviato', 'consegnato', 'non_consegnato'] as const;
+
+/**
+ * DDT emesso che si corregge (Adriano 2/11/2026: "un DDT non ha nessuna valenza fiscale"): si modifica anche dopo l'emissione,
+ * con lo stesso numero e la stessa data, SALVO se è in una fattura già mandata allo SdI (o fatta in Fatture in Cloud, che l'ha già mandata).
+ * Restituisce null se si può modificare, altrimenti il motivo. `fatture` = fatture (non annullate) che contengono il DDT.
+ */
+export function bloccoModificaDdt(d: { tipo: string; origine: string | null; stato: string },
+  fatture: { numero: number | string | null; origine: string | null; stato: string }[]): string | null {
+  if (d.tipo !== 'ddt') return 'Dopo l\'emissione si modificano solo i DDT.';
+  if (d.origine && d.origine !== 'portale') return 'I DDT arrivati da Fatture in Cloud non si modificano.';
+  if (d.stato === 'annullato') return 'Il DDT è annullato.';
+  const sdi = fatture.find(f => (f.origine && f.origine !== 'portale') || (STATI_FATTURA_ALLO_SDI as readonly string[]).includes(f.stato));
+  if (sdi) return `Il DDT è nella fattura n. ${sdi.numero ?? ''} già mandata allo SdI: non si modifica più.`;
+  return null;
+}

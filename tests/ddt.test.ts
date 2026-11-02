@@ -106,3 +106,17 @@ test('Riga d\'ordine della commessa: prima quella che la cita, poi lo stesso pro
   assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: 99 }), undefined);
   assert.equal(rigaOrdinePerCommessa(righe, { id: 1, prodotto_id: null }), undefined);
 });
+
+test('DDT emesso: si corregge finché non è in una fattura già allo SdI (Adriano 2/11/2026)', async () => {
+  const { bloccoModificaDdt } = await import('../src/engine/ddt.js');
+  const ddt = { tipo: 'ddt', origine: 'portale', stato: 'emesso' };
+  assert.equal(bloccoModificaDdt(ddt, []), null);
+  assert.equal(bloccoModificaDdt(ddt, [{ numero: null, origine: 'portale', stato: 'bozza' }]), null);      // fattura in preparazione
+  assert.equal(bloccoModificaDdt(ddt, [{ numero: 130, origine: 'portale', stato: 'emesso' }]), null);     // emessa ma non ancora mandata
+  assert.equal(bloccoModificaDdt(ddt, [{ numero: 130, origine: 'portale', stato: 'scartato' }]), null);   // scartata: si corregge e si rimanda
+  for (const stato of ['inviato', 'consegnato', 'non_consegnato'])
+    assert.match(bloccoModificaDdt(ddt, [{ numero: 130, origine: 'portale', stato }]) ?? '', /SdI/);
+  assert.match(bloccoModificaDdt(ddt, [{ numero: 120, origine: 'fic', stato: 'emesso' }]) ?? '', /SdI/);  // fatturato in FIC
+  assert.ok(bloccoModificaDdt({ ...ddt, origine: 'fic' }, []));
+  assert.ok(bloccoModificaDdt({ ...ddt, stato: 'annullato' }, []));
+});

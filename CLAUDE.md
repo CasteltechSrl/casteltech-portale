@@ -476,7 +476,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ✅ DDT emessi dal portale (Adriano 28/10/2026; `engine/ddt.ts`, `documenti-servizio.ts`, stampa `views/stampa-documento.ts` → `/amministrazione/documenti/:id/stampa`):
    "Crea DDT" nella pagina dell'ordine (schede ancora da spedire, `riga_ordine_id` collegata: l'evasione la conta) o "+ Nuovo DDT"; trasporto in `dati_trasporto`
    (causale, a_cura, trasportatore, porto, colli, peso, aspetto, destinazione, inizio) proposto dall'ultimo DDT del cliente; prezzo non stampato (serve alla fattura).
-   Emetti = numero in transazione (`controlliDdt`); "Annulla DDT" se la merce non parte (numero usato, stato annullato; non se è in una fattura); "Fattura questo DDT".
+   Emetti = numero in transazione (`controlliDdt`); DDT emesso si corregge con "Modifica DDT" (Adriano 2/11/2026: nessuna valenza fiscale; stesso numero e data, `?modifica=1`, `salvaBozza`) finché non è in una fattura già allo SdI o di FIC (`bloccoModificaDdt` in `engine/ddt.ts`, test in `tests/ddt.test.ts`); "Annulla DDT" se la merce non parte (numero usato, stato annullato; non se è in una fattura); "Fattura questo DDT".
    DDT per email (Adriano 2/11/2026; `ddt-email-servizio.ts`, PDF con pdf-lib in `pdf-ddt.ts`, GET `/documenti/:id/pdf`, POST `/documenti/:id/email`): riquadro nella pagina
    del DDT emesso, indirizzo proposto = ultimo DDT mandato allo stesso cliente > email amministrativa > CRM > PEC (`destinatarioDdt`), Gmail di info@, `email_a`/`email_inviata_il`.
    ✅ PDF di cortesia di fattura e nota di credito (Adriano 31/10/2026; `stampaFattura` in `views/stampa-documento.ts`, stessa pagina `/documenti/:id/stampa`
