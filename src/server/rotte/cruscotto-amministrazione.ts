@@ -3,6 +3,7 @@
  * incassi e pagamenti in scadenza, DDT da fatturare, bozze da finire. I conti stanno in engine/cruscotto-amministrazione.ts.
  */
 import { q } from '../db.js';
+import { SCHEDE_DOCUMENTI } from '../../engine/azioni-documenti.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../../engine/ddt.js';
@@ -13,8 +14,13 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MOSTRATE = 12;   // scadenze elencate per riquadro (le altre sono nei totali)
 
 /** Tasti in cima a tutte le pagine dell'Amministrazione. */
-export function menuAmministrazione(attiva: 'cruscotto' | 'documenti' | 'ricevuti' | 'registri' | 'vies' | 'analisi' | 'fiscale'): Raw {
-  const voci = [['cruscotto', '/amministrazione', 'Cruscotto'], ['documenti', '/amministrazione/documenti', 'Documenti emessi'],
+/**
+ * Tasti della sezione Amministrazione. DDT, Fatture, Autofatture e Note di credito stanno qui direttamente, al posto di
+ * "Documenti emessi" con le sue schede (Adriano 2/11/2026: sono i documenti che si usano di più). Indirizzi invariati.
+ */
+export function menuAmministrazione(attiva: 'cruscotto' | 'ddt' | 'fattura' | 'autofattura' | 'nota_credito' | 'ricevuti' | 'registri' | 'vies' | 'analisi' | 'fiscale'): Raw {
+  const voci = [['cruscotto', '/amministrazione', 'Cruscotto'],
+    ...SCHEDE_DOCUMENTI.map(s => [s.tipo, `/amministrazione/documenti?tipo=${s.tipo}`, s.tanti] as const),
     ['ricevuti', '/amministrazione/ricevuti', 'Fatture fornitori'], ['registri', '/amministrazione/registri', 'Registri IVA'],
     ['vies', '/amministrazione/vies', 'Controllo VIES'], ['fiscale', '/amministrazione/spese', 'Spese, bollo, lettere d\'intento'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
   return html`<nav class="tasti-sezione">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}

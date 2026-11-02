@@ -82,3 +82,12 @@ test('profilo Contabilità: pagine dell\'Amministrazione in fila, senza tendine;
   assert.match(pagina('ufficio'), /<nav class="menu"><!--/);
   assert.doesNotMatch(pagina('ufficio'), /menu-piatto/);
 });
+
+test('Amministrazione (Adriano 2/11/2026): DDT, Fatture, Autofatture, Note di credito nel menu al posto di "Documenti emessi"', async () => {
+  const { MENU_GRUPPI, MENU_CONTABILITA } = await import('../src/server/views/layout.js');
+  const g = MENU_GRUPPI.find(x => x.chiave === 'amministrazione')!;
+  assert.deepEqual(g.voci.slice(0, 5).map(v => v[0]), ['Cruscotto', 'DDT', 'Fatture', 'Autofatture', 'Note di credito']);
+  assert.ok(!g.voci.some(v => v[0] === 'Documenti emessi'));
+  assert.ok(!MENU_CONTABILITA.some(v => v[0] === 'Documenti emessi'));
+  assert.equal(g.voci[1][1], '/amministrazione/documenti?tipo=ddt');
+});

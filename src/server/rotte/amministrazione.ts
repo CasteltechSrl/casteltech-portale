@@ -43,7 +43,7 @@ import { marginePreventivo } from '../../engine/analisi.js';
 import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
+import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
 import { compensaNoteCredito, documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, rimettiDaFatturare, scriviXml, segnaGiaFatturati, segnaIncassate } from '../azioni-documenti-servizio.js';
 
 // schede nell'ordine scelto da Adriano (1/11/2026): DDT, Fatture, Autofatture, Note di credito
@@ -279,7 +279,7 @@ export function rotteAmministrazione() {
             <select name="modo" required title="Come è stata incassata"><option value="">Modo di pagamento…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select>
             <button>Segna incassata</button></form></td></tr>`)}</tbody></table></div>`
         : html`<p class="vuoto">Nessuna rata in scadenza nei prossimi 14 giorni.</p>`}
-      <p class="nota">Le rate già scadute si segnano incassate dalla fattura o da Documenti emessi → Segna incassate.</p>`, msg(req)));
+      <p class="nota">Le rate già scadute si segnano incassate dalla fattura o da Amministrazione → Fatture → Segna incassate.</p>`, msg(req)));
   });
 
   // ── Solleciti incassi (proposta della revisione, Adriano 1/11/2026) ──
@@ -291,7 +291,7 @@ export function rotteAmministrazione() {
       <div class="intestazione-pagina"><h1>Solleciti incassi · rate scadute per cliente</h1><div class="azioni"><a class="bottone" href="/amministrazione">Cruscotto</a></div></div>
       <p class="nota">Tutte le rate scadute e non incassate delle fatture emesse, un gruppo per cliente. <b>Prepara il sollecito</b> scrive l'email con l'elenco delle fatture, gli importi e l'IBAN:
         la controlli e la mandi (con Gmail quando la delega è attiva, altrimenti con la tua posta). Il tono sale con il ritardo: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso.
-        Una rata incassata si segna dalla fattura (o da Documenti emessi → Segna incassate) e sparisce da qui.</p>
+        Una rata incassata si segna dalla fattura (o da Amministrazione → Fatture → Segna incassate) e sparisce da qui.</p>
       ${gruppi.length ? html`<p class="nota">${gruppi.length} clienti, ${euro(totale)} scaduti.</p>
       <div class="tabella-scorre"><table class="elenco solleciti"><thead><tr><th>Cliente</th><th class="n">Rate</th><th class="n">Scaduto</th><th class="n">Ritardo max</th><th>Livello</th><th>Email</th><th></th></tr></thead>
         <tbody>${gruppi.map(g => html`<tr class="livello-${g.livello}">
@@ -416,9 +416,7 @@ export function rotteAmministrazione() {
           ${tipo === 'ddt' ? html`<a href="/amministrazione/documenti/nuovo?tipo=ddt" class="bottone primario">+ Nuovo DDT</a>`
             : html`<a href="/amministrazione/documenti/nuovo?tipo=fattura" class="bottone primario">+ Nuova fattura</a>`}
         </div></div>
-      ${menuAmministrazione('documenti')}
-      <nav class="tasti-sezione">${Object.entries(NOMI).map(([k, v]) =>
-        html`<a href="/amministrazione/documenti?tipo=${k}&anno=${anno}" class="${k === tipo ? 'attivo' : ''}">${v.tanti}</a>`)}</nav>
+      ${menuAmministrazione(tipo as TipoDocumentoElenco)}
       <form class="cerca" method="get">
         <input type="hidden" name="tipo" value="${tipo}">
         <select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>

@@ -4,7 +4,10 @@
   const qui = location.pathname.replace(/\/+$/, '') || '/';
   let migliore = null;
   for (const a of voci) {
-    const h = new URL(a.href).pathname.replace(/\/+$/, '');
+    const u = new URL(a.href), h = u.pathname.replace(/\/+$/, '');
+    // DDT / Fatture / Autofatture / Note di credito: stesso indirizzo, cambia solo ?tipo= (senza tipo si apre sui DDT)
+    const tipo = u.searchParams.get('tipo');
+    if (tipo && qui === h && (new URLSearchParams(location.search).get('tipo') || 'ddt') !== tipo) continue;
     if ((qui === h || qui.startsWith(h + '/')) && (!migliore || h.length > migliore.h.length)) migliore = { a, h };
   }
   if (migliore) migliore.a.classList.add('attiva');
