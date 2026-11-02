@@ -4,6 +4,7 @@
  * Il profilo Contabilità (sola lettura) cerca solo tra i documenti emessi e le fatture dei fornitori.
  */
 import { q } from './db.js';
+import { STATI_CRM, escluso, type StatoCrm } from '../engine/crm.js';
 import type { Ruolo } from '../engine/ruoli.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
 import { cercaGuida, indirizzoArgomento } from '../engine/guida.js';
@@ -78,7 +79,7 @@ export async function cercaOvunque(testoGrezzo: string, ruolo: Ruolo): Promise<R
     letture.push(q(`SELECT id, ragione_sociale, citta, stato, cliente_id FROM crm_aziende
       WHERE cliente_id IS NULL AND (${SQL_COMPATTO('ragione_sociale')} OR partita_iva = $1 OR coalesce(altri_nomi, '') ILIKE '%' || $1 || '%')
       ORDER BY ragione_sociale LIMIT ${LIMITE}`, [t])
-      .then(righe => righe.map(a => ({ tipo: 'crm' as const, titolo: a.ragione_sociale, dettaglio: [a.citta, a.stato].filter(Boolean).join(' · '), href: `/crm/${a.id}`, chiave: a.ragione_sociale }))));
+      .then(righe => righe.map(a => ({ tipo: 'crm' as const, titolo: a.ragione_sociale, dettaglio: [a.citta, STATI_CRM[a.stato as StatoCrm] ?? a.stato, escluso(a.stato) ? 'da non ricontattare' : ''].filter(Boolean).join(' · '), href: `/crm/${a.id}`, chiave: a.ragione_sociale }))));
     if (compatto.length >= 3 && !r.numero) {
       letture.push(q(`SELECT pn, codice_produzione, codice_gestionale, descrizione FROM componenti
         WHERE ${SQL_COMPATTO('pn')} OR ${SQL_COMPATTO('codice_produzione')} OR ${SQL_COMPATTO('codice_gestionale')} ORDER BY pn LIMIT ${LIMITE}`, [t])

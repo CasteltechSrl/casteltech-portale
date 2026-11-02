@@ -886,3 +886,5 @@ ul.elenco-trovati li.attiva, ul.elenco-trovati li:hover { background: var(--acce
 ul.elenco-trovati li.nuovo { color: var(--accento); font-weight: 600; }
 ul.elenco-trovati li.vuoto { color: #777; cursor: default; }
 #componenti-clienti input { width: 100%; min-width: 7rem; }
+/* CRM: azienda non interessata / scartata (non compare negli elenchi) */
+.avviso.crm-escluso { background: #fbe2e0; border-color: var(--negativo); color: var(--negativo); }

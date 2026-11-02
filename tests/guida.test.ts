@@ -161,3 +161,7 @@ test('guida: da chi partono le email (alias per funzione)', () => {
   assert.ok(primi('da quale indirizzo parte la mail', 3).includes('mittenti-email'));
   assert.ok(primi('alias amministrazione ordini', 2).includes('mittenti-email'));
 });
+
+test('guida: clienti non interessati nascosti nel CRM', () => {
+  assert.ok(primi('nascondere non interessati crm', 3).includes('crm-aziende'));
+});

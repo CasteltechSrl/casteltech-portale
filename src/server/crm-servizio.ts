@@ -7,7 +7,7 @@ import type pg from 'pg';
 import { q, transazione } from './db.js';
 import { maiuscolo } from './anagrafiche-servizio.js';
 import { completaAzienda, CAMPI_COMPLETABILI, type PropostaCompletamento } from '../engine/crm-completamento.js';
-import { chiavePiva, chiaveNome, fasciaFatturato, formatta, mediaAnnua, statoDa, statoDopoImport, TIPI_ATTIVITA, trovaCliente, unisciElenco, type ClientePerCollegamento, type StatoCrm } from '../engine/crm.js';
+import { chiavePiva, chiaveNome, fasciaFatturato, formatta, FILTRO_ESCLUSI, mediaAnnua, STATI_ESCLUSI, statoDa, statoDopoImport, TIPI_ATTIVITA, trovaCliente, unisciElenco, type ClientePerCollegamento, type StatoCrm } from '../engine/crm.js';
 
 type Db = Pick<pg.PoolClient, 'query'>;
 
@@ -251,11 +251,12 @@ export async function completaCrm(f: FileCompletamento, opz: { anteprima: boolea
 }
 
 // ───────────────────────────── ricerca ─────────────────────────────
-export interface FiltriCrm { testo?: string; stato?: string; provincia?: string; responsabile?: string; soloAzioni?: boolean; verificare?: boolean }
+export interface FiltriCrm { testo?: string; stato?: string; provincia?: string; responsabile?: string; soloAzioni?: boolean; verificare?: boolean; anchEsclusi?: boolean }
 
 /**
  * Aziende che corrispondono alla ricerca: ogni parola scritta deve comparire in nome, altri nomi, città, provincia,
- * partita IVA, telefoni, email, sito, settore o nei referenti. Le scartate si vedono solo cercandole per stato.
+ * partita IVA, telefoni, email, sito, settore o nei referenti. Non interessate e scartate (`STATI_ESCLUSI`) si vedono solo
+ * scegliendo il loro stato, "Non interessati e scartati" (`FILTRO_ESCLUSI`) o con la spunta `anchEsclusi`.
  */
 export async function cercaAziende(f: FiltriCrm, limite = 200) {
   const parole = String(f.testo ?? '').trim().split(/\s+/).filter(Boolean).map(p => p.replace(/[\\%_]/g, m => '\\' + m));
@@ -265,7 +266,7 @@ export async function cercaAziende(f: FiltriCrm, limite = 200) {
       (SELECT k.nome FROM crm_contatti k WHERE k.azienda_id = a.id ORDER BY k.codice NULLS LAST, k.id LIMIT 1) AS referente
     FROM crm_aziende a LEFT JOIN clienti cl ON cl.id = a.cliente_id
     WHERE ($1::boolean AND a.da_verificare IS NOT NULL OR NOT $1::boolean AND a.da_verificare IS NULL)
-      AND ($2 = '' AND a.stato <> 'scartato' OR a.stato = $2)
+      AND ($2 = '' AND ($8::boolean OR a.stato <> ALL($9::text[])) OR $2 = $10 AND a.stato = ANY($9::text[]) OR a.stato = $2)
       AND ($3 = '' OR a.provincia = $3)
       AND ($4 = '' OR a.responsabile = $4)
       AND (NOT $5::boolean OR a.data_prossima_azione IS NOT NULL)
@@ -275,13 +276,15 @@ export async function cercaAziende(f: FiltriCrm, limite = 200) {
           a.email, a.altre_email, a.sito, a.settore, a.descrizione,
           (SELECT string_agg(concat_ws(' ', k.nome, k.telefono, k.email), ' ') FROM crm_contatti k WHERE k.azienda_id = a.id)) NOT ILIKE '%' || p.parola || '%')
     ORDER BY a.data_prossima_azione NULLS LAST, (a.cliente_id IS NULL), coalesce(cl.ragione_sociale, a.ragione_sociale)
-    LIMIT $7`, [!!f.verificare, f.stato ?? '', String(f.provincia ?? '').trim().toUpperCase(), f.responsabile ?? '', !!f.soloAzioni, parole, limite]);
+    LIMIT $7`, [!!f.verificare, f.stato ?? '', String(f.provincia ?? '').trim().toUpperCase(), f.responsabile ?? '', !!f.soloAzioni, parole, limite,
+      !!f.anchEsclusi, [...STATI_ESCLUSI], FILTRO_ESCLUSI]);
 }
 
 /** Un'azienda del CRM con lo stesso nome (forma giuridica a parte): per non crearne due uguali. */
 export async function aziendaConNome(nome: string) {
   const k = chiaveNome(nome);
-  const righe = await q<{ id: number; ragione_sociale: string }>(`SELECT a.id, coalesce(cl.ragione_sociale, a.ragione_sociale) AS ragione_sociale
+  const righe = await q<{ id: number; ragione_sociale: string; stato: string; ultimo_contatto: string | null }>(`SELECT a.id,
+    coalesce(cl.ragione_sociale, a.ragione_sociale) AS ragione_sociale, a.stato, a.ultimo_contatto
     FROM crm_aziende a LEFT JOIN clienti cl ON cl.id = a.cliente_id`);
   return righe.find(r => chiaveNome(r.ragione_sociale) === k);
 }

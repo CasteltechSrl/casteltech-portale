@@ -9,6 +9,27 @@ export const STATI_CRM = {
 } as const;
 export type StatoCrm = keyof typeof STATI_CRM;
 
+/**
+ * Aziende su cui non ha senso puntare (Adriano 2/11/2026): "Non interessato" e "Scartato" escono dall'elenco, dalle ricerche
+ * e dalle prossime azioni, ma restano nel database, così non si reinseriscono e non si ricontattano per sbaglio.
+ * Si vedono scegliendo lo stato nel filtro o con "mostra anche i non interessati".
+ */
+export const STATI_ESCLUSI: readonly StatoCrm[] = ['non_interessato', 'scartato'];
+export const escluso = (stato: unknown): boolean => STATI_ESCLUSI.includes(String(stato) as StatoCrm);
+
+/** Valore del filtro "Stato" che mostra insieme non interessati e scartati. */
+export const FILTRO_ESCLUSI = 'esclusi';
+
+/** Avviso per chi apre, reinserisce o ricontatta un'azienda esclusa (null se l'azienda è "papabile"). */
+export function avvisoEscluso(a: { stato: unknown; ultimo_contatto?: string | null; ragione_sociale?: string | null }): string | null {
+  if (!escluso(a.stato)) return null;
+  const chi = a.ragione_sociale ? `${a.ragione_sociale} è` : 'Questa azienda è';
+  const quando = a.ultimo_contatto ? ` (ultimo contatto ${String(a.ultimo_contatto).slice(8, 10)}/${String(a.ultimo_contatto).slice(5, 7)}/${String(a.ultimo_contatto).slice(0, 4)})` : '';
+  return a.stato === 'scartato'
+    ? `Attenzione: ${chi} già nel CRM come SCARTATA${quando}: non compare negli elenchi. Leggi lo storico prima di ricontattarla.`
+    : `Attenzione: ${chi} già nel CRM come NON INTERESSATA${quando}: non compare negli elenchi. Leggi lo storico prima di ricontattarla.`;
+}
+
 export const TIPI_ATTIVITA = {
   telefonata: 'Telefonata', email: 'Email', visita: 'Appuntamento / visita', offerta: 'Offerta / quotazione', fiera: 'Fiera / evento', nota: 'Nota',
 } as const;
