@@ -38,5 +38,9 @@ test('SdI: errori di Invoicetronic e dello SdI in italiano leggibile', () => {
   assert.equal(testoErrori(null), '');
   assert.match(messaggioErroreApi(401, { title: 'Unauthorized' }), /Chiave di Invoicetronic non valida/);
   assert.match(messaggioErroreApi(422, { title: 'Unprocessable', errors: { payload: ['Numero mancante'] } }), /payload: Numero mancante/);
+  // errori della validazione SdI come elenco, e risposta senza dettagli mostrata com'è (prova del 2/11/2026: solo "Bad Request")
+  assert.match(messaggioErroreApi(400, { title: 'Bad Request', errors: [{ code: '00305', description: 'IdFiscaleIVA non valido', hint: 'controlla la P.IVA' }] }), /00305 – IdFiscaleIVA non valido – controlla la P.IVA/);
+  assert.match(messaggioErroreApi(400, { title: 'Bad Request', status: 400, motivo: 'company non trovata' }), /company non trovata/);
+  assert.equal(messaggioErroreApi(400, { title: 'Bad Request', status: 400 }), 'Bad Request');
   assert.match(messaggioErroreApi(400, { detail: 'A file with the same name already exists.' }), /same name/);
 });
