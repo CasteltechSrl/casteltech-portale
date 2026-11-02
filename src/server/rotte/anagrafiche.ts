@@ -4,6 +4,7 @@
  * Nei preventivi cliente e codice si scelgono SOLO da qui. Tutto in maiuscolo.
  */
 import express, { Router, type Request } from 'express';
+import { maiuscoloPulito } from '../../engine/componenti-clienti.js';
 import { conCampo } from '../../engine/errori-campo.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
@@ -222,6 +223,14 @@ export function rotteAnagrafiche() {
     const cliente = Number(req.body.cliente_id) || '';
     if (errore) return res.redirect(conCampo(torna(errore, '/componenti-clienti', `&cliente=${cliente}`), errore.includes('cliente.') ? 'cliente_id' : 'codice', 'k-nuovo'));
     res.redirect(torna(`Componente ${String(req.body.codice ?? '').trim().toUpperCase()} aggiunto.`, '/componenti-clienti', `&cliente=${cliente}`));
+  });
+  // componente nuovo del cliente dalla riga del DDT (Adriano 2/11/2026: "se il codice non c'è dare la possibilità di inserirlo come nuovo")
+  r.post('/componenti-clienti/nuovo-riga', async (req, res) => {
+    const errore = await aggiungiComponenteCliente(req.body);
+    if (errore) return res.status(400).json({ errore });
+    const k = await q1(`SELECT id, codice, descrizione FROM componenti_clienti WHERE cliente_id = $1 AND codice = $2`,
+      [Number(req.body.cliente_id), maiuscoloPulito(req.body.codice)]);
+    res.json(k);
   });
   r.post('/componenti-clienti/carica', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
     const clienteId = Number(req.query.cliente) || 0;
