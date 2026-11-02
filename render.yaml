@@ -1,5 +1,5 @@
 # Configurazione Render ("Blueprint").
-# Costo: sito 7 $/mese + disco backup 1 GB 0,25 $/mese. Il database è su Neon (piano gratuito).
+# Costo: portale 7 $/mese + disco backup 1 GB 0,25 $/mese. Il database è su Neon (piano gratuito).
 services:
   - type: web
     name: casteltech-portale
@@ -10,6 +10,9 @@ services:
     startCommand: npm start
     healthCheckPath: /salute
     autoDeploy: true            # ogni modifica salvata su GitHub (ramo main) viene pubblicata da sola
+    buildFilter:
+      ignoredPaths:
+        - sito/**               # le modifiche al sito pubblicano solo il sito, non riavviano il portale
     disk:
       name: backup
       mountPath: /var/data
@@ -48,3 +51,42 @@ services:
         sync: false
       - key: TME_APP_SECRET
         sync: false
+
+  # Sito casteltech.net (Adriano, 2/11/2026: da WordPress su Noamweb a pagine statiche, gratis su Render).
+  # Pagine in sito/pubblico; i moduli Contatti e Preventivo li riceve il portale (/api/sito/..., src/server/rotte/sito.ts).
+  - type: web
+    name: casteltech-sito
+    runtime: static
+    buildCommand: echo "pagine statiche, niente da costruire"
+    staticPublishPath: ./sito/pubblico
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - sito/**
+    headers:
+      - path: /wp-content/*
+        name: Cache-Control
+        value: public, max-age=2592000
+      - path: /wp-includes/*
+        name: Cache-Control
+        value: public, max-age=2592000
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      # indirizzi di WordPress che non esistono più: alla pagina iniziale (rimando permanente, non si perde posizionamento)
+      - type: redirect
+        source: /index.php
+        destination: /
+      - type: redirect
+        source: /feed/*
+        destination: /
+      - type: redirect
+        source: /wp-admin/*
+        destination: /
+      - type: redirect
+        source: /wp-login.php
+        destination: /
+      - type: redirect
+        source: /en/feed/*
+        destination: /en/

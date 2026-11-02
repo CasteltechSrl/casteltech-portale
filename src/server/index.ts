@@ -33,6 +33,7 @@ import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { rotteDipendenti } from './rotte/dipendenti.js';
 import { rotteGmail } from './rotte/gmail.js';
+import { rotteSito } from './rotte/sito.js';
 import { rotteApiClaude } from './rotte/api-claude.js';
 import { rotteApiBackup } from './rotte/api-backup.js';
 import { rotteCalendario } from './rotte/calendario.js';
@@ -58,6 +59,8 @@ app.post('/sdi/webhook', express.raw({ type: '*/*', limit: '1mb' }), async (req,
 });
 // pulsante "Portale Casteltech" dentro Gmail: entra con la sua chiave, senza sessione, e manda file più grandi dei moduli (prima dei lettori da 2 MB)
 app.use('/api/gmail', rotteGmail());
+// moduli Contatti e Richiedi un preventivo del sito casteltech.net (pagine statiche): senza sessione, prima dei lettori da 2 MB
+app.use('/api/sito', rotteSito());
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 // controllo settimanale dei suggerimenti fatto da Claude: entra con la sua chiave, senza sessione

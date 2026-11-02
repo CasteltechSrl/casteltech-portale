@@ -198,6 +198,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/preventivi/documenti', 'Documenti del cliente'], ['/ordini/acquisire', 'Ordini → Da acquisire'], ['/amministrazione/fatture-estere', 'Autofatture']],
   },
   {
+    id: 'moduli-sito', area: 'inizio', titolo: 'Richieste dal sito casteltech.net (Contatti e Richiedi un preventivo)',
+    parole: 'sito web casteltech.net modulo contatti richiesta preventivo internet visitatore form messaggio richiedi',
+    testo: [
+      'Il sito casteltech.net è fatto di pagine semplici ospitate su Render insieme al portale (non più WordPress). I due moduli del sito li riceve il portale.',
+      'Contatti: il messaggio arriva per email a info@casteltech.net con oggetto "Sito casteltech.net – Contatto". Premendo "Rispondi" la risposta va a chi ha scritto.',
+      'Richiedi un preventivo: nasce un pacchetto in Preventivi → Documenti del cliente con nome "SITO – AZIENDA", con il testo della richiesta (quantità, componenti, note) in cima alla pagina e i file utili allegati (BOM, Gerber, pick and place, zip). L\'analisi parte da sola. Arriva anche un\'email a info@ con il link al pacchetto.',
+      'Il cliente si collega da solo se l\'email è di un cliente in anagrafica, altrimenti lo scegli tu. Contro i robot il portale scarta i moduli compilati in pochi secondi e oltre 5 invii all\'ora dallo stesso indirizzo.',
+      'Per cambiare un testo o una foto del sito chiedi a Claude: le pagine sono nella cartella sito/ del programma.',
+    ],
+    passi: ['Apri Preventivi → Documenti del cliente.', 'Apri il pacchetto "SITO – …" e controlla testo e file.', 'Scegli il cliente (o aggiungilo) e prosegui come per una richiesta arrivata via email.'],
+    pagine: [['/preventivi/documenti', 'Documenti del cliente']],
+  },
+  {
     id: 'eliminare', area: 'inizio', titolo: 'Cosa si può eliminare e cosa no',
     parole: 'elimina cancella cancellare togliere errore sbagliato rimuovere annullare disattiva',
     testo: [
