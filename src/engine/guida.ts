@@ -298,12 +298,15 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/fornitori', 'Anagrafiche → Fornitori']],
   },
   {
-    id: 'archivio-componenti', area: 'anagrafiche', titolo: 'Archivio dei componenti (codici di produzione e gestionale)',
-    parole: 'archivio componenti codice gestionale moka armadio excel scaricare',
+    id: 'archivio-componenti', area: 'anagrafiche', titolo: 'Archivio dei componenti: elenco, ricerca e aggiungere un componente',
+    parole: 'archivio componenti componente codice gestionale moka armadio excel scaricare elenco disponibili tutti famiglia aggiungere nuovo manca inserire',
     testo: [
-      'Tutti i componenti già codificati, con il codice di produzione (quello dell\'armadio, es. RS-0603-2K2-1-100MW) e il codice gestionale (es. SRS-0603-2K20F-001). Si può scaricare tutto in Excel.',
-      'I componenti nuovi entrano in archivio dalla codifica delle BOM (sezione Quotazioni).',
+      'Tutti i componenti già codificati, con il codice di produzione (quello dell\'armadio, es. RS-0603-2K2-1-100MW) e il codice gestionale (es. SRS-0603-2K20F-001). Aprendo la pagina si vede l\'elenco di tutto l\'archivio, a pagine da 100, in ordine di codice gestionale; il menu "Tutte le famiglie" mostra una famiglia sola (es. RS resistenze). Si può scaricare tutto in Excel.',
+      'La ricerca (P/N, codici o descrizione, poi Invio) trova il componente; "Mostra tutti" torna all\'elenco completo.',
+      'Se un componente manca, "+ Aggiungi componente": si scrive il P/N (o la descrizione, se non c\'è il P/N) e il portale lo codifica come in Quotazioni → Codifica un P/N (codice di produzione, codice gestionale con il primo numero libero, prezzi dai distributori). Si controlla e si preme "Salva nell\'archivio": si torna all\'archivio con il componente nuovo. Se il P/N è già in archivio, il portale lo mostra senza creare doppioni.',
+      'I componenti nuovi entrano in archivio anche dalla codifica delle BOM (sezione Quotazioni). Non è un magazzino: l\'archivio dice come si codifica un componente, non quanti pezzi ci sono.',
     ],
+    passi: ['Anagrafiche → Componenti.', 'Cerca il P/N; se non c\'è, compila "+ Aggiungi componente" (in fondo alla pagina) e premi Codifica e aggiungi.', 'Controlla codici e prezzi, poi premi Salva nell\'archivio.'],
     pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/quotazioni', 'Quotazioni (codifica)']],
   },
   {
@@ -535,8 +538,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/differite', 'Fatture differite'], ['/amministrazione/documenti', 'Documenti emessi']],
   },
   {
-    id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT e stamparlo',
-    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare',
+    id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT, stamparlo e mandarlo per email',
+    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare email mail inviare mandare gmail',
     testo: [
       'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
@@ -544,8 +547,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
       'Se la merce non parte, "Annulla DDT": il numero resta usato e il DDT resta nell\'elenco come annullato. Un DDT già messo in una fattura non si annulla.',
       'Per fatturarlo: "Fattura questo DDT" prepara la fattura con le sue righe; si possono aggiungere altri DDT dello stesso cliente.',
+      'Per mandarlo al cliente: nella pagina del DDT emesso, riquadro "Invia il DDT per email". L\'indirizzo proposto è quello a cui è stato mandato l\'ultimo DDT dello stesso cliente (altrimenti l\'email amministrativa, poi quella del CRM, poi la PEC); oggetto e testo si possono cambiare. "Invia con Gmail" lo manda da info@ con il PDF del DDT allegato e resta scritto a chi e quando è partito.',
     ],
-    passi: ['Apri l\'ordine e premi Crea DDT (oppure + Nuovo DDT e scegli il cliente).', 'Controlla quantità, colli, peso, vettore e destinazione, poi Salva.', 'Premi Emetti.', 'Premi Stampa / PDF e stampa due copie.'],
+    passi: ['Apri l\'ordine e premi Crea DDT (oppure + Nuovo DDT e scegli il cliente).', 'Controlla quantità, colli, peso, vettore e destinazione, poi Salva.', 'Premi Emetti.', 'Premi Stampa / PDF e stampa due copie.', 'Se serve, in fondo alla pagina controlla l\'indirizzo e premi Invia con Gmail.'],
     pagine: [['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/ordini', 'Ordini']],
   },
   {

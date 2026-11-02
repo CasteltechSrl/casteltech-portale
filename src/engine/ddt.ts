@@ -127,3 +127,34 @@ export function indirizzoSu(c: { indirizzo?: string | null; cap?: string | null;
   const citta = [c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' ');
   return [c.indirizzo, citta, c.nazione && c.nazione !== 'IT' ? c.nazione : ''].filter(Boolean).join('\n');
 }
+
+// ───────────────────────────── invio del DDT per email (Adriano 2/11/2026) ─────────────────────────────
+
+const dataItDdt = (d: string | null | undefined) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '');
+
+/** Oggetto e testo proposti per l'email del DDT (l'ufficio li può cambiare prima di inviare). */
+export function emailDdt(o: { numero: string; data: string; azienda: string; riferimento?: string | null; causale?: string | null; trasportatore?: string | null; colli?: string | null }) {
+  const rif = o.riferimento?.trim() ? ` (${o.riferimento.trim()})` : '';
+  const partenza = [o.colli ? `${o.colli} ${o.colli === '1' ? 'collo' : 'colli'}` : '', o.trasportatore ? `con ${o.trasportatore}` : ''].filter(Boolean).join(' ');
+  return {
+    oggetto: `DDT n. ${o.numero} del ${dataItDdt(o.data)} - ${o.azienda}`,
+    testo: `Buongiorno,\n\nin allegato il nostro documento di trasporto n. ${o.numero} del ${dataItDdt(o.data)}${rif}.\n`
+      + `${partenza ? `La merce parte ${partenza}.\n` : ''}\nCordiali saluti\n\n${o.azienda}`,
+  };
+}
+
+/** Nome del file PDF: DDT_219_2026_CLIENTE.pdf (solo lettere, numeri e trattini bassi). */
+export function nomeFilePdfDdt(numero: string | number | null, anno: number, cliente: string): string {
+  const pulito = cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+  const n = numero == null ? 'bozza' : String(numero).replace(/[^A-Za-z0-9]+/g, '_');
+  return `DDT_${n}_${anno}${pulito ? `_${pulito}` : ''}.pdf`;
+}
+
+/**
+ * A chi proporre l'email del DDT: l'indirizzo a cui è stato mandato l'ultimo DDT dello stesso cliente
+ * (così il portale "impara" il magazzino o l'ufficio acquisti del cliente), poi l'email amministrativa, poi quella del CRM, poi la PEC.
+ */
+export function destinatarioDdt(c: { ultimoDdt?: string | null; amministrazione?: string | null; crm?: string | null; pec?: string | null }): string {
+  for (const x of [c.ultimoDdt, c.amministrazione, c.crm, c.pec]) if (x && /@/.test(x)) return x.trim();
+  return '';
+}
