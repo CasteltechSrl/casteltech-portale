@@ -64,16 +64,21 @@ const SEGNAPOSTO_FONTE: Record<string, string> = {
   componente: 'cerca P/N, gestionale o produzione', componente_cliente: 'cerca codice o descrizione', libero: 'codice (facoltativo)',
 };
 
-/** Cella Codice del DDT: menu "Da" (prodotto, componente nostro, componente cliente, libero) + il campo giusto per la fonte. */
+/** Colonna Tipo del DDT (a sinistra, non si stampa; Adriano 2/11/2026): da quale anagrafica viene il codice della riga. */
+export function cellaTipoDdt(x: any, i: number): Raw {
+  const fonte = fonteRiga(x);
+  return html`<select name="righe[${i}][fonte]" class="fonte-riga" data-predefinita="prodotto" aria-label="Tipo di riga: da quale anagrafica viene il codice">
+    ${FONTI_RIGA.map(f => html`<option value="${f}" ${f === fonte ? raw('selected') : ''}>${NOMI_FONTI[f]}</option>`)}</select>`;
+}
+
+/** Cella Codice del DDT: menu dei prodotti del cliente, oppure casella con l'elenco dei codici del tipo scelto (componenti nostri o del cliente, libero). */
 export function cellaCodiceDdt(x: any, i: number, prodotti: ProdottoScelta[]): Raw {
   const fonte = fonteRiga(x);
   const prodotto = fonte === 'prodotto';
   return html`<div class="codice-fonte">
-    <select name="righe[${i}][fonte]" class="fonte-riga" data-predefinita="prodotto" aria-label="Da quale anagrafica viene il codice">
-      ${FONTI_RIGA.map(f => html`<option value="${f}" ${f === fonte ? raw('selected') : ''}>${NOMI_FONTI[f]}</option>`)}</select>
     <span class="per-prodotto" ${prodotto ? '' : raw('hidden')}>${cellaCodice(prodotto ? x : { prodotto_id: null, codice: null }, i, prodotti)}</span>
     <span class="per-testo" ${prodotto ? raw('hidden') : ''}><input name="righe[${i}][codice_testo]" value="${prodotto ? '' : x.codice ?? ''}"
-      class="codice maiuscolo cerca-riga" list="trovati-riga" autocomplete="off" placeholder="${SEGNAPOSTO_FONTE[fonte] ?? ''}"></span>
+      class="codice maiuscolo cerca-riga" autocomplete="off" placeholder="${SEGNAPOSTO_FONTE[fonte] ?? ''}"></span>
     <input type="hidden" name="righe[${i}][componente_id]" value="${x.componente_id ?? ''}">
     <input type="hidden" name="righe[${i}][componente_cliente_id]" value="${x.componente_cliente_id ?? ''}">
   </div>`;

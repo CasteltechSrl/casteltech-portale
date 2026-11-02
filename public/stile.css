@@ -872,6 +872,17 @@ table.elenco tr.fisso td { background: #e6f4ea; }
 table.bom td.note b.nota-ufficio { color: #1a4f8b; }
 
 /* DDT: menu "Da" e codice della riga (Adriano 2/11/2026) */
-.codice-fonte { display: flex; flex-direction: column; gap: .25rem; min-width: 15rem; }
+/* DDT: colonna Tipo a sinistra (non si stampa) e codice sulla stessa riga (Adriano 2/11/2026) */
+#righe-documento td.tipo-riga select { width: 11rem; }
+.codice-fonte { min-width: 13rem; }
+.codice-fonte > span:not([hidden]) { display: block; }
 .codice-fonte .per-testo input, .codice-fonte .per-prodotto select { width: 100%; }
+tr[hidden] { display: none; }
+ul.elenco-trovati { position: absolute; z-index: 50; margin: 2px 0 0; padding: 0; list-style: none; max-height: 18rem; overflow-y: auto; max-width: 40rem;
+  background: var(--carta); border: 1px solid var(--bordo); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.15); font-size: .9rem; }
+ul.elenco-trovati li { padding: .4rem .6rem; cursor: pointer; border-bottom: 1px solid var(--bordo); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+ul.elenco-trovati li b { margin-right: .4rem; }
+ul.elenco-trovati li.attiva, ul.elenco-trovati li:hover { background: var(--accento-chiaro); }
+ul.elenco-trovati li.nuovo { color: var(--accento); font-weight: 600; }
+ul.elenco-trovati li.vuoto { color: #777; cursor: default; }
 #componenti-clienti input { width: 100%; min-width: 7rem; }

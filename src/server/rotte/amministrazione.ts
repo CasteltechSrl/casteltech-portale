@@ -6,7 +6,7 @@
  */
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
-import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
+import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -133,12 +133,14 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
   // ogni riga sceglie l'anagrafica: prodotto, componente nostro, componente del cliente o libero (Adriano 2/11/2026)
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
+    <td class="tipo-riga">${cellaTipoDdt(x, i)}</td>
     <td>${cellaCodiceDdt(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
     <td>${cellaDescrizioneDdt(x, i, prodotti)}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
     <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
     <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
     <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo"></td>
+    <td class="centro"><button type="button" class="link negativo togli-riga" title="Togli questa riga (poi Salva)" aria-label="Togli la riga">✕</button></td>
   </tr>`;
   return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento" data-autosalva="${d.stato === 'bozza' ? '1' : ''}">
       <div class="riga-campi">
@@ -162,11 +164,12 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
         <textarea name="destinazione" rows="3" class="maiuscolo">${t.destinazione ?? ''}</textarea></label>
       <label>Note interne (non vanno sul DDT) <input name="note" value="${d.note ?? ''}"></label>
       <div class="tabella-scorre"><table class="editor" id="righe-documento" data-cliente="${d.cliente_id ?? ''}">
-        <thead><tr><th title="Da quale anagrafica viene il codice: prodotto, componente nostro, componente del cliente o libero">Da · Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th></tr></thead>
+        <thead><tr><th title="Da quale anagrafica viene il codice (non si stampa)">Tipo</th><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th><th></th></tr></thead>
         <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
-      </table></div><datalist id="trovati-riga"></datalist>
-      <p class="nota">Da: <b>Prodotto</b> = codici del cliente · <b>Componente nostro</b> = archivio Componenti (cerca per P/N, codice gestionale o di produzione) ·
-        <b>Componente cliente</b> = materiale in conto lavoro del cliente (Anagrafiche → Componenti clienti) · <b>Libero</b> = codice e descrizione scritti a mano.</p>
+      </table></div>
+      <p class="nota">Tipo (non si stampa): <b>Prodotto</b> = codici del cliente · <b>Componente nostro</b> = archivio Componenti (cerca per P/N, codice gestionale o di produzione) ·
+        <b>Componente cliente</b> = materiale in conto lavoro del cliente (Anagrafiche → Componenti clienti) · <b>Libero</b> = codice e descrizione scritti a mano.
+        Il codice che non c'è si aggiunge dall'elenco ("+ Nuovo…"); ✕ toglie la riga.</p>
       ${riquadriSceltaProdotto(d.cliente_id)}
       <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
         <span class="nota">Il prezzo non si stampa sul DDT: passa nella fattura quando si fattura il DDT.</span>
