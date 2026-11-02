@@ -93,3 +93,16 @@ test('crm: import che si aggiunge a quello che c\'è (altri nomi, telefoni, emai
   assert.equal(statoDopoImport('da_contattare', null), 'da_contattare');
   assert.equal(formatta('note', 'riga  uno\n\n  riga due '), 'riga uno\nriga due');
 });
+
+test('crm: non interessati e scartati escono dagli elenchi, con avviso se si ricontattano (Adriano 2/11/2026)', async () => {
+  const { STATI_ESCLUSI, escluso, avvisoEscluso } = await import('../src/engine/crm.js');
+  assert.deepEqual([...STATI_ESCLUSI].sort(), ['non_interessato', 'scartato']);
+  assert.equal(escluso('non_interessato'), true);
+  assert.equal(escluso('scartato'), true);
+  for (const s of ['da_contattare', 'contattato', 'da_ricontattare', 'in_trattativa', 'offerta_inviata', 'cliente']) assert.equal(escluso(s), false);
+  assert.equal(avvisoEscluso({ stato: 'in_trattativa' }), null);
+  const testo = avvisoEscluso({ stato: 'non_interessato', ultimo_contatto: '2026-10-13', ragione_sociale: 'ACME SRL' })!;
+  assert.match(testo, /ACME SRL è già nel CRM come NON INTERESSATA/);
+  assert.match(testo, /13\/10\/2026/);
+  assert.match(avvisoEscluso({ stato: 'scartato' })!, /Questa azienda è già nel CRM come SCARTATA/);
+});

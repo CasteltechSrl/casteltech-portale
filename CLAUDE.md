@@ -319,6 +319,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Import che si aggiunge (foglio lead PER_FEDERICO, 26/10/2026): il file può portare attività (non ripetute: stessa data, tipo, testo),
    prossima azione (solo dove manca), responsabile, stato (solo alle aziende ancora "Da contattare") e `scollega_cliente` per i collegamenti
    sbagliati; altri nomi, telefoni, email e note si uniscono a quelli del portale (`unisciElenco`). Nome uguale ma P.IVA diversa: non è lo stesso cliente.
+   Non interessati nascosti (Adriano 2/11/2026; `STATI_ESCLUSI`/`avvisoEscluso` in `engine/crm.ts`, test in `tests/crm.test.ts`): stati "Non interessato" e "Scartato"
+   fuori da elenco, ricerche, conteggi e prossime azioni (anche nel cruscotto), mai eliminati; si vedono con Stato → "Non interessati e scartati" (`FILTRO_ESCLUSI`),
+   la spunta "mostra anche…" o il riquadro "Nascoste". Avviso rosso nella scheda, in "Nuova azienda" con lo stesso nome, nella ricerca che le trova; registrare un'attività chiede conferma.
 4e. ✅ Anagrafica fornitori (`rotte/fornitori-anagrafica.ts`, `engine/anagrafica-fornitori.ts`, migrazione 028, tabella `fornitori_anagrafica`;
    diversa da `fornitori.ts`, che sono i distributori di componenti): Anagrafiche → Fornitori. Regole di Adriano (26/10/2026): solo con P.IVA
    valida (italiana: cifra di controllo; estera: formato del paese, scritta con il prefisso), una P.IVA = un fornitore, tutto MAIUSCOLO (email e PEC minuscolo).

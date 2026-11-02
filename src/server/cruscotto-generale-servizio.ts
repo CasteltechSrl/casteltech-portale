@@ -43,9 +43,9 @@ export async function datiCruscottoGenerale(oggi: string) {
       WHERE stato IN ('nuovo', 'da_confermare', 'errore') GROUP BY tipo, stato`),
     q<{ scadute: number; settimana: number }>(`SELECT count(*) FILTER (WHERE data_prossima_azione < $1)::int AS scadute,
         count(*) FILTER (WHERE data_prossima_azione >= $1 AND data_prossima_azione <= $1::date + 7)::int AS settimana
-      FROM crm_aziende WHERE da_verificare IS NULL`, [oggi]),
+      FROM crm_aziende WHERE da_verificare IS NULL AND stato NOT IN ('non_interessato', 'scartato')`, [oggi]),
     q<{ id: number; ragione_sociale: string; prossima_azione: string | null; data_prossima_azione: string }>(`SELECT id, ragione_sociale, prossima_azione, data_prossima_azione
-      FROM crm_aziende WHERE da_verificare IS NULL AND data_prossima_azione <= $1::date + 7 ORDER BY data_prossima_azione, id LIMIT ${MOSTRATE}`, [oggi]),
+      FROM crm_aziende WHERE da_verificare IS NULL AND stato NOT IN ('non_interessato', 'scartato') AND data_prossima_azione <= $1::date + 7 ORDER BY data_prossima_azione, id LIMIT ${MOSTRATE}`, [oggi]),
     q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, data, imponibile FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
     q<{ data: string; importo: number; documento_id: number; numero_doc: number; sezionale: string; anno: number; nome: string }>(`

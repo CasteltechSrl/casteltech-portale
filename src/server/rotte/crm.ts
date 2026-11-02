@@ -11,7 +11,7 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, raw, type Raw } from '../views/html.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { allineaClienti, aziendaConNome, cercaAziende, fatturatoClienti, type FatturatoCliente } from '../crm-servizio.js';
-import { PRIORITA, STATI_CRM, formatta, TIPI_ATTIVITA, scadenza, statoDa, type StatoCrm, type TipoAttivita } from '../../engine/crm.js';
+import { PRIORITA, STATI_CRM, STATI_ESCLUSI, FILTRO_ESCLUSI, avvisoEscluso, escluso, formatta, TIPI_ATTIVITA, scadenza, statoDa, type StatoCrm, type TipoAttivita } from '../../engine/crm.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const dataValida = (d: unknown) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
@@ -35,7 +35,7 @@ export function rotteCrm() {
 
   // ── Ricerca e cose da fare ──
   r.get('/elenco.xlsx', async (req, res) => {
-    const filtri = { testo: String(req.query.q ?? ''), stato: String(req.query.stato ?? ''), provincia: String(req.query.prov ?? ''), responsabile: String(req.query.resp ?? ''), soloAzioni: req.query.azioni === '1' };
+    const filtri = { testo: String(req.query.q ?? ''), stato: String(req.query.stato ?? ''), provincia: String(req.query.prov ?? ''), responsabile: String(req.query.resp ?? ''), soloAzioni: req.query.azioni === '1', anchEsclusi: req.query.esclusi === '1' };
     const righe = await cercaAziende(filtri, 5000);
     inviaExcel(res, nomeExcel('crm'), await excelSemplice('CRM', [
       { header: 'Azienda', key: 'nome', width: 40 }, { header: 'Città', key: 'citta', width: 22 }, { header: 'Prov.', key: 'provincia', width: 6 }, { header: 'Telefono', key: 'telefono', width: 16 },
@@ -50,19 +50,23 @@ export function rotteCrm() {
     const oggi = oggiRoma();
     const filtri = {
       testo: String(req.query.q ?? ''), stato: String(req.query.stato ?? ''), provincia: String(req.query.prov ?? ''),
-      responsabile: String(req.query.resp ?? ''), soloAzioni: req.query.azioni === '1',
+      responsabile: String(req.query.resp ?? ''), soloAzioni: req.query.azioni === '1', anchEsclusi: req.query.esclusi === '1',
     };
-    const cerca = !!(filtri.testo.trim() || filtri.stato || filtri.provincia.trim() || filtri.responsabile || filtri.soloAzioni);
+    const cerca = !!(filtri.testo.trim() || filtri.stato || filtri.provincia.trim() || filtri.responsabile || filtri.soloAzioni || filtri.anchEsclusi);
     const conti = (await q(`SELECT
-        count(*) FILTER (WHERE da_verificare IS NULL AND stato <> 'scartato')::int AS aziende,
+        count(*) FILTER (WHERE da_verificare IS NULL AND stato <> ALL($2::text[]))::int AS aziende,
         count(*) FILTER (WHERE da_verificare IS NULL AND cliente_id IS NOT NULL)::int AS clienti,
         count(*) FILTER (WHERE da_verificare IS NOT NULL)::int AS verificare,
-        count(*) FILTER (WHERE da_verificare IS NULL AND data_prossima_azione < $1)::int AS scadute,
-        count(*) FILTER (WHERE da_verificare IS NULL AND data_prossima_azione = $1)::int AS oggi,
-        count(*) FILTER (WHERE da_verificare IS NULL AND data_prossima_azione > $1 AND data_prossima_azione <= $1::date + 7)::int AS settimana
-      FROM crm_aziende`, [oggi]))[0];
+        count(*) FILTER (WHERE da_verificare IS NULL AND stato = ANY($2::text[]))::int AS esclusi,
+        count(*) FILTER (WHERE da_verificare IS NULL AND stato <> ALL($2::text[]) AND data_prossima_azione < $1)::int AS scadute,
+        count(*) FILTER (WHERE da_verificare IS NULL AND stato <> ALL($2::text[]) AND data_prossima_azione = $1)::int AS oggi,
+        count(*) FILTER (WHERE da_verificare IS NULL AND stato <> ALL($2::text[]) AND data_prossima_azione > $1 AND data_prossima_azione <= $1::date + 7)::int AS settimana
+      FROM crm_aziende`, [oggi, [...STATI_ESCLUSI]]))[0];
     const responsabili = (await q<{ r: string }>(`SELECT DISTINCT responsabile AS r FROM crm_aziende WHERE responsabile IS NOT NULL ORDER BY 1`)).map(x => x.r);
     const righe = cerca ? await cercaAziende(filtri) : await cercaAziende({ soloAzioni: true }, 100);
+    // cercando un nome: quante aziende nascoste (non interessate / scartate) corrispondono, per non reinserirle o ricontattarle
+    const nascosteTrovate = filtri.testo.trim() && !filtri.anchEsclusi && !filtri.stato
+      ? await cercaAziende({ ...filtri, stato: FILTRO_ESCLUSI }, 50) : [];
     const { perCliente } = await fatturatoClienti(righe.filter(a => a.cliente_id).map(a => a.cliente_id));
     const recenti = cerca ? [] : await q(`SELECT t.data, t.tipo, t.descrizione, a.id, coalesce(cl.ragione_sociale, a.ragione_sociale) AS nome
       FROM crm_attivita t JOIN crm_aziende a ON a.id = t.azienda_id LEFT JOIN clienti cl ON cl.id = a.cliente_id
@@ -76,10 +80,12 @@ export function rotteCrm() {
 
       <form class="cerca-crm" method="get" action="/crm">
         <input name="q" type="search" value="${filtri.testo}" placeholder="Cerca azienda, città, referente, telefono, email, P.IVA…" autofocus>
-        <select name="stato"><option value="">Tutti gli stati</option>${Object.entries(STATI_CRM).map(([k, v]) => html`<option value="${k}" ${filtri.stato === k ? raw('selected') : ''}>${v}</option>`)}</select>
+        <select name="stato"><option value="">Tutti gli stati utili</option>${Object.entries(STATI_CRM).map(([k, v]) => html`<option value="${k}" ${filtri.stato === k ? raw('selected') : ''}>${v}</option>`)}
+          <option value="${FILTRO_ESCLUSI}" ${filtri.stato === FILTRO_ESCLUSI ? raw('selected') : ''}>Non interessati e scartati</option></select>
         <input name="prov" value="${filtri.provincia}" placeholder="Prov." maxlength="2" class="maiuscolo corto">
         ${responsabili.length ? html`<select name="resp"><option value="">Tutti i responsabili</option>${responsabili.map(x => html`<option ${filtri.responsabile === x ? raw('selected') : ''}>${x}</option>`)}</select>` : ''}
         <label class="spunta piccola"><input type="checkbox" name="azioni" value="1" ${filtri.soloAzioni ? raw('checked') : ''}> solo con prossima azione</label>
+        <label class="spunta piccola" title="Le aziende non interessate o scartate non compaiono negli elenchi: restano nel CRM per non ricontattarle"><input type="checkbox" name="esclusi" value="1" ${filtri.anchEsclusi ? raw('checked') : ''}> mostra anche non interessati e scartati</label>
         <button class="primario">Cerca</button>${cerca ? html` <a href="/crm">Azzera</a>` : ''}
       </form>
 
@@ -87,10 +93,15 @@ export function rotteCrm() {
         <a class="cifra ${conti.scadute ? 'allarme' : ''}" href="/crm?azioni=1"><span>Azioni scadute</span><b>${conti.scadute}</b><small>da fare prima possibile</small></a>
         <a class="cifra" href="/crm?azioni=1"><span>Da fare oggi</span><b>${conti.oggi}</b><small>${conti.settimana} nei prossimi 7 giorni</small></a>
         <div class="cifra"><span>Aziende</span><b>${num(conti.aziende, 0)}</b><small>di cui ${conti.clienti} clienti</small></div>
+        ${conti.esclusi ? html`<a class="cifra" href="/crm?stato=${FILTRO_ESCLUSI}" title="Non compaiono negli elenchi e nelle ricerche: restano nel CRM per non ricontattarle"><span>Nascoste</span><b>${num(conti.esclusi, 0)}</b><small>non interessate o scartate</small></a>` : ''}
       </div>`}
 
       <h2>${cerca ? html`Risultati <span class="nota">(${righe.length}${righe.length === 200 ? '+, restringi la ricerca' : ''})</span>` : 'Prossime azioni'}
-        <a class="bottone" href="/crm/elenco.xlsx?${new URLSearchParams({ q: filtri.testo, stato: filtri.stato, prov: filtri.provincia, resp: filtri.responsabile, azioni: cerca ? (filtri.soloAzioni ? '1' : '') : '1' })}" title="Queste aziende in Excel">Excel</a></h2>
+        <a class="bottone" href="/crm/elenco.xlsx?${new URLSearchParams({ q: filtri.testo, stato: filtri.stato, prov: filtri.provincia, resp: filtri.responsabile, azioni: cerca ? (filtri.soloAzioni ? '1' : '') : '1', esclusi: filtri.anchEsclusi ? '1' : '' })}" title="Queste aziende in Excel">Excel</a></h2>
+      ${nascosteTrovate.length ? html`<p class="avviso crm-escluso">Attenzione: ${nascosteTrovate.length === 1
+          ? html`<a href="/crm/${nascosteTrovate[0].id}">${nascosteTrovate[0].nome}</a> corrisponde alla ricerca ma è segnata «${STATI_CRM[nascosteTrovate[0].stato as StatoCrm]}»: non compare nell'elenco, da non ricontattare.`
+          : html`${nascosteTrovate.length} aziende non interessate o scartate corrispondono alla ricerca: non compaiono nell'elenco, da non ricontattare.`}
+        <a href="/crm?${new URLSearchParams({ q: filtri.testo, prov: filtri.provincia, resp: filtri.responsabile, azioni: filtri.soloAzioni ? '1' : '', esclusi: '1' })}">Mostrale</a></p>` : ''}
       ${righe.length ? html`<div class="tabella-scorre"><table class="elenco crm">
         <thead><tr><th>Azienda</th><th>Città</th><th>Telefono</th><th>Referente</th><th>Stato</th><th>Prossima azione</th><th>Quando</th></tr></thead>
         <tbody>${righe.map(a => html`<tr class="cliccabile ${scadenza(a.data_prossima_azione, oggi) ?? ''} ${a.cliente_id ? 'gia-cliente' : ''}" data-href="/crm/${a.id}">
@@ -134,7 +145,7 @@ export function rotteCrm() {
     const nome = maiuscolo(req.body.ragione_sociale);
     if (!nome) return res.redirect('/crm');
     const esiste = await aziendaConNome(nome);
-    if (esiste) return res.redirect(`/crm/${esiste.id}?msg=${encodeURIComponent(`${esiste.ragione_sociale} è già nel CRM.`)}`);
+    if (esiste) return res.redirect(`/crm/${esiste.id}?msg=${encodeURIComponent(avvisoEscluso(esiste) ?? `${esiste.ragione_sociale} è già nel CRM.`)}`);
     const { id } = (await q1(`INSERT INTO crm_aziende (ragione_sociale) VALUES ($1) RETURNING id`, [nome]))!;
     res.redirect(`/crm/${id}?msg=${encodeURIComponent(`${nome} aggiunta: completa i dati.`)}#dati`);
   });
@@ -175,6 +186,8 @@ export function rotteCrm() {
           : fatt?.anni.length ? html`nessuna fattura negli anni ${fatt.anni[0]}–${fatt.anni.at(-1)}` : 'fatturato non ancora caricato'}</span>
         ${ordini ? html`<a href="/ordini?vista=tutti&q=${encodeURIComponent(a.cliente)}">${ordini} ordini</a>` : ''}
       </div>` : ''}
+      ${escluso(a.stato) ? html`<div class="avviso crm-escluso">${avvisoEscluso({ stato: a.stato, ultimo_contatto: a.ultimo_contatto })}
+        Per rimetterla negli elenchi cambia lo stato (es. "Da ricontattare") registrando l'attività.</div>` : ''}
       ${a.da_verificare ? html`<div class="avviso">Da verificare: ${collegaCodici(a.da_verificare)}
         <form method="post" action="/crm/${id}/verifica" class="inline"> <button name="esito" value="conferma">Conferma</button> <button name="esito" value="scarta" class="link negativo">Scarta</button></form></div>` : ''}
 
@@ -187,7 +200,7 @@ export function rotteCrm() {
 
       <div class="griglia-crm">
         <section>
-          <form method="post" action="/crm/${id}/attivita" class="blocco registra">
+          <form method="post" action="/crm/${id}/attivita" class="blocco registra" ${escluso(a.stato) ? html`data-conferma="${STATI_CRM[a.stato as StatoCrm]}: questa azienda non va ricontattata. Registro comunque l'attività?"` : ''}>
             <h2>Registra un'attività</h2>
             <div class="riga-campi">
               <label class="stretto">Data <input type="date" name="data" value="${oggi}" required></label>
