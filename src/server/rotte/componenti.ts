@@ -122,6 +122,11 @@ export function rotteComponenti() {
   });
   r.post('/bom/:id/salva', async (req, res) => {
     const x = await salvaInArchivio(Number(req.params.id), req.session.utente!.nome);
+    // codifica di un solo P/N (anche da Anagrafiche → Componenti → + Aggiungi componente): si torna all'archivio con il componente nuovo
+    const a = await q1<any>(`SELECT file_nome, righe FROM bom_analisi WHERE id = $1`, [Number(req.params.id)]);
+    const riga = a?.file_nome === FILE_SINGOLA ? (a.righe as RigaBom[])[0] : null;
+    const cerca = riga?.codiceGestionale || riga?.pn || riga?.codiceProduzione;
+    if (x.nuovi && cerca) return res.redirect(`/anagrafiche/componenti?q=${encodeURIComponent(cerca)}&msg=${encodeURIComponent(`Componente ${cerca} aggiunto all'archivio.`)}`);
     res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent(`Archivio aggiornato: ${x.nuovi} componenti nuovi, ${x.aggiornati} completati.`)}`);
   });
   // azioni dall'elenco sulle BOM spuntate

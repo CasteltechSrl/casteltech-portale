@@ -11,7 +11,11 @@ import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
 import { html, num, raw, euro, data, type Raw } from '../views/html.js';
 import { caricaAnagrafiche, maiuscolo, chiaveCodice, type FileAnagrafiche } from '../anagrafiche-servizio.js';
-import { cercaComponenti, conteggiComponenti } from '../codifica-servizio.js';
+import { avviaElaborazione, cercaComponenti, conteggiComponenti, creaCodificaSingola, FAMIGLIE } from '../codifica-servizio.js';
+import { pnKey } from '../../engine/codifica/bom.js';
+import { datiNuovoComponente, famigliaFiltro } from '../../engine/componenti-archivio.js';
+import { calcolaPagina, PER_PAGINA } from '../../engine/paginazione.js';
+import { barraPagine } from '../views/paginazione.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
@@ -235,35 +239,82 @@ export function rotteAnagrafiche() {
       ${caricaFile}${caricaPrezziFic}`, msg(req)));
   });
 
-  // ── Componenti: l'archivio della codifica (tanti: la ricerca si fa nel database, con Invio) ──
+  // ── Componenti: l'archivio della codifica. Senza ricerca l'elenco di tutti, a pagine da 100 (Adriano 2/11/2026); la ricerca si fa nel database, con Invio ──
   r.get('/componenti', async (req, res) => {
     const testo = String(req.query.q ?? '').trim();
     const conti = await conteggiComponenti();
-    const righe = testo ? await cercaComponenti(testo) : [];
+    const famiglie = await q<{ famiglia: string | null; n: number }>(`SELECT famiglia, count(*)::int AS n FROM componenti GROUP BY famiglia ORDER BY famiglia NULLS LAST`);
+    const fam = famigliaFiltro(req.query.famiglia, famiglie.map(f => f.famiglia ?? '').filter(Boolean));
+    let righe: Awaited<ReturnType<typeof cercaComponenti>>, barra: Raw = html``, totale: number;
+    if (testo) {
+      righe = (await cercaComponenti(testo)).filter(c => !fam || (fam === '-' ? !c.famiglia : c.famiglia === fam));
+      totale = righe.length;
+    } else {
+      const dove = fam === '-' ? 'WHERE famiglia IS NULL' : fam ? 'WHERE famiglia = $1' : '';
+      const par = fam && fam !== '-' ? [fam] : [];
+      totale = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM componenti ${dove}`, par))!.n;
+      const info = calcolaPagina(totale, req.query.pagina);
+      righe = await q<any>(`SELECT * FROM componenti ${dove} ORDER BY codice_gestionale NULLS LAST, codice_produzione NULLS LAST, id
+        LIMIT ${PER_PAGINA} OFFSET ${(info.pagina - 1) * PER_PAGINA}`, par);
+      barra = barraPagine(info, req.query as Record<string, unknown>);
+    }
+    const nuovo = datiNuovoComponente(testo);
+    const qs = new URLSearchParams({ ...(testo ? { q: testo } : {}), ...(fam ? { famiglia: fam } : {}), ...(req.query.pagina ? { pagina: String(req.query.pagina) } : {}) }).toString();
     res.send(await paginaAnagrafiche(req, 'componenti', html`
       <div class="intestazione-pagina"><p class="nota">${num(conti.totale, 0)} componenti in archivio, ${num(conti.gestionale, 0)} con codice gestionale.
-        I componenti nuovi entrano da soli quando si codifica una BOM (<a href="/quotazioni">Quotazioni</a>).
+        I componenti nuovi entrano da soli quando si codifica una BOM (<a href="/quotazioni">Quotazioni</a>), oppure con <b>+ Aggiungi componente</b>.
         ${conti.totale ? '' : html` L'archivio iniziale si carica da <a href="/impostazioni/componenti">Impostazioni → Componenti</a>.`}</p>
-        <a class="bottone" href="/anagrafiche/componenti.xlsx">Scarica tutto in Excel</a></div>
+        <div class="azioni"><a class="bottone" href="/anagrafiche/componenti.xlsx">Scarica tutto in Excel</a>
+          <a class="bottone primario" href="#aggiungi-componente" title="Codifica un P/N nuovo e lo mette nell'archivio">+ Aggiungi componente</a></div></div>
       <form class="ricerca-veloce" method="get"><input type="search" name="q" value="${testo}" placeholder="Cerca P/N, codice di produzione o gestionale, descrizione… e premi Invio" autofocus>
-        <button class="primario">Cerca</button></form>
-      ${testo ? (righe.length ? html`<div class="tabella-scorre"><table class="componenti"><thead><tr><th>P/N</th><th>Fam.</th><th>Codice produzione</th>
+        <select name="famiglia" title="Solo una famiglia"><option value="">Tutte le famiglie</option>
+          ${famiglie.map(f => html`<option value="${f.famiglia ?? '-'}" ${(f.famiglia ?? '-') === fam ? raw('selected') : ''}>${f.famiglia ? `${f.famiglia}${FAMIGLIE[f.famiglia] ? ` · ${FAMIGLIE[f.famiglia].nome}` : ''}` : 'senza famiglia'} (${num(f.n, 0)})</option>`)}</select>
+        <button class="primario">Cerca</button>${testo || fam ? html` <a href="/anagrafiche/componenti">Mostra tutti</a>` : ''}</form>
+      ${righe.length ? html`<p class="nota">${testo ? `Trovati ${num(totale, 0)}${totale === 200 ? ' (i primi 200: scrivi qualcosa in più per restringere)' : ''}.`
+          : `Elenco di ${fam ? 'questa famiglia' : 'tutto l\'archivio'}: ${num(totale, 0)} componenti, in ordine di codice gestionale.`}</p>
+        <div class="tabella-scorre"><table class="componenti"><thead><tr><th>P/N</th><th>Fam.</th><th>Codice produzione</th>
         <th>Codice gestionale</th><th>Descrizione</th><th class="n" title="Prezzo dell'ultimo ordine a fornitore">Ultimo acquisto €</th><th>Fornitore</th><th>Stato</th><th>Fonte</th><th>Note</th><th></th></tr></thead><tbody>
         ${righe.map(c => html`<tr><td>${c.pn}</td><td>${c.famiglia}</td><td class="codice">${c.codice_produzione}</td><td class="codice">${c.codice_gestionale}</td>
           <td class="taglia">${c.descrizione}</td>
           <td class="n" title="${testoAcquisto(c)}">${c.prezzo_acquisto == null ? '' : num(Number(c.prezzo_acquisto), 5)}</td>
           <td class="taglia" title="${testoAcquisto(c)}">${c.prezzo_fornitore ?? ''}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
-          <td><form method="post" action="/anagrafiche/componenti/${c.id}/elimina?q=${encodeURIComponent(testo)}" class="inline"
+          <td><form method="post" action="/anagrafiche/componenti/${c.id}/elimina?${qs}" class="inline"
             data-conferma="${`Eliminare dall'archivio ${c.codice_gestionale || c.codice_produzione || c.pn}?` + (c.codice_gestionale ? `\n\nSe il codice ${c.codice_gestionale} è già stato creato in Moka, non eliminarlo: il suo numero verrebbe riassegnato al prossimo componente nuovo.` : '')}">
             <button class="link negativo">Elimina</button></form></td></tr>`)}
-        </tbody></table></div>${righe.length === 200 ? html`<p class="nota">Mostrati i primi 200: scrivi qualcosa in più per restringere.</p>` : ''}`
-        : html`<p class="vuoto">Nessun componente trovato.</p>`) : html`<p class="vuoto">Scrivi cosa cerchi e premi Invio.</p>`}
+        </tbody></table></div>${barra}`
+        : html`<p class="vuoto">${testo ? html`Nessun componente trovato per «${testo}». Se è nuovo, aggiungilo qui sotto.` : 'Nessun componente in archivio.'}</p>`}
+      <form method="post" action="/anagrafiche/componenti/aggiungi" class="blocco stretto-form" id="aggiungi-componente">
+        <h2>+ Aggiungi componente</h2>
+        <p class="nota">Scrivi il P/N del produttore (o, se non c'è, la descrizione, es. <code>resistenza 2,2k 0603</code>). Il portale lo codifica come
+          <a href="/quotazioni/codifica">Quotazioni → Codifica un P/N</a> (codice di produzione, codice gestionale con il primo numero libero, prezzi dai distributori);
+          controlli il risultato e premi <b>Salva nell'archivio</b>. Se il P/N c'è già, te lo mostra senza doppioni.</p>
+        <label>P/N <input name="pn" value="${testo && !righe.length ? nuovo.pn : ''}" autocomplete="off"></label>
+        <label>Descrizione / valore / case <input name="descrizione" value="${testo && !righe.length ? nuovo.descrizione : ''}" autocomplete="off"></label>
+        <label>Famiglia <small class="unita">facoltativa</small><select name="famiglia"><option value="">— riconosci da solo —</option>
+          ${Object.entries(FAMIGLIE).map(([k, f]) => html`<option value="${k}">${k} · ${f.nome}</option>`)}</select></label>
+        <button class="primario">Codifica e aggiungi</button>
+      </form>
       ${caricaPrezziFic}`, msg(req), 'anagrafiche.js'));
+  });
+  // componente nuovo: se il P/N c'è già si mostra quello, altrimenti si codifica (BOM di una riga, come Quotazioni → Codifica un P/N)
+  r.post('/componenti/aggiungi', async (req, res) => {
+    const pn = String(req.body.pn ?? '').trim(), descrizione = String(req.body.descrizione ?? '').trim();
+    if (!pn && !descrizione) return res.redirect(`/anagrafiche/componenti?msg=${encodeURIComponent('Scrivi il P/N o la descrizione del componente.')}#aggiungi-componente`);
+    if (pn) {
+      const c = await q1<{ codice_gestionale: string | null }>(`SELECT codice_gestionale FROM componenti WHERE pn_key = $1 LIMIT 1`, [pnKey(pn) ?? '']);
+      if (c) return res.redirect(`/anagrafiche/componenti?q=${encodeURIComponent(pn)}&msg=${encodeURIComponent(`Il P/N ${pn.toUpperCase()} è già in archivio${c.codice_gestionale ? ` (${c.codice_gestionale})` : ''}: non serve aggiungerlo.`)}`);
+    }
+    const fam = String(req.body.famiglia ?? '').toUpperCase();
+    const id = await creaCodificaSingola({ pn, descrizione, famiglia: fam in FAMIGLIE ? fam : '', schede: [100], utenteId: req.session.utente!.id });
+    avviaElaborazione(id);
+    res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent('Codifica in corso: controlla codici e prezzi, poi premi "Salva … codici nell\'archivio". Il componente comparirà in Anagrafiche → Componenti.')}`);
   });
   // componente codificato per errore
   r.post('/componenti/:id/elimina', async (req, res) => {
     await q(`DELETE FROM componenti WHERE id = $1`, [Number(req.params.id)]);
-    res.redirect(`/anagrafiche/componenti?q=${encodeURIComponent(String(req.query.q ?? ''))}&msg=${encodeURIComponent('Componente eliminato dall\'archivio.')}`);
+    const qs = new URLSearchParams(Object.entries(req.query).filter(([k, v]) => ['q', 'famiglia', 'pagina'].includes(k) && v).map(([k, v]) => [k, String(v)]));
+    qs.set('msg', 'Componente eliminato dall\'archivio.');
+    res.redirect(`/anagrafiche/componenti?${qs}`);
   });
   r.get('/componenti.xlsx', async (_req, res) => {
     const righe = await q<any>(`SELECT pn, produttore, famiglia, codice_produzione, codice_gestionale, descrizione, stato, fonte, note, attributi,
