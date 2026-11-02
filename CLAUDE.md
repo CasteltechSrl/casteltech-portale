@@ -467,6 +467,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    ruolo 'contabilita' = solo GET sotto /amministrazione (`contabilitaPuo`, middleware `amministrazioneOContabilita` in `index.ts`) + Guida; menu con il solo
    pagine dell'Amministrazione in fila nella barra, senza tendine (`MENU_CONTABILITA` in `views/layout.ts`, Adriano 1/11/2026; il menu dell'ufficio non cambia),
    dopo l'accesso dritto al cruscotto `/amministrazione` (`paginaDopoAccesso`), `body.sola-lettura` nasconde i moduli POST. Utenti creati dall'ufficio in Impostazioni → Utenti.
+   ✅ Profilo Esterno "vede tutto, sola lettura" (Adriano 2/11/2026; `esternoPuo` in `engine/ruoli.ts`, migrazione 062, test in `tests/esterno.test.ts`): stesso menu
+   dell'ufficio, entra nel cruscotto, solo GET su tutte le pagine (in `soloUfficio`) tranne `/impostazioni`, `/dipendenti/riservata` e le pagine `…/nuovo`;
+   `body.sola-lettura-tutto`: moduli visibili, caselle spente da `public/sola-lettura.js`, pulsanti che salvano e spunte nascosti in `stile.css`. Una sezione nuova
+   montata con `soloUfficio` è già leggibile dall'esterno: se contiene chiavi o dati riservati va esclusa in `esternoPuo`.
    ✅ Analisi (Adriano 31/10/2026, "trend e analisi critica/di aiuto"; `/amministrazione/analisi`, `engine/analisi.ts`, `rotte/analisi.ts`, test `tests/analisi.test.ts`):
    dal 1/1 a oggi contro lo stesso periodo dell'anno prima (anni passati: anno intero), fatture emesse/ricevute anche storico FIC: fatturato, acquisti, resta dopo
    gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che

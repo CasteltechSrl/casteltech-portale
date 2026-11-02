@@ -857,3 +857,10 @@ tr.riga-margine.critico td { background: #fff1c2; }
 .elenco-controllo li { break-inside: avoid; padding: .15rem 0; }
 .elenco-controllo small { color: #6b6b6b; }
 @media (max-width: 800px) { .elenco-controllo { columns: 1; } }
+
+/* profilo Esterno (Adriano 2/11/2026: vede tutto, non modifica nulla): i moduli restano visibili (es. il preventivo è un modulo),
+   ma senza pulsanti che salvano, senza spunte degli elenchi e senza link a "nuovo…" e Impostazioni; le caselle le spegne public/sola-lettura.js */
+body.sola-lettura-tutto main form[method="post"] button:not([type="button"]), body.sola-lettura-tutto main form[method="post"] input[type="submit"],
+body.sola-lettura-tutto main .barra-azioni, body.sola-lettura-tutto main td.selezione, body.sola-lettura-tutto main th.selezione,
+body.sola-lettura-tutto main a[href*="/nuovo"], body.sola-lettura-tutto main a[href^="/impostazioni"], body.sola-lettura-tutto main button[form] { display: none !important; }
+body.sola-lettura-tutto .menu-destra .etichetta { align-self: center; }

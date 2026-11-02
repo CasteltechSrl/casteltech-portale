@@ -340,7 +340,7 @@ export function rotteAmministrazione() {
     if (!anni.includes(anno)) anni.unshift(anno);
     const totale = righe.filter(d => d.stato !== 'bozza' && d.stato !== 'annullato').reduce((s, d) => s + Number(d.imponibile), 0);
     // spunte e pulsanti in alto a destra (Adriano 31/10/2026); il profilo Contabilità (sola lettura) vede l'elenco senza
-    const spunte = req.session.utente?.ruolo !== 'contabilita' && tipo in NOMI;
+    const spunte = req.session.utente?.ruolo !== 'contabilita' && req.session.utente?.ruolo !== 'esterno' && tipo in NOMI;
     const modulo = spunte ? moduloAzioni({
       azione: '/amministrazione/documenti/azioni', nome: { singolare: 'documento', plurale: 'documenti' }, pulsanti: pulsantiDocumenti(tipo),
       extra: html`<input type="hidden" name="tipo" value="${tipo}"><input type="hidden" name="torna" value="${req.originalUrl}">`,

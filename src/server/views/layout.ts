@@ -55,12 +55,12 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/stile.css?v=${VERSIONE}">
 </head>
-<body class="${opz.utente?.ruolo === 'contabilita' ? 'sola-lettura' : ''}">
+<body class="${opz.utente?.ruolo === 'contabilita' ? 'sola-lettura' : opz.utente?.ruolo === 'esterno' ? 'sola-lettura-tutto' : ''}">
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${MENU_CONTABILITA.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
-    ${(opz.utente.ruolo === 'ufficio' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
+    ${(opz.utente.ruolo === 'ufficio' || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
       <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
     </div>`)}
@@ -71,8 +71,9 @@ ${opz.utente ? html`
   </form>`}
   <nav class="menu-destra">
     ${opz.utente.ruolo === 'ufficio' ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
+    ${opz.utente.ruolo === 'esterno' ? voce('/suggerimenti', 'Suggerimenti', 'suggerimenti') : ''}
     ${voce('/guida', 'Guida', 'guida')}
-    ${opz.utente.ruolo === 'contabilita' ? html`<span class="etichetta">sola lettura</span>` : ''}
+    ${opz.utente.ruolo === 'contabilita' || opz.utente.ruolo === 'esterno' ? html`<span class="etichetta">sola lettura</span>` : ''}
   </nav>
   <div class="utente" title="${opz.utente.nome}"><span class="nome-utente">${opz.utente.nome} · </span><form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}
@@ -87,7 +88,8 @@ ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></scri
 <script src="/static/tasti.js?v=${VERSIONE}" defer></script>
 <script src="/static/tempi.js?v=${VERSIONE}" defer></script>
 <script src="/static/errori-campo.js?v=${VERSIONE}" defer></script>
-<script src="/static/formati.js?v=${VERSIONE}" defer></script>`) : ''}
+<script src="/static/formati.js?v=${VERSIONE}" defer></script>
+<script src="/static/sola-lettura.js?v=${VERSIONE}" defer></script>`) : ''}
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>
 </html>`;
