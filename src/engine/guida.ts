@@ -490,6 +490,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/controlli', 'Controlli settimanali']],
   },
   {
+    id: 'crediti-clienti', area: 'amministrazione', titolo: 'Crediti verso clienti: da incassare, scaduto per fasce, giorni medi di incasso',
+    parole: 'crediti credito clienti da incassare scaduto scadute fasce 30 60 90 esposizione giorni medi incasso pagano ritardo prossime scadenze 14 giorni incassata',
+    testo: [
+      'Amministrazione → Crediti verso clienti mostra quanto c\'è da incassare dalle fatture emesse (anche lo storico di Fatture in Cloud), quanto è già scaduto e da quanto: fino a 30 giorni, 31–60, 61–90, oltre 90. Le note di credito aperte tolgono dal credito del cliente.',
+      'La tabella per cliente dà l\'esposizione (tutto ciò che deve ancora pagare), lo scaduto per fascia, il ritardo più lungo e i giorni medi di incasso (dalla data della fattura al pagamento, sulle rate pagate negli ultimi 12 mesi): serve a capire chi paga puntuale e chi no.',
+      'In fondo le rate che scadono nei prossimi 14 giorni, con "Segna incassata" sulla riga (data e modo di pagamento). I conti si fanno quando si apre la pagina, nessun controllo automatico. Per chi ha scaduto c\'è "Sollecito", che porta a Solleciti incassi: il portale prepara l\'email, non la manda mai da solo.',
+    ],
+    passi: ['Apri Amministrazione → Crediti verso clienti.', 'Guarda le fasce e i clienti in cima (più scaduto).', 'Per un cliente in ritardo premi "Sollecito"; quando arriva un pagamento premi "Segna incassata".'],
+    pagine: [['/amministrazione/crediti', 'Crediti verso clienti'], ['/amministrazione/solleciti', 'Solleciti incassi']],
+  },
+  {
     id: 'solleciti-incassi', area: 'amministrazione', titolo: 'Solleciti incassi: email al cliente per le fatture scadute',
     parole: 'sollecito solleciti incassi pagamento fatture scadute scaduto email cliente gmail iban ritardo ultimo avviso crm',
     testo: [
