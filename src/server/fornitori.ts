@@ -11,6 +11,7 @@
  * Ogni risposta resta in fornitori_cache per 24 ore (stesso P/N = nessuna nuova chiamata).
  * TME: lettura secondo la documentazione ufficiale v2 (src/engine/tme.ts). Farnell: lettura tollerante, campi da confermare con le prime chiavi vere.
  */
+import { attesaTurno } from '../engine/ritmo-distributori.js';
 import { q, q1 } from './db.js';
 import { leggiPrezzo, type Fornitore, type Offerta } from '../engine/acquisti.js';
 import { pnKey } from '../engine/codifica/bom.js';
@@ -35,7 +36,13 @@ export function fornitoriConfigurati(): Record<Fornitore, boolean> {
   };
 }
 
+async function turno(servizio: string): Promise<void> {
+  const ms = attesaTurno(servizio);
+  if (ms > 0) await new Promise(r => setTimeout(r, ms));
+}
+
 async function http(url: string, opz: RequestInit & { nome: string }): Promise<any> {
+  await turno(opz.nome.toLowerCase());   // prima del tempo massimo: l'attesa del turno non conta
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   // ogni richiesta conta per il limite giornaliero del distributore (Impostazioni → Servizi)
   const servizio = opz.nome.toLowerCase();
@@ -166,14 +173,6 @@ export async function mouserParametri(parole: string): Promise<Offerta[]> {
 }
 
 // ───────────────────────────── Farnell ─────────────────────────────
-/** Farnell (piano Basic) accetta al massimo 2 richieste al secondo: oltre risponde 403 come se la chiave fosse sbagliata.
- *  Tutte le chiamate (codici e varianti) passano da qui e partono almeno a 0,6 s l'una dall'altra. */
-let prossimaFarnell = 0;
-async function turnoFarnell(): Promise<void> {
-  const ora = Date.now(), quando = Math.max(ora, prossimaFarnell);
-  prossimaFarnell = quando + 600;
-  if (quando > ora) await new Promise(r => setTimeout(r, quando - ora));
-}
 export function offertaFarnell(p: any): Offerta {
   const pack = Number(p.packSize) > 1 && /pack|confez/i.test(String(p.unitOfMeasure ?? '')) ? Number(p.packSize) : 1;
   const stato = String(p.productStatus ?? '');
@@ -193,7 +192,6 @@ async function farnellPn(pn: string): Promise<RisultatoFornitore> {
     'resultsSettings.offset': '0', 'resultsSettings.numberOfResults': '10', 'resultsSettings.responseGroup': 'large',
     'callInfo.responseDataFormat': 'JSON', 'callInfo.apiKey': process.env.FARNELL_API_KEY! };
   for (const [k, v] of Object.entries(par)) u.searchParams.set(k, v);
-  await turnoFarnell();
   const r = await http(u.toString(), { nome: 'Farnell', headers: { Accept: 'application/json' } });
   const ritorno = r?.manufacturerPartNumberSearchReturn ?? r?.keywordSearchReturn ?? {};
   const k = pnKey(pn);
@@ -207,7 +205,6 @@ async function farnellParola(parole: string): Promise<Offerta[]> {
     'resultsSettings.offset': '0', 'resultsSettings.numberOfResults': '20', 'resultsSettings.responseGroup': 'large',
     'callInfo.responseDataFormat': 'JSON', 'callInfo.apiKey': process.env.FARNELL_API_KEY! };
   for (const [k, v] of Object.entries(par)) u.searchParams.set(k, v);
-  await turnoFarnell();
   const r = await http(u.toString(), { nome: 'Farnell', headers: { Accept: 'application/json' } });
   const ritorno = r?.keywordSearchReturn ?? r?.manufacturerPartNumberSearchReturn ?? {};
   return (ritorno.products ?? []).map(offertaFarnell).filter((o: Offerta) => o.scaglioni.length);
@@ -364,10 +361,10 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
     })());
   };
   unoAllaVolta('digikey', 3, digikeyPn);
-  aGruppi('mouser', 10, mouserPn, 2100); // 30 richieste al minuto
-  unoAllaVolta('farnell', 2, farnellPn); // il ritmo lo dà turnoFarnell
+  aGruppi('mouser', 10, mouserPn); // il ritmo (30 al minuto) lo dà turno()
+  unoAllaVolta('farnell', 2, farnellPn); // il ritmo lo dà turno()
   aGruppi('tme', 50, tmePn);
-  unoAllaVolta('arrow', 2, arrowPn, 200);
+  unoAllaVolta('arrow', 2, arrowPn);
   await Promise.all(lavori);
   return { perPn, errori };
 }
