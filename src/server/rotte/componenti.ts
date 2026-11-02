@@ -9,7 +9,7 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  creaAnalisi, creaCodificaSingola, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, togliRiga, type RigaBom, type Riepilogo,
+  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, togliRiga, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
@@ -18,6 +18,7 @@ import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
 import { pnKey } from '../../engine/codifica/bom.js';
 import { iaConfigurata } from '../lettura-ia.js';
+import { testoScarto } from '../../engine/codifica/modifiche-mano.js';
 import { componentiInComune, feederFissi, type BomPerComuni } from '../../engine/componenti-comuni.js';
 
 const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(x);
@@ -172,6 +173,22 @@ export function rotteComponenti() {
       usa: String(req.body.usa ?? '').trim() || undefined, nuova: String(req.body.nuova ?? '').trim() || undefined,
       togli: String(req.body.togli ?? '').trim() || undefined, originale: !!req.body.originale });
     res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#alternative`);
+  });
+  // modifiche a mano della riga: P/N, quantità, scarto, nota (Federico, 2/11/2026)
+  r.post('/bom/:id/riga/:n/mano', async (req, res) => {
+    const id = Number(req.params.id), n = Number(req.params.n);
+    const x = await modificaRigaAMano(id, n, { pn: req.body.pn == null ? undefined : String(req.body.pn), qta: req.body.qta == null ? undefined : String(req.body.qta),
+      scarto: String(req.body.scarto ?? ''), nota: String(req.body.nota ?? '') });
+    if (x.rielabora) { avviaElaborazione(id); return res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}#riga-${n}`); }
+    res.redirect(`/quotazioni/bom/${id}/riga/${n}?msg=${encodeURIComponent(x.messaggio)}#modifica-mano`);
+  });
+  // riga aggiunta a mano: componente che manca nella BOM o comprato altrove (Federico, 2/11/2026)
+  r.post('/bom/:id/aggiungi', async (req, res) => {
+    const id = Number(req.params.id);
+    const b = req.body ?? {};
+    const x = await aggiungiRigaBom(id, { pn: b.pn, descrizione: b.descrizione, designatori: b.designatori, qta: b.qta, prezzo: b.prezzo, dove: b.dove, nota: b.nota });
+    if (x.n) avviaElaborazione(id);
+    res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}${x.n ? '' : '&aggiungi=1'}#aggiungi-riga`);
   });
   r.post('/bom/:id/riga/:n/elimina', async (req, res) => {
     const msg = await togliRiga(Number(req.params.id), Number(req.params.n));
@@ -377,11 +394,12 @@ function paginaAnalisi(a: any): Raw {
       ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${nomeFornitore(x.scelta.fornitore)}
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
-      <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
+      <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.aggiuntaAMano ? html`<span class="esito nuovo" title="Riga aggiunta a mano dall'ufficio">aggiunta</span> ` : ''}${r.notaOperatore ? html`<b class="nota-ufficio">Nota: ${r.notaOperatore}</b> ` : ''}${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
       <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a>
         ${inCorso ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/elimina" class="inline" data-conferma="${`Togliere la riga ${r.n} dalla BOM? Non torna nemmeno con Rielabora.`}">
           <button class="link negativo" title="Toglie la riga dalla BOM (voce che non serve)">togli</button></form>`}</td></tr>`)}
   </tbody></table></div>
+  ${!singola && !inCorso ? bloccoAggiungiRiga(a) : ''}
   <p class="nota">Esiti: <span class="esito archivio">in archivio</span> codici esistenti · <span class="esito nuovo">nuovo</span> codici calcolati, da salvare ·
     <span class="esito verifica">da verificare</span> ipotesi da controllare (vedi note) · <span class="esito manca">da completare</span> mancano dati: apri "modifica".
     Lo scarto: passivi economici +10%, sotto 1 € +5%, 1–3 € +1 pezzo, oltre 3 € nessuno.</p>` : inCorso ? '' : html`<p class="vuoto">Nessuna riga.</p>`}`;
@@ -475,6 +493,43 @@ function bloccoAlternative(a: any, r: RigaBom, qta: number): Raw {
   </section>`;
 }
 
+/** Modifiche a mano della riga (Federico, 2/11/2026): P/N sbagliato nella BOM, quantità, scarto, nota. */
+function bloccoModificaMano(a: any, r: RigaBom): Raw {
+  return html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/mano" class="blocco" id="modifica-mano">
+    <h3>Modifica a mano</h3>
+    <p class="nota">Se nella BOM il P/N o la quantità sono sbagliati correggili qui: la BOM si rielabora (codici e prezzi del P/N giusto) e la correzione resta
+      anche con "Aggiorna prezzi". Lo scarto scritto vale al posto di quello standard: pezzi in più per lotto (es. <code>10</code>) o percentuale (es. <code>5%</code>); vuoto = standard.</p>
+    <div class="riga-campi">
+      <label>P/N <input name="pn" value="${r.pn ?? ''}" autocomplete="off" class="codice"></label>
+      <label class="stretto">Pezzi a scheda <input name="qta" value="${String(r.qtaScheda).replace('.', ',')}" inputmode="decimal" autocomplete="off"></label>
+      <label class="stretto">Scarto <input name="scarto" value="${testoScarto(r.scartoManuale)}" placeholder="standard" autocomplete="off"></label>
+    </div>
+    <label>Nota <textarea name="nota" rows="2" placeholder="Commento dell'ufficio sulla riga (si vede nella BOM)">${r.notaOperatore ?? ''}</textarea></label>
+    <button class="primario">Salva le modifiche</button>
+  </form>`;
+}
+
+/** Riga aggiunta a mano (Federico, 2/11/2026): componente che manca nella BOM o che si compra altrove. */
+function bloccoAggiungiRiga(a: any): Raw {
+  return html`<details class="blocco" id="aggiungi-riga"><summary>+ Aggiungi una riga</summary>
+    <form method="post" action="/quotazioni/bom/${a.id}/aggiungi">
+      <p class="nota">Per un componente che non è nella BOM del cliente o che si compra altrove (magazzino, altro fornitore). Con il P/N il portale lo codifica e cerca
+        i prezzi come le altre righe; se scrivi il prezzo vale quello. Entra nei totali e quindi nel costo componenti del preventivo collegato.</p>
+      <div class="riga-campi">
+        <label>P/N <input name="pn" autocomplete="off" class="codice"></label>
+        <label>Descrizione <input name="descrizione" autocomplete="off" placeholder="es. DISSIPATORE TO-220"></label>
+        <label>Designatori <input name="designatori" autocomplete="off" placeholder="facoltativo"></label>
+      </div>
+      <div class="riga-campi">
+        <label class="stretto">Pezzi a scheda <input name="qta" inputmode="decimal" autocomplete="off" required></label>
+        <label class="stretto">Prezzo €/pz <input name="prezzo" inputmode="decimal" autocomplete="off" placeholder="facoltativo"></label>
+        <label>Si compra da <input name="dove" autocomplete="off" placeholder="facoltativo, es. magazzino"></label>
+      </div>
+      <label>Nota <input name="nota" autocomplete="off"></label>
+      <button class="primario">Aggiungi la riga</button>
+    </form></details>`;
+}
+
 function paginaRiga(a: any, r: RigaBom): Raw {
   const bloccata = r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO;
   const qta = r.acquisti[r.acquisti.length - 1]?.lorda ?? 0;
@@ -505,6 +560,7 @@ function paginaRiga(a: any, r: RigaBom): Raw {
         <label>Prezzo a mano <small class="unita">€/pz, vale al posto di quello proposto</small>
           <input name="prezzo" inputmode="decimal" autocomplete="off" value="${r.prezzoManuale != null ? String(r.prezzoManuale).replace('.', ',') : ''}" placeholder="es. 0,125"></label>
         <button class="primario">Salva prezzo</button>${r.prezzoManuale != null ? html`<button name="togli" value="1">Torna al prezzo proposto</button>` : ''}</form>`}
+      ${a.file_nome === FILE_SINGOLA ? '' : bloccoModificaMano(a, r)}
       ${bloccoAlternative(a, r, qta)}
       ${r.acquisti.length ? html`<table class="acquisti"><thead><tr><th class="n">Schede</th><th class="n">Netta</th><th>Scarto</th><th class="n">Da ordinare</th><th>Fornitore</th><th class="n">€/pz</th><th class="n">Totale</th></tr></thead><tbody>
         ${r.acquisti.map(x => html`<tr><td class="n">${num(x.schede, 0)}</td><td class="n">${num(x.netta, 0)}</td><td>${x.scarto ? `+${x.scarto} ` : ''}<small>${x.regolaScarto}</small></td>

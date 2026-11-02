@@ -26,8 +26,8 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { pianificaProduzione } from '../ordini-servizio.js';
 import { caricoGiornaliero } from '../../engine/ordini.js';
 import { stimaConsegna } from '../../engine/consegna-preventivo.js';
-import { creaOrdineDaPreventivo, propostaOrdineDaPreventivo } from '../ordine-da-preventivo-servizio.js';
-import { righeDaModuloOrdine, totaleOrdineProposto, type RigaOrdineProposta } from '../../engine/ordine-da-preventivo.js';
+import { creaOrdineDaPreventivi, creaOrdineDaPreventivo, propostaOrdineDaPreventivi, propostaOrdineDaPreventivo } from '../ordine-da-preventivo-servizio.js';
+import { indirizzoOrdine, righeDaModuloOrdine, totaleOrdineProposto, type RigaOrdineProposta } from '../../engine/ordine-da-preventivo.js';
 
 const PROVENIENZE: [number, string, string][] = [
   [1, 'Cliente, da restituire', 'Materiale del cliente da restituire a fine lavoro: non passa dal magazzino (niente etichettatura, stoccaggio ed estrazione) e si aggiunge il reso in imballaggio'],
@@ -69,6 +69,7 @@ export function rottePreventivi() {
       azione: '/preventivi/azioni', nome: { singolare: 'preventivo', plurale: 'preventivi' },
       pulsanti: [
         { azione: 'commessa', testo: 'Crea commessa', serve: '1', titolo: 'Crea la commessa dal preventivo selezionato (uno alla volta)' },
+        { azione: 'ordine', testo: 'Crea ordine', serve: '1+', titolo: 'Ordine cliente dai preventivi selezionati: con più preventivi dello stesso cliente nasce un ordine unico' },
         { azione: 'duplica', testo: 'Duplica', serve: '1+', titolo: 'Nuovo preventivo con fasi, tariffe e prezzi attuali' },
         { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Elimina i preventivi selezionati (non quelli già diventati commessa)',
           chiedi: 'Eliminare {n} preventiv{o|i}? L\'operazione non si può annullare (prima viene salvato un backup).' },
@@ -117,6 +118,26 @@ export function rottePreventivi() {
 
   // prodotti (prima di '/:id', altrimenti "prodotti" verrebbe letto come numero di preventivo)
   // selezionabili per il cliente scelto
+  // ── Ordine unico da più preventivi dello stesso cliente (Cinzia, 2/11/2026) ──
+  const idsDaQuery = (v: unknown) => [...new Set([v ?? []].flat().map(x => Number(x)).filter(n => Number.isInteger(n) && n > 0))].slice(0, 30);
+  r.get('/ordine', async (req, res) => {
+    const ids = idsDaQuery(req.query.p);
+    if (ids.length === 1) return res.redirect(indirizzoOrdine(ids));
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const x = ids.length ? await propostaOrdineDaPreventivi(ids, oggi) : null;
+    if (!x) return res.redirect(`/preventivi?msg=${encodeURIComponent('Seleziona i preventivi da unire in un ordine.')}`);
+    res.send(paginaOrdine(req, x, x.righe, {}, x.errori ?? []));
+  });
+  r.post('/ordine', async (req, res) => {
+    const ids = idsDaQuery(req.query.p);
+    const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    const e = await creaOrdineDaPreventivi(ids, req.body ?? {}, req.session.utente?.id ?? null, oggi);
+    if (e.id) return res.redirect(`/ordini/${e.id}?msg=${encodeURIComponent('Ordine unico creato dai preventivi: controlla le date, poi conferma d\'ordine o commessa.')}`);
+    const x = ids.length ? await propostaOrdineDaPreventivi(ids, oggi) : null;
+    if (!x) return res.status(404).send('Preventivi non trovati');
+    res.status(400).send(paginaOrdine(req, x, righeDaModuloOrdine(req.body ?? {}), req.body ?? {}, e.errori));
+  });
+
   r.get('/prodotti', async (req, res) => {
     res.json(await prodottiPerCliente(Number(req.query.cliente) || 0));
   });
@@ -236,6 +257,8 @@ export function rottePreventivi() {
   // ── Ordine dal preventivo (proposta della revisione, Adriano 1/11/2026): quando il cliente conferma ──
   const paginaOrdine = (req: any, x: NonNullable<Awaited<ReturnType<typeof propostaOrdineDaPreventivo>>>, righe: RigaOrdineProposta[], b: Record<string, unknown>, errori: string[]) => {
     const p = x.preventivo;
+    const piu = (x.preventivi?.length ?? 0) > 1;
+    const numeri = piu ? x.preventivi!.map(v => v.numero).join(', ') : p.numero;
     const it = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
     const rigaHtml = (r: RigaOrdineProposta | null) => html`<tr>
       <td><select name="riga_tipo"><option value="scheda" ${r?.tipo !== 'servizio' ? raw('selected') : ''}>schede</option><option value="servizio" ${r?.tipo === 'servizio' ? raw('selected') : ''}>servizio</option></select></td>
@@ -245,16 +268,17 @@ export function rottePreventivi() {
       <td><input name="riga_prezzo" value="${r ? num(r.prezzo, 2) : ''}" class="n corta" inputmode="decimal"></td>
       <td class="n">${r ? euro(r.quantita * r.prezzo) : ''}</td></tr>`;
     return String(layout({
-      titolo: `Ordine dal preventivo ${p.numero}`, utente: req.session.utente!, attiva: 'preventivi', avviso: errori.length ? errori.join(' ') : undefined,
+      titolo: piu ? `Ordine dai preventivi ${numeri}` : `Ordine dal preventivo ${p.numero}`, utente: req.session.utente!, attiva: 'preventivi', avviso: errori.length ? errori.join(' ') : undefined,
       contenuto: html`
-      <div class="intestazione-pagina"><h1>Crea l'ordine dal preventivo ${p.numero}</h1>
-        <div class="azioni"><a class="bottone" href="/preventivi/${p.id}">Torna al preventivo</a></div></div>
+      <div class="intestazione-pagina"><h1>${piu ? `Crea un ordine unico dai preventivi ${numeri}` : `Crea l'ordine dal preventivo ${p.numero}`}</h1>
+        <div class="azioni"><a class="bottone" href="${piu ? '/preventivi' : `/preventivi/${p.id}`}">${piu ? 'Torna ai preventivi' : 'Torna al preventivo'}</a></div></div>
+      ${piu ? html`<p class="nota">Un solo ordine con le righe di tutti i preventivi scelti, come l'ordine del cliente. La consegna proposta è la più lontana.</p>` : ''}
       <p class="nota">Il cliente ha confermato il preventivo: qui nasce l'ordine cliente con le righe già compilate (prezzo a scheda del preventivo${x.primoLotto ? ', più le una tantum del primo lotto come righe di servizio' : ''}).
         Controlla quantità, prezzi e consegna, poi <b>Crea l'ordine</b>: lo trovi in Ordini clienti, entra nel Gantt e da lì si fanno conferma d'ordine, commessa e DDT.</p>
       ${x.ordiniEsistenti.length ? html`<div class="avviso info">Da questo preventivo ${x.ordiniEsistenti.length === 1 ? 'è già nato l\'ordine' : 'sono già nati gli ordini'}
         ${x.ordiniEsistenti.map((o, k) => html`${k ? ', ' : ''}<a href="/ordini/${o.id}">${o.numero}/${o.anno}</a>`)}. Creane un altro solo per un nuovo lotto.</div>` : ''}
-      <form method="post" class="riquadro" autocomplete="off">
-        <p>Cliente <b>${x.cliente || '(manca il cliente dall\'anagrafica)'}</b>${x.preventivo.intestazione?.codice ? html` · codice <b>${x.preventivo.intestazione.codice}</b>` : ''}${x.preventivo.intestazione?.revisione ? html` rev. ${x.preventivo.intestazione.revisione}` : ''}</p>
+      <form method="post" class="riquadro" autocomplete="off" action="${indirizzoOrdine(piu ? x.preventivi!.map(v => v.id) : [p.id])}">
+        <p>Cliente <b>${x.cliente || '(manca il cliente dall\'anagrafica)'}</b>${!piu && x.preventivo.intestazione?.codice ? html` · codice <b>${x.preventivo.intestazione.codice}</b>` : ''}${!piu && x.preventivo.intestazione?.revisione ? html` rev. ${x.preventivo.intestazione.revisione}` : ''}</p>
         <div class="riga-campi">
           <label>N. ordine del cliente <input name="rifCliente" value="${String(b.rifCliente ?? '')}" placeholder="es. 26-366"></label>
           <label>Data ordine del cliente <input type="date" name="dataOrdineCliente" value="${String(b.dataOrdineCliente ?? '')}"></label>
@@ -347,6 +371,7 @@ export function rottePreventivi() {
       if (ids.length !== 1) return torna('La commessa si crea da un preventivo alla volta: selezionane uno solo.');
       return res.redirect(`/commesse/nuova?preventivo=${ids[0]}`);
     }
+    if (azione === 'ordine') return res.redirect(indirizzoOrdine(ids));
     if (azione === 'duplica') {
       const nuovi: number[] = [];
       for (const id of ids) { const n = await duplica(id, req.session.utente!.id); if (n) nuovi.push(n); }

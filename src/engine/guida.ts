@@ -132,13 +132,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'ordine-da-preventivo', area: 'preventivi', titolo: 'Il cliente ha confermato: creare l\'ordine dal preventivo',
-    parole: 'ordine dal preventivo crea ordine cliente conferma confermato accettato righe quantità prezzo consegna proposta una tantum',
+    parole: 'ordine dal preventivo crea ordine cliente conferma confermato accettato righe quantità prezzo consegna proposta una tantum unico più preventivi unire insieme stesso cliente',
     testo: [
       'Quando il cliente conferma un preventivo non serve riscrivere l\'ordine: nel preventivo salvato il pulsante "Crea ordine" apre l\'ordine cliente già compilato con la riga delle schede (codice, descrizione, quantità e prezzo a scheda del preventivo) e, se è il primo lotto, una riga di servizio per ogni costo una tantum (programmazioni, lamine…).',
       'La consegna richiesta è proposta dal portale come nella pagina "Data di consegna" (carico del Gantt e ore ciclo del preventivo), ma si può cambiare. Si scrivono il numero e la data dell\'ordine del cliente, si correggono righe e prezzi se serve e si preme "Crea l\'ordine".',
       'L\'ordine nasce in Ordini clienti con origine "preventivo" e numero della serie 9001 (come quelli letti dalle email), entra nel Gantt e nel cruscotto; il preventivo passa ad "accettato". Da lì si fanno conferma d\'ordine, commessa e DDT come sempre.',
+      'Un ordine unico da più preventivi (dal 2/11/2026): quando il cliente manda un solo ordine per più schede quotate a parte, nell\'elenco Preventivi spunta i preventivi e premi "Crea ordine" in alto a destra. Le righe di tutti i preventivi finiscono nello stesso ordine; la consegna proposta è la più lontana. Si possono unire solo preventivi dello stesso cliente; tutti passano ad "accettato".',
     ],
-    passi: ['Apri il preventivo confermato dal cliente.', 'Premi "Crea ordine" accanto a "Crea commessa".', 'Controlla righe, prezzi e consegna, scrivi il numero d\'ordine del cliente, poi "Crea l\'ordine".'],
+    passi: ['Apri il preventivo confermato dal cliente (o spunta più preventivi nell\'elenco e premi "Crea ordine").', 'Premi "Crea ordine" accanto a "Crea commessa".', 'Controlla righe, prezzi e consegna, scrivi il numero d\'ordine del cliente, poi "Crea l\'ordine".'],
     pagine: [['/preventivi', 'Preventivi'], ['/ordini', 'Ordini clienti']],
   },
   {
@@ -745,6 +746,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/quotazioni', 'Quotazioni']],
   },
   {
+    id: 'bom-modifiche-mano', area: 'componenti', titolo: 'Correggere a mano una riga della BOM o aggiungerne una',
+    parole: 'modifica a mano correggere p/n sbagliato quantità scarto nota commento aggiungere riga aggiunta togliere componente comprato altrove magazzino altro fornitore manca nella bom',
+    testo: [
+      'Se nella BOM del cliente il P/N o la quantità sono sbagliati: apri la riga ("modifica") e usa il riquadro "Modifica a mano". La BOM si rielabora con il P/N giusto (codici e prezzi) e la correzione resta anche con "Aggiorna prezzi"; nelle note si vede com\'era nella BOM.',
+      'Nello stesso riquadro lo scarto: scrivi i pezzi in più per lotto (es. 10) o la percentuale (es. 5%) al posto di quello standard; vuoto = di nuovo quello standard. La nota è un commento dell\'ufficio e si vede nella colonna Note della BOM.',
+      'Componenti che mancano nella BOM o che si comprano altrove (magazzino, altro fornitore): sotto la tabella "+ Aggiungi una riga" con P/N o descrizione, pezzi a scheda, prezzo (facoltativo: se c\'è vale quello) e da chi si compra. La riga entra nei totali e quindi nel costo componenti del preventivo collegato alla BOM.',
+      'Una riga che non serve si toglie con "togli" in fondo alla riga.',
+    ],
+    passi: ['Quotazioni → apri la BOM.', 'Riga sbagliata: "modifica" → Modifica a mano → Salva.', 'Riga che manca: "+ Aggiungi una riga" sotto la tabella.'],
+    pagine: [['/quotazioni/bom', 'Quotazioni → BOM']],
+  },
+  {
     id: 'componenti-in-comune', area: 'componenti', titolo: 'Componenti in comune tra le schede di un cliente (feeder fissi)',
     parole: 'componenti in comune comuni stessi feeder fissi cambio macchina cambi fox ipulse selea cliente schede bom confronto attrezzaggio',
     testo: [
@@ -1111,7 +1124,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'suggerimento', area: 'suggerimenti', titolo: 'Proporre un\'idea per il portale',
     parole: 'suggerimento idea proposta migliorare richiesta funzione manca',
     testo: [
-      'Se manca qualcosa o un passaggio è scomodo, scrivilo in Suggerimenti: titolo, descrizione, chi lo propone, area e priorità. Poi si decide se e quando svilupparlo (da valutare, da chiarire, in programma, in sviluppo, fatto, scartato).',
+      'Se manca qualcosa o un passaggio è scomodo, scrivilo in Suggerimenti: titolo, descrizione, chi lo propone (si sceglie dal menu degli utenti, è già scelto chi sta usando il portale ed è obbligatorio), area e priorità. Poi si decide se e quando svilupparlo (da valutare, da chiarire, in programma, in sviluppo, fatto, scartato).',
       'Una volta alla settimana Claude legge i suggerimenti aperti: realizza quelli validi e li segna "Fatto" con una risposta che spiega dove trovarli; se un\'idea non è chiara scrive una domanda e la mette "Da chiarire" (in cima all\'elenco, in giallo).',
       'Per rispondere a una domanda: apri il suggerimento, scrivi la risposta in "Note e risposte" e salva. La settimana dopo Claude la rilegge.',
     ],

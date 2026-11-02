@@ -253,6 +253,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Componenti in comune (suggerimento di Adriano Croci "Macchine per Selea", 2/11/2026; `/quotazioni/comuni`, `engine/componenti-comuni.ts`, test in
    `tests/componenti-comuni.test.ts`): cliente → sue BOM quotate (via `preventivi.bom_id` / `pacchetti_scheda.bom_id`, o spuntate a mano) → componenti presenti in più
    schede (stesso codice di produzione, altrimenti P/N senza trattini; non montati esclusi), in cima i più usati; "Feeder fissi" N = i primi N in verde. Solo lettura.
+   Modifiche a mano della BOM (suggerimenti di Federico, 2/11/2026; `engine/codifica/modifiche-mano.ts`, `modificaRigaAMano`/`aggiungiRigaBom` in `codifica-servizio.ts`,
+   test in `tests/modifiche-mano.test.ts`): riga → "Modifica a mano" (POST `.../riga/:n/mano`): P/N e quantità scritti nella riga di `righe_file` (colonna "… (a mano)"
+   se la BOM non l'ha) poi rielabora; scarto a mano (pezzi "10" o "5%") e nota in `righe_file[].mano`, valgono subito. "+ Aggiungi una riga" (POST `/quotazioni/bom/:id/aggiungi`):
+   componente che manca o comprato altrove, `mano.aggiunta` + prezzo e "si compra da"; entra nei totali e nel costo del preventivo collegato.
    BOM collegata al preventivo (migrazione 024, `preventivi.bom_id`): nel gruppo ACQUISTI si sceglie una BOM caricata e il costo
    componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette (`costoMaterialiPer`, niente chiamate ai
    distributori); il valore resta nei parametri del preventivo. Scrivere il costo a mano toglie il collegamento; eliminare la BOM no.
@@ -324,6 +328,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (in cima, giallo) + colonna `risposta` (domanda/risposta per chi ha proposto; chi risponde scrive nelle note). Claude legge e aggiorna con
    GET/POST `/api/claude/suggerimenti` e la chiave creata in Suggerimenti → Collegamento con Claude (impostazioni 'claude_api'; nel progetto Claude
    è un "Segreto di rete" per casteltech-portale.onrender.com, arriva come Authorization: Bearer, oppure x-chiave-portale); può cambiare solo stato, risposta e aggiungere una riga datata alle note.
+   "Proposto da" = menu con gli utenti attivi di ufficio e produzione, già scelto chi usa il portale, obbligatorio (Federico 2/11/2026, `elencoProponenti`).
    ✅ Calendario dei ritardi (idea di Federico; `engine/calendario-ritardi.ts`, `rotte/calendario.ts`, test in `tests/calendario-ritardi.test.ts`):
    `/calendario/<chiave>/ritardi.ics` aggiunto "Da URL" in Google Calendar di info@ (niente delega Workspace), indirizzo in Impostazioni → Promemoria.
    Eventi: consegna scaduta, fine Gantt superata, doveva partire, avviso 2 gg lavorativi prima dell'inizio, sovraccarico (ore > ore al giorno),
@@ -396,7 +401,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    preventivi, commesse, ordini, documenti emessi e ricevuti); pulsante Excel con lo stesso filtro su preventivi, commesse, ordini, clienti, prodotti, fornitori,
    CRM, fatture fornitori (`server/excel.ts`: `excelSemplice` + `inviaExcel`; un elenco nuovo aggiunge la sua rotta `/elenco.xlsx` con le stesse righe filtrate).
    ✅ Gruppo B delle proposte (Adriano 1/11/2026): ordine dal preventivo (`engine/ordine-da-preventivo.ts`, `ordine-da-preventivo-servizio.ts`, GET/POST
-   `/preventivi/:id/ordine`, migrazione 058 `ordini.preventivo_id` + origine 'preventivo', test `tests/ordine-da-preventivo.test.ts`): "Crea ordine" nel preventivo
+   `/preventivi/:id/ordine`, migrazione 058 `ordini.preventivo_id` + origine 'preventivo', test `tests/ordine-da-preventivo.test.ts`; ordine unico da più preventivi dello stesso cliente = Cinzia 2/11/2026,
+   azione "Crea ordine" dell'elenco → `/preventivi/ordine?p=ID&p=ID`, `creaOrdineDaPreventivi`, `controlliPiuPreventivi`): "Crea ordine" nel preventivo
    salvato → riga schede al prezzo del preventivo + una tantum come servizi se primo lotto, consegna proposta da `stimaConsegna`, numero serie 9001, preventivo →
    accettato. "Cosa manca" nella commessa (`engine/cosa-manca.ts`, `mancantiCommessa`/`ordinaMancanti` in `ordini-fornitore-servizio.ts`, `/ordini/fornitori/commessa/:id`,
    test `tests/cosa-manca.test.ts`): BOM del preventivo per la quantità quotata più vicina contro gli ordini a fornitore con `bom_id`/`commessa_id` (chiave = codice

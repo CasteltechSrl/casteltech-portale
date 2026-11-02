@@ -9,7 +9,7 @@ import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '
 import { html, data, raw, type Raw } from '../views/html.js';
 import { leggiChiaveClaude, nuovaChiaveClaude } from './api-claude.js';
 import {
-  AREE_SUGGERIMENTI, PRIORITA_SUGGERIMENTI, STATI_SUGGERIMENTI, chiuso, ordinaSuggerimenti, preparaSuggerimento,
+  AREE_SUGGERIMENTI, PRIORITA_SUGGERIMENTI, STATI_SUGGERIMENTI, chiuso, elencoProponenti, ordinaSuggerimenti, preparaSuggerimento,
   type Suggerimento,
 } from '../../engine/suggerimenti.js';
 
@@ -43,12 +43,18 @@ export function rotteSuggerimenti() {
     String(layout({ titolo, utente: req.session.utente, attiva: 'suggerimenti', contenuto, avviso, script: 'elenco.js' }));
   const torna = (msg: string, dove = '') => `/suggerimenti${dove}?msg=${encodeURIComponent(msg)}`;
 
-  const modulo = (s: Partial<Suggerimento>, azione: string, pulsante: string) => html`
+  // "Proposto da" = menu con gli utenti del portale; nel suggerimento nuovo è già scelto chi sta usando il portale (Federico, 2/11/2026)
+  const nomiUtenti = async () => (await q<{ nome: string }>(`SELECT nome FROM utenti WHERE attivo AND ruolo IN ('ufficio', 'produzione') ORDER BY nome`)).map(u => u.nome);
+  const modulo = (s: Partial<Suggerimento>, azione: string, pulsante: string, utenti: string[], predefinito?: string | null) => {
+    const scelto = s.proposto_da ?? predefinito ?? '';
+    const nomi = elencoProponenti(utenti, scelto);
+    return html`
     <form method="post" action="${azione}" class="blocco stretto-form">
       <label>Titolo <input name="titolo" value="${s.titolo ?? ''}" required placeholder="In poche parole, es. Avviso Telegram alla fase successiva"></label>
       <label>Descrizione <textarea name="descrizione" rows="5" placeholder="Cosa dovrebbe fare il portale e perché serve">${s.descrizione ?? ''}</textarea></label>
       <div class="riga-campi">
-        <label>Proposto da <input name="proposto_da" value="${s.proposto_da ?? ''}" placeholder="Nome"></label>
+        <label>Proposto da <select name="proposto_da" required><option value="">— scegli —</option>
+          ${nomi.map(n => html`<option ${n.toLowerCase() === String(scelto).toLowerCase() ? raw('selected') : ''}>${n}</option>`)}</select></label>
         <label>Data <input name="proposto_il" type="date" value="${s.proposto_il ?? oggiRoma()}"></label>
       </div>
       <div class="riga-campi">
@@ -61,6 +67,7 @@ export function rotteSuggerimenti() {
       <label>Note e risposte di chi l'ha proposto <textarea name="note" rows="3" placeholder="Decisioni prese, cosa manca per partire, risposte alle domande">${s.note ?? ''}</textarea></label>
       <button class="primario">${pulsante}</button>
     </form>`;
+  };
 
   r.get('/', async (req, res) => {
     const chiaveClaude = await riquadroChiaveClaude(req.query.chiave === 'nuova');
@@ -132,13 +139,13 @@ export function rotteSuggerimenti() {
     res.redirect('/suggerimenti?chiave=nuova');
   });
 
-  r.get('/nuovo', (req, res) => res.send(pagina(req, 'Nuovo suggerimento', html`
+  r.get('/nuovo', async (req, res) => res.send(pagina(req, 'Nuovo suggerimento', html`
     <p><a href="/suggerimenti">← Tutti i suggerimenti</a></p><h1>Nuovo suggerimento</h1>
-    ${modulo({}, '/suggerimenti/nuovo', 'Aggiungi')}`)));
+    ${modulo({}, '/suggerimenti/nuovo', 'Aggiungi', await nomiUtenti(), req.session.utente?.nome)}`)));
 
   r.post('/nuovo', async (req, res) => {
     const { suggerimento: s, errore } = preparaSuggerimento(req.body, oggiRoma());
-    if (errore) return res.send(pagina(req, 'Nuovo suggerimento', html`<h1>Nuovo suggerimento</h1>${modulo(s, '/suggerimenti/nuovo', 'Aggiungi')}`, errore));
+    if (errore) return res.send(pagina(req, 'Nuovo suggerimento', html`<h1>Nuovo suggerimento</h1>${modulo(s, '/suggerimenti/nuovo', 'Aggiungi', await nomiUtenti())}`, errore));
     const risposta = String(req.body.risposta ?? '').trim() || null;
     await q(`INSERT INTO suggerimenti (${CAMPI.join(', ')}, creato_da, risposta, risposta_da, risposta_il)
       VALUES (${CAMPI.map((_, i) => `$${i + 1}`).join(', ')}, $${CAMPI.length + 1}, $${CAMPI.length + 2}, $${CAMPI.length + 3}, $${CAMPI.length + 4})`,
@@ -146,13 +153,13 @@ export function rotteSuggerimenti() {
     res.redirect(torna(`Suggerimento "${s.titolo}" aggiunto.`));
   });
 
-  const scheda = (req: Request, id: number, s: Partial<Suggerimento>, avviso?: string) => pagina(req, s.titolo || 'Suggerimento', html`
+  const scheda = async (req: Request, id: number, s: Partial<Suggerimento>, avviso?: string) => pagina(req, s.titolo || 'Suggerimento', html`
     <p><a href="/suggerimenti">← Tutti i suggerimenti</a></p>
     <h1>${s.titolo} ${s.stato ? statoBadge(s.stato) : ''}</h1>
     ${(s as any).risposta ? html`<div class="blocco sugg-risposta-blocco"><strong>${s.stato === 'da_chiarire' ? 'Domanda' : 'Risposta'}${(s as any).risposta_da ? ` di ${(s as any).risposta_da}` : ''}</strong>
       ${(s as any).risposta_il ? html` <span class="nota">(${data((s as any).risposta_il)})</span>` : ''}<p>${(s as any).risposta}</p>
       ${s.stato === 'da_chiarire' ? html`<p class="nota">Rispondi nel campo "Note e risposte" qui sotto e salva: la prossima settimana Claude la rilegge.</p>` : ''}</div>` : ''}
-    ${modulo(s, `/suggerimenti/${id}`, 'Salva')}
+    ${modulo(s, `/suggerimenti/${id}`, 'Salva', await nomiUtenti())}
     <form method="post" action="/suggerimenti/${id}/elimina" data-conferma="${`Eliminare il suggerimento "${s.titolo}"? Non si può annullare.`}">
       <button class="link negativo">Elimina</button></form>`, avviso);
 
@@ -160,13 +167,13 @@ export function rotteSuggerimenti() {
     const id = Number(req.params.id);
     const s = await q1(`SELECT * FROM suggerimenti WHERE id = $1`, [id]);
     if (!s) return res.redirect(torna('Suggerimento non trovato.'));
-    res.send(scheda(req, id, s, req.query.msg ? String(req.query.msg) : undefined));
+    res.send(await scheda(req, id, s, req.query.msg ? String(req.query.msg) : undefined));
   });
 
   r.post('/:id', async (req, res) => {
     const id = Number(req.params.id);
     const { suggerimento: s, errore } = preparaSuggerimento(req.body, oggiRoma());
-    if (errore) return res.send(scheda(req, id, { ...s, risposta: req.body.risposta } as any, errore));
+    if (errore) return res.send(await scheda(req, id, { ...s, risposta: req.body.risposta } as any, errore));
     const risposta = String(req.body.risposta ?? '').replace(/\r\n/g, '\n').trim() || null;
     const n = CAMPI.length + 2;
     const ok = await q1(`UPDATE suggerimenti SET ${CAMPI.map((k, i) => `${k} = $${i + 2}`).join(', ')},

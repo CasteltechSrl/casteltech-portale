@@ -52,3 +52,24 @@ export function controlliOrdineDaPreventivo(d: { clienteId: number | null; righe
 }
 
 export const totaleOrdineProposto = (righe: RigaOrdineProposta[]) => r2(righe.reduce((s, r) => s + r.quantita * r.prezzo, 0));
+
+/**
+ * Un ordine da più preventivi (suggerimento di Cinzia, 2/11/2026: "se facciamo più preventivi vogliamo un ordine unico come da
+ * ordine del cliente"): i preventivi devono essere dello stesso cliente; errori in italiano, nessuno = si può fare.
+ */
+export function controlliPiuPreventivi(preventivi: { numero: string; clienteId: number | null }[]): string[] {
+  if (!preventivi.length) return ['Seleziona almeno un preventivo.'];
+  const senza = preventivi.filter(p => !p.clienteId).map(p => p.numero);
+  if (senza.length) return [`Senza cliente dall'anagrafica: ${senza.join(', ')}. Apri il preventivo, scegli il cliente e salvalo.`];
+  if (new Set(preventivi.map(p => p.clienteId)).size > 1) return ['I preventivi sono di clienti diversi: un ordine unico si fa solo con preventivi dello stesso cliente.'];
+  return [];
+}
+
+/** Indirizzo della pagina dell'ordine: un preventivo = /preventivi/ID/ordine, più preventivi = /preventivi/ordine?p=ID&p=ID. */
+export function indirizzoOrdine(ids: number[]): string {
+  const unici = [...new Set(ids)];
+  return unici.length === 1 ? `/preventivi/${unici[0]}/ordine` : `/preventivi/ordine?${unici.map(id => `p=${id}`).join('&')}`;
+}
+
+/** Nota dell'ordine: da quale preventivo (o da quali) nasce. */
+export const notaPreventivi = (numeri: string[]) => numeri.length === 1 ? `Dal preventivo ${numeri[0]}.` : `Dai preventivi ${numeri.join(', ')}.`;

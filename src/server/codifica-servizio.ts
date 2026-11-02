@@ -19,9 +19,10 @@ import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/deco
 import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandidato, type CandidatoPn, type ColonnaPn } from '../engine/codifica/candidati-pn.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
-import { NOMI_FORNITORI, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
+import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
+import { leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -47,6 +48,8 @@ export interface RigaBom {
   alternativaProposta?: string | null;
   /** prezzo €/pz scritto dall'operatore: vale al posto di quello dei distributori (Adriano 28/10/2026) */
   prezzoManuale?: number | null;
+  /** modifiche a mano (Federico, 2/11/2026): scarto al posto di quello standard, nota dell'ufficio, riga aggiunta e dove si compra */
+  scartoManuale?: ScartoMano | null; notaOperatore?: string | null; aggiuntaAMano?: boolean; doveSiCompra?: string | null;
 }
 
 export const PREZZO_A_MANO = 'manuale' as const;
@@ -219,11 +222,11 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     return v && v.toLowerCase() !== 'nan' ? v : null;
   };
   // 1. righe di base
-  const righeFile = a.righe_file as { n: number; celle: string[] }[];
+  const righeFile = a.righe_file as RigaFile[];
   // senza P/N: il codice si cerca in Valore e Descrizione, prima nella colonna che ne contiene di più (Adriano 29/10/2026)
   const ordinePn = (['descrizione', 'valore'] as ColonnaPn[])
     .map(c => ({ c, q: quotaPn(righeFile.map(r => val(r.celle, c))) })).sort((x, y) => y.q - x.q).map(x => x.c);
-  const righe: RigaBom[] = righeFile.map(({ n, celle }) => {
+  const righe: RigaBom[] = righeFile.map(({ n, celle, mano }) => {
     const qt = quantitaRiga(val(celle, 'quantita'), val(celle, 'designatori'));
     const r: RigaBom = { n, pn: val(celle, 'pn'), produttore: val(celle, 'produttore'), designatori: val(celle, 'designatori'), valore: val(celle, 'valore'),
       footprint: val(celle, 'footprint'), descrizioneBom: val(celle, 'descrizione'), qtaScheda: qt.qta, esito: ESITI.INC, famiglia: null, attributi: {},
@@ -237,6 +240,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
       r.alternativaScelta = prima.alternativaScelta ?? null;
       r.prezzoManuale = prima.prezzoManuale ?? null;
     }
+    applicaMano(r, mano);
     (r as any)._fam = val(celle, 'famiglia');
     (r as any)._candidati = candidati;
     (r as any)._escluso = celle.some(c => CELLA_ESCLUSA.test(String(c ?? '').trim()));
@@ -671,6 +675,10 @@ export async function impostaPrezzoManuale(id: number, n: number, prezzo: number
   const r = righe.find(x => x.n === n);
   if (!r) return 'Riga non trovata.';
   r.prezzoManuale = prezzo;
+  // la riga aggiunta a mano ricorda il prezzo nel file: si aggiorna anche lì, così "Rielabora" non rimette quello vecchio
+  const rf = (a.righe_file ?? []) as RigaFile[];
+  const f = rf.find(x => x.n === n);
+  if (f?.mano && 'prezzo' in f.mano) { f.mano.prezzo = prezzo; await q(`UPDATE bom_analisi SET righe_file = $2 WHERE id = $1`, [id, JSON.stringify(rf)]); }
   await calcolaAcquisti(righe, a.quantita ?? []);
   await salvaRighe(id, righe);
   return prezzo == null ? 'Prezzo a mano tolto: vale di nuovo quello dei distributori.' : `Prezzo a mano salvato: ${String(prezzo).replace('.', ',')} €/pz.`;
@@ -757,7 +765,8 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
       const manuale = r.prezzoManuale != null && r.prezzoManuale >= 0 ? r.prezzoManuale : null;
       const migliore0 = manuale == null ? sceltaMigliore(r.offerte, netta) : null;
       const p0 = manuale ?? (migliore0 ? prezzoUnitario(migliore0.offerta, netta) : null);
-      const sc = pezziScarto(r.famiglia, p0, netta, regole);
+      const sc = r.scartoManuale ? { pezzi: pezziScartoAMano(r.scartoManuale, netta), regola: `scarto a mano (${testoScarto(r.scartoManuale)})` }
+        : pezziScarto(r.famiglia, p0, netta, regole);
       const lorda = netta + sc.pezzi;
       if (manuale != null) { // prezzo scritto dall'operatore: vale quello, qualunque cosa propongano i distributori
         r.acquisti.push({ schede, netta, scarto: sc.pezzi, regolaScarto: sc.regola, lorda,
@@ -860,6 +869,86 @@ export async function togliRiga(id: number, n: number): Promise<string> {
   await calcolaAcquisti(righe, a.quantita ?? []);
   await salvaRighe(id, righe);
   return `Riga ${n} tolta dalla BOM.`;
+}
+
+/** Dati scritti a mano sulla riga del file → riga della BOM (Federico, 2/11/2026). */
+function applicaMano(r: RigaBom, mano: ManoRiga | undefined) {
+  if (!mano) return;
+  r.scartoManuale = mano.scarto ?? null;
+  r.notaOperatore = mano.nota ?? null;
+  r.aggiuntaAMano = !!mano.aggiunta;
+  r.doveSiCompra = mano.dove ?? null;
+  if (r.prezzoManuale == null && mano.prezzo != null) r.prezzoManuale = mano.prezzo;
+  if (mano.aggiunta) r.fonti.push('riga aggiunta a mano');
+  if (mano.pnBom !== undefined && (mano.pnBom ?? '') !== (r.pn ?? '')) r.note.push(`P/N corretto a mano (nella BOM: ${mano.pnBom || 'nessuno'})`);
+  if (mano.qtaBom !== undefined) r.note.push(`quantità corretta a mano (nella BOM: ${mano.qtaBom || 'nessuna'})`);
+  if (mano.dove) r.note.push(`si compra da: ${mano.dove}`);
+}
+
+/**
+ * Modifica a mano di una riga (Federico, 2/11/2026): P/N e quantità a scheda si scrivono nella riga del file e la BOM si rielabora
+ * (codici e prezzi del P/N nuovo); scarto e nota valgono subito. Restituisce il messaggio e se serve rielaborare.
+ */
+export async function modificaRigaAMano(id: number, n: number, dati: { pn?: string; qta?: string; scarto?: string; nota?: string }): Promise<{ messaggio: string; rielabora: boolean }> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  if (!a) return { messaggio: 'BOM non trovata.', rielabora: false };
+  const righeFile = (a.righe_file ?? []) as RigaFile[];
+  const f = righeFile.find(x => x.n === n);
+  const righe: RigaBom[] = a.righe ?? [];
+  const r = righe.find(x => x.n === n);
+  if (!f || !r) return { messaggio: 'Riga non trovata.', rielabora: false };
+  const sc = leggiScartoAMano(dati.scarto);
+  if (sc.errore) return { messaggio: sc.errore, rielabora: false };
+  const pn = dati.pn === undefined ? undefined : dati.pn.trim().toUpperCase();
+  const qtaTesto = dati.qta === undefined ? undefined : dati.qta.trim();
+  const qta = qtaTesto ? leggiQuantitaScheda(qtaTesto) : null;
+  if (qtaTesto && qta == null) return { messaggio: 'Quantità a scheda non valida: scrivi un numero, es. 4 o 0,5.', rielabora: false };
+  const mano: ManoRiga = { ...(f.mano ?? {}) };
+  const map: Partial<Record<Ruolo, string>> = a.mappatura ?? {};
+  const colonne: string[] = a.colonne ?? [];
+  const cella = (ruolo: Ruolo) => { const c = map[ruolo]; return c ? String(f.celle[colonne.indexOf(c)] ?? '').trim() : ''; };
+  const valori: Partial<Record<Ruolo, string | null>> = {};
+  const pnCambiato = pn !== undefined && pnKey(pn) !== pnKey(r.pn ?? cella('pn'));
+  const qtaCambiata = qta != null && qta !== r.qtaScheda;
+  if (pnCambiato) { if (mano.pnBom === undefined) mano.pnBom = cella('pn') || null; valori.pn = pn || null; }
+  if (qtaCambiata) { if (mano.qtaBom === undefined) mano.qtaBom = cella('quantita') || null; valori.quantita = String(qta); }
+  mano.scarto = sc.scarto;
+  mano.nota = dati.nota === undefined ? mano.nota ?? null : dati.nota.trim().slice(0, 500) || null;
+  const scritto = scriviNellaRiga(colonne, map, f.celle, valori, ETICHETTE_RUOLI);
+  f.celle = scritto.celle; f.mano = mano;
+  await q(`UPDATE bom_analisi SET righe_file = $2, colonne = $3, mappatura = $4 WHERE id = $1`,
+    [id, JSON.stringify(righeFile), JSON.stringify(scritto.colonne), JSON.stringify(scritto.mappatura)]);
+  if (pnCambiato || qtaCambiata) return { messaggio: `Riga ${n} corretta: la BOM si rielabora con ${pnCambiato ? 'il P/N nuovo' : 'la quantità nuova'}.`, rielabora: true };
+  r.scartoManuale = mano.scarto; r.notaOperatore = mano.nota;
+  await calcolaAcquisti(righe, a.quantita ?? []);
+  await salvaRighe(id, righe);
+  return { messaggio: 'Scarto e nota salvati.', rielabora: false };
+}
+
+/**
+ * Riga aggiunta a mano (Federico, 2/11/2026): componenti che mancano nella BOM o che si comprano altrove (magazzino, altro fornitore).
+ * Entra nel file della BOM come le altre (codifica e prezzi dai distributori); con il prezzo scritto vale quello.
+ */
+export async function aggiungiRigaBom(id: number, dati: { pn?: string; descrizione?: string; designatori?: string; qta?: string; prezzo?: string; dove?: string; nota?: string }): Promise<{ messaggio: string; n?: number }> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  if (!a) return { messaggio: 'BOM non trovata.' };
+  const pn = String(dati.pn ?? '').trim().toUpperCase(), descrizione = String(dati.descrizione ?? '').trim().toUpperCase();
+  if (!pn && !descrizione) return { messaggio: 'Scrivi il P/N o la descrizione del componente da aggiungere.' };
+  const qta = leggiQuantitaScheda(dati.qta);
+  if (qta == null || qta <= 0) return { messaggio: 'Scrivi quanti pezzi servono a scheda (es. 2 o 0,5).' };
+  const testoPrezzo = String(dati.prezzo ?? '').trim();
+  const prezzo = testoPrezzo ? leggiPrezzo(testoPrezzo) : null;
+  if (testoPrezzo && (prezzo == null || !(prezzo >= 0))) return { messaggio: 'Prezzo non valido: scrivi ad esempio 0,125.' };
+  const righeFile = (a.righe_file ?? []) as RigaFile[];
+  const n = numeroRigaNuova(righeFile, a.righe ?? []);
+  const scritto = scriviNellaRiga(a.colonne ?? [], a.mappatura ?? {}, [], {
+    pn: pn || null, descrizione: descrizione || null, designatori: String(dati.designatori ?? '').trim().toUpperCase() || null, quantita: String(qta),
+  }, ETICHETTE_RUOLI);
+  righeFile.push({ n, celle: scritto.celle, mano: { aggiunta: true, prezzo, dove: String(dati.dove ?? '').trim().toUpperCase().slice(0, 80) || null,
+    nota: String(dati.nota ?? '').trim().slice(0, 500) || null } });
+  await q(`UPDATE bom_analisi SET righe_file = $2, colonne = $3, mappatura = $4 WHERE id = $1`,
+    [id, JSON.stringify(righeFile), JSON.stringify(scritto.colonne), JSON.stringify(scritto.mappatura)]);
+  return { messaggio: `Riga ${n} aggiunta: la BOM si rielabora.`, n };
 }
 
 /** Correzione a mano di una riga: famiglia, attributi, fornito dal cliente. Ricalcola codici e acquisti. */
