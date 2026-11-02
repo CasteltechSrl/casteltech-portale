@@ -6,6 +6,7 @@ export interface RigaModulo {
   codice?: string; descrizione?: string; quantita?: string | number; um?: string; prezzo?: string | number; sconto?: string | number;
   aliquota_iva?: string; solo_descrizione?: string | boolean; ddt_id?: string | number; prodotto_id?: string | number; riga_ordine_id?: string | number;
   acconto_id?: string | number;
+  fonte?: string | null; componente_id?: string | number | null; componente_cliente_id?: string | number | null;   // DDT (Adriano 2/11/2026)
 }
 
 /** Numero scritto all'italiana (1.234,5) o con il punto (1234.5). */
@@ -21,6 +22,8 @@ export interface RigaBozza {
   prezzo: number; sconto: number; aliquota_iva: string | null; ddt_id: number | null; prodotto_id: number | null;
   riga_ordine_id: number | null;   // riga dell'ordine evasa da questa riga (DDT, e fattura che viene dal DDT)
   acconto_id: number | null;       // fattura d'acconto (TD02) scalata da questa riga negativa
+  fonte: string | null;            // DDT: prodotto / componente / componente_cliente / libero
+  componente_id: number | null; componente_cliente_id: number | null;
 }
 
 /** Righe del modulo → righe del documento (quelle completamente vuote si tolgono). Restituisce anche gli errori di scrittura. */
@@ -42,6 +45,8 @@ export function righeDaModulo(righe: RigaModulo[]): { righe: RigaBozza[]; errori
         aliquota_iva: solo ? null : String(r.aliquota_iva ?? '').trim() || null,
         ddt_id: Number(r.ddt_id) || null, prodotto_id: Number(r.prodotto_id) || null, riga_ordine_id: Number(r.riga_ordine_id) || null,
         acconto_id: solo ? null : Number(r.acconto_id) || null,
+        fonte: solo ? null : String(r.fonte ?? '').trim() || null,
+        componente_id: solo ? null : Number(r.componente_id) || null, componente_cliente_id: solo ? null : Number(r.componente_cliente_id) || null,
       };
     });
   return { righe: out, errori };

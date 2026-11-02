@@ -6,7 +6,7 @@
  */
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
-import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
+import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -129,9 +129,10 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
   // codice solo dall'anagrafica del cliente (Adriano 31/10/2026)
   const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
+  // ogni riga sceglie l'anagrafica: prodotto, componente nostro, componente del cliente o libero (Adriano 2/11/2026)
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
-    <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
-    <td>${cellaDescrizione(x, i, prodotti, 'maiuscolo')}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
+    <td>${cellaCodiceDdt(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+    <td>${cellaDescrizioneDdt(x, i, prodotti)}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
     <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
     <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
@@ -158,10 +159,12 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
       <label>Luogo di destinazione (vuoto = sede del cliente${sede ? `: ${sede.replace(/\n/g, ', ')}` : ''})
         <textarea name="destinazione" rows="3" class="maiuscolo">${t.destinazione ?? ''}</textarea></label>
       <label>Note interne (non vanno sul DDT) <input name="note" value="${d.note ?? ''}"></label>
-      <div class="tabella-scorre"><table class="editor" id="righe-documento">
-        <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th></tr></thead>
+      <div class="tabella-scorre"><table class="editor" id="righe-documento" data-cliente="${d.cliente_id ?? ''}">
+        <thead><tr><th title="Da quale anagrafica viene il codice: prodotto, componente nostro, componente del cliente o libero">Da · Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th></tr></thead>
         <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
-      </table></div>
+      </table></div><datalist id="trovati-riga"></datalist>
+      <p class="nota">Da: <b>Prodotto</b> = codici del cliente · <b>Componente nostro</b> = archivio Componenti (cerca per P/N, codice gestionale o di produzione) ·
+        <b>Componente cliente</b> = materiale in conto lavoro del cliente (Anagrafiche → Componenti clienti) · <b>Libero</b> = codice e descrizione scritti a mano.</p>
       ${riquadriSceltaProdotto(d.cliente_id)}
       <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
         <span class="nota">Il prezzo non si stampa sul DDT: passa nella fattura quando si fattura il DDT.</span>
