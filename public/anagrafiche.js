@@ -66,3 +66,37 @@ async function inviaPrezzi(definitivo) {
 }
 controllaPrezzi?.addEventListener('click', () => inviaPrezzi(false));
 confermaPrezzi?.addEventListener('click', () => inviaPrezzi(true));
+
+// Componenti clienti (Adriano 2/11/2026): elenco del cliente da Excel/CSV, prima il riepilogo poi la conferma
+(() => {
+  const controlla = document.getElementById('carica-componenti-clienti');
+  if (!controlla) return;
+  const conferma = document.getElementById('conferma-componenti-clienti');
+  const out = document.getElementById('esito-componenti-clienti');
+  const cliente = document.querySelector('select.carica-cliente');
+  async function invia(definitivo) {
+    const f = document.getElementById('file-componenti-clienti').files[0];
+    if (!cliente.value) { out.textContent = 'Scegli prima il cliente.'; return; }
+    if (!f) { out.textContent = 'Scegli prima il file.'; return; }
+    controlla.disabled = conferma.disabled = true;
+    out.textContent = definitivo ? 'Caricamento…' : 'Lettura del file…';
+    const qs = new URLSearchParams({ cliente: cliente.value, nome: f.name, conferma: definitivo ? '1' : '0' });
+    const res = await fetch('/anagrafiche/componenti-clienti/carica?' + qs, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } }).catch(() => null);
+    const j = res ? await res.json().catch(() => ({})) : {};
+    controlla.disabled = conferma.disabled = false;
+    if (!res?.ok) { out.textContent = j.errore || 'Errore nel caricamento'; conferma.hidden = true; return; }
+    const nome = cliente.selectedOptions[0]?.textContent.replace(/\s*\(\d[\d.]*\)$/, '') ?? '';
+    if (definitivo) {
+      out.textContent = `Fatto: ${j.nuovi} codici nuovi e ${j.aggiornati} aggiornati per ${nome}.`;
+      conferma.hidden = true;
+      setTimeout(() => { location.href = '/anagrafiche/componenti-clienti?cliente=' + cliente.value; }, 1200);
+      return;
+    }
+    out.textContent = `${nome}: ${j.totale} codici nel file → ${j.nuovi} nuovi, ${j.aggiornati} da aggiornare, ${j.uguali} già uguali`
+      + (j.scartate ? `, ${j.scartate} righe senza codice saltate` : '') + '.'
+      + (j.esempi?.length ? ' Esempi: ' + j.esempi.map(x => `${x.codice} ${x.descrizione ?? ''}`.trim()).join(' · ') : '');
+    conferma.hidden = !(j.nuovi || j.aggiornati);
+  }
+  controlla.addEventListener('click', () => invia(false));
+  conferma.addEventListener('click', () => invia(true));
+})();

@@ -310,6 +310,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/quotazioni', 'Quotazioni (codifica)']],
   },
   {
+    id: 'componenti-clienti', area: 'anagrafiche', titolo: 'Componenti dei clienti (materiale in conto lavoro)',
+    parole: 'componenti clienti cliente conto lavoro materiale codici selea idea caricare elenco excel csv restituire reso ddt',
+    testo: [
+      'Il materiale che i clienti ci mandano in conto lavoro, con i LORO codici: ogni codice ha il suo cliente, tutto in maiuscolo.',
+      'Si caricano dall\'elenco del cliente (Excel o CSV): scegli il cliente, il file, "Controlla il file" mostra quanti codici sono nuovi o da aggiornare, poi "Conferma e carica". Ricaricando, i codici nuovi si aggiungono e le descrizioni si aggiornano; nulla viene tolto.',
+      'Un codice si aggiunge anche a mano ("+ Aggiungi componente del cliente"), si corregge (Salva) e si elimina solo se non è in nessun DDT.',
+      'Nel DDT, scegliendo "Componente cliente" nella riga, si cerca tra i codici del cliente del DDT: codice e descrizione arrivano da qui.',
+    ],
+    passi: ['Anagrafiche → Componenti clienti.', 'In "Carica l\'elenco di un cliente" scegli cliente e file, poi Controlla il file.', 'Conferma e carica.'],
+    pagine: [['/anagrafiche/componenti-clienti', 'Anagrafiche → Componenti clienti']],
+  },
+  {
     id: 'prezzi-anagrafiche', area: 'anagrafiche', titolo: 'Prezzo di vendita dei prodotti e ultimo acquisto dei componenti',
     parole: 'prezzo prezzi listino scaglioni scaglione fasce range quantità vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
     testo: [
@@ -539,7 +551,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'ddt-emessi', area: 'amministrazione', titolo: 'Fare un DDT, stamparlo e mandarlo per email',
-    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare email mail inviare mandare gmail',
+    parole: 'ddt nuovo emettere fare bolla unità misura um pz nr kg testo documento trasporto spedire spedizione stampare stampa pdf corriere vettore colli peso causale reso lavorato vendita annullare fatturare email mail inviare mandare gmail componente componenti conto lavoro restituire libero',
     testo: [
       'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → Documenti emessi → DDT → "+ Nuovo DDT".',
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
@@ -547,6 +559,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
       'Se la merce non parte, "Annulla DDT": il numero resta usato e il DDT resta nell\'elenco come annullato. Un DDT già messo in una fattura non si annulla.',
       'Per fatturarlo: "Fattura questo DDT" prepara la fattura con le sue righe; si possono aggiungere altri DDT dello stesso cliente.',
+      'Ogni riga del DDT ha il menu "Da": Prodotto (i codici del cliente, come prima), Componente nostro (archivio Componenti: si cerca per P/N, codice gestionale o codice di produzione; sul DDT va il codice gestionale e in descrizione il P/N con il codice di produzione tra parentesi), Componente cliente (i codici del materiale in conto lavoro del cliente del DDT, Anagrafiche → Componenti clienti: per restituirlo non montato) oppure Libero (codice e descrizione scritti a mano, senza anagrafica).',
       'Per mandarlo al cliente: nella pagina del DDT emesso, riquadro "Invia il DDT per email". L\'indirizzo proposto è quello a cui è stato mandato l\'ultimo DDT dello stesso cliente (altrimenti l\'email amministrativa, poi quella del CRM, poi la PEC); oggetto e testo si possono cambiare. "Invia con Gmail" lo manda da info@ con il PDF del DDT allegato e resta scritto a chi e quando è partito.',
     ],
     passi: ['Apri l\'ordine e premi Crea DDT (oppure + Nuovo DDT e scegli il cliente).', 'Controlla quantità, colli, peso, vettore e destinazione, poi Salva.', 'Premi Emetti.', 'Premi Stampa / PDF e stampa due copie.', 'Se serve, in fondo alla pagina controlla l\'indirizzo e premi Invia con Gmail.'],
