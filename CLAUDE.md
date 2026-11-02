@@ -357,6 +357,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Contati anche distributori (richieste al giorno), Drive, Gmail; memoria del processo (picco, riavvii con la stessa versione = inattesi), spazio Neon.
    Contatori in memoria, salvati tutti insieme 15 s dopo l'ultima chiamata (`consumi_servizi`), errori in `eventi_servizi` (stesso errore al massimo ogni 6 ore).
    Credito Anthropic prepagato scritto dall'ufficio (l'API non lo dà); avviso giallo/rosso in cima alle pagine dell'ufficio dall'80% (`avvisoServizi`, niente query).
+   X per chiudere gli avvisi in cima (Adriano 2/11/2026; `public/avvisi.js`, classe `chiudibile`): avviso servizi nascosto nel browser finché non cambia
+   `chiaveAvvisoServizi` (testo + ultimo riavvio), messaggi `?msg=` tolti dall'indirizzo. GET `/api/claude/eventi-render`: avvii/arresti di Render degli ultimi 7 giorni.
    Facoltativi su Render: ANTHROPIC_ADMIN_KEY (costo ufficiale del mese), NEON_API_KEY + NEON_PROJECT_ID (ore di calcolo), RENDER_MEMORIA_MB, NEON_SPAZIO_MB.
 4i. ✅ Cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026; `/cruscotto`, `rotte/cruscotto-generale.ts`, letture in `cruscotto-generale-servizio.ts`,
    conti in `engine/cruscotto-generale.ts`, test in `tests/cruscotto-generale.test.ts`; `paginaIniziale('ufficio')`): "Da fare oggi" (pulsanti rosso/giallo/verde con il numero,

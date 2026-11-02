@@ -77,6 +77,11 @@ label.spunta.piccola { font-size: .82rem; font-weight: 400; color: var(--tenue);
 output { display: block; padding: .45rem 0; font-weight: 650; color: var(--testo); }
 
 .avviso { background: var(--avviso); border: 1px solid #f0d98c; padding: .7rem 1rem; border-radius: var(--raggio); margin-bottom: 1rem; }
+/* X per chiudere gli avvisi in cima alla pagina (Adriano 2/11/2026, public/avvisi.js) */
+.avviso.chiudibile { position: relative; padding-right: 2.4rem; }
+.chiudi-avviso { position: absolute; top: .3rem; right: .45rem; background: none; border: 0; padding: .1rem .45rem; font-size: 1.25rem; line-height: 1; color: #8a6100; cursor: pointer; border-radius: 4px; }
+.chiudi-avviso:hover { background: rgba(0,0,0,.08); color: #000; }
+@media print { .chiudi-avviso { display: none; } }
 .avviso.info { background: var(--accento-chiaro); border-color: #b7dcd4; }
 .nota { color: var(--tenue); font-size: .88rem; margin: .3rem 0 .8rem; }
 .vuoto { color: var(--tenue); text-align: center; padding: 2rem; }
