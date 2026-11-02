@@ -868,3 +868,5 @@ body.sola-lettura-tutto .menu-destra .etichetta { align-self: center; }
 
 /* Quotazioni → Componenti in comune: proposta di feeder fissi */
 table.elenco tr.fisso td { background: #e6f4ea; }
+/* Quotazioni → BOM: nota scritta dall ufficio sulla riga */
+table.bom td.note b.nota-ufficio { color: #1a4f8b; }

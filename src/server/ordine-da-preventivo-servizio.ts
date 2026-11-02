@@ -12,12 +12,28 @@ import { riepilogo } from '../engine/riepilogo.js';
 import { righeUnaTantum } from '../engine/stampa-preventivo.js';
 import { stimaConsegna } from '../engine/consegna-preventivo.js';
 import { PRIMO_NUMERO_EMAIL, numeroOrdineEmail } from '../engine/acquisizioni.js';
-import { controlliOrdineDaPreventivo, righeDaModuloOrdine, righeOrdineDaPreventivo, type RigaOrdineProposta } from '../engine/ordine-da-preventivo.js';
+import { controlliOrdineDaPreventivo, controlliPiuPreventivi, notaPreventivi, righeDaModuloOrdine, righeOrdineDaPreventivo, type RigaOrdineProposta } from '../engine/ordine-da-preventivo.js';
 import type { Catalogo } from './catalogo-db.js';
 
 export interface PropostaOrdine {
   preventivo: any; cliente: string; clienteId: number | null; prodottoId: number | null; primoLotto: boolean;
   righe: RigaOrdineProposta[]; consegnaProposta: string | null; settimana: number | null; ordiniEsistenti: { id: number; numero: number; anno: number }[];
+  /** preventivi dell'ordine (più di uno = ordine unico da più preventivi dello stesso cliente) */
+  preventivi?: { id: number; numero: string }[];
+  errori?: string[];
+}
+
+/** Ordine unico da più preventivi (Cinzia, 2/11/2026): righe una dopo l'altra, consegna proposta = la più lontana. */
+export async function propostaOrdineDaPreventivi(ids: number[], oggi: string): Promise<PropostaOrdine | null> {
+  const proposte = (await Promise.all([...new Set(ids)].map(id => propostaOrdineDaPreventivo(id, oggi)))).filter((x): x is PropostaOrdine => !!x);
+  if (!proposte.length) return null;
+  if (proposte.length === 1) return proposte[0];
+  const errori = controlliPiuPreventivi(proposte.map(x => ({ numero: x.preventivo.numero, clienteId: x.clienteId })));
+  const consegne = proposte.map(x => x.consegnaProposta).filter((d): d is string => !!d).sort();
+  const ultima = proposte.find(x => x.consegnaProposta === consegne[consegne.length - 1]);
+  return { ...proposte[0], righe: proposte.flatMap(x => x.righe), primoLotto: proposte.some(x => x.primoLotto),
+    consegnaProposta: ultima?.consegnaProposta ?? null, settimana: ultima?.settimana ?? null,
+    ordiniEsistenti: proposte.flatMap(x => x.ordiniEsistenti), preventivi: proposte.map(x => ({ id: x.preventivo.id, numero: x.preventivo.numero })), errori };
 }
 
 export async function propostaOrdineDaPreventivo(preventivoId: number, oggi: string): Promise<PropostaOrdine | null> {
@@ -51,16 +67,30 @@ export interface ModuloOrdine { rifCliente?: string; dataOrdineCliente?: string;
 
 /** Crea l'ordine dal modulo: errori in italiano, oppure l'id dell'ordine. Il preventivo passa ad "accettato" se era bozza o inviato. */
 export async function creaOrdineDaPreventivo(preventivoId: number, b: ModuloOrdine, utenteId: number | null, oggi: string): Promise<{ id?: number; errori: string[] }> {
-  const p = await leggiPreventivo(preventivoId);
-  if (!p) return { errori: ['Preventivo non trovato.'] };
+  return creaOrdineDaPreventivi([preventivoId], b, utenteId, oggi);
+}
+
+/** Un ordine da uno o più preventivi dello stesso cliente (Cinzia, 2/11/2026); tutti passano ad "accettato" se erano bozza o inviati. */
+export async function creaOrdineDaPreventivi(ids: number[], b: ModuloOrdine, utenteId: number | null, oggi: string): Promise<{ id?: number; errori: string[] }> {
+  const prev = (await Promise.all([...new Set(ids)].map(id => leggiPreventivo(id)))).filter(Boolean) as any[];
+  if (!prev.length) return { errori: ['Preventivo non trovato.'] };
+  const p = prev[0];
   const righe = righeDaModuloOrdine(b);
   const dataQ = (x: unknown) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null;
   const consegna = dataQ(b.consegna), dataOrdineCliente = dataQ(b.dataOrdineCliente);
-  const errori = controlliOrdineDaPreventivo({ clienteId: p.cliente_id ?? null, righe, consegna, dataOrdineCliente, oggi });
+  const errori = [
+    ...(prev.length > 1 ? controlliPiuPreventivi(prev.map(x => ({ numero: x.numero, clienteId: x.cliente_id ?? null }))) : []),
+    ...controlliOrdineDaPreventivo({ clienteId: p.cliente_id ?? null, righe, consegna, dataOrdineCliente, oggi }),
+  ];
   if (errori.length) return { errori };
   const rif = String(b.rifCliente ?? '').trim().toUpperCase().slice(0, 60) || null;
-  const note = [String(b.note ?? '').trim(), `Dal preventivo ${p.numero}.`].filter(Boolean).join('\n');
-  const prodotto = p.prodotto_id ? await q1<{ codice: string; descrizione: string }>(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [p.prodotto_id]) : null;
+  const note = [String(b.note ?? '').trim(), notaPreventivi(prev.map(x => x.numero))].filter(Boolean).join('\n');
+  // prodotti dei preventivi: la riga di schede con lo stesso codice si collega al prodotto in anagrafica
+  const prodotti = new Map<string, { id: number; descrizione: string }>();
+  for (const x of prev) if (x.prodotto_id) {
+    const pr = await q1<{ codice: string; descrizione: string }>(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [x.prodotto_id]);
+    if (pr) prodotti.set(pr.codice.toUpperCase(), { id: x.prodotto_id, descrizione: pr.descrizione });
+  }
   const id = await transazione(async c => {
     const anno = Number(oggi.slice(0, 4));
     const massimo = (await c.query(`SELECT max(numero) AS m FROM ordini WHERE anno = $1 AND numero >= $2`, [anno, PRIMO_NUMERO_EMAIL])).rows[0].m;
@@ -69,12 +99,12 @@ export async function creaOrdineDaPreventivo(preventivoId: number, b: ModuloOrdi
       VALUES ($1,$2,$3,$4,$5,$6,$7,'preventivo',$8,$9) RETURNING id`,
       [anno, numeroOrdineEmail(massimo), oggi, p.cliente_id, cliente?.ragione_sociale ?? p.intestazione?.cliente ?? '', rif, dataOrdineCliente, note, p.id])).rows[0];
     for (const [i, r] of righe.entries()) {
-      const eProdotto = r.tipo === 'scheda' && prodotto && r.codice === prodotto.codice.toUpperCase();
+      const prodotto = r.tipo === 'scheda' && r.codice ? prodotti.get(r.codice) : undefined;
       await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, tipo, quantita, prezzo, consegna_richiesta)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, `P${p.id}-${i + 1}`, i, eProdotto ? p.prodotto_id : null, r.codice, eProdotto ? prodotto!.descrizione : r.descrizione, r.tipo, r.quantita, r.prezzo, r.tipo === 'scheda' ? consegna : null]);
+        [id, `P${p.id}-${i + 1}`, i, prodotto?.id ?? null, r.codice, prodotto ? prodotto.descrizione : r.descrizione, r.tipo, r.quantita, r.prezzo, r.tipo === 'scheda' ? consegna : null]);
     }
-    if (['bozza', 'inviato'].includes(p.stato)) await c.query(`UPDATE preventivi SET stato = 'accettato', aggiornato_il = now() WHERE id = $1`, [p.id]);
+    for (const x of prev) if (['bozza', 'inviato'].includes(x.stato)) await c.query(`UPDATE preventivi SET stato = 'accettato', aggiornato_il = now() WHERE id = $1`, [x.id]);
     return id as number;
   });
   void utenteId;

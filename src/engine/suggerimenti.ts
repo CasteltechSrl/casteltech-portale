@@ -44,7 +44,21 @@ export function preparaSuggerimento(campi: Record<string, unknown>, oggi: string
     stato: scelta(campi.stato, STATI_SUGGERIMENTI, 'da_valutare'),
     note: testo(campi.note) || null,
   };
-  return { suggerimento: s, errore: s.titolo ? null : 'Scrivi almeno il titolo del suggerimento.' };
+  return { suggerimento: s, errore: !s.titolo ? 'Scrivi almeno il titolo del suggerimento.'
+    : !s.proposto_da ? 'Scegli chi ha proposto il suggerimento.' : null };
+}
+
+/**
+ * Nomi per il menu "Proposto da" (Federico, 2/11/2026): gli utenti del portale in ordine alfabetico, senza doppioni;
+ * il nome già scritto su un vecchio suggerimento resta tra le scelte anche se non è un utente.
+ */
+export function elencoProponenti(nomiUtenti: (string | null | undefined)[], attuale?: string | null): string[] {
+  const visti = new Map<string, string>();
+  for (const n of [...nomiUtenti, attuale]) {
+    const pulito = String(n ?? '').trim().replace(/\s+/g, ' ');
+    if (pulito && !visti.has(pulito.toLowerCase())) visti.set(pulito.toLowerCase(), pulito);
+  }
+  return [...visti.values()].sort((a, b) => a.localeCompare(b, 'it'));
 }
 
 /** I suggerimenti chiusi (fatti o scartati) vanno in fondo all'elenco. */
