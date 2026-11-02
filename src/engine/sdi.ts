@@ -49,9 +49,17 @@ export function testoErrori(errori: Array<{ code?: string; description?: string;
  */
 export function messaggioErroreApi(stato: number, corpo: any): string {
   const dettagli: string[] = [];
-  if (corpo?.errors && typeof corpo.errors === 'object')
+  // errori dei campi ({ campo: [testi] }) o della validazione SdI ([{ code, description, hint }])
+  if (Array.isArray(corpo?.errors))
+    for (const e of corpo.errors) dettagli.push(typeof e === 'object' && e ? [e.code, e.description, e.hint].filter(Boolean).join(' – ') : String(e));
+  else if (corpo?.errors && typeof corpo.errors === 'object')
     for (const [campo, testi] of Object.entries(corpo.errors)) dettagli.push(`${campo}: ${[testi].flat().join(', ')}`);
   const base = corpo?.detail || corpo?.title || (typeof corpo === 'string' ? corpo : '') || `errore ${stato}`;
+  // risposta senza dettagli leggibili: si mostra com'è, per capire cosa non va
+  if (!dettagli.length && !corpo?.detail && corpo && typeof corpo === 'object') {
+    const altro = Object.fromEntries(Object.entries(corpo).filter(([k]) => !['type', 'title', 'status', 'traceId'].includes(k)));
+    if (Object.keys(altro).length) dettagli.push(JSON.stringify(altro));
+  }
   const prima = stato === 401 ? 'Chiave di Invoicetronic non valida o mancante.' : stato === 403 ? 'Operazione non permessa dalla chiave (o crediti finiti).' : '';
   return [prima, base, dettagli.join(' · ')].filter(Boolean).join(' ').slice(0, 1000);
 }

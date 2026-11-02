@@ -112,7 +112,7 @@ export async function inviaDocumento(id: number, utenteId: number | null): Promi
   const nInvii = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM sdi_invii WHERE documento_id = $1 AND ambiente = $2`, [id, ambiente]))!.n;
   try {
     const s = await chiama<{ id: number; file_name: string }>('POST', '/send?validate=true',
-      { payload: xml, meta_data: { documento_id: id, portale: 'casteltech' } },
+      { payload: xml, meta_data: { documento_id: String(id), portale: 'casteltech' } },
       { 'Idempotency-Key': `casteltech-${ambiente}-doc${id}-${nInvii + 1}` });
     const r = await q1<{ id: number }>(`INSERT INTO sdi_invii (documento_id, ambiente, invoicetronic_id, nome_file, creato_da) VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (ambiente, invoicetronic_id) DO UPDATE SET aggiornato_il = now() RETURNING id`, [id, ambiente, s.id, s.file_name, utenteId]);
