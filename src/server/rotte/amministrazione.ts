@@ -30,7 +30,7 @@ import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-se
 import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
+  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
   creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
@@ -119,6 +119,8 @@ const ETICHETTE_TRASPORTO: Record<string, string> = { causale: 'Causale', a_cura
 
 /** Bozza di DDT: trasporto, righe (il prezzo serve solo alla fattura, non si stampa), controlli, Emetti. */
 async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
+  // DDT già emesso che si corregge (Adriano 2/11/2026): stesso numero e stessa data, niente Emetti/Elimina
+  const emesso = d.stato !== 'bozza';
   const t = d.dati_trasporto ?? {};
   const { errori, avvisi } = await controllaDdt(d.id);
   const cliente = d.cliente_id ? await q1(`SELECT indirizzo, cap, comune, provincia, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
@@ -140,7 +142,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   </tr>`;
   return html`<form method="post" action="/amministrazione/documenti/${d.id}" class="blocco" id="modulo-documento" data-autosalva="${d.stato === 'bozza' ? '1' : ''}">
       <div class="riga-campi">
-        <label class="stretto">Data <input type="date" name="data" value="${d.data}" required></label>
+        <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${emesso ? raw('readonly title="La data di un DDT emesso non cambia (va con il numero)"') : ''}></label>
         <label>Causale del trasporto <input name="causale_trasporto" value="${t.causale ?? ''}" list="causali-ddt" class="maiuscolo" required></label>
         <datalist id="causali-ddt">${CAUSALI_DDT.map(c => html`<option value="${c}">`)}</datalist>
         <label>Rif. ordine del cliente <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}" class="maiuscolo"></label>
@@ -170,19 +172,24 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
         <span class="nota">Il prezzo non si stampa sul DDT: passa nella fattura quando si fattura il DDT.</span>
         <button class="primario">Salva</button></div>
     </form>
+    ${emesso ? html`<div class="blocco"><p class="nota">Stai correggendo il DDT n. ${numeroCompleto(d.numero, d.sezionale)} già emesso: numero e data restano gli stessi.
+        Se il DDT è già in una fattura non ancora mandata allo SdI, la fattura non cambia da sola: correggi anche lei.</p>
+      ${avvisi.length ? html`<ul class="controlli">${avvisi.map(e => html`<li>${e}</li>`)}</ul>` : ''}
+      <div class="azioni-secondarie"><a class="bottone" href="/amministrazione/documenti/${d.id}">Fine modifiche</a>
+        <a class="bottone" href="/amministrazione/documenti/${d.id}/stampa" target="_blank" rel="noopener">Stampa / PDF</a></div></div>` : html`
     <div class="blocco">
       ${errori.length ? html`<p><strong>Da sistemare prima di emettere:</strong></p><ul class="controlli errori">${errori.map(e => html`<li>${e}</li>`)}</ul>`
         : html`<p class="nota">Controlli superati: si può emettere.</p>`}
       ${avvisi.length ? html`<ul class="controlli">${avvisi.map(e => html`<li>${e}</li>`)}</ul>` : ''}
       <div class="azioni-secondarie">
         <form method="post" action="/amministrazione/documenti/${d.id}/emetti" class="inline"
-          data-conferma="Emettere il DDT? Prende il numero successivo e non si potrà più modificare (se la merce non parte si annulla).">
+          data-conferma="Emettere il DDT? Prende il numero successivo; si potrà ancora correggere finché non è in una fattura mandata allo SdI (se la merce non parte si annulla).">
           <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
         <a class="bottone" href="/amministrazione/documenti/${d.id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>
         <form method="post" action="/amministrazione/documenti/${d.id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
           <button class="pericolo">Elimina bozza</button></form>
       </div>
-    </div>`;
+    </div>`}`;
 }
 
 export function rotteAmministrazione() {
@@ -677,6 +684,10 @@ export function rotteAmministrazione() {
         ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>`
           : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>`;
 
+    // DDT emesso: "Modifica" finché non è in una fattura già allo SdI (Adriano 2/11/2026)
+    const bloccoModifica = d.tipo === 'ddt' && d.stato !== 'bozza' ? await bloccoDdt(id) : null;
+    if (d.tipo === 'ddt' && d.stato !== 'bozza' && req.query.modifica === '1' && !bloccoModifica)
+      return res.send(pagina(req, `Modifica ${titolo}`, html`${testa}${await moduloDdt(d, righe)}`, msg(req), ['documenti.js']));
     if (d.stato !== 'bozza') {
       const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
       const trasporto = d.dati_trasporto ?? {};
@@ -701,6 +712,9 @@ export function rotteAmministrazione() {
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
           ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
             title="${d.tipo === 'ddt' ? '' : 'Copia di cortesia per il cliente (il documento fiscale è l\'XML)'}">${d.tipo === 'ddt' ? 'Stampa / PDF' : 'PDF di cortesia'}</a>` : ''}
+          ${d.tipo === 'ddt' && d.stato !== 'annullato' && d.origine === 'portale' ? (bloccoModifica
+            ? html`<span class="nota" title="${bloccoModifica}">Non modificabile: fattura già allo SdI</span>`
+            : html`<a class="bottone" href="/amministrazione/documenti/${id}?modifica=1">Modifica DDT</a>`) : ''}
           ${d.tipo === 'ddt' && d.origine === 'portale' && d.stato === 'emesso' && !d.fattura_id ? html`
             <form method="post" action="/amministrazione/documenti/${id}/fattura" class="inline"><button>Fattura questo DDT</button></form>
             <form method="post" action="/amministrazione/documenti/${id}/annulla" class="inline"
@@ -841,8 +855,10 @@ export function rotteAmministrazione() {
   r.post('/documenti/:id', async (req, res) => {
     const id = Number(req.params.id);
     let errori: string[];
-    try { errori = await salvaBozza(id, req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
-    rispondiSalvataggio(req, res, errori, `/amministrazione/documenti/${id}?msg=${encodeURIComponent(errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.')}`);
+    try { errori = await salvaBozza(id, req.body); } catch (e: any) { if (!eAutosalvataggio(req) && !/modifica/.test(String(e?.message))) throw e; errori = [e.message]; }
+    const ddtEmesso = await q1(`SELECT 1 FROM documenti WHERE id = $1 AND tipo = 'ddt' AND stato <> 'bozza'`, [id]);
+    rispondiSalvataggio(req, res, errori, `/amministrazione/documenti/${id}?${ddtEmesso && errori.length ? 'modifica=1&' : ''}msg=${encodeURIComponent(errori.length
+      ? `Non salvato: ${errori.join(' ')}` : ddtEmesso ? 'DDT corretto (stesso numero e data). Se l\'avevi già mandato, rimandalo.' : 'Salvato.')}`);
   });
 
   r.post('/documenti/:id/ddt', async (req, res) => {

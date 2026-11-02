@@ -43,6 +43,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('elenco componenti disponibili', 2).includes('archivio-componenti'));
   assert.ok(primi('caricare i componenti in conto lavoro del cliente', 2).includes('componenti-clienti'));
   assert.ok(primi('restituire componenti del cliente con il ddt', 3).includes('ddt-emessi'));
+  assert.ok(primi('modificare un ddt già emesso', 2).includes('ddt-emessi'));
   assert.ok(primi('codice dal menu nella fattura', 3).includes('nuova-fattura'));
   assert.ok(primi('aggiornare il prezzo in anagrafica', 3).includes('prezzi-anagrafiche'));
   assert.deepEqual(primi('stornare una fattura'), ['nota-credito']);

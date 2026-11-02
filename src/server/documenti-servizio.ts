@@ -12,7 +12,7 @@ import { righeDaModulo } from '../engine/documenti.js';
 import { risolviFontiDdt } from './componenti-clienti-servizio.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
 import type { DdtAperto } from '../engine/fatture-differite.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, bloccoModificaDdt, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
@@ -198,8 +198,11 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errori.push('Data non valida.');
   if (errori.length) return errori;
   await transazione(async c => {
-    const d = (await c.query(`SELECT stato, tipo FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
-    if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
+    const d = (await c.query(`SELECT stato, tipo, origine, numero FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    // DDT emesso: si corregge (stesso numero e data) finché non è in una fattura già allo SdI (Adriano 2/11/2026)
+    const ddtEmesso = d?.tipo === 'ddt' && d.stato !== 'bozza';
+    if (ddtEmesso) { const blocco = await bloccoDdt(id, c); if (blocco) throw new Error(blocco); }
+    else if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
     if (d.tipo === 'ddt') await c.query(`UPDATE documenti SET dati_trasporto = $2 WHERE id = $1`, [id, JSON.stringify(trasportoDaModulo(b))]);
     if (d.tipo === 'fattura' && (TIPI_SCEGLIBILI as readonly string[]).includes(String(b.tipo_sdi ?? '')))
       await c.query(`UPDATE documenti SET tipo_sdi = $2 WHERE id = $1`, [id, b.tipo_sdi]);
@@ -222,8 +225,24 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
        FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, solo_descrizione boolean, prodotto_id int, codice text, descrizione text, quantita numeric,
          um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int, fonte text, componente_id int, componente_cliente_id int)`,
       [id, JSON.stringify(righe), d.tipo === 'ddt']);
-  });
-  return [];
+    if (ddtEmesso) {
+      const { errori: e } = await controllaDdt(id, c);
+      if (e.length) throw new ErroreEmissione(e);   // annulla il salvataggio: il DDT emesso resta com'era
+      await c.query(`UPDATE documenti SET imponibile = v, totale = v FROM (SELECT coalesce(sum(round(quantita * prezzo * (1 - sconto / 100), 2)), 0) AS v
+        FROM documenti_righe WHERE documento_id = $1 AND NOT solo_descrizione) x WHERE id = $1`, [id]);
+    }
+  }).catch((e: unknown) => { if (e instanceof ErroreEmissione) errori.push(...e.errori); else throw e; });
+  return errori;
+}
+
+/** Perché un DDT emesso non si può più modificare (null = si può). Fatture che lo contengono: collegata (fattura_id) o con righe del DDT. */
+export async function bloccoDdt(id: number, c: pg.PoolClient | null = null): Promise<string | null> {
+  const query = (sql: string, p: unknown[]) => (c ? c.query(sql, p).then(r => r.rows) : q(sql, p));
+  const [d] = await query(`SELECT tipo, origine, stato FROM documenti WHERE id = $1`, [id]);
+  if (!d) return 'DDT non trovato.';
+  const fatture = await query(`SELECT f.numero, f.origine, f.stato FROM documenti f WHERE f.stato <> 'annullato' AND f.tipo <> 'ddt'
+    AND (f.id = (SELECT fattura_id FROM documenti WHERE id = $1) OR EXISTS (SELECT 1 FROM documenti_righe r WHERE r.documento_id = f.id AND r.ddt_id = $1))`, [id]);
+  return bloccoModificaDdt(d, fatture);
 }
 
 /** DDT del cliente non ancora fatturati (né già messi in un'altra bozza). */
