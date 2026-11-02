@@ -232,7 +232,7 @@ export function righeServizi(d: DatiServizi, adesso = new Date()): RigaServizio[
   if (d.gmail) {
     const g = d.gmail;
     const stato = g.configurato ? statoSoglia(g.inviatiOggi, g.limiteGiorno) : 'spento';
-    out.push({ chiave: 'gmail', servizio: 'Gmail (info@)', cosa: "Invio delle conferme d'ordine",
+    out.push({ chiave: 'gmail', servizio: 'Gmail (info@)', cosa: "Invio di DDT, conferme d'ordine, ordini a fornitore e solleciti (dagli indirizzi per funzione)",
       uso: g.configurato ? `oggi ${nf(g.inviatiOggi)} email inviate` : '—', limite: g.configurato ? `${nf(g.limiteGiorno)} email al giorno (Google Workspace)` : '—',
       percentuale: g.configurato ? pct(g.inviatiOggi, g.limiteGiorno) : null, stato,
       nota: !g.configurato ? 'Servono GMAIL_MITTENTE e la delega di dominio di Google Workspace.' : g.ultimoErrore ? `Ultimo errore ${quando(g.ultimoErrore.il)}: ${g.ultimoErrore.messaggio}` : '',

@@ -11,6 +11,7 @@
 import { createSign } from 'node:crypto';
 import { chiaveAccountServizio } from './drive.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
+import { FUNZIONI_EMAIL, funzioneDi, indirizzoFunzione, scegliMittente } from '../engine/mittenti-email.js';
 
 const SCOPE_INVIO = 'https://www.googleapis.com/auth/gmail.send';
 const SCOPE_LETTURA = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -54,6 +55,45 @@ async function conversazioneDi(messaggioId: string): Promise<string | null> {
     const j: any = await r.json().catch(() => null);
     return r.ok ? j?.messages?.[0]?.threadId ?? null : null;
   } catch { return null; }
+}
+
+/**
+ * Indirizzi "Invia messaggio come" della casella principale (Gmail → Impostazioni → Account → Invia messaggio come):
+ * solo da questi Gmail lascia partire un alias. Letti con l'ambito gmail.readonly, tenuti in memoria un'ora (10 minuti se
+ * la lettura non riesce: null = si manda dalla casella principale). Nessuna query al database.
+ */
+let invioCome: { elenco: string[] | null; il: number; errore: string | null } | null = null;
+export async function indirizziInvioCome(forza = false): Promise<string[] | null> {
+  if (!gmailConfigurato()) return null;
+  if (!forza && invioCome && Date.now() - invioCome.il < (invioCome.elenco ? 3_600_000 : 600_000)) return invioCome.elenco;
+  try {
+    const t = await accesso(SCOPE_LETTURA);
+    const r = await fetch(`${API}/settings/sendAs`, { headers: { authorization: `Bearer ${t}` } });
+    const j: any = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j?.error?.message ?? String(r.status));
+    const elenco = (j?.sendAs ?? [])
+      .filter((x: any) => !x.verificationStatus || x.verificationStatus === 'accepted')
+      .map((x: any) => String(x.sendAsEmail ?? '').trim().toLowerCase()).filter(Boolean);
+    invioCome = { elenco, il: Date.now(), errore: null };
+  } catch (e: any) {
+    invioCome = { elenco: null, il: Date.now(), errore: String(e?.message ?? e) };
+  }
+  return invioCome.elenco;
+}
+
+/** Da chi parte l'email di quel tipo di documento (ddt, fattura, conferma_ordine, ordine_fornitore, sollecito, preventivo…). */
+export async function mittentePer(tipo: string) {
+  return scegliMittente(funzioneDi(tipo), mittenteGmail(), await indirizziInvioCome());
+}
+
+/** Stato degli alias per Impostazioni → Servizi (dall'ultima lettura in memoria, senza chiamare Gmail). */
+export function statoAlias(): { funzione: string; indirizzo: string; attivo: boolean | null }[] {
+  const p = mittenteGmail();
+  if (!/@/.test(p)) return [];
+  return FUNZIONI_EMAIL.map(f => {
+    const indirizzo = indirizzoFunzione(f.funzione, p) ?? '';
+    return { funzione: f.funzione, indirizzo, attivo: invioCome?.elenco ? invioCome.elenco.includes(indirizzo) : null };
+  });
 }
 
 /** Manda il messaggio già composto (vedi messaggioEmail): se risponde a un'email, nella stessa conversazione. */

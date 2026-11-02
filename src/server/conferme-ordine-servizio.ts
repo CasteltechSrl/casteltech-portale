@@ -9,7 +9,8 @@ import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAzienda } from './amministrazione-servizio.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { pdfConfermaOrdine, type DatiPdfConferma } from './pdf-conferma-ordine.js';
-import { gmailConfigurato, inviaGmail, mittenteGmail } from './gmail.js';
+import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
+import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { AZIENDA_PREDEFINITA } from './views/stampa-preventivo.js';
 import { leggiEmail } from '../engine/acquisizioni.js';
 import {
@@ -200,7 +201,7 @@ export async function propostaEmail(id: number): Promise<PropostaEmail | null> {
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
   const numero = d.numero ? `${d.numero}/${d.anno}` : 'bozza';
   return {
-    a, origine, attivo: gmailConfigurato(), mittente: mittenteGmail(),
+    a, origine, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('conferma_ordine')),
     oggetto: oggettoRisposta(origine?.oggetto, numero, d.riferimento_esterno),
     testo: testoEmailConferma({ numero, data: d.data, rifCliente: d.riferimento_esterno, dataRif: d.data_riferimento, azienda }),
   };
@@ -220,7 +221,7 @@ export async function inviaConferma(id: number, b: { a?: string; cc?: string; og
   const pdf = await pdfConferma(id);
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
   const messaggio = messaggioEmail({
-    da: `"${azienda.replace(/"/g, '')}" <${mittenteGmail()}>`, a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
+    da: intestazioneDa(azienda, (await mittentePer('conferma_ordine')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati }, inRispostaA: origine?.messaggioId, riferimenti: origine?.riferimenti,
   });
   const inviato = await inviaGmail(messaggio, origine?.messaggioId);

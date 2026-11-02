@@ -4,7 +4,8 @@
  * e non annullato; resta scritto a chi e quando (documenti.email_a / email_inviata_il), lo stato del DDT non cambia.
  */
 import { q, q1 } from './db.js';
-import { gmailConfigurato, inviaGmail, mittenteGmail } from './gmail.js';
+import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
+import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { pdfDdt } from './pdf-ddt.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail } from '../engine/conferme-ordine.js';
 import { destinatarioDdt, emailDdt, nomeFilePdfDdt } from '../engine/ddt.js';
@@ -45,7 +46,7 @@ export async function propostaEmailDdt(id: number) {
   const t = x.d.dati_trasporto ?? {};
   const testo = emailDdt({ numero: `${numeroCompleto(x.d.numero, x.d.sezionale)}`, data: x.d.data, azienda, riferimento: x.d.riferimento_esterno,
     trasportatore: t.trasportatore, colli: t.colli });
-  return { a, ...testo, attivo: gmailConfigurato(), mittente: mittenteGmail() };
+  return { a, ...testo, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ddt')) };
 }
 
 /** Manda il DDT con il PDF allegato; restituisce gli indirizzi a cui è partito. */
@@ -60,7 +61,7 @@ export async function inviaDdtEmail(id: number, b: { a?: string; cc?: string; og
   if (!oggetto || !testo) throw new Error("Servono l'oggetto e il testo dell'email.");
   const pdf = (await pdfDelDdt(id))!;
   const azienda = String(x.azienda.ragione_sociale || 'Casteltech S.r.l.').replace(/"/g, '');
-  const inviato = await inviaGmail(messaggioEmail({ da: `"${azienda}" <${mittenteGmail()}>`, a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
+  const inviato = await inviaGmail(messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ddt')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } }));
   await q(`UPDATE documenti SET email_a = $2, email_inviata_il = now(), email_id = $3, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
