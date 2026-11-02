@@ -865,3 +865,6 @@ body.sola-lettura-tutto main form[method="post"] button:not([type="button"]), bo
 body.sola-lettura-tutto main .barra-azioni, body.sola-lettura-tutto main td.selezione, body.sola-lettura-tutto main th.selezione,
 body.sola-lettura-tutto main a[href*="/nuovo"], body.sola-lettura-tutto main a[href^="/impostazioni"], body.sola-lettura-tutto main button[form] { display: none !important; }
 body.sola-lettura-tutto .menu-destra .etichetta { align-self: center; }
+
+/* Quotazioni → Componenti in comune: proposta di feeder fissi */
+table.elenco tr.fisso td { background: #e6f4ea; }

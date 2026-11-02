@@ -245,6 +245,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
+   Componenti in comune (suggerimento di Adriano Croci "Macchine per Selea", 2/11/2026; `/quotazioni/comuni`, `engine/componenti-comuni.ts`, test in
+   `tests/componenti-comuni.test.ts`): cliente → sue BOM quotate (via `preventivi.bom_id` / `pacchetti_scheda.bom_id`, o spuntate a mano) → componenti presenti in più
+   schede (stesso codice di produzione, altrimenti P/N senza trattini; non montati esclusi), in cima i più usati; "Feeder fissi" N = i primi N in verde. Solo lettura.
    BOM collegata al preventivo (migrazione 024, `preventivi.bom_id`): nel gruppo ACQUISTI si sceglie una BOM caricata e il costo
    componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette (`costoMaterialiPer`, niente chiamate ai
    distributori); il valore resta nei parametri del preventivo. Scrivere il costo a mano toglie il collegamento; eliminare la BOM no.

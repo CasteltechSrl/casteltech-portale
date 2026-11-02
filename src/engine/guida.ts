@@ -732,6 +732,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/quotazioni', 'Quotazioni']],
   },
   {
+    id: 'componenti-in-comune', area: 'componenti', titolo: 'Componenti in comune tra le schede di un cliente (feeder fissi)',
+    parole: 'componenti in comune comuni stessi feeder fissi cambio macchina cambi fox ipulse selea cliente schede bom confronto attrezzaggio',
+    testo: [
+      'Per non cambiare i feeder tra una produzione e l\'altra dello stesso cliente (es. Selea), Quotazioni → Componenti in comune mette in fila i componenti che compaiono in più schede del cliente.',
+      'Si usano le BOM quotate collegate al cliente (da un preventivo o dai documenti del cliente); si possono anche spuntare a mano. Stesso componente = stesso codice di produzione, altrimenti stesso P/N. I componenti non montati non contano.',
+      'In cima quelli presenti in più schede, poi quelli con più pezzi. Scrivendo il numero dei feeder fissi i primi N diventano verdi: sono la proposta di componenti da lasciare sempre su FOX e iPulse.',
+      'È solo una consultazione: BOM, archivio e preventivi non cambiano.',
+    ],
+    passi: ['Quotazioni → Componenti in comune.', 'Scegli il cliente (o spunta le BOM).', 'Scrivi quanti feeder si possono lasciare fissi.', 'Mostra i componenti.'],
+    pagine: [['/quotazioni/comuni', 'Componenti in comune']],
+  },
+  {
     id: 'alternative-componenti', area: 'componenti', titolo: 'Componente non trovato: alternative e reperibilità',
     parole: 'alternativa alternative equivalente compatibile compatibili verificare confermo sostituto prezzo a mano manuale scrivere prezzo p/n non trovato introvabile critico reperibilità disponibile negozi distributori obsoleto due codici diversi valore descrizione kicad equivalenti',
     testo: [

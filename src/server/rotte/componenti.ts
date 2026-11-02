@@ -18,6 +18,7 @@ import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
 import { pnKey } from '../../engine/codifica/bom.js';
 import { iaConfigurata } from '../lettura-ia.js';
+import { componentiInComune, feederFissi, type BomPerComuni } from '../../engine/componenti-comuni.js';
 
 const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(x);
 const euro2 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x) + ' €';
@@ -29,7 +30,7 @@ export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
     String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js'], contenuto: html`
-      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N']]
+      <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N'], ['comuni', 'Componenti in comune']]
         .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
 
@@ -209,6 +210,50 @@ export function rotteComponenti() {
           <a href="https://www.lcsc.com/search?q=${encodeURIComponent(pn)}" target="_blank" rel="noopener">Cerca su LCSC ↗</a> (non ancora collegato: si apre il sito) ·
           <a href="/quotazioni/prezzo?pn=${encodeURIComponent(pn)}&amp;qta=${String(qta)}&amp;aggiorna=1">Aggiorna prezzi</a></p>
       </section>` : ''}`));
+  });
+
+  // ── Componenti in comune tra le BOM di un cliente (Adriano Croci, 29/10/2026: stessi feeder su FOX e iPulse, niente cambi macchina) ──
+  r.get('/comuni', async (req, res) => {
+    const clienteId = parseInt(String(req.query.cliente ?? ''), 10) || null;
+    const scelte = [...new Set([req.query.bom ?? []].flat().map(x => parseInt(String(x), 10)).filter(n => n > 0))];
+    const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT DISTINCT c.id, c.ragione_sociale FROM clienti c
+      WHERE c.id IN (SELECT cliente_id FROM preventivi WHERE bom_id IS NOT NULL UNION SELECT cliente_id FROM pacchetti_scheda WHERE bom_id IS NOT NULL)
+      ORDER BY c.ragione_sociale`);
+    const elenco = await q<{ id: number; nome: string; creato_il: string; del_cliente: boolean }>(`SELECT b.id, b.nome, b.creato_il,
+        coalesce($2::int IN (SELECT cliente_id FROM preventivi WHERE bom_id = b.id UNION SELECT cliente_id FROM pacchetti_scheda WHERE bom_id = b.id), false) AS del_cliente
+      FROM bom_analisi b WHERE b.file_nome IS DISTINCT FROM $1 AND b.stato = 'pronta' ORDER BY b.creato_il DESC LIMIT 200`, [FILE_SINGOLA, clienteId]);
+    // scelte esplicite dell'ufficio; altrimenti tutte le BOM collegate al cliente (preventivi o documenti del cliente)
+    const ids = scelte.length ? scelte : elenco.filter(b => b.del_cliente).map(b => b.id);
+    const boms: BomPerComuni[] = ids.length ? (await q<{ id: number; nome: string; righe: RigaBom[] }>(
+      `SELECT id, nome, righe FROM bom_analisi WHERE id = ANY($1::int[]) ORDER BY nome`, [ids]))
+      .map(b => ({ id: b.id, nome: b.nome, righe: (b.righe ?? []).map(x => ({ pn: x.mpnAcquisto ?? x.pn, codiceProduzione: x.codiceProduzione,
+        descrizione: x.descrizione ?? x.descrizioneBom, valore: x.valore, footprint: x.footprint, qtaScheda: x.qtaScheda, nonMontato: x.esito === ESITI.NON_MONTATO })) })) : [];
+    const minimo = boms.length < 2 ? 1 : 2;
+    const comuni = componentiInComune(boms, minimo);
+    const fissi = feederFissi(comuni, req.query.feeder);
+    res.send(pag(req, 'Componenti in comune', 'comuni', html`
+      <form method="get" class="blocco">
+        <p class="nota">Scegli un cliente (es. Selea): il portale prende le sue BOM quotate (collegate a un preventivo o ai documenti del cliente) e
+          mette in cima i componenti che compaiono in più schede. Sono quelli da tenere fissi sui feeder di FOX e iPulse per passare da una produzione
+          all'altra senza cambiarli. Puoi anche spuntare tu le BOM da confrontare. Solo consultazione: BOM, archivio e preventivi non cambiano.</p>
+        <label>Cliente <select name="cliente"><option value="">— scegli —</option>
+          ${clienti.map(c => html`<option value="${String(c.id)}" ${c.id === clienteId ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select></label>
+        <label>Feeder fissi <small class="unita">facoltativo: segna i primi N</small><input name="feeder" value="${String(req.query.feeder ?? '')}" inputmode="numeric"></label>
+        <details ${scelte.length ? raw('open') : ''}><summary>Scegli le BOM a mano (${String(elenco.length)})</summary>
+          <div class="tabella-scorre"><table class="elenco"><tbody>${elenco.map(b => html`<tr><td><label><input type="checkbox" name="bom" value="${String(b.id)}"
+            ${ids.includes(b.id) ? raw('checked') : ''}> ${b.nome}</label></td><td>${new Date(b.creato_il).toLocaleDateString('it-IT')}</td>
+            <td>${b.del_cliente ? 'del cliente' : ''}</td></tr>`)}</tbody></table></div></details>
+        <button class="primario">Mostra i componenti</button>
+      </form>
+      ${!boms.length ? html`<p class="vuoto">${clienteId ? 'Questo cliente non ha BOM quotate: caricale in Quotazioni → BOM o spuntale a mano.' : 'Scegli un cliente o spunta le BOM.'}</p>` : html`
+      <section class="blocco"><h2>${String(comuni.length)} componenti ${minimo === 2 ? 'in almeno 2 schede' : ''} <small class="nota">su ${String(boms.length)} BOM: ${boms.map(b => b.nome).join(', ')}</small></h2>
+        ${fissi.size ? html`<p class="nota">In verde i primi ${String(fissi.size)}: proposta di feeder fissi.</p>` : ''}
+        <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Codice di produzione</th><th>P/N</th><th>Descrizione</th><th class="n">Schede</th>
+          <th class="n">Pezzi a scheda (totale)</th><th>In quali BOM</th></tr></thead><tbody>
+          ${comuni.map(c => html`<tr class="${fissi.has(c.chiave) ? 'fisso' : ''}"><td>${c.codiceProduzione ?? ''}</td><td>${c.pn.join(', ')}</td><td class="taglia">${c.descrizione ?? ''}</td>
+            <td class="n">${String(c.bom.length)}</td><td class="n">${num(c.pezziTotali, 0)}</td>
+            <td>${c.bom.map((b, i) => html`${i ? ', ' : ''}<a href="/quotazioni/bom/${String(b.id)}">${b.nome}</a> (${num(b.qtaScheda, 0)})`)}</td></tr>`)}
+        </tbody></table></div></section>`}`));
   });
 
   // ── Codifica di un singolo P/N ──
