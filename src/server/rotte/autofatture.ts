@@ -158,7 +158,7 @@ export function rotteAutofatture() {
               <td class="n">${euro(inEuro)} · ${euro(Math.round(inEuro * 22) / 100)}</td>${modificabile ? html`<td></td>` : ''}</tr>` : ''}</tfoot>
         </table></div>
         ${modificabile ? html`<p class="nota">Con «Prepara l'autofattura»: il fornitore nuovo entra in anagrafica, la fattura si registra tra le fatture fornitori
-            e nasce la bozza dell'autofattura (sezionale AF) con queste righe in euro. La bozza si controlla e si emette da Documenti emessi → Autofatture.</p>
+            e nasce la bozza dell'autofattura (sezionale AF) con queste righe in euro. La bozza si controlla e si emette da Amministrazione → Autofatture.</p>
           <p class="pulsanti"><button class="primario" name="azione" value="conferma" ${controlli.errori.length ? raw('disabled') : ''}>Prepara l'autofattura</button>
             <button name="azione" value="salva">Salva le correzioni</button></p>` : ''}
       </form>` : ''}
