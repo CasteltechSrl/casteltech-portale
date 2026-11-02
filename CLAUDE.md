@@ -79,6 +79,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   pulsanti per tipo (fatture: Stampa, XML/zip, Excel, Segna incassate → pagina con data e modo, Duplica, Nota di credito, Elimina; NC; autofatture; DDT: Fattura i DDT
   dello stesso cliente, Annulla DDT); Elimina SOLO bozze senza numero, il resto si storna/annulla e il messaggio dice cosa non è stato toccato; niente spunte per Contabilità. Un elenco nuovo con azioni usa lo stesso schema.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
+- Sito casteltech.net (Adriano 2/11/2026): pagine statiche in `sito/pubblico` (Static Site `casteltech-sito` su Render, gratis; prima WordPress su Noamweb),
+  vedi `sito/LEGGIMI.md`. Moduli Contatti/Preventivo → portale (`rotte/sito.ts`, `engine/sito.ts`, test in `tests/sito.test.ts`): email a info@ e pacchetto "SITO – AZIENDA"
+  nei Documenti dei clienti. Cambiare un testo = modificare l'HTML IT ed EN; non cambiare gli indirizzi delle pagine (posizionamento su Google).
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
 ## Database su Neon (piano gratuito)

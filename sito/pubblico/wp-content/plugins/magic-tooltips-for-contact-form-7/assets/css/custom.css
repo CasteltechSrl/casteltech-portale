@@ -1,0 +1,30 @@
+.wpcf7 tip{
+    display: none;
+}
+
+.mm-tooltip-cf7-li-hide-description .gfield_description {
+	display:none;
+}
+
+.mtfcf7_help {
+    color: #2385ba;
+}
+.mtfcf7_help::before {
+    background: #2385ba none repeat scroll 0 0;
+    border-radius: 16px;
+    color: #fff;
+    content: "?";
+    font-size: 14px;
+    font-weight: bold;
+    height: 16px;
+    left: 3px;
+    line-height: 15px;
+    margin-top: -8px;
+    text-align: center;
+    width: 16px;
+    display:inline-block;
+}
+
+
+.mm-tooltip-cf7.mm-tooltip-cf7-title-underline {font-weight: bold; border-bottom: 1px dotted;}
+
