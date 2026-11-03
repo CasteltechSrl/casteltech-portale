@@ -285,7 +285,7 @@ export function rotteOrdini() {
     const prodotti: { id: number; codice: string; descrizione: string | null }[] = o.cliente_id ? await prodottiPerCliente(o.cliente_id) : [];
     const sceltaProdotto = (nome: string, id: number | null | undefined, codiceVecchio?: string | null) => html`<select name="${nome}" aria-label="Codice dall'anagrafica del cliente">
       <option value="">${codiceVecchio && !id ? `${codiceVecchio} (non in anagrafica)` : '— senza codice —'}</option>
-      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}${k.descrizione ? ` · ${k.descrizione}` : ''}</option>`)}</select>`;
+      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}</select>`;
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
