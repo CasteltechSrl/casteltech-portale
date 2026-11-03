@@ -1,3 +1,4 @@
+import { perFase } from './acquisizioni.js';
 /**
  * Ordini dei clienti: stato delle righe (da evadere / parziale / evaso), date secondo le regole del foglio
  * "Schedulazione produzione", cruscotto (fatturato, ordini da evadere, previsione) e pianificazione per il Gantt.
@@ -170,7 +171,8 @@ export function abbinaSpedizioni(aperte: RigaAperta[], spedite: RigaSpedita[]): 
           || (codiceBuono(d) && (codici.includes(d) || (d.length >= 6 && d === descr)));
       })());
     let q = s.quantita;
-    for (const r of candidate) {
+    // stesso codice con righe di fasi diverse (SMD / PTH): la spedizione va sulla riga della sua fase
+    for (const r of s.rigaOrdineId ? candidate : perFase(candidate, s.descrizione, x => x.descrizione)) {
       const libero = s.rigaOrdineId ? q : Math.min(q, resto.get(r.id) ?? 0);
       if (libero <= 0) continue;
       out.push({ rigaId: r.id, chiave: s.chiave, documento: s.documento, data: s.data, codice: s.codice || s.descrizione, quantita: libero });

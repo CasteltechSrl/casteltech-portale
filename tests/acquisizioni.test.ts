@@ -167,3 +167,26 @@ test('casella del prezzo: 350 resta 350 (prima diventava 35)', async () => {
   assert.equal(numCampo(3.3, 5), '3,3');
   assert.equal(numCampo(1000, 3), '1000');
 });
+
+test('Control Systems: codice per versione e fase SMD/PTH nella riga (Adriano 3/11/2026)', async () => {
+  const { prodottoDaDescrizione, faseLavorazione, abbinaDdt } = await import('../src/engine/acquisizioni.js');
+  const { abbinaSpedizioni } = await import('../src/engine/ordini.js');
+  const prodotti = [{ id: 1, codice: 'M0929-C' }, { id: 2, codice: 'M0929-C CRONOS' }, { id: 3, codice: 'M0929-C HELIOS' }];
+  assert.equal(prodottoDaDescrizione('SALDATURA SMD SCHEDA M0929-C VERS. CRONOS', prodotti)?.id, 2);
+  assert.equal(prodottoDaDescrizione('RIPRESA PTH SCHEDA M0929-C VERSIONE HELIOS', prodotti)?.id, 3);
+  assert.equal(prodottoDaDescrizione('SCHEDA M0929-C', prodotti)?.id, 1);
+  assert.equal(faseLavorazione('Saldatura SMD ns. scheda'), 'smd');
+  assert.equal(faseLavorazione('Ripresa PTH'), 'tht');
+  assert.equal(faseLavorazione('MONTAGGIO SMD E THT'), null);
+  // DDT letto: la riga "Ripresa PTH" va sulla riga PTH anche se la SMD è più vecchia
+  const aperte = [
+    { id: 10, codice: 'M0929-C CRONOS', codiceCliente: null, descrizione: 'SALDATURA SMD SCHEDA M0929-C VERS. CRONOS', rifCliente: null, residuo: 90, consegna: '2026-11-06' },
+    { id: 11, codice: 'M0929-C CRONOS', codiceCliente: null, descrizione: 'RIPRESA PTH SCHEDA M0929-C VERS. CRONOS', rifCliente: null, residuo: 120, consegna: '2026-11-06' },
+  ];
+  assert.deepEqual(abbinaDdt([{ codice: 'M0929-C CRONOS', descrizione: 'RIPRESA PTH M0929-C CRONOS', quantita: 120 }], aperte), [11]);
+  assert.deepEqual(abbinaDdt([{ codice: 'M0929-C CRONOS', descrizione: 'SALDATURA SMD', quantita: 90 }], aperte), [10]);
+  // DDT del portale abbinati in automatico: stessa regola
+  const righe = aperte.map(a => ({ id: a.id, clienteId: 5, dataOrdine: '2026-11-03', codici: [a.codice], descrizione: a.descrizione, daSpedire: a.residuo }));
+  const ab = abbinaSpedizioni(righe as any, [{ chiave: 'D1', documento: 'DDT 1', clienteId: 5, data: '2026-11-06', codice: 'M0929-C CRONOS', descrizione: 'RIPRESA PTH SCHEDA M0929-C VERS. CRONOS', quantita: 120 } as any]);
+  assert.deepEqual(ab.map(a => [a.rigaId, a.quantita]), [[11, 120]]);
+});

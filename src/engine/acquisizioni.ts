@@ -244,6 +244,23 @@ export interface RigaAperta { id: number; codice: string | null; codiceCliente: 
 const chiave = (s: string | null | undefined) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /**
+ * Fase della lavorazione scritta nella riga (Control Systems, Adriano 3/11/2026: stesso codice per versione, righe "Saldatura SMD" e
+ * "Ripresa PTH" con prezzi diversi, a volte si fa una fase sola): 'smd', 'tht' (PTH/THT) o null se non c'è o ci sono tutte e due.
+ */
+export function faseLavorazione(testo: string | null | undefined): 'smd' | 'tht' | null {
+  const t = String(testo ?? '').toUpperCase();
+  const smd = /(^|[^A-Z0-9])SMD($|[^A-Z0-9])/.test(t), tht = /(^|[^A-Z0-9])(PTH|THT)($|[^A-Z0-9])/.test(t);
+  return smd === tht ? null : smd ? 'smd' : 'tht';
+}
+/** Righe d'ordine compatibili con la fase della riga spedita: fuori quelle dell'altra fase, prima quelle della stessa fase. */
+export function perFase<T>(candidate: T[], descrizioneSpedita: string | null | undefined, descrizioneDi: (x: T) => string | null | undefined): T[] {
+  const f = faseLavorazione(descrizioneSpedita);
+  if (!f) return candidate;
+  const ok = candidate.filter(x => { const g = faseLavorazione(descrizioneDi(x)); return !g || g === f; });
+  return [...ok.filter(x => faseLavorazione(descrizioneDi(x)) === f), ...ok.filter(x => faseLavorazione(descrizioneDi(x)) !== f)];
+}
+
+/**
  * Per ogni riga del DDT propone la riga d'ordine: stesso codice (nostro o del cliente), prima quelle ancora da spedire;
  * a parità vale l'ordine citato nel DDT,
  * poi la consegna più vicina. Una riga d'ordine già "riempita" dalle righe precedenti del DDT passa alla successiva.
@@ -253,10 +270,10 @@ export function abbinaDdt(righe: RigaDdtLetta[], aperte: RigaAperta[], rifOrdine
   const rif = chiave(rifOrdine);
   return righe.map(r => {
     const k = chiave(r.codice);
-    const candidate = aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
+    const candidate = perFase(aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
       .sort((a, b) => Number((resta.get(b.id) ?? 0) > 0) - Number((resta.get(a.id) ?? 0) > 0)
         || Number(!!rif && chiave(b.rifCliente) === rif) - Number(!!rif && chiave(a.rifCliente) === rif)
-        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999'));
+        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999')), r.descrizione, a => a.descrizione);
     const scelta = candidate[0];
     if (!scelta) return null;
     resta.set(scelta.id, (resta.get(scelta.id) ?? 0) - r.quantita);
@@ -284,10 +301,10 @@ export function dividiDdt<R extends RigaDdtLetta & { rigaId?: number | null }>(r
       out.push(r); continue;
     }
     const k = chiave(r.codice);
-    const candidate = aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
+    const candidate = perFase(aperte.filter(a => k && (chiave(a.codice) === k || chiave(a.codiceCliente) === k))
       .sort((a, b) => Number((resta.get(b.id) ?? 0) > 0) - Number((resta.get(a.id) ?? 0) > 0)
         || Number(!!rif && chiave(b.rifCliente) === rif) - Number(!!rif && chiave(a.rifCliente) === rif)
-        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999'));
+        || (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999')), r.descrizione, a => a.descrizione);
     const prima = candidate[0];
     if (!prima) { out.push({ ...r, rigaId: null }); continue; }
     const restaPrima = resta.get(prima.id) ?? 0;
@@ -329,7 +346,8 @@ export function prodottoDaDescrizione<T extends { id: number; codice: string; de
   const trovati = prodotti.filter(p => {
     const pezzi = String(p.codice ?? '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
     if (pezzi.join('').length < 4) return false;
-    const re = new RegExp(`(^|[^A-Z0-9])${pezzi.join('[^A-Z0-9]?')}($|[^A-Z0-9])`);
+    // tra i pezzi: un separatore, oppure "VERS." / "VERSIONE" (codice "M0929-C CRONOS" = "M0929-C VERS. CRONOS")
+    const re = new RegExp(`(^|[^A-Z0-9])${pezzi.join('(?:[^A-Z0-9]?|[^A-Z0-9]+VERS(?:IONE)?[^A-Z0-9]+)')}($|[^A-Z0-9])`);
     return re.test(testo);
   });
   if (!trovati.length) return null;
