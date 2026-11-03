@@ -323,6 +323,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/componenti-clienti', 'Anagrafiche → Componenti clienti']],
   },
   {
+    id: 'materiali-consumo', area: 'anagrafiche', titolo: 'Materiali di consumo (lamine, pasta saldante, stagno, Kapton, punte)',
+    parole: 'materiali materiale consumo consumabili lamina lamine stencil serigrafica pasta saldante crema stagno barre verghe filo kapton nastro punta punte saldatore weller ugello flussante flux alcol isopropilico coating pluriboll buste guanti codice nostro mc acquistare comprare',
+    testo: [
+      'Quello che si compra per la produzione e non va sulla scheda del cliente: lamine serigrafiche, pasta saldante, barre e filo di stagno, Kapton, punte dei saldatori, flussanti, prodotti di pulizia, coating, buste antistatiche, guanti ESD.',
+      'Ogni materiale ha un codice NOSTRO dato dal portale: MC-categoria-numero (es. MC-LAM-001 lamina 0,12, MC-PAS-001 pasta saldante, MC-PUN-001 punta Weller). Il codice del fornitore o del produttore si scrive nella descrizione, tra parentesi. Le punte Weller hanno un solo codice: il modello si scrive nella descrizione della riga dell\'ordine.',
+      'L\'elenco iniziale viene dagli acquisti 2022–2026 delle fatture dei fornitori di Fatture in Cloud. Gli ultimi prezzi si caricano dal file materiali_prezzi.json.gz ("Carica gli ultimi prezzi d\'acquisto"); poi si aggiornano dagli ordini quando scrivi un prezzo diverso e rispondi Sì alla domanda.',
+      'Nell\'ordine a fornitore si richiamano scrivendo una parola nel Codice ("lamina", "pasta", "filo 0,7", "kapton 12"): scelto il materiale arrivano codice, descrizione e ultimo prezzo; la descrizione si può completare (per quale prodotto è la lamina, il modello della punta).',
+      'Un materiale si aggiunge qui ("+ Aggiungi materiale") o dall\'ordine ("+ Nuovo materiale" nel menu del Codice, oppure "Aggiungi ai materiali" nel riquadro "Righe non in anagrafica"). Si elimina solo se non è in nessun ordine; altrimenti si toglie la spunta "Attivo" e non compare più negli ordini.',
+    ],
+    passi: ['Anagrafiche → Materiali di consumo.', 'Filtra per categoria o cerca.', 'Correggi descrizione o unità e premi Salva; "+ Aggiungi materiale" per uno nuovo.'],
+    pagine: [['/anagrafiche/materiali', 'Anagrafiche → Materiali di consumo'], ['/ordini/fornitori', 'Ordini a fornitore']],
+  },
+  {
     id: 'prezzi-anagrafiche', area: 'anagrafiche', titolo: 'Prezzo di vendita dei prodotti e ultimo acquisto dei componenti',
     parole: 'prezzo prezzi listino scaglioni scaglione fasce range quantità vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
     testo: [
@@ -585,10 +598,10 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'ordini-fornitore', area: 'ordini', titolo: 'Ordini a fornitore (componenti, PCB, lavorazioni)',
-    parole: 'fornitore fornitori compera comprare comprato ordinare pcb componenti distributore mouser digikey farnell tme carrello arrivo arrivata arrivati merce',
+    parole: 'fornitore fornitori compera comprare comprato ordinare pcb componenti materiali consumo lamina pasta stagno distributore mouser digikey farnell tme carrello arrivo arrivata arrivati merce',
     testo: [
       'Gli ordini che Casteltech fa ai fornitori stanno in Acquisti → Ordini a fornitore (prima si facevano in Fatture in Cloud). Il fornitore si sceglie solo dall\'anagrafica: se manca si aggiunge in Anagrafiche → Fornitori.',
-      '"+ Nuovo ordine" crea una bozza: si scrivono le righe (codice del fornitore o P/N, descrizione, quantità, prezzo, consegna richiesta), la vostra offerta, il pagamento e la commessa per cui si compra. Scrivendo il P/N il menu propone i componenti dell\'archivio (Anagrafiche → Componenti): scegliendone uno arrivano descrizione e ultimo prezzo d\'acquisto. Emetti dà il numero (numerazione degli ordini a fornitore) e conserva il PDF; un ordine emesso si corregge ancora (il PDF si rifà con lo stesso numero), ma il fornitore non si cambia più.',
+      '"+ Nuovo ordine" crea una bozza: si scrivono le righe (codice del fornitore o P/N, descrizione, quantità, prezzo, consegna richiesta), la vostra offerta, il pagamento e la commessa per cui si compra. Nel Codice scrivi una parola ("lamina", "pasta", "kapton") o il P/N: il menu propone i materiali di consumo (Anagrafiche → Materiali di consumo, codici MC-…) e i componenti dell\'archivio (Anagrafiche → Componenti); scegliendone uno arrivano descrizione e ultimo prezzo d\'acquisto, e la descrizione si può completare per questo ordine. In fondo al menu "+ Nuovo materiale" lo aggiunge in anagrafica con un codice nostro, "Riga libera" lascia la riga come scritta e sotto le righe il riquadro "Righe non in anagrafica" propone "Aggiungi ai materiali" (il codice del fornitore passa nella descrizione e la riga prende il codice nostro). Emetti dà il numero (numerazione degli ordini a fornitore) e conserva il PDF; un ordine emesso si corregge ancora (il PDF si rifà con lo stesso numero), ma il fornitore non si cambia più.',
       'Dalla BOM quotata (Quotazioni → apri la BOM → "Ordina i componenti") il portale prepara una bozza per ogni distributore scelto (DigiKey, Mouser, Farnell, TME) con le quantità già comprensive dello scarto. Il pulsante del carrello scarica codice e quantità da usare sul sito del distributore.',
       'Quando arriva la merce si scrivono i pezzi arrivati riga per riga ("Tutto arrivato" se è completo): l\'ordine risulta da ricevere, arrivato in parte o arrivato. Quando arriva la fattura dallo SdI la si collega all\'ordine nel riquadro "Fattura del fornitore" (se il totale è diverso dall\'ordine il portale lo dice).',
       'L\'elenco mostra gli ordini da completare (bozze, merce da ricevere, fattura da collegare); "Tutti" mostra anche quelli finiti. Con le spunte: Duplica (stesse righe, nuova bozza) ed Elimina (le bozze spariscono, gli ordini emessi restano come annullati e il numero non si riusa).',

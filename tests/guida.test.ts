@@ -43,6 +43,9 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('aggiungere un componente che manca', 2).includes('archivio-componenti'));
   assert.ok(primi('elenco componenti disponibili', 2).includes('archivio-componenti'));
   assert.ok(primi('caricare i componenti in conto lavoro del cliente', 2).includes('componenti-clienti'));
+  assert.ok(primi('ordinare una lamina serigrafica', 2).includes('materiali-consumo'));
+  assert.ok(primi('codice della pasta saldante', 2).includes('materiali-consumo'));
+  assert.ok(primi('punte weller', 2).includes('materiali-consumo'));
   assert.ok(primi('restituire componenti del cliente con il ddt', 3).includes('ddt-emessi'));
   assert.ok(primi('modificare un ddt già emesso', 2).includes('ddt-emessi'));
   assert.ok(primi('cancellare una riga del ddt', 3).includes('ddt-emessi'));

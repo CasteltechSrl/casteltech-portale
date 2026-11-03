@@ -128,6 +128,12 @@ export async function salvaOrdineFornitore(id: number, b: any): Promise<string[]
   return [];
 }
 
+/** Ordine già emesso: PDF rifatto con le righe come sono ora (es. dopo "Aggiungi ai materiali"). In bozza non serve. */
+export async function rifaiPdfOrdine(id: number) {
+  if (await q1(`SELECT 1 FROM documenti WHERE id = $1 AND tipo = 'ordine_fornitore' AND numero IS NOT NULL`, [id]))
+    await q(`UPDATE documenti SET pdf = $2 WHERE id = $1`, [id, (await creaPdf(id)).dati]);
+}
+
 async function datiPdf(id: number): Promise<{ dati: DatiPdfConferma; nome: string }> {
   const x = await leggiOrdineFornitore(id);
   if (!x) throw new Error('Ordine non trovato.');

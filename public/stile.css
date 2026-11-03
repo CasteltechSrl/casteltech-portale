@@ -893,3 +893,10 @@ ul.elenco-trovati li.vuoto { color: #777; cursor: default; }
 #componenti-clienti input { width: 100%; min-width: 7rem; }
 /* CRM: azienda non interessata / scartata (non compare negli elenchi) */
 .avviso.crm-escluso { background: #fbe2e0; border-color: var(--negativo); color: var(--negativo); }
+/* Ordine a fornitore: articoli (materiali di consumo e componenti) proposti mentre si scrive nel Codice */
+ul.elenco-trovati li .tipo-articolo { color: #777; font-size: .8rem; margin-left: .4rem; }
+ul.elenco-trovati li.libero { color: #555; font-style: italic; }
+#materiali tr.spento td { opacity: .55; }
+#materiali td.largo { min-width: 30rem; }
+#materiali td.largo input { width: 100%; }
+#materiali select { max-width: 13rem; }

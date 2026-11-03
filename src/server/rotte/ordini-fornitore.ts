@@ -10,8 +10,10 @@ import { riquadriSceltaProdotto } from '../views/scelta-prodotto.js';
 import {
   anteprimaOrdiniDaBom, collegaFattura, commessePerOrdini, creaOrdineFornitore, csvOrdine, duplicaOrdineFornitore, elencoOrdiniFornitore, eliminaOAnnullaOrdine,
   emettiOrdineFornitore, fattureCollegabili, fornitoriPerOrdini, inviaOrdineFornitore, leggiOrdineFornitore, mancantiCommessa, ordinaMancanti, ordiniDaBom, pdfOrdineFornitore, propostaEmailOrdine,
-  salvaOrdineFornitore, segnaArrivi, ultimoNumeroOrdini,
+  rifaiPdfOrdine, salvaOrdineFornitore, segnaArrivi, ultimoNumeroOrdini,
 } from '../ordini-fornitore-servizio.js';
+import { righeOrdineFuoriAnagrafica, rigaOrdineInAnagrafica } from '../materiali-consumo-servizio.js';
+import { CATEGORIE_MATERIALI } from '../../engine/materiali-consumo.js';
 import { controlliEmissioneOrdine, avvisoNumerazione, NOMI_ARRIVO, type StatoArrivo } from '../../engine/ordini-fornitore.js';
 import { importoRigaConferma, totaleConferma } from '../../engine/conferme-ordine.js';
 import { nomeFornitore } from '../codifica-servizio.js';
@@ -198,11 +200,12 @@ export function rotteOrdiniFornitore() {
       emesso ? Promise.resolve(null) : ultimoNumeroOrdini(d.anno),
     ]);
     const errori = emesso ? [] : controlliEmissioneOrdine({ fornitoreId: d.fornitore_id }, righe);
+    const fuori = annullato ? [] : await righeOrdineFuoriAnagrafica(righe);
     const avviso = emesso ? null : avvisoNumerazione(d.anno, ultimo);
     const base = `/ordini/fornitori/${d.id}`;
     const rigaModulo = (x: any, i: number) => html`<tr>
-      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo cerca-componente" list="componenti-trovati" autocomplete="off"
-        title="Scrivi il P/N o il codice: il menu propone i componenti dell'archivio (Anagrafiche → Componenti)"></td>
+      <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo cerca-componente cerca-articolo" autocomplete="off"
+        placeholder="lamina, kapton, P/N…" title="Scrivi una parola (lamina, pasta, filo, kapton…) o il P/N: il menu propone i materiali di consumo e i componenti delle Anagrafiche"></td>
       <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo"></td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
@@ -241,11 +244,20 @@ export function rotteOrdiniFornitore() {
           <thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>Prezzo €</th><th>Consegna</th><th class="n">Importo</th><th title="Togli la riga">Togli</th></tr></thead>
           <tbody>${[...righe, {}].map(rigaModulo)}</tbody>
         </table></div>
-        <datalist id="componenti-trovati"></datalist>
         ${riquadriSceltaProdotto(null)}
+        <div id="nuovo-materiale" class="nuovo-prodotto" hidden>
+          <h3>Nuovo materiale in anagrafica</h3>
+          <p class="nota">Il codice nostro (MC-…) lo dà il portale; il codice del fornitore scrivilo nella descrizione.</p>
+          <div class="riga-campi"><label class="largo">Descrizione <input id="nm-descrizione" class="maiuscolo" autocomplete="off"></label>
+            <label>Categoria <select id="nm-categoria">${Object.entries(CATEGORIE_MATERIALI).map(([c, n]) => html`<option value="${c}">${n}</option>`)}</select></label>
+            <label>U.M. <input id="nm-um" class="maiuscolo corto" value="PZ"></label></div>
+          <div class="barra-azioni"><output id="nm-esito"></output><button type="button" id="nm-annulla">Annulla</button>
+            <button type="button" class="primario" id="nm-aggiungi">Aggiungi e usa nella riga</button></div>
+        </div>
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
-          <span class="nota">Codice: scrivi il P/N e scegli il componente dal menu (archivio di Anagrafiche → Componenti: descrizione e ultimo prezzo arrivano da soli),
-            oppure il codice del fornitore. La consegna richiesta non è obbligatoria.</span>
+          <span class="nota">Codice: scrivi una parola ("lamina", "pasta", "filo 0,7", "kapton 12") o il P/N e scegli dal menu: materiali di consumo e componenti
+            di Anagrafiche, con descrizione e ultimo prezzo. La descrizione si può completare (es. per quale prodotto è la lamina). Un articolo nuovo si scrive libero:
+            dopo il salvataggio il portale propone di aggiungerlo in anagrafica. La consegna richiesta non è obbligatoria.</span>
           <button class="primario">Salva</button></div>
       </form>
       <div class="blocco">
@@ -262,6 +274,17 @@ export function rotteOrdiniFornitore() {
             <button class="pericolo">${emesso ? 'Annulla ordine' : 'Elimina bozza'}</button></form>`}
         </div>
       </div>
+      ${fuori.length && !annullato ? html`<div class="blocco" id="righe-fuori-anagrafica">
+        <h2>Righe non in anagrafica</h2>
+        <p class="nota">Questi codici non sono né materiali di consumo né componenti delle Anagrafiche. Se l'articolo si ricompra, aggiungilo ai materiali:
+          il portale gli dà un codice nostro (MC-…), il codice scritto nella riga va nella descrizione e la riga prende il codice nuovo. Altrimenti lascia la riga libera.</p>
+        <table class="elenco"><thead><tr><th>Riga</th><th>Scritto nell'ordine</th><th>Descrizione per l'anagrafica</th><th>Categoria</th><th></th></tr></thead>
+          <tbody>${fuori.map(k => html`<tr><td class="n">${k.posizione}</td><td>${k.codice ?? ''} ${k.descrizione}</td>
+            <td class="largo"><input name="descrizione" value="${k.nuovaDescrizione}" class="maiuscolo" form="fa-${k.posizione}"></td>
+            <td><select name="categoria" form="fa-${k.posizione}">${Object.entries(CATEGORIE_MATERIALI).map(([c, n]) =>
+              html`<option value="${c}" ${c === k.categoria ? raw('selected') : ''}>${n}</option>`)}</select></td>
+            <td><form method="post" action="${base}/riga/${k.posizione}/in-anagrafica" id="fa-${k.posizione}" class="inline"><button>Aggiungi ai materiali</button></form></td></tr>`)}</tbody></table>
+      </div>` : ''}
       ${emesso && !annullato ? html`<form method="post" action="${base}/arrivi" class="blocco">
         <h2>Arrivo della merce</h2>
         <table class="elenco"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Ordinati</th><th>Arrivati</th><th>Ultimo arrivo</th></tr></thead>
@@ -296,13 +319,20 @@ export function rotteOrdiniFornitore() {
             : html`<b>Invio con Gmail non ancora attivo</b> (manca la delega di Google Workspace per info@): scarica il PDF e mandalo dalla posta.`}</span>
           <button class="primario" ${email.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
         </div>
-      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: ['documenti.js', 'autosalva.js'] }));
+      </form>` : ''}`, { avviso: req.query.msg ? String(req.query.msg) : undefined, script: ['documenti.js', 'articoli-ordine.js', 'autosalva.js'] }));
   });
 
   r.post('/:id', async (req, res) => {
     let errori: string[];
     try { errori = await salvaOrdineFornitore(Number(req.params.id), req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
     rispondiSalvataggio(req, res, errori, msg(`/ordini/fornitori/${req.params.id}`, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
+  });
+
+  // riga libera → Anagrafiche → Materiali con un codice nostro (Adriano 3/11/2026: "chiedi di aggiungere l'informazione in anagrafica")
+  r.post('/:id/riga/:posizione/in-anagrafica', async (req, res) => {
+    const e = await rigaOrdineInAnagrafica(Number(req.params.id), Number(req.params.posizione), req.body);
+    if ('messaggio' in e) await rifaiPdfOrdine(Number(req.params.id));   // ordine già emesso: il PDF prende il codice nuovo
+    res.redirect(msg(`/ordini/fornitori/${req.params.id}`, 'errore' in e ? e.errore : e.messaggio));
   });
 
   r.get('/:id/pdf', async (req, res) => {
