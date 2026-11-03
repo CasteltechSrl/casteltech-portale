@@ -26,12 +26,12 @@ const periodoRichiesta = (req: Request) => {
 function tabellaRegistro(registro: Registro, righe: RigaRegistro[]): Raw {
   if (!righe.length) return html`<p class="vuoto">Nessun documento nel periodo.</p>`;
   return html`<div class="tabella-scorre"><table class="elenco">
-    <thead><tr>${registro === 'acquisti' ? html`<th>Prot.</th>` : ''}<th>Data</th><th>Numero</th><th>Tipo</th><th>${registro === 'vendite' ? 'Cliente' : 'Fornitore'}</th>
+    <thead><tr>${registro === 'acquisti' ? html`<th>Prot.</th><th>Ricevuta il</th>` : ''}<th>Data</th><th>Numero</th><th>Tipo</th><th>${registro === 'vendite' ? 'Cliente' : 'Fornitore'}</th>
       <th>P.IVA</th><th>IVA</th><th class="num">Imponibile</th><th class="num">Imposta</th><th class="num">Totale</th></tr></thead>
     <tbody>${righe.map(r => {
       const s = segno(r.tipo);
       return html`<tr class="${r.differenza ? 'scaduta' : ''}">
-        ${registro === 'acquisti' ? html`<td>${r.protocollo}</td>` : ''}
+        ${registro === 'acquisti' ? html`<td>${r.protocollo}</td><td>${r.ricevutoIl ? data(r.ricevutoIl) : ''}</td>` : ''}
         <td>${data(r.data)}</td><td><a href="${r.link}">${r.numero}</a>${r.origine === 'fic' ? html` <span class="etichetta">FIC</span>` : ''}</td>
         <td>${r.tipo === 'nota_credito' ? 'Nota di credito' : r.tipoSdi ?? (r.tipo === 'autofattura' ? 'Autofattura' : 'Fattura')}</td>
         <td>${r.nome}</td><td>${r.paese && r.paese !== 'IT' && !r.partitaIva.startsWith(r.paese) ? `${r.paese} ` : ''}${r.partitaIva}</td>
@@ -104,7 +104,7 @@ export function rotteRegistriIva() {
         })}</tbody></table></div>
       ${(['vendite', 'acquisti', 'autofatture'] as Registro[]).map(reg => html`
         <h2>${NOMI_REGISTRO[reg]} · ${d[reg].length}</h2>
-        ${reg === 'acquisti' ? html`<p class="nota">Protocollo: progressivo nell'anno in ordine di data del documento (calcolato, non fisso).</p>` : ''}
+        ${reg === 'acquisti' ? html`<p class="nota">Protocollo: progressivo nell'anno in ordine di data di ricezione (calcolato, non fisso). Mese e anno del registro e della liquidazione seguono la data di ricezione; per lo storico di Fatture in Cloud vale la data del documento.</p>` : ''}
         ${reg === 'autofatture' ? html`<p class="nota">L'IVA delle autofatture (TD16–TD19) va sia a debito sia a credito: nella liquidazione si annulla.</p>` : ''}
         ${tabellaRegistro(reg, d[reg])}`)}
       <p class="nota">I numeri sono quelli del portale; la liquidazione e i registri ufficiali li controlla il commercialista. Il pacchetto zip contiene l'Excel

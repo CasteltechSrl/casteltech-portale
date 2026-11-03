@@ -225,8 +225,8 @@ export function rotteFiscale() {
     const { spesa: s, errori } = spesaDaModulo(req.body ?? {});
     if (errori.length) return res.redirect(`/amministrazione/spese?msg=${encodeURIComponent(`Non registrata: ${errori.join(' ')}`)}`);
     await transazione(async c => {
-      const { rows: [d] } = await c.query(`INSERT INTO documenti_ricevuti (tipo, numero, data, intestatario, descrizione, categoria, imponibile, imposta, totale, elettronica, origine)
-        VALUES ('fattura', $1, $2, $3, nullif($4, ''), $5, $6, $7, $8, false, 'manuale') RETURNING id`,
+      const { rows: [d] } = await c.query(`INSERT INTO documenti_ricevuti (tipo, numero, data, intestatario, descrizione, categoria, imponibile, imposta, totale, elettronica, origine, ricevuto_il)
+        VALUES ('fattura', $1, $2, $3, nullif($4, ''), $5, $6, $7, $8, false, 'manuale', $2) RETURNING id`,
         [s.numero, s.data, JSON.stringify({ nome: maiuscolo(s.controparte) }), s.descrizione, s.tipo, s.imponibile, s.imposta, s.totale]);
       await c.query(`INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo, pagata_il, conto) VALUES ($1, $2, $3, $4, $5)`,
         [d.id, s.data, s.totale, s.pagataIl, s.pagataIl ? s.conto : null]);

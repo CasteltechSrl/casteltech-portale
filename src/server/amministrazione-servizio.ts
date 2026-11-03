@@ -224,8 +224,8 @@ export async function caricaStoricoFic(dati: { documenti?: unknown[]; ricevuti?:
         if (!fornitore_id) esito.fornitoriSenzaAnagrafica++;
         const r = (await c.query(
           `INSERT INTO documenti_ricevuti (tipo, numero, data, fornitore_id, intestatario, descrizione, categoria, imponibile, imposta, totale, elettronica, origine, fic_id,
-             ritenuta, netto_a_pagare)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'fic', $12, $13, $14)
+             ritenuta, netto_a_pagare, ricevuto_il)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'fic', $12, $13, $14, NULL)
            ON CONFLICT (fic_id) DO UPDATE SET tipo = $1, numero = $2, data = $3, fornitore_id = $4, intestatario = $5, descrizione = $6, categoria = $7,
              imponibile = $8, imposta = $9, totale = $10, elettronica = $11, ritenuta = $13, netto_a_pagare = $14, aggiornato_il = now()
            RETURNING id, (xmax = 0) AS nuovo`,

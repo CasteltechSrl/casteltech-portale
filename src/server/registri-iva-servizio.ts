@@ -39,13 +39,13 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
       FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
       WHERE d.tipo IN ('fattura', 'nota_credito', 'autofattura') AND d.numero IS NOT NULL AND d.data BETWEEN $1 AND $2`, [periodo.dal, periodo.al]),
     // acquisti: tutto l'anno per il protocollo (progressivo nell'anno), poi si tengono quelli del periodo
-    q(`SELECT r.id, r.tipo, r.tipo_sdi, r.numero, r.data, r.origine, r.imponibile, r.imposta, r.totale,
+    q(`SELECT r.id, r.tipo, r.tipo_sdi, r.numero, r.data, to_char(coalesce(r.ricevuto_il, r.data), 'YYYY-MM-DD') AS ricevuto_il, r.origine, r.imponibile, r.imposta, r.totale,
         coalesce(f.ragione_sociale, r.intestatario->>'nome', r.intestatario->>'ragione_sociale', '') AS nome,
         coalesce(nullif(r.intestatario->>'partita_iva', ''), f.partita_iva, '') AS partita_iva,
         coalesce(nullif(r.intestatario->>'paese', ''), nullif(r.intestatario->>'nazione', ''), f.paese, 'IT') AS paese,
-        CASE WHEN r.data BETWEEN $2 AND $3 THEN ${RIEPILOGO_XML('r.xml')} END AS riepilogo_xml
+        CASE WHEN coalesce(r.ricevuto_il, r.data) BETWEEN $2 AND $3 THEN ${RIEPILOGO_XML('r.xml')} END AS riepilogo_xml
       FROM documenti_ricevuti r LEFT JOIN fornitori_anagrafica f ON f.id = r.fornitore_id
-      WHERE extract(year FROM r.data)::int = $1
+      WHERE extract(year FROM coalesce(r.ricevuto_il, r.data))::int = $1   -- anno e mese del registro: data di ricezione
         AND (r.elettronica OR r.imposta <> 0)   -- spese senza fattura (scontrini, affitto, polizze): fuori dal registro IVA`, [periodo.anno, periodo.dal, periodo.al]),
     q<{ tipo: string; sezionale: string; numeri: number[] }>(`SELECT tipo, sezionale, array_agg(numero) AS numeri FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito', 'autofattura') AND anno = $1 AND numero IS NOT NULL AND data <= $2 GROUP BY tipo, sezionale`, [periodo.anno, periodo.al]),
@@ -66,12 +66,12 @@ export async function caricaRegistri(periodo: Periodo): Promise<DatiRegistri> {
   };
   const vendite = emessi.filter(d => d.tipo !== 'autofattura').map(daEmesso);
   const autofatture = emessi.filter(d => d.tipo === 'autofattura').map(daEmesso);
-  const acquisti = protocolla(ricevuti as any[]).filter(r => r.data >= periodo.dal && r.data <= periodo.al).map((d): RigaRegistro => {
+  const acquisti = protocolla(ricevuti as any[]).filter(r => r.ricevuto_il >= periodo.dal && r.ricevuto_il <= periodo.al).map((d): RigaRegistro => {
     const { voci, differenza } = riepilogoDocumento({ imponibile: d.imponibile, imposta: d.imposta, xml: d.riepilogo_xml }, aliquote);
     return {
       id: d.id, registro: 'acquisti', protocollo: d.protocollo, tipo: d.tipo, tipoSdi: d.tipo_sdi, numero: d.numero || '(senza numero)', data: d.data,
       nome: d.nome, partitaIva: d.partita_iva ?? '', paese: siglaNazione(d.paese) ?? d.paese ?? '', imponibile: Number(d.imponibile), imposta: Number(d.imposta),
-      totale: Number(d.totale), voci, differenza, origine: d.origine, link: `/amministrazione/ricevuti/${d.id}`,
+      totale: Number(d.totale), voci, differenza, origine: d.origine, link: `/amministrazione/ricevuti/${d.id}`, ricevutoIl: d.ricevuto_il,
     };
   });
   const NOMI_SERIE: Record<string, string> = { fattura: 'Fatture', nota_credito: 'Note di credito', autofattura: 'Autofatture' };
@@ -124,7 +124,7 @@ export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?
   for (const registro of ['vendite', 'acquisti', 'autofatture'] as Registro[]) {
     const ws = wb.addWorksheet(registro === 'vendite' ? 'Vendite' : registro === 'acquisti' ? 'Acquisti' : 'Autofatture');
     ws.columns = [
-      ...(registro === 'acquisti' ? [{ header: 'Protocollo', key: 'protocollo', width: 10 }] : []),
+      ...(registro === 'acquisti' ? [{ header: 'Protocollo', key: 'protocollo', width: 10 }, { header: 'Data ricezione', key: 'ricevuto', width: 13 }] : []),
       { header: 'Data documento', key: 'data', width: 13 }, { header: 'Numero', key: 'numero', width: 14 }, { header: 'Tipo', key: 'tipo', width: 15 },
       { header: 'Tipo SdI', key: 'tipoSdi', width: 9 }, { header: registro === 'vendite' ? 'Cliente' : 'Fornitore', key: 'nome', width: 40 },
       { header: 'Partita IVA', key: 'partitaIva', width: 16 }, { header: 'Paese', key: 'paese', width: 7 },
@@ -135,7 +135,7 @@ export async function excelRegistri(d: DatiRegistri, azienda: { ragione_sociale?
     for (const r of d[registro]) r.voci.forEach((v, i) => {
       const s = segno(r.tipo);
       ws.addRow({
-        protocollo: r.protocollo, data: dataIt(r.data), numero: r.numero, tipo: TIPI[r.tipo] ?? r.tipo, tipoSdi: r.tipoSdi ?? '', nome: r.nome,
+        protocollo: r.protocollo, ricevuto: r.ricevutoIl ? dataIt(r.ricevutoIl) : '', data: dataIt(r.data), numero: r.numero, tipo: TIPI[r.tipo] ?? r.tipo, tipoSdi: r.tipoSdi ?? '', nome: r.nome,
         partitaIva: r.partitaIva, paese: r.paese, percentuale: v.percentuale, natura: v.natura ?? '', voce: nomeVoce(v),
         imponibile: s * v.imponibile, imposta: s * v.imposta, totale: i === 0 ? s * r.totale : null, origine: r.origine === 'fic' ? 'FIC' : r.origine,
       });
