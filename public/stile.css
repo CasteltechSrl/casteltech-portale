@@ -908,3 +908,4 @@ ul.elenco-trovati li.libero { color: #555; font-style: italic; }
 #materiali td.largo input { width: 100%; }
 #materiali select { max-width: 13rem; }
 tr.da-controllare td { background: #fff2cc; }
+.nuovo-prodotto-riga { margin-top: .3rem; } .nuovo-prodotto-riga label { display: block; margin: .2rem 0; } .nuovo-prodotto-riga summary { cursor: pointer; color: var(--accento, #1d6b57); font-size: .9em; }

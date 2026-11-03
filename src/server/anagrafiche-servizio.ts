@@ -4,7 +4,8 @@
  * tutto in MAIUSCOLO. I nomi scritti in modo diverso nei vecchi preventivi sono collegati tramite "alias".
  */
 import type pg from 'pg';
-import { q, transazione } from './db.js';
+import { q, q1, transazione } from './db.js';
+import { controllaProdottoNuovo } from '../engine/scheda/prodotto.js';
 
 /** Maiuscolo e spazi singoli. */
 export const maiuscolo = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -172,3 +173,25 @@ export async function riallineaPreventivi(c: Db) {
 /** Prodotti selezionabili per un cliente: SOLO i suoi (Adriano 29/10/2026: ogni codice ha il suo cliente, vedi engine/anagrafiche.ts). */
 export const prodottiPerCliente = (clienteId: number) => q(
   `SELECT id, codice, descrizione, cliente_id FROM prodotti WHERE cliente_id = $1 ORDER BY codice`, [clienteId]);
+
+/**
+ * Prodotto nuovo per un cliente, aggiunto dall'ufficio da una riga d'ordine (Ordini da e-mail e PDF, pagina dell'ordine; Adriano 3/11/2026).
+ * Stesse regole di "+ Nuovo prodotto" del preventivo: MAIUSCOLO, codice e descrizione obbligatori, sempre con il cliente;
+ * lo stesso codice già in anagrafica per il cliente (o senza cliente: gli si assegna) si riusa.
+ */
+export async function aggiungiProdottoCliente(clienteId: number, x: { codice?: unknown; descrizione?: unknown }):
+  Promise<{ id: number; codice: string; esisteva: boolean } | { errore: string }> {
+  if (!clienteId || !(await q1(`SELECT 1 FROM clienti WHERE id = $1`, [clienteId]))) return { errore: "Scegli prima il cliente dall'anagrafica." };
+  const { valori, errore } = controllaProdottoNuovo({ codice: x.codice, descrizione: x.descrizione, revisione: '0' });
+  if (errore) return { errore };
+  const esistente = await q1<{ id: number; codice: string }>(
+    `SELECT id, codice FROM prodotti WHERE regexp_replace(upper(codice), '[^A-Z0-9]', '', 'g') = $1 AND (cliente_id = $2 OR cliente_id IS NULL)
+     ORDER BY cliente_id NULLS LAST, id LIMIT 1`, [valori.codice.replace(/[^A-Z0-9]/g, ''), clienteId]);
+  if (esistente) {
+    await q(`UPDATE prodotti SET cliente_id = $2 WHERE id = $1 AND cliente_id IS NULL`, [esistente.id, clienteId]);
+    return { ...esistente, esisteva: true };
+  }
+  const nuovo = (await q1<{ id: number; codice: string }>(`INSERT INTO prodotti (codice, descrizione, cliente_id) VALUES ($1, $2, $3) RETURNING id, codice`,
+    [valori.codice, valori.descrizione, clienteId]))!;
+  return { ...nuovo, esisteva: false };
+}

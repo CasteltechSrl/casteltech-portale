@@ -190,3 +190,12 @@ test('Control Systems: codice per versione e fase SMD/PTH nella riga (Adriano 3/
   const ab = abbinaSpedizioni(righe as any, [{ chiave: 'D1', documento: 'DDT 1', clienteId: 5, data: '2026-11-06', codice: 'M0929-C CRONOS', descrizione: 'RIPRESA PTH SCHEDA M0929-C VERS. CRONOS', quantita: 120 } as any]);
   assert.deepEqual(ab.map(a => [a.rigaId, a.quantita]), [[11, 120]]);
 });
+
+test('codice proposto per il prodotto nuovo da una riga d\'ordine', async () => {
+  const { codiceProposto } = await import('../src/engine/acquisizioni.js');
+  assert.equal(codiceProposto('', 'Saldatura SMD ns. scheda M0929-C Vers. CRONOS'), 'M0929-C CRONOS');
+  assert.equal(codiceProposto('.', 'RIPRESA PTH SCHEDA M0921-C VERSIONE HELIOS'), 'M0921-C HELIOS');
+  assert.equal(codiceProposto('ea1002-0', 'scheda'), 'EA1002-0');
+  assert.equal(codiceProposto('', 'Montaggio scheda M2501-B'), 'M2501-B');
+  assert.equal(codiceProposto('', 'COSTO UNA TANTUM'), '');
+});
