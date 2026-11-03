@@ -62,6 +62,7 @@ export function dateRiga(r: Pick<RigaOrdine, 'arrivoMateriale' | 'dataLavorazion
  */
 const PAROLE_SERVIZIO = /\b(LAMIN[AE]|PROGRAMMAZION[EI] (ATTREZZATUR|MACCHIN)|ATTREZZAGGIO|ATTREZZATURE|UNA TANTUM|AVVIO (DI )?PRODUZIONE|INITIAL PRODUCTION|SET ?UP|TRASPORTO|SPEDIZION[EI]|SPESE DI|SCONTO|ACCONTO|ANTICIPO|ADVANCE PAYMENT|PROTOTIPAZIONE|PROGETTAZIONE|SCANSIONE|UPLOAD FIRMWARE)\b/;
 export function eServizio(codice: string | null | undefined, descrizione: string | null | undefined): boolean {
+  if (/^UT-/i.test(String(codice ?? '').trim())) return true;     // servizi una tantum (Anagrafiche → Servizi una tantum)
   return PAROLE_SERVIZIO.test(`${codice ?? ''} ${descrizione ?? ''}`.toUpperCase().replace(/[-_]/g, ' '));
 }
 

@@ -34,11 +34,11 @@ test('prezzo cambiato a mano: si aggiorna lo scaglione di quella quantità, altr
 
 test('tutti i documenti con righe al cliente usano il menu dell\'anagrafica; il codice salvato viene dal prodotto del cliente', () => {
   const amm = readFileSync(new URL('../src/server/rotte/amministrazione.ts', import.meta.url), 'utf8');
-  assert.equal((amm.match(/cellaCodice\(x, i, prodotti\)/g) ?? []).length, 1);     // fattura / nota di credito / di debito
+  assert.equal((amm.match(/cellaCodice\(x, i, prodotti, servizi\)/g) ?? []).length, 1);     // fattura / nota di credito / di debito
   assert.match(amm, /cellaTipoDdt\(x, i\)/);   // colonna Tipo a sinistra, non stampata
   assert.match(amm, /togli-riga/);              // ✕ toglie la riga
-  assert.match(amm, /cellaCodiceDdt\(x, i, prodotti\)/);                       // DDT: prodotto, componente nostro, componente cliente, libero (2/11/2026)
-  assert.match(readFileSync(new URL('../src/server/rotte/conferme-ordine.ts', import.meta.url), 'utf8'), /cellaCodice\(x, i, prodotti\)/);
+  assert.match(amm, /cellaCodiceDdt\(x, i, prodotti, servizi\)/);                       // DDT: prodotto, componente nostro, componente cliente, libero (2/11/2026)
+  assert.match(readFileSync(new URL('../src/server/rotte/conferme-ordine.ts', import.meta.url), 'utf8'), /cellaCodice\(x, i, prodotti, servizi\)/);
   assert.match(readFileSync(new URL('../src/server/rotte/ordini-fornitore.ts', import.meta.url), 'utf8'), /cerca-componente/);
   assert.match(readFileSync(new URL('../src/server/conferme-ordine-servizio.ts', import.meta.url), 'utf8'), /completaDaListino\(cliente/);
   const srv = readFileSync(new URL('../src/server/prezzi-servizio.ts', import.meta.url), 'utf8');

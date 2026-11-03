@@ -14,6 +14,7 @@ import { controlliEmissione, importoRigaConferma, totaleConferma } from '../../e
 import { pagina } from './ordini.js';
 import { html, data, euro, raw, numCampo } from '../views/html.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
 import { cellaCodice, cellaDescrizione, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 
 export const STATI_CONFERMA: Record<string, [string, string]> = {
@@ -46,8 +47,9 @@ export function rotteConferme() {
     const base = indirizzo(o.id, d.id);
     // codice solo dall'anagrafica del cliente (Adriano 31/10/2026)
     const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
+    const servizi = await serviziAttivi();     // servizi una tantum (UT-…): per tutti i clienti
     const rigaModulo = (x: any, i: number) => html`<tr>
-      <td>${cellaCodice(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+      <td>${cellaCodice(x, i, prodotti, servizi)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
       <td class="largo">${cellaDescrizione(x, i, prodotti, 'maiuscolo')}</td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>

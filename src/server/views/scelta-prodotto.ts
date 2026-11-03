@@ -9,6 +9,8 @@ import { html, raw, type Raw } from './html.js';
 import { FONTI_RIGA, NOMI_FONTI, fonteRiga } from '../../engine/componenti-clienti.js';
 
 export interface ProdottoScelta { id: number; codice: string; descrizione: string | null }
+/** Servizio una tantum (UT-…, Adriano 3/11/2026): vale per tutti i clienti, in fondo al menu Codice. */
+export interface ServizioScelta { codice: string; descrizione: string; prezzo: number | null }
 
 const chiave = (s: unknown) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -18,16 +20,24 @@ export function prodottoDellaRiga(x: { codice?: string | null; prodotto_id?: num
   return (id ? prodotti.find(p => p.id === id) : undefined) ?? (x.codice ? prodotti.find(p => chiave(p.codice) === chiave(x.codice)) : undefined) ?? null;
 }
 
-/** Cella Codice: menu dei prodotti del cliente + campo nascosto con il codice (quello che va nel documento). */
-export function cellaCodice(x: { codice?: string | null; prodotto_id?: number | string | null }, i: number, prodotti: ProdottoScelta[]): Raw {
+/** Gruppo "Servizi una tantum" del menu Codice: codici Casteltech validi per tutti i clienti (descrizione modificabile nella riga). */
+export const opzioniServizi = (servizi: ServizioScelta[], codiceRiga: unknown, valore: (s: ServizioScelta) => string = () => ''): Raw => servizi.length
+  ? html`<optgroup label="Servizi una tantum (tutti i clienti)">${servizi.map(s => html`<option value="${valore(s)}" data-codice="${s.codice}" data-descrizione="${s.descrizione}"
+      data-servizio="1" data-prezzo="${s.prezzo ?? ''}" ${chiave(codiceRiga) && chiave(codiceRiga) === chiave(s.codice) ? raw('selected') : ''}>${s.codice}</option>`)}</optgroup>`
+  : html``;
+
+/** Cella Codice: menu dei prodotti del cliente (+ servizi una tantum) + campo nascosto con il codice (quello che va nel documento). */
+export function cellaCodice(x: { codice?: string | null; prodotto_id?: number | string | null }, i: number, prodotti: ProdottoScelta[], servizi: ServizioScelta[] = []): Raw {
   const scelto = prodottoDellaRiga(x, prodotti);
-  const libero = !scelto && x.codice ? String(x.codice) : '';
+  const servizio = !scelto && x.codice ? servizi.find(s => chiave(s.codice) === chiave(x.codice)) : undefined;
+  const libero = !scelto && !servizio && x.codice ? String(x.codice) : '';
   return html`<select name="righe[${i}][prodotto_id]" class="scelta-prodotto" aria-label="Codice dall'anagrafica del cliente">
       <option value="" data-codice="">— senza codice —</option>
       ${libero ? html`<option value="" data-codice="${libero}" data-libero="1" selected>${libero} (non in anagrafica)</option>` : ''}
       ${prodotti.map(p => html`<option value="${p.id}" data-codice="${p.codice}" data-descrizione="${p.descrizione ?? ''}" ${scelto?.id === p.id ? raw('selected') : ''}>${p.codice}</option>`)}
       <option value="nuovo">+ Nuovo prodotto…</option>
-    </select><input type="hidden" name="righe[${i}][codice]" value="${scelto?.codice ?? libero}">`;
+      ${opzioniServizi(servizi, servizio?.codice)}
+    </select><input type="hidden" name="righe[${i}][codice]" value="${scelto?.codice ?? servizio?.codice ?? libero}">`;
 }
 
 /** Descrizione della riga: dal prodotto scelto (sola lettura), libera per le righe senza codice. */
@@ -72,11 +82,11 @@ export function cellaTipoDdt(x: any, i: number): Raw {
 }
 
 /** Cella Codice del DDT: menu dei prodotti del cliente, oppure casella con l'elenco dei codici del tipo scelto (componenti nostri o del cliente, libero). */
-export function cellaCodiceDdt(x: any, i: number, prodotti: ProdottoScelta[]): Raw {
+export function cellaCodiceDdt(x: any, i: number, prodotti: ProdottoScelta[], servizi: ServizioScelta[] = []): Raw {
   const fonte = fonteRiga(x);
   const prodotto = fonte === 'prodotto';
   return html`<div class="codice-fonte">
-    <span class="per-prodotto" ${prodotto ? '' : raw('hidden')}>${cellaCodice(prodotto ? x : { prodotto_id: null, codice: null }, i, prodotti)}</span>
+    <span class="per-prodotto" ${prodotto ? '' : raw('hidden')}>${cellaCodice(prodotto ? x : { prodotto_id: null, codice: null }, i, prodotti, servizi)}</span>
     <span class="per-testo" ${prodotto ? raw('hidden') : ''}><input name="righe[${i}][codice_testo]" value="${prodotto ? '' : x.codice ?? ''}"
       class="codice maiuscolo cerca-riga" autocomplete="off" placeholder="${SEGNAPOSTO_FONTE[fonte] ?? ''}"></span>
     <input type="hidden" name="righe[${i}][componente_id]" value="${x.componente_id ?? ''}">

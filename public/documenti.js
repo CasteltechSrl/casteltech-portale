@@ -38,6 +38,18 @@ function scegliProdotto(riga, opzione) {
   const codice = campo(riga, 'codice'), descr = campo(riga, 'descrizione');
   if (codice) codice.value = opzione?.dataset.codice ?? '';
   if (!descr) return;
+  // servizio una tantum (UT-…, uguale per tutti i clienti): descrizione proposta ma modificabile, prezzo proposto se la casella è vuota
+  if (opzione?.dataset.servizio) {
+    if (!descr.value.trim() || descr.readOnly || descr.dataset.servizio) descr.value = opzione.dataset.descrizione || '';
+    descr.readOnly = false; descr.title = 'Descrizione proposta dal servizio una tantum: si può completare';
+    descr.dataset.servizio = '1';
+    const prezzo = campo(riga, 'prezzo');
+    if (prezzo && opzione.dataset.prezzo && (!prezzo.value.trim() || prezzo.dataset.listino)) {
+      prezzo.value = opzione.dataset.prezzo.replace('.', ','); prezzo.dataset.listino = '1'; prezzo.title = 'Prezzo proposto dal servizio una tantum';
+    }
+    return;
+  }
+  delete descr.dataset.servizio;
   if (opzione?.value && opzione.value !== 'nuovo') {
     descr.value = opzione.dataset.descrizione || descr.value;
     descr.readOnly = true;
@@ -55,9 +67,9 @@ moduloDoc?.addEventListener('change', e => {
     if (pannelloNuovo) { pannelloNuovo.hidden = false; document.getElementById('np-riga-codice').focus(); }
     return;
   }
-  scegliProdotto(riga, sel.selectedOptions[0]);
   const prezzo = campo(riga, 'prezzo');
   if (prezzo?.dataset.listino) prezzo.value = '';      // il prezzo del prodotto di prima non vale più
+  scegliProdotto(riga, sel.selectedOptions[0]);
   prezzoDaListino(riga);
 });
 if (pannelloNuovo) {

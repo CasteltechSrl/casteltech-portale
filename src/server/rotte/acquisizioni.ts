@@ -11,6 +11,8 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { TIPI_ACQUISIZIONE, codiceProposto, controlloTotali, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { aggiungiProdottoCliente, maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
+import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
+import { opzioniServizi } from '../views/scelta-prodotto.js';
 import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta } from '../acquisizioni-servizio.js';
 import type { Request } from 'express';
 import { html, data, euro, num, numCampo, raw } from '../views/html.js';
@@ -29,6 +31,8 @@ function propostaDa(body: any, prima: PropostaDb | null): PropostaDb {
       consegna: dataDa(x?.consegna), ...(numeroDa(x?.importo) != null ? { importo: numeroDa(x?.importo) } : {}), tipo: x?.tipo === 'servizio' ? 'servizio' as const : 'scheda' as const,
       // vuoto = "cerca dal codice": il prodotto si ritrova dall'anagrafica del cliente scelto
       prodottoId: Number(x?.prodotto) || (undefined as unknown as null),
+      // servizio una tantum scelto nel menu ("ut:UT-LAMINA"): la riga diventa di servizio
+      ...(/^ut:/i.test(String(x?.prodotto ?? '')) ? { servizio: String(x.prodotto).slice(3).toUpperCase(), tipo: 'servizio' as const } : {}),
     }))
     .filter(r => r.codice || r.descrizione || r.prodottoId);
   return {
@@ -201,6 +205,7 @@ export function rotteAcquisizioni() {
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!p;
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const prodotti = p?.clienteId ? await q(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1 OR cliente_id IS NULL ORDER BY codice`, [p.clienteId]) : [];
+    const servizi = await serviziAttivi();     // servizi una tantum (UT-…): per tutti i clienti
     const righe = [...(p?.righe ?? []), ...(modificabile ? [null, null] : [])];
     const conti = p ? controlloTotali(p.righe, p.totaleDocumento) : null;
     const righeSbagliate = new Set((conti?.avvisi ?? []).map(v => v.riga).filter(n => n != null));
@@ -235,7 +240,8 @@ export function rotteAcquisizioni() {
             <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}"></td>
             <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
             <td><select name="righe[r${i}][prodotto]"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: cerca dal codice' : '— cerca dal codice —'}</option>
-              ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</select>
+              ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}
+              ${opzioniServizi(servizi, x?.servizio, s => `ut:${s.codice}`)}</select>
               ${x && !x.prodottoId && x.tipo !== 'servizio' && p.clienteId ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
                 <label>Codice <input name="righe[r${i}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
                 <label>Descrizione <input name="righe[r${i}][np_descrizione]" value="${x.descrizione}" class="maiuscolo lungo"></label>
@@ -246,7 +252,7 @@ export function rotteAcquisizioni() {
             <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto">${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
             <td><input type="date" name="righe[r${i}][consegna]" value="${x?.consegna ?? ''}"></td>
             <td><input type="checkbox" name="righe[r${i}][togli]" value="1" aria-label="Togli la riga"></td></tr>`
-          : html`<tr><td>${x!.codice}</td><td>${x!.descrizione}</td><td>${x!.prodottoId ? 'sì' : html`<span class="esito verifica">no</span>`}</td><td>${x!.tipo}</td>
+          : html`<tr><td>${x!.codice}</td><td>${x!.descrizione}</td><td>${x!.prodottoId ? 'sì' : x!.servizio ? x!.servizio : html`<span class="esito verifica">no</span>`}</td><td>${x!.tipo}</td>
             <td class="n">${num(x!.quantita, 0)}</td><td class="n">${euro(x!.prezzo)}</td><td>${data(x!.consegna)}</td></tr>`)}</tbody>
           <tfoot><tr><td colspan="5">Somma delle righe${p.totaleDocumento != null ? html` · nell'ordine ${euro(p.totaleDocumento)}` : ''}</td><td class="n"><b>${euro(conti?.somma ?? 0)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
         </table></div>

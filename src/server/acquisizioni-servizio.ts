@@ -3,6 +3,8 @@
  * (Ordini → Da acquisire). Gli ordini (PDF, foto, email) li legge l'IA e diventano una proposta "da confermare":
  * l'ordine nasce solo quando l'ufficio conferma. Il cliente si sceglie SOLO dall'anagrafica.
  */
+import { serviziAttivi } from './servizi-una-tantum-servizio.js';
+import { servizioProposto } from '../engine/servizi-una-tantum.js';
 import { createHash } from 'node:crypto';
 import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
@@ -15,7 +17,8 @@ import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type 
 import { righeOrdini } from './ordini-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
-export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio' }
+/** servizio: codice del servizio una tantum (UT-…, Adriano 3/11/2026) per le righe di servizio; proposto dalla descrizione. */
+export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio'; servizio?: string | null }
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
 export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
 
@@ -63,6 +66,7 @@ async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null):
   const nomeCliente = clienteId ? (await q1<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti WHERE id = $1`, [clienteId]))!.r : p.cliente;
   const righe: RigaPropostaDb[] = [];
   let delCliente: { id: number; codice: string; descrizione: string | null }[] | null = null;
+  const servizi = await serviziAttivi();
   for (const r of p.righe) {
     const x = r as Partial<RigaPropostaDb>;
     let prodottoId = x.prodottoId ?? null;
@@ -76,7 +80,11 @@ async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null):
       const trovato = prodottoDaDescrizione(r.descrizione, delCliente);
       if (trovato) { prodottoId = trovato.id; codice = trovato.codice; }
     }
-    righe.push({ ...r, codice: chiaveCodice(codice) ? codice : '', prodottoId, tipo: x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`)) });
+    const tipo = x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`));
+    // riga di servizio: servizio una tantum scelto dall'ufficio, altrimenti proposto dalla descrizione ("LAMINA SERIGRAFICA" → UT-LAMINA)
+    const servizio = prodottoId || tipo !== 'servizio' ? null
+      : x.servizio && servizi.some(s => s.codice === x.servizio) ? x.servizio : servizioProposto(r.descrizione, servizi);
+    righe.push({ ...r, codice: chiaveCodice(codice) ? codice : '', prodottoId, tipo, servizio });
   }
   return { ...p, clienteId, cliente: maiuscolo(nomeCliente), righe };
 }
@@ -195,7 +203,7 @@ export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi
       const prodotto = r.prodottoId ? (await c.query(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [r.prodottoId])).rows[0] : null;
       await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, codice_cliente, descrizione_cliente, tipo, quantita, prezzo, consegna_richiesta)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [ordineId, `A${id}-${i + 1}`, i, r.prodottoId, prodotto?.codice ?? (r.codice || null), prodotto?.descrizione || r.descrizione || null,
+        [ordineId, `A${id}-${i + 1}`, i, r.prodottoId, prodotto?.codice ?? r.servizio ?? (r.codice || null), prodotto?.descrizione || r.descrizione || null,
           r.codice || null, r.descrizione || null, r.tipo, r.quantita, r.prezzo ?? 0, r.consegna]);
     }
     await c.query(`UPDATE acquisizioni SET stato = 'confermato', ordine_id = $2, confermato_da = $3, proposta = $4 WHERE id = $1`,

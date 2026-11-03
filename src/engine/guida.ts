@@ -347,6 +347,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/materiali', 'Anagrafiche → Materiali di consumo'], ['/ordini/fornitori', 'Ordini a fornitore']],
   },
   {
+    id: 'servizi-una-tantum', area: 'anagrafiche', titolo: 'Servizi una tantum (lamina, documentazione, programmazione, attrezzaggio PCB)',
+    parole: 'servizi servizio una tantum costi primo lotto avvio produzione lamina lamine vendute venduto venduta quante programmazione attrezzature attrezzaggio pcb documentazione ut codice casteltech tutti i clienti',
+    testo: [
+      'I costi una tantum uguali per tutti i clienti hanno un codice Casteltech che vale per qualunque cliente: UT-LAMINA (lamina serigrafica), UT-DOCUMENTAZIONE (preparazione della documentazione), UT-PROGRAMMAZIONE (programmazione attrezzature), UT-ATTREZZAGGIO-PCB. Stanno in Anagrafiche → Servizi una tantum, non tra i Prodotti (che hanno sempre il loro cliente).',
+      'Nelle righe di ordini, conferme d\'ordine, DDT e fatture si scelgono in fondo al menu Codice, nel gruppo "Servizi una tantum": arriva la descrizione (che si può completare, es. "LAMINA SERIGRAFICA CON TRATTAMENTI TOP") e il prezzo proposto se la casella è vuota.',
+      'Negli ordini letti da e-mail e PDF la riga di servizio che cita un servizio solo ("LAMINA SERIGRAFICA", "PROGRAMMAZIONE ATTREZZATURE") prende il codice da sola; se ne unisce più di uno lo scegli tu nel menu.',
+      'Nella pagina c\'è il venduto per anno (pezzi ed euro): conta le righe con il codice UT e, per le fatture di prima (anche Fatture in Cloud), quelle che nella descrizione citano un servizio solo. Così sai per esempio quante lamine hai venduto.',
+      'Un servizio nuovo per tutti (es. UT-COLLAUDO) si aggiunge con "+ Aggiungi servizio una tantum". Si elimina solo se non è in nessun documento; altrimenti si toglie la spunta "Attivo".',
+    ],
+    passi: ['Anagrafiche → Servizi una tantum.', 'Correggi descrizione o prezzo proposto e premi Salva.', 'Nel documento: menu Codice → gruppo "Servizi una tantum".'],
+    pagine: [['/anagrafiche/servizi', 'Anagrafiche → Servizi una tantum']],
+  },
+  {
     id: 'prezzi-anagrafiche', area: 'anagrafiche', titolo: 'Prezzo di vendita dei prodotti e ultimo acquisto dei componenti',
     parole: 'prezzo prezzi listino scaglioni scaglione fasce range quantità vendita acquisto costo ultimo fornitore fattura anagrafica fatture in cloud fic differenza scheda componente',
     testo: [
