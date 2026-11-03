@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  aliquotaDedotta, codiceTributoIva, controlliRegistro, liquidazione, liquidazioniMensili, meseDaLiquidare, scadenzaVersamentoIva, numeriMancanti, periodoDa, protocolla, riepilogoDaXml, riepilogoDocumento, riepilogoRegistro, type RigaRegistro,
+  aliquotaDedotta, codiceTributoIva, dataRegistro, controlliRegistro, liquidazione, liquidazioniMensili, meseDaLiquidare, scadenzaVersamentoIva, numeriMancanti, periodoDa, protocolla, riepilogoDaXml, riepilogoDocumento, riepilogoRegistro, type RigaRegistro,
 } from '../src/engine/registri-iva.js';
 import { cercaGuida } from '../src/engine/guida.js';
 import { esitoVies, partitaIvaPerVies, statoControllo } from '../src/engine/vies.js';
@@ -71,6 +71,9 @@ test('registri IVA: note di credito in negativo, riepilogo per aliquota e liquid
 
 test('registri IVA: protocollo degli acquisti in ordine di data, numeri mancanti nella serie e segnalazioni', () => {
   assert.deepEqual(protocolla([{ id: 5, data: '2026-02-01' }, { id: 3, data: '2026-01-10' }, { id: 4, data: '2026-01-10' }]).map(x => [x.id, x.protocollo]), [[3, 1], [4, 2], [5, 3]]);
+  // Adriano 3/11/2026: progressivo per DATA DI RICEZIONE (fattura del 28/01 ricevuta il 05/02 viene dopo quella ricevuta il 02/02)
+  assert.deepEqual(protocolla([{ id: 1, data: '2026-01-28', ricevuto_il: '2026-02-05' }, { id: 2, data: '2026-02-01', ricevuto_il: '2026-02-02' },
+    { id: 3, data: '2026-01-15', ricevuto_il: null }]).map(x => [x.id, x.protocollo]), [[3, 1], [2, 2], [1, 3]]);
   assert.deepEqual(numeriMancanti([1, 2, 4, 7]), [3, 5, 6]);
   assert.deepEqual(numeriMancanti([]), []);
   const c = controlliRegistro({ vendite: [riga({ differenza: true })], acquisti: [riga({ registro: 'acquisti', partitaIva: '' })], autofatture: [],
@@ -142,4 +145,15 @@ test('liquidazione IVA mensile (Adriano 31/10/2026): credito riportato, sotto 25
   ]);
   assert.equal(m[1].codiceTributo, '6002');
   assert.equal(m[1].scadenza, '2026-03-16');
+});
+
+test('Registro acquisti: il mese della liquidazione segue la data di ricezione (Adriano 3/11/2026)', () => {
+  const vendita = riga({ data: '2026-02-10', imposta: 300, voci: [] });
+  // fattura del fornitore del 30/01 ricevuta il 03/02: conta a febbraio
+  const acq = riga({ registro: 'acquisti', data: '2026-01-30', ricevutoIl: '2026-02-03', imposta: 100, voci: [] });
+  const m = liquidazioniMensili(2026, 2, [vendita], [acq], []);
+  assert.equal(m[0].risultato, 0);
+  assert.equal(m[1].risultato, 200);
+  assert.equal(dataRegistro(acq), '2026-02-03');
+  assert.equal(dataRegistro(riga({ data: '2026-01-30' })), '2026-01-30');
 });

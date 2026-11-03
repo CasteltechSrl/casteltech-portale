@@ -136,7 +136,12 @@ export interface RigaRegistro {
   numero: string; data: string; nome: string; partitaIva: string; paese: string;
   imponibile: number; imposta: number; totale: number; voci: VoceIva[]; differenza: boolean;
   origine: string; stato?: string | null; link: string;
+  /** acquisti: data di ricezione (decide protocollo, mese e anno nel registro); vuota = data del documento */
+  ricevutoIl?: string | null;
 }
+
+/** Data che conta nel registro: per gli acquisti la ricezione, per il resto la data del documento. */
+export const dataRegistro = (r: { data: string; ricevutoIl?: string | null }) => String(r.ricevutoIl || r.data).slice(0, 10);
 
 /** Note di credito in negativo nei registri e nei totali. */
 export const segno = (tipo: string) => (tipo === 'nota_credito' ? -1 : 1);
@@ -145,11 +150,14 @@ export const segno = (tipo: string) => (tipo === 'nota_credito' ? -1 : 1);
 export const STATI_ESCLUSI = ['bozza', 'annullato', 'scartato'];
 
 /**
- * Protocollo degli acquisti: numero progressivo nell'anno in ordine di data (poi di arrivo nel portale). Il portale non salva un
- * protocollo fisso: è calcolato, quindi una fattura registrata tardi con una data vecchia sposta i numeri dopo di lei.
+ * Protocollo degli acquisti (Adriano 3/11/2026): numero progressivo nell'anno in ordine di DATA DI RICEZIONE del documento
+ * (storico FIC senza ricezione: la data del documento), poi data del documento e arrivo nel portale. Il portale non salva un
+ * protocollo fisso: è calcolato, quindi un documento ricevuto e caricato tardi con una ricezione vecchia sposta i numeri dopo di lui.
  */
-export function protocolla<T extends { data: string; id: number }>(docs: T[]): (T & { protocollo: number })[] {
-  return [...docs].sort((a, b) => a.data.localeCompare(b.data) || a.id - b.id).map((d, i) => ({ ...d, protocollo: i + 1 }));
+export function protocolla<T extends { data: string; id: number; ricevuto_il?: string | null }>(docs: T[]): (T & { protocollo: number })[] {
+  const ric = (d: T) => String(d.ricevuto_il || d.data).slice(0, 10);
+  return [...docs].sort((a, b) => ric(a).localeCompare(ric(b)) || String(a.data).localeCompare(String(b.data)) || a.id - b.id)
+    .map((d, i) => ({ ...d, protocollo: i + 1 }));
 }
 
 export interface TotaleVoce { codice: string; percentuale: number; natura: string | null; imponibile: number; imposta: number; documenti: number; splitPayment?: boolean }
@@ -224,7 +232,7 @@ export interface LiquidazioneMese extends Liquidazione {
  */
 export function liquidazioniMensili(anno: number, finoAMese: number, vendite: RigaRegistro[], acquisti: RigaRegistro[], autofatture: RigaRegistro[],
   creditoIniziale = 0): LiquidazioneMese[] {
-  const delMese = (rr: RigaRegistro[], m: number) => rr.filter(r => String(r.data).slice(0, 7) === `${anno}-${dueCifre(m)}`);
+  const delMese = (rr: RigaRegistro[], m: number) => rr.filter(r => dataRegistro(r).slice(0, 7) === `${anno}-${dueCifre(m)}`);
   const esito: LiquidazioneMese[] = [];
   let riporto = -Math.abs(creditoIniziale);
   for (let m = 1; m <= finoAMese; m++) {

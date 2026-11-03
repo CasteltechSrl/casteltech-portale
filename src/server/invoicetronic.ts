@@ -223,11 +223,12 @@ export async function registraRicevuta(ambiente: Ambiente, r: any): Promise<stri
           fornitore.indirizzo, fornitore.cap, fornitore.comune, fornitore.provincia, fornitore.paese, fornitore.note])).rows[0]?.id ?? null;
       }
       const id = (await c.query(`INSERT INTO documenti_ricevuti (tipo, tipo_sdi, numero, data, fornitore_id, intestatario, descrizione, imponibile, imposta, totale,
-          elettronica, origine, valuta, sdi_id, xml, ritenuta, tipo_ritenuta, causale_ritenuta, cassa, netto_a_pagare)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'sdi',$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+          elettronica, origine, valuta, sdi_id, xml, ritenuta, tipo_ritenuta, causale_ritenuta, cassa, netto_a_pagare, ricevuto_il)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'sdi',$11,$12,$13,$14,$15,$16,$17,$18,
+            coalesce((($19::timestamptz) AT TIME ZONE 'Europe/Rome')::date, (now() AT TIME ZONE 'Europe/Rome')::date)) RETURNING id`,
         [f.tipo, f.tipo_sdi, f.numero, f.data, forn, JSON.stringify({ nome: f.fornitore.ragione_sociale, ...f.fornitore }), f.descrizione,
          f.imponibile, f.imposta, f.totale, f.valuta, sdiId, xml, f.ritenuta, f.tipo_ritenuta, f.causale_ritenuta, f.cassa,
-         f.ritenuta ? f.netto_a_pagare : null])).rows[0].id;
+         f.ritenuta ? f.netto_a_pagare : null, r.created ?? null])).rows[0].id;
       for (const sc of f.scadenze) await c.query(`INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo) VALUES ($1, $2, $3)`, [id, sc.data, sc.importo]);
       return `${chi}: registrata${forn ? '' : ' (fornitore da aggiungere a mano in anagrafica)'}`;
     }));
