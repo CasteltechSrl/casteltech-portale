@@ -104,6 +104,13 @@ td { padding: .45rem .6rem; border-bottom: 1px solid #eef0ee; vertical-align: mi
 tr:last-child td { border-bottom: 0; }
 .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 tr.cliccabile { cursor: pointer; }
+/* ordinare cliccando l'intestazione (public/ordina-tabelle.js) */
+th.ordinabile { cursor: pointer; user-select: none; }
+th.ordinabile:hover { color: var(--accento); }
+th.ordinabile::after { content: "↕"; margin-left: .3em; opacity: .25; font-size: .9em; }
+th.ordinabile.ordinata-su::after { content: "▲"; opacity: .9; color: var(--accento); }
+th.ordinabile.ordinata-giu::after { content: "▼"; opacity: .9; color: var(--accento); }
+@media print { th.ordinabile::after { content: none; } }
 tr.cliccabile:hover td { background: #f7faf9; }
 .taglia { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .etichetta { font-size: .7rem; padding: .05rem .4rem; border-radius: 99px; background: #eef0ee; color: var(--tenue); white-space: nowrap; font-weight: 550; }

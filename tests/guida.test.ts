@@ -30,6 +30,8 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi("dove salvo il file dell'ordine?", 2).includes('carica-ordine'));
   assert.deepEqual(primi('Caricare un ordine'), ['carica-ordine']);
   assert.deepEqual(primi('nota di credito'), ['nota-credito']);
+  assert.ok(primi('ordinare le fatture per cliente cliccando la colonna', 2).includes('ordinare-elenchi'));
+  assert.ok(primi('mettere in ordine per data crescente', 2).includes('ordinare-elenchi'));
   assert.ok(primi('data di consegna al cliente', 2).includes('data-consegna'));
   assert.ok(primi('togliere una riga sbagliata dalla bom', 2).includes('codifica-bom'));
   assert.ok(primi('codici compatibili da verificare', 2).includes('alternative-componenti'));
