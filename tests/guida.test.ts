@@ -169,3 +169,7 @@ test('guida: da chi partono le email (alias per funzione)', () => {
 test('guida: clienti non interessati nascosti nel CRM', () => {
   assert.ok(primi('nascondere non interessati crm', 3).includes('crm-aziende'));
 });
+
+test('guida: aggiornare la conferma dopo aver corretto l\'ordine', () => {
+  assert.ok(primi('aggiornare conferma ordine', 3).includes('conferma-ordine'));
+});

@@ -485,6 +485,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',
       'Ordine senza colonna codice (per esempio Control Systems: "Saldatura SMD ns. scheda M0929-C Vers. CRONOS"): il portale cerca nella descrizione i codici dei prodotti del cliente e collega la riga da solo. Se non trova niente, scegli il prodotto dal menu "Prodotto in anagrafica" e premi "Salva le correzioni". Le spese una tantum diventano righe di servizio.',
+      'Ordine già creato da correggere: nella pagina dell\'ordine codice (solo dall\'anagrafica), descrizione, quantità, prezzo e consegna si cambiano nelle righe; l\'ultima riga vuota aggiunge una riga mancante; poi Salva. La commessa si crea dal preventivo: nella colonna Commessa più righe possono puntare alla stessa (es. Saldatura SMD e Ripresa PTH della stessa versione).',
       'Conti dell\'ordine: il portale fa quantità × prezzo di ogni riga e confronta la somma con il totale merce scritto nell\'ordine (e con l\'importo della riga, se c\'è). Se non tornano, in cima alle righe compare l\'elenco giallo con la differenza e le righe da guardare sono evidenziate: correggi o chiedi al cliente. Per confermare lo stesso serve la spunta "Ho controllato". Se il totale non è stato letto, scrivilo nella casella "Totale merce nell\'ordine".',
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi.', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
@@ -584,12 +585,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'conferma-ordine', area: 'ordini', titolo: 'Conferma d\'ordine al cliente (PDF e email)',
-    parole: 'conferma confermare conferme ordine pdf email gmail rispondere risposta inviare mandare cliente date consegna righe accettazione',
+    parole: 'conferma confermare conferme ordine pdf email gmail rispondere risposta inviare mandare cliente date consegna righe accettazione aggiornare riprendere correggere',
     testo: [
       'Dall\'ordine caricato nel portale si prepara la conferma per il cliente: il pulsante "Conferma d\'ordine" in alto nella pagina dell\'ordine copia tutte le righe con quantità, prezzi e date di consegna.',
       'Righe e date si cambiano liberamente nella conferma (non toccano l\'ordine): si aggiungono righe con "+ Riga", si tolgono con la spunta "Togli". Le consegne a programma diventano una riga per ogni consegna.',
       'Per emettere serve una data di consegna su ogni riga. Emetti dà il numero (la serie continua quella degli "Ordini" di Fatture in Cloud: 74 al 23/10/2026) e salva il PDF, impaginato come i preventivi. Una conferma emessa si può ancora correggere: il PDF si rifà con lo stesso numero.',
       'Invio: se l\'ordine è arrivato per email, "Invia con Gmail" risponde a quell\'email (stessa conversazione) da ordini@casteltech.net (o da info@ finché l\'indirizzo non è attivo in Gmail) con il PDF allegato; destinatario, oggetto e testo si possono cambiare. Finché la delega di Gmail non è attiva il pulsante è spento: scarica il PDF con "Apri il PDF" e mandalo dalla posta.',
+      'Ordine corretto dopo la conferma (codice, quantità, prezzo, consegna o una riga in più): apri la conferma e premi "Riprendi le righe dall\'ordine". Le righe tornano uguali all\'ordine; se è già emessa resta lo stesso numero, poi rimandala con "Invia con Gmail".',
       'Non si può preparare la conferma se il cliente dell\'ordine non è in anagrafica. Una bozza si elimina; una conferma emessa si annulla (resta nell\'elenco e il numero non si riusa).',
       'Tutte le conferme (bozze in cima, poi per numero) stanno in Commerciale → Conferme d\'ordine, con cliente, ordine, stato e data di invio. Spuntando le righe: "Apri il PDF", "Duplica" (nuova bozza con le stesse righe, prende il numero successivo all\'emissione) e "Annulla / Elimina" (le bozze si eliminano, le emesse si annullano). Per cambiare il numero di una conferma emessa: Duplica, poi annulla quella vecchia ed emetti la copia.',
     ],

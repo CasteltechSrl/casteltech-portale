@@ -17,7 +17,9 @@ import { confermeDellOrdine, creaConferma, duplicaConferma, eliminaOAnnulla } fr
 import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { html, data, euro, num, raw, type Raw } from '../views/html.js';
+import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
+import { prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { numeroDa } from '../../engine/acquisizioni.js';
 import type { Utente } from '../views/layout.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -279,6 +281,11 @@ export function rotteOrdini() {
     const fatture = await q(`SELECT f.*, r.chiave FROM fatture_righe f JOIN ordini_righe r ON r.id = f.riga_id WHERE r.ordine_id = $1 ORDER BY f.data, f.numero`, [o.id]);
     const commesse = await q(`SELECT id, numero FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
     const conferme = await confermeDellOrdine(o.id);
+    // codice delle righe solo dall'anagrafica del cliente (regola dei documenti, Adriano 31/10/2026)
+    const prodotti: { id: number; codice: string; descrizione: string | null }[] = o.cliente_id ? await prodottiPerCliente(o.cliente_id) : [];
+    const sceltaProdotto = (nome: string, id: number | null | undefined, codiceVecchio?: string | null) => html`<select name="${nome}" aria-label="Codice dall'anagrafica del cliente">
+      <option value="">${codiceVecchio && !id ? `${codiceVecchio} (non in anagrafica)` : '— senza codice —'}</option>
+      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}${k.descrizione ? ` · ${k.descrizione}` : ''}</option>`)}</select>`;
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
@@ -315,10 +322,12 @@ export function rotteOrdini() {
         <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Prezzo</th><th class="n">Fatturato</th>
           <th>Consegna richiesta</th><th>Arrivo materiale</th><th>Lavorazione</th><th>Ritardi (gg)</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th><th>Commessa</th><th>Note</th><th></th></tr></thead>
         <tbody>${righe.map(x => html`<tr class="${x.tipo === 'servizio' ? 'servizio' : ''}">
-          <td class="nowrap">${x.codice}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
-          <td class="taglia">${x.descrizione}</td><td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
-          <td class="n">${euro(x.prezzo)}</td><td class="n">${x.importoFatturato ? euro(x.importoFatturato) : ''}</td>
-          <td>${data(x.consegnaRichiesta)}${x.consegne?.length ? html`<details><summary>${x.consegne.length} consegne</summary>${x.consegne.map(k => html`${data(k.data)}: ${num(k.quantita, 0)}<br>`)}</details>` : ''}</td>
+          <td class="nowrap">${sceltaProdotto(`righe[r${x.id}][prodotto]`, x.prodottoId, x.codice)}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
+          <td><input name="righe[r${x.id}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo">${x.descrizioneCliente && x.descrizioneCliente !== x.descrizione ? html`<br><small class="nota">cliente: ${x.descrizioneCliente}</small>` : ''}</td>
+          <td class="n">${x.consegne?.length ? num(x.quantita, 0) : html`<input name="righe[r${x.id}][quantita]" value="${numCampo(x.quantita, 3)}" inputmode="decimal" class="corto">`}</td>
+          <td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
+          <td class="n"><input name="righe[r${x.id}][prezzo]" value="${numCampo(x.prezzo, 5)}" inputmode="decimal" class="corto"></td><td class="n">${x.importoFatturato ? euro(x.importoFatturato) : ''}</td>
+          <td>${x.consegne?.length ? data(x.consegnaRichiesta) : html`<input type="date" name="righe[r${x.id}][richiesta]" value="${x.consegnaRichiesta ?? ''}">`}${x.consegne?.length ? html`<details><summary>${x.consegne.length} consegne</summary>${x.consegne.map(k => html`${data(k.data)}: ${num(k.quantita, 0)}<br>`)}</details>` : ''}</td>
           <td>${campoData(`righe[r${x.id}][arrivo]`, x.arrivoMateriale)}</td>
           <td>${campoData(`righe[r${x.id}][lavorazione]`, (righeDb(x).dataLavorazione))}<br><small class="nota">${x.lavorazione && !righeDb(x).dataLavorazione ? `calcolata: ${data(x.lavorazione)}` : ''}</small></td>
           <td><input name="righe[r${x.id}][ritardi]" value="${x.ritardiProduzione || ''}" inputmode="numeric" class="corto"></td>
@@ -332,8 +341,16 @@ export function rotteOrdini() {
           <td><input name="righe[r${x.id}][note]" value="${x.note ?? ''}"></td>
           <td><button form="elimina-riga-${x.id}" class="link negativo" title="Elimina questa riga"
             data-conferma="${`Eliminare la riga ${x.codice || x.descrizione || ''} (${num(x.quantita, 0)} pz) dall'ordine ${o.numero}/${o.anno}? Le modifiche non salvate delle altre righe si perdono.`}">Elimina</button></td>
-        </tr>`)}</tbody></table></div>
-      <p><button class="primario">Salva</button></p>
+        </tr>`)}
+        <tr class="riga-nuova"><td>${sceltaProdotto('nuova[prodotto]', null)}</td>
+          <td><input name="nuova[descrizione]" class="maiuscolo lungo" placeholder="+ riga nuova: descrizione"></td>
+          <td class="n"><input name="nuova[quantita]" inputmode="decimal" class="corto"></td><td></td>
+          <td class="n"><input name="nuova[prezzo]" inputmode="decimal" class="corto"></td><td></td>
+          <td><input type="date" name="nuova[richiesta]"></td>
+          <td colspan="6"><select name="nuova[tipo]"><option value="scheda">schede</option><option value="servizio">servizio (una tantum, lamine…)</option></select></td>
+          <td></td><td></td><td></td></tr></tbody></table></div>
+      <p><button class="primario">Salva</button> <span class="nota">Codice, descrizione, quantità, prezzo e consegna si correggono qui; la conferma d'ordine già fatta non cambia da sola:
+        aprila e premi «Riprendi le righe dall'ordine».</span></p>
       </form>
       ${righe.map(x => html`<form method="post" action="/ordini/${o.id}/righe/${x.id}/elimina" id="elimina-riga-${x.id}" hidden></form>`)}
       <div class="due-colonne">
@@ -393,7 +410,11 @@ export function rotteOrdini() {
       await q(`UPDATE ordini_righe SET arrivo_materiale = $3, data_lavorazione = $4, ritardi_produzione = $5, consegna_prevista = $6, stato_manuale = $7,
           commessa_id = (SELECT id FROM commesse WHERE id = $8), note = $9 WHERE id = $1 AND ordine_id = $2`,
         [Number(rigaId), id, dataO(x?.arrivo), dataO(x?.lavorazione), ritardi, dataO(x?.prevista), stato, Number(x?.commessa) || null, String(x?.note ?? '').trim() || null]);
+      // correzioni della riga (Adriano 3/11/2026): codice solo dai prodotti del cliente, descrizione, quantità, prezzo, consegna richiesta
+      if (x && 'prezzo' in x) await correggiRiga(id, Number(rigaId), x);
     }
+    const n = req.body?.nuova;
+    if (n && (String(n.descrizione ?? '').trim() || Number(n.prodotto)) && (numeroDa(n.quantita) ?? 0) > 0) await aggiungiRiga(id, n);
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
     res.redirect(`/ordini/${id}?salvato=1`);
   });
@@ -426,6 +447,38 @@ export function rotteOrdini() {
 
   r.use(rotteConferme());
   return r;
+}
+
+/** Prodotto della riga: solo se è del cliente dell'ordine. */
+async function prodottoDelCliente(ordineId: number, prodottoId: unknown) {
+  if (!Number(prodottoId)) return null;
+  return q1<{ id: number; codice: string; descrizione: string | null }>(`SELECT p.id, p.codice, p.descrizione FROM prodotti p JOIN ordini o ON o.cliente_id = p.cliente_id
+    WHERE p.id = $1 AND o.id = $2`, [Number(prodottoId), ordineId]);
+}
+const maiuscolo = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+const dataRichiesta = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
+
+/** Correzione di una riga dell'ordine dalla sua scheda. Senza prodotto il codice vecchio (non in anagrafica) resta. Le righe con consegne a programma tengono la quantità. */
+async function correggiRiga(ordineId: number, rigaId: number, x: any) {
+  const p = await prodottoDelCliente(ordineId, x.prodotto);
+  const quantita = numeroDa(x.quantita);
+  await q(`UPDATE ordini_righe SET prodotto_id = $3, codice = CASE WHEN $3::int IS NULL THEN (CASE WHEN prodotto_id IS NULL THEN codice ELSE NULL END) ELSE $4 END,
+      descrizione = coalesce(nullif($5, ''), $6, descrizione), prezzo = coalesce($7, prezzo),
+      quantita = CASE WHEN $8::numeric IS NULL OR EXISTS (SELECT 1 FROM ordini_consegne k WHERE k.riga_id = ordini_righe.id) THEN quantita ELSE $8 END,
+      consegna_richiesta = CASE WHEN $9 THEN consegna_richiesta ELSE $10::date END
+    WHERE id = $1 AND ordine_id = $2`,
+    [rigaId, ordineId, p?.id ?? null, p?.codice ?? null, maiuscolo(x.descrizione), p?.descrizione ?? null, numeroDa(x.prezzo), quantita != null && quantita > 0 ? quantita : null,
+      !('richiesta' in x), dataRichiesta(x.richiesta)]);
+}
+
+/** Riga aggiunta a mano nella scheda dell'ordine (una riga che mancava nel documento letto). */
+async function aggiungiRiga(ordineId: number, n: any) {
+  const p = await prodottoDelCliente(ordineId, n.prodotto);
+  const posizione = (await q1<{ m: number | null }>(`SELECT max(posizione) AS m FROM ordini_righe WHERE ordine_id = $1`, [ordineId]))?.m ?? -1;
+  await q(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, tipo, quantita, prezzo, consegna_richiesta)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [ordineId, `M${Date.now()}`, posizione + 1, p?.id ?? null, p?.codice ?? null, maiuscolo(n.descrizione) || p?.descrizione || null,
+      n.tipo === 'servizio' ? 'servizio' : 'scheda', numeroDa(n.quantita), numeroDa(n.prezzo) ?? 0, dataRichiesta(n.richiesta)]);
 }
 
 /** Elimina un ordine con righe e consegne (DDT e fatture restano, senza ordine). Prima un backup. */
