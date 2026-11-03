@@ -8,7 +8,7 @@ import { Router } from 'express';
 import { q1 } from '../db.js';
 import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import {
-  creaConferma, eliminaOAnnulla, emettiConferma, inviaConferma, leggiConferma, pdfConferma, propostaEmail, salvaConferma,
+  creaConferma, eliminaOAnnulla, riprendiRigheDallOrdine, emettiConferma, inviaConferma, leggiConferma, pdfConferma, propostaEmail, salvaConferma,
 } from '../conferme-ordine-servizio.js';
 import { controlliEmissione, importoRigaConferma, totaleConferma } from '../../engine/conferme-ordine.js';
 import { pagina } from './ordini.js';
@@ -88,6 +88,9 @@ export function rotteConferme() {
           ${emessa ? '' : html`<form method="post" action="${base}/emetti" class="inline"
             data-conferma="Emettere la conferma d'ordine? Prende il numero successivo e il PDF si salva (si potrà ancora correggere).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>`}
+          ${annullata ? '' : html`<form method="post" action="${base}/dall-ordine" class="inline"
+            data-conferma="${`Riprendere le righe dall'ordine com'è adesso? Le righe scritte qui si sostituiscono${emessa ? '; il PDF si rifà con lo stesso numero (poi rimandalo al cliente)' : ''}.`}">
+            <button title="Dopo aver corretto l'ordine: righe, prezzi e consegne di nuovo uguali all'ordine">Riprendi le righe dall'ordine</button></form>`}
           ${annullata ? '' : html`<form method="post" action="${base}/elimina" class="inline"
             data-conferma="${emessa ? 'Annullare questa conferma emessa? Resta nell\'elenco come annullata e il numero non si riusa.' : 'Eliminare questa bozza di conferma?'}">
             <button class="pericolo">${emessa ? 'Annulla conferma' : 'Elimina bozza'}</button></form>`}
@@ -116,6 +119,11 @@ export function rotteConferme() {
     let errori: string[];
     try { errori = await salvaConferma(Number(req.params.cid), req.body); } catch (e: any) { if (!eAutosalvataggio(req)) throw e; errori = [e.message]; }
     rispondiSalvataggio(req, res, errori, indirizzo(req.params.id, req.params.cid, errori.length ? `Non salvato: ${errori.join(' ')}` : 'Salvato.'));
+  });
+
+  r.post('/:id/conferme/:cid/dall-ordine', async (req, res) => {
+    const fatto = await riprendiRigheDallOrdine(Number(req.params.cid));
+    res.redirect(indirizzo(req.params.id, req.params.cid, fatto ? "Righe riprese dall'ordine." : 'Conferma annullata: righe non cambiate.'));
   });
 
   r.get('/:id/conferme/:cid/pdf', async (req, res) => {

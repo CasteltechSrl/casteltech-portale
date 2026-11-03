@@ -51,6 +51,25 @@ export async function creaConferma(ordineId: number, utenteId: number | null): P
   });
 }
 
+/**
+ * Ordine corretto dopo la conferma (Adriano 3/11/2026): le righe della conferma si riprendono dall'ordine com'è adesso.
+ * Se la conferma è già emessa il PDF si rifà con lo stesso numero (poi si rimanda al cliente). Annullata: niente.
+ */
+export async function riprendiRigheDallOrdine(id: number): Promise<boolean> {
+  const d = await q1<{ ordine_id: number | null; stato: string; numero: number | null }>(`SELECT ordine_id, stato, numero FROM documenti WHERE id = $1 AND tipo = 'conferma_ordine'`, [id]);
+  if (!d?.ordine_id || d.stato === 'annullato') return false;
+  const righe = righeConfermaDaOrdine((await righeOrdini(d.ordine_id)).map(r => ({
+    id: r.id, codice: r.codice, descrizione: r.descrizione, codiceCliente: r.codiceCliente, quantita: r.quantita, prezzo: r.prezzo,
+    consegnaRichiesta: r.consegnaRichiesta, consegnaPrevista: r.consegnaPrevista, statoManuale: r.statoManuale, prodottoId: r.prodottoId, consegne: r.consegne,
+  })));
+  await transazione(async c => {
+    await scriviRighe(c, id, righe);
+    await c.query(`UPDATE documenti SET imponibile = $2, totale = $2, aggiornato_il = now() WHERE id = $1`, [id, totaleConferma(righe)]);
+  });
+  if (d.numero) await q(`UPDATE documenti SET pdf = $2 WHERE id = $1`, [id, (await creaPdf(id)).dati]);
+  return true;
+}
+
 async function scriviRighe(c: { query: (s: string, v?: unknown[]) => Promise<unknown> }, id: number, righe: RigaConferma[]) {
   await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
   if (righe.length) await c.query(
