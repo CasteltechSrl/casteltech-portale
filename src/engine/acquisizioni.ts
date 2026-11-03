@@ -111,7 +111,10 @@ export function decodificaParole(s: string): string {
 }
 
 // ───────────────────────────── proposta d'ordine letta dall'IA ─────────────────────────────
-export interface RigaProposta { codice: string; descrizione: string; quantita: number; prezzo: number | null; consegna: string | null }
+export interface RigaProposta {
+  codice: string; descrizione: string; quantita: number; prezzo: number | null; consegna: string | null;
+  importo?: number | null;     // importo della riga scritto nell'ordine (se c'è la colonna), per il controllo
+}
 export interface Proposta {
   eOrdine: boolean;            // false: il documento non è un ordine (offerta, DDT, conferma nostra…)
   cliente: string;
@@ -119,6 +122,7 @@ export interface Proposta {
   dataOrdine: string | null;
   righe: RigaProposta[];
   note: string;
+  totaleDocumento?: number | null;   // totale merce / imponibile scritto nell'ordine (senza IVA), per il controllo
 }
 
 const maiuscolo = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -153,12 +157,42 @@ export function normalizzaProposta(x: any): Proposta {
   const righe: RigaProposta[] = (Array.isArray(x?.righe) ? x.righe : []).map((r: any) => ({
     codice: maiuscolo(r?.codice), descrizione: maiuscolo(r?.descrizione),
     quantita: numeroDa(r?.quantita) ?? 0, prezzo: numeroDa(r?.prezzo), consegna: dataDa(r?.consegna),
+    ...(numeroDa(r?.importo) != null ? { importo: numeroDa(r?.importo) } : {}),
   })).filter((r: RigaProposta) => r.codice || r.descrizione);
+  const totale = numeroDa(x?.totale_merce ?? x?.totaleDocumento);
   return {
     eOrdine: x?.e_ordine !== false && x?.eOrdine !== false,
     cliente: maiuscolo(x?.cliente), rifCliente: maiuscolo(x?.rif_cliente ?? x?.rifCliente),
     dataOrdine: dataDa(x?.data_ordine ?? x?.dataOrdine), righe, note: String(x?.note ?? '').trim().slice(0, 500),
+    ...(totale != null ? { totaleDocumento: totale } : {}),
   };
+}
+
+const tondo = (n: number) => Math.round(n * 100) / 100;
+const it = (n: number) => n.toLocaleString('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 } as Intl.NumberFormatOptions);
+
+/**
+ * Controllo dei conti dell'ordine (Adriano 3/11/2026, ordine Control Systems: "la somma deve farla per individuare
+ * eventuali errori nell'ordine"): quantità × prezzo di ogni riga contro l'importo scritto (se c'è) e la somma delle righe
+ * contro il totale merce dell'ordine. Tolleranza 1 centesimo per riga, 1 centesimo per riga sul totale (arrotondamenti).
+ * Restituisce gli avvisi da mostrare (vuoto = i conti tornano) e la somma.
+ */
+export function controlloTotali(righe: Pick<RigaProposta, 'quantita' | 'prezzo' | 'importo' | 'descrizione' | 'codice'>[], totaleDocumento: number | null | undefined) {
+  const avvisi: { riga: number | null; testo: string }[] = [];
+  let somma = 0;
+  righe.forEach((r, i) => {
+    const calcolo = tondo((r.quantita ?? 0) * (r.prezzo ?? 0));
+    somma += calcolo;
+    const nome = `Riga ${i + 1}${r.codice || r.descrizione ? ` (${r.codice || r.descrizione.slice(0, 40)})` : ''}`;
+    if (r.prezzo == null && r.quantita) avvisi.push({ riga: i, testo: `${nome}: manca il prezzo.` });
+    if (r.importo != null && Math.abs(calcolo - r.importo) > 0.01)
+      avvisi.push({ riga: i, testo: `${nome}: ${it(r.quantita)} × ${it(r.prezzo ?? 0)} = ${it(calcolo)} €, ma nell'ordine l'importo è ${it(r.importo)} €.` });
+  });
+  somma = tondo(somma);
+  if (totaleDocumento == null) avvisi.push({ riga: null, testo: `Totale merce dell'ordine non letto: confronta a mano la somma delle righe (${it(somma)} €) con il documento.` });
+  else if (Math.abs(somma - totaleDocumento) > Math.max(0.01, 0.01 * righe.length))
+    avvisi.push({ riga: null, testo: `La somma delle righe è ${it(somma)} €, ma il totale merce dell'ordine è ${it(totaleDocumento)} € (differenza ${it(tondo(somma - totaleDocumento))} €): controlla quantità e prezzi, o chiedi al cliente.` });
+  return { somma, avvisi, torna: !avvisi.length };
 }
 
 /** Estrae l'oggetto JSON dalla risposta dell'IA anche se ha testo o ``` intorno. */

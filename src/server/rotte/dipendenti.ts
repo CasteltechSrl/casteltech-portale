@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs';
 import { gunzipSync } from 'node:zlib';
 import { q, q1, transazione } from '../db.js';
 import { layout } from '../views/layout.js';
-import { html, data, euro, num, raw, type Raw } from '../views/html.js';
+import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import {
   TIPI_PAGHE, TIPI_RISERVATI, MINUTI_SBLOCCO, controllaPasswordPaghe, costoAzienda, kmRiga, nomeMeseMaiuscolo, puoAprireRiservata, riepilogoAnno,
@@ -198,7 +198,7 @@ export function rotteDipendenti() {
           ${veicoli.map((v: any) => html`<tr class="${v.attivo ? '' : 'tenue'}"><td>${persone.find((p: any) => p.id === v.dipendente_id)?.nome ?? ''}</td>
             <td><input name="marca" form="v-${v.id}" value="${v.marca ?? ''}" class="maiuscolo"></td><td><input name="modello" form="v-${v.id}" value="${v.modello ?? ''}" class="maiuscolo"></td>
             <td><input name="anno" form="v-${v.id}" value="${v.anno ?? ''}" inputmode="numeric" size="5"></td>
-            <td><input name="tariffa_km" form="v-${v.id}" value="${num(Number(v.tariffa_km), 4).replace(/0+$/, '').replace(/,$/, ',00')}" inputmode="decimal" size="6" required></td>
+            <td><input name="tariffa_km" form="v-${v.id}" value="${numCampo(Number(v.tariffa_km), 4)}" inputmode="decimal" size="6" required></td>
             <td><input type="checkbox" name="attivo" value="1" form="v-${v.id}" ${v.attivo ? raw('checked') : ''}></td>
             <td class="nowrap"><form method="post" action="/dipendenti/veicoli/${v.id}" id="v-${v.id}"><button>Salva</button></form>
               ${v.note ? '' : html`<form method="post" action="/dipendenti/veicoli/${v.id}/elimina" class="inline" data-conferma="Eliminare questa auto?"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}

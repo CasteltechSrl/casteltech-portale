@@ -8,12 +8,12 @@ import { aggiungiFile, conferma, elabora, salvaProposta, scarta, type PropostaDb
 import { iaConfigurata } from '../lettura-ordini-ia.js';
 import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { TIPI_ACQUISIZIONE, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
+import { TIPI_ACQUISIZIONE, controlloTotali, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
 import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta } from '../acquisizioni-servizio.js';
 import type { Request } from 'express';
-import { html, data, euro, num, raw } from '../views/html.js';
+import { html, data, euro, num, numCampo, raw } from '../views/html.js';
 
 const STATI: Record<string, string> = { nuovo: 'in attesa', da_confermare: 'da confermare', confermato: 'ordine creato', scartato: 'scartato', errore: 'errore' };
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -26,7 +26,7 @@ function propostaDa(body: any, prima: PropostaDb | null): PropostaDb {
     .sort(([a], [b]) => Number(a.slice(1)) - Number(b.slice(1)))
     .map(([, x]) => ({
       codice: maiuscolo(x?.codice), descrizione: maiuscolo(x?.descrizione), quantita: numeroDa(x?.quantita) ?? 0, prezzo: numeroDa(x?.prezzo),
-      consegna: dataDa(x?.consegna), tipo: x?.tipo === 'servizio' ? 'servizio' as const : 'scheda' as const,
+      consegna: dataDa(x?.consegna), ...(numeroDa(x?.importo) != null ? { importo: numeroDa(x?.importo) } : {}), tipo: x?.tipo === 'servizio' ? 'servizio' as const : 'scheda' as const,
       // vuoto = "cerca dal codice": il prodotto si ritrova dall'anagrafica del cliente scelto
       prodottoId: Number(x?.prodotto) || (undefined as unknown as null),
     }))
@@ -35,6 +35,7 @@ function propostaDa(body: any, prima: PropostaDb | null): PropostaDb {
     eOrdine: prima?.eOrdine ?? true, mittente: prima?.mittente, oggetto: prima?.oggetto,
     clienteId: Number(body?.cliente) || null, cliente: prima?.cliente ?? '', rifCliente: maiuscolo(body?.rif),
     dataOrdine: dataDa(body?.dataOrdine), note: String(body?.note ?? '').trim().slice(0, 500), righe,
+    totaleDocumento: numeroDa(body?.totaleDocumento),
   };
 }
 
@@ -201,7 +202,8 @@ export function rotteAcquisizioni() {
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const prodotti = p?.clienteId ? await q(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1 OR cliente_id IS NULL ORDER BY codice`, [p.clienteId]) : [];
     const righe = [...(p?.righe ?? []), ...(modificabile ? [null, null] : [])];
-    const totale = (p?.righe ?? []).reduce((s, x) => s + x.quantita * (x.prezzo ?? 0), 0);
+    const conti = p ? controlloTotali(p.righe, p.totaleDocumento) : null;
+    const righeSbagliate = new Set((conti?.avvisi ?? []).map(v => v.riga).filter(n => n != null));
     const avviso = req.query.errore ? String(req.query.errore) : req.query.salvato ? 'Salvato' : undefined;
     res.send(pagina(req.session.utente, a.nome_file, 'acquisire', html`
       <h2>${a.nome_file} <span class="stato acq-${a.stato}">${STATI[a.stato]}</span></h2>
@@ -222,26 +224,30 @@ export function rotteAcquisizioni() {
             ${!p.clienteId && p.cliente ? html`<small class="nota">L'IA ha letto «${p.cliente}», che non è in anagrafica: sceglilo dall'elenco (se è un altro modo di scrivere un cliente già in elenco, scegli quello).</small>` : ''}</label>
           <label>N. ordine del cliente <input name="rif" value="${p.rifCliente}" ${modificabile ? '' : raw('disabled')}></label>
           <label>Data ordine del cliente <input type="date" name="dataOrdine" value="${p.dataOrdine ?? ''}" ${modificabile ? '' : raw('disabled')}></label>
+          <label>Totale merce nell'ordine (senza IVA) <input name="totaleDocumento" value="${numCampo(p.totaleDocumento, 2)}" inputmode="decimal" ${modificabile ? '' : raw('disabled')}></label>
           <label class="largo">Note <textarea name="note" rows="2" ${modificabile ? '' : raw('disabled')}>${p.note}</textarea></label>
         </div>
+        ${conti && !conti.torna ? html`<div class="avviso-riga"><b>I conti dell'ordine non tornano:</b><ul>${conti.avvisi.map(v => html`<li>${v.testo}</li>`)}</ul></div>`
+          : conti ? html`<p class="nota">Conti controllati: quantità × prezzo delle righe = totale merce dell'ordine (${euro(conti.somma)}).</p>` : ''}
         <div class="tabella-scorre"><table class="elenco righe-ordine">
           <thead><tr><th>Codice letto</th><th>Descrizione</th><th>Prodotto in anagrafica</th><th>Tipo</th><th class="n">Q.tà</th><th class="n">Prezzo</th><th>Consegna</th>${modificabile ? html`<th>Togli</th>` : ''}</tr></thead>
-          <tbody>${righe.map((x, i) => modificabile ? html`<tr>
+          <tbody>${righe.map((x, i) => modificabile ? html`<tr${righeSbagliate.has(i) ? raw(' class="da-controllare"') : ''}>
             <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}"></td>
             <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
             <td><select name="righe[r${i}][prodotto]"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: cerca dal codice' : '— cerca dal codice —'}</option>
               ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</select></td>
             <td><select name="righe[r${i}][tipo]">${[['scheda', 'schede'], ['servizio', 'servizio']].map(([v, t]) => html`<option value="${v}" ${(x?.tipo ?? 'scheda') === v ? raw('selected') : ''}>${t}</option>`)}</select></td>
-            <td class="n"><input name="righe[r${i}][quantita]" value="${x ? num(x.quantita, 0) : ''}" inputmode="decimal" class="corto"></td>
-            <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? num(x.prezzo, 4).replace(/,?0+$/, '') : ''}" inputmode="decimal" class="corto"></td>
+            <td class="n"><input name="righe[r${i}][quantita]" value="${x ? numCampo(x.quantita, 3) : ''}" inputmode="decimal" class="corto"></td>
+            <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto">${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
             <td><input type="date" name="righe[r${i}][consegna]" value="${x?.consegna ?? ''}"></td>
             <td><input type="checkbox" name="righe[r${i}][togli]" value="1" aria-label="Togli la riga"></td></tr>`
           : html`<tr><td>${x!.codice}</td><td>${x!.descrizione}</td><td>${x!.prodottoId ? 'sì' : html`<span class="esito verifica">no</span>`}</td><td>${x!.tipo}</td>
             <td class="n">${num(x!.quantita, 0)}</td><td class="n">${euro(x!.prezzo)}</td><td>${data(x!.consegna)}</td></tr>`)}</tbody>
-          <tfoot><tr><td colspan="5">Totale letto</td><td class="n"><b>${euro(totale)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
+          <tfoot><tr><td colspan="5">Somma delle righe${p.totaleDocumento != null ? html` · nell'ordine ${euro(p.totaleDocumento)}` : ''}</td><td class="n"><b>${euro(conti?.somma ?? 0)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
         </table></div>
         ${modificabile ? html`<p class="nota">Dopo aver cambiato il cliente premi «Salva le correzioni»: i prodotti si ricollegano alla sua anagrafica.
           Le righe con il prodotto non in anagrafica entrano nell'ordine con il codice del cliente (come nell'import).</p>
+          ${conti && !conti.torna ? html`<p><label><input type="checkbox" name="contiControllati" value="1"> Ho controllato: confermo anche se i conti non tornano</label></p>` : ''}
           <p class="pulsanti"><button class="primario">Conferma e crea l'ordine</button>
             <button formaction="/ordini/acquisire/${a.id}/salva">Salva le correzioni</button></p>` : ''}
       </form>` : ''}
@@ -273,6 +279,11 @@ export function rotteAcquisizioni() {
     const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1`, [id]);
     if (!a) return res.status(404).send('Non trovato');
     const p = propostaDa(req.body, a.proposta);
+    const conti = controlloTotali(p.righe, p.totaleDocumento);
+    if (!conti.torna && !req.body?.contiControllati) {
+      await salvaProposta(id, p);
+      return res.redirect(`/ordini/acquisire/${id}?errore=${encodeURIComponent("I conti dell'ordine non tornano: controlla le righe segnalate oppure spunta «Ho controllato» e conferma")}`);
+    }
     try {
       const ordineId = await conferma(id, p, req.session.utente!.id, oggiRoma());
       res.redirect(`/ordini/${ordineId}?salvato=1`);

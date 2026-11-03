@@ -133,3 +133,37 @@ test('prodotto riconosciuto dalla descrizione quando l\'ordine non ha il codice 
   assert.equal(prodottoDaDescrizione('SMD A1 TOP', [{ id: 9, codice: 'A1' }]), null);
   assert.equal(tipoRigaDa('COSTO UNA TANTUM'), 'servizio');
 });
+
+test('acquisizioni: conti dell\'ordine controllati (Control Systems 2026-ORD-0000542)', async () => {
+  const { controlloTotali, normalizzaProposta } = await import('../src/engine/acquisizioni.js');
+  const righe = [
+    { codice: '', descrizione: 'SALDATURA SMD M0929-C CRONOS', quantita: 90, prezzo: 3.3 },
+    { codice: '', descrizione: 'RIPRESA PTH M0929-C CRONOS', quantita: 120, prezzo: 2 },
+    { codice: '', descrizione: 'SALDATURA SMD M0929-C HELIOS', quantita: 168, prezzo: 3.5 },
+    { codice: '', descrizione: 'RIPRESA PTH M0929-C HELIOS', quantita: 168, prezzo: 2 },
+    { codice: '', descrizione: 'COSTO UNA TANTUM', quantita: 1, prezzo: 350 },
+  ];
+  const ok = controlloTotali(righe, 1811);
+  assert.equal(ok.somma, 1811);
+  assert.equal(ok.torna, true);
+  // una tantum letta 35 invece di 350: la somma non torna più con il totale dell'ordine
+  const no = controlloTotali(righe.map((r, i) => i === 4 ? { ...r, prezzo: 35 } : r), 1811);
+  assert.equal(no.torna, false);
+  assert.match(no.avvisi[0].testo, /1\.496,00 €.*1\.811,00 €.*-315,00/);
+  // importo della riga diverso da quantità × prezzo
+  const riga = controlloTotali([{ codice: 'A1234', descrizione: '', quantita: 10, prezzo: 2, importo: 25 }], 25);
+  assert.equal(riga.avvisi.filter(v => v.riga === 0).length, 1);
+  // totale non letto: lo si dice
+  assert.match(controlloTotali(righe, null).avvisi[0].testo, /non letto/);
+  // dall'IA: totale merce e importi
+  const p = normalizzaProposta({ righe: [{ codice: 'X', quantita: 2, prezzo: '1,5', importo: '3,00' }], totale_merce: '1.811,00' });
+  assert.equal(p.totaleDocumento, 1811);
+  assert.equal(p.righe[0].importo, 3);
+});
+
+test('casella del prezzo: 350 resta 350 (prima diventava 35)', async () => {
+  const { numCampo } = await import('../src/server/views/html.js');
+  assert.equal(numCampo(350, 5), '350');
+  assert.equal(numCampo(3.3, 5), '3,3');
+  assert.equal(numCampo(1000, 3), '1000');
+});

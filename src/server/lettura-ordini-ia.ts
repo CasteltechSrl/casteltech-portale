@@ -22,7 +22,8 @@ Clienti già in anagrafica (usa esattamente uno di questi nomi se il cliente è 
 ${clienti.join('; ') || '(nessuno)'}
 
 Per ogni riga ordinata: codice dell'articolo (quello del cliente o di Casteltech, come scritto; se la colonna codice è vuota o ha solo un segno lascialo vuoto), descrizione completa, quantità, prezzo unitario in euro
-(senza IVA), data di consegna richiesta. Le spese una tantum (attrezzaggio, lamina, programmazione, PCB) sono righe anche loro.
+(senza IVA), importo della riga se il documento ha la colonna, data di consegna richiesta. Copia i numeri ESATTAMENTE come sono scritti,
+senza calcolarli né correggerli (l'ufficio controlla i conti). Scrivi anche il totale merce / imponibile dell'ordine (senza IVA) come scritto. Le spese una tantum (attrezzaggio, lamina, programmazione, PCB) sono righe anche loro.
 Se ci sono più consegne per lo stesso articolo scrivi una riga per ogni consegna.
 
 Regole: non inventare. Se un dato non c'è, lascialo vuoto (stringa vuota o null). Date nel formato AAAA-MM-GG.
@@ -37,7 +38,7 @@ ECCEZIONE: se è una FATTURA (o invoice) emessa da un FORNITORE a Casteltech (Ca
 In note metti in italiano, in breve, quello che l'ufficio deve sapere (condizioni particolari, consegne parziali, dubbi di lettura).
 Rispondi SOLO con un oggetto JSON:
 {"e_ordine": true, "cliente": "", "rif_cliente": "<numero dell'ordine del cliente>", "data_ordine": "AAAA-MM-GG",
- "righe": [{"codice": "", "descrizione": "", "quantita": 0, "prezzo": 0, "consegna": "AAAA-MM-GG"}], "note": ""}`;
+ "righe": [{"codice": "", "descrizione": "", "quantita": 0, "prezzo": 0, "importo": null, "consegna": "AAAA-MM-GG"}], "totale_merce": null, "note": ""}`;
 
 /** Manda i pezzi del documento all'IA con le istruzioni e restituisce l'oggetto JSON della risposta. */
 async function chiediIa(parti: Parte[], sistema: string, voce: string): Promise<any> {
