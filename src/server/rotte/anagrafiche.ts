@@ -32,10 +32,11 @@ import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteMateriali } from './materiali-consumo.js';
+import { rotteServizi } from './servizi-una-tantum.js';
 
-export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti' | 'materiali';
+export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti' | 'materiali' | 'servizi';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti'],
-  ['componenti-clienti', 'Componenti clienti'], ['materiali', 'Materiali di consumo']];
+  ['componenti-clienti', 'Componenti clienti'], ['materiali', 'Materiali di consumo'], ['servizi', 'Servizi una tantum']];
 
 /** Pagina della sezione: tasti in alto (con quanti sono) e il contenuto della scheda scelta. */
 export type PaginaAnagrafiche = (req: Request, scheda: SchedaAnagrafiche, contenuto: Raw, avviso?: string, script?: string) => Promise<string>;
@@ -44,7 +45,7 @@ const paginaAnagrafiche: PaginaAnagrafiche = async (req, scheda, contenuto, avvi
     (SELECT count(*)::int FROM prodotti WHERE cliente_id IS NULL) AS senza_cliente,
     (SELECT count(*)::int FROM fornitori_anagrafica) AS fornitori, (SELECT count(*)::int FROM prodotti) AS prodotti,
     (SELECT count(*)::int FROM componenti) AS componenti, (SELECT count(*)::int FROM componenti_clienti) AS "componenti-clienti",
-    (SELECT count(*)::int FROM materiali_consumo) AS materiali`))!;
+    (SELECT count(*)::int FROM materiali_consumo) AS materiali, (SELECT count(*)::int FROM servizi_una_tantum) AS servizi`))!;
   const titolo = SCHEDE.find(([s]) => s === scheda)![1];
   return String(layout({ titolo, utente: req.session.utente, attiva: 'anagrafiche', avviso, script: ['ricerca.js', ...(script ? [script] : [])], contenuto: html`
     <h1>Anagrafiche</h1>
@@ -173,6 +174,7 @@ export function rotteAnagrafiche() {
   r.get('/componenti-cerca', async (req, res) => res.json(await cercaComponentiPerOrdine(String(req.query.q ?? ''))));
   // ── Materiali di consumo (Adriano 3/11/2026): pagina, ricerca per le righe degli ordini a fornitore, aggiunta dalla riga ──
   r.use('/materiali', rotteMateriali(paginaAnagrafiche));
+  r.use('/servizi', rotteServizi(paginaAnagrafiche));
   // righe del DDT (Adriano 2/11/2026): nostri componenti con codice gestionale e descrizione "P/N (codice produzione)"; componenti del cliente del DDT
   r.get('/componenti-ddt', async (req, res) => res.json(await cercaComponentiPerDdt(String(req.query.q ?? ''))));
   r.get('/componenti-clienti-cerca', async (req, res) => res.json(await cercaComponentiCliente(Number(req.query.cliente) || 0, String(req.query.q ?? ''))));

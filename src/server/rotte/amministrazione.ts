@@ -6,6 +6,7 @@
  */
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
 import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
@@ -131,10 +132,11 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const vuote = Array.from({ length: RIGHE_VUOTE }, () => ({}) as any);
   // codice solo dall'anagrafica del cliente (Adriano 31/10/2026)
   const prodotti = d.cliente_id ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
+  const servizi = await serviziAttivi();     // servizi una tantum (UT-…): per tutti i clienti
   // ogni riga sceglie l'anagrafica: prodotto, componente nostro, componente del cliente o libero (Adriano 2/11/2026)
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
     <td class="tipo-riga">${cellaTipoDdt(x, i)}</td>
-    <td>${cellaCodiceDdt(x, i, prodotti)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
+    <td>${cellaCodiceDdt(x, i, prodotti, servizi)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
     <td>${cellaDescrizioneDdt(x, i, prodotti)}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
     <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
@@ -763,6 +765,7 @@ export function rotteAmministrazione() {
     // fattura e note al cliente: codice solo dall'anagrafica del cliente (Adriano 31/10/2026); autofattura: righe del fornitore estero, libere
     const conAnagrafica = d.tipo !== 'autofattura' && !!d.cliente_id;
     const prodotti = conAnagrafica ? await prodottiPerCliente(d.cliente_id) as ProdottoScelta[] : [];
+    const servizi = conAnagrafica ? await serviziAttivi() : [];     // servizi una tantum (UT-…): per tutti i clienti
     // avviso margine (engine/avviso-margine.ts): prezzo sotto l'ultimo preventivo del codice o margine del preventivo sotto il 10 % → riga gialla
     const riferimenti = new Map<string, RiferimentoPreventivo>();
     if (conAnagrafica && d.tipo === 'fattura') {
@@ -771,7 +774,7 @@ export function rotteAmministrazione() {
     }
     const avvisiMargine = avvisiRighe(righe, riferimenti);
     const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''} ${avvisiMargine.has(i) ? `riga-margine ${avvisiMargine.get(i)!.livello}` : ''}">
-      <td>${conAnagrafica ? cellaCodice(x, i, prodotti) : html`<input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
+      <td>${conAnagrafica ? cellaCodice(x, i, prodotti, servizi) : html`<input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="corto maiuscolo">
         <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}">`}<input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
         <input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
         <input type="hidden" name="righe[${i}][acconto_id]" value="${x.acconto_id ?? ''}"></td>

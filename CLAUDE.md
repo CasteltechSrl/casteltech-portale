@@ -57,6 +57,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   materiali-consumo; 'manuale' non si tocca). Ordine a fornitore: nel Codice una parola ("lamina") → menu materiali + componenti (`/anagrafiche/materiali/cerca`),
   descrizione sempre modificabile nella riga, in fondo "+ Nuovo materiale" e "Riga libera"; righe con codice fuori anagrafica → riquadro "Righe non in anagrafica"
   con "Aggiungi ai materiali" (la riga prende il codice MC-…). Si elimina solo se in nessun ordine, altrimenti spunta "Attivo".
+  Servizi una tantum (Adriano 3/11/2026; migrazione 066 `servizi_una_tantum`, `engine/servizi-una-tantum.ts`, `servizi-una-tantum-servizio.ts`, `rotte/servizi-una-tantum.ts`,
+  test in `tests/servizi-una-tantum.test.ts`): lamina, documentazione, programmazione attrezzature, attrezzaggio PCB = codici Casteltech UT-… validi per TUTTI i clienti
+  (eccezione voluta alla regola codice-cliente, per questo non sono in `prodotti`). Gruppo "Servizi una tantum" in fondo al menu Codice (`opzioniServizi`: documenti con
+  `cellaCodice(x, i, prodotti, servizi)`, ordine con valore `ut:CODICE` → riga tipo servizio), descrizione modificabile, prezzo proposto; Ordini da e-mail e PDF propongono
+  il servizio dalla descrizione (`servizioProposto`). Venduto per anno nella pagina: codice UT o, per le fatture di prima/FIC, la prima riga della descrizione che cita UN servizio.
 - Prezzi in anagrafica (Adriano 31/10/2026; migrazione 051, `engine/prezzi-fic.ts`, `prezzi-servizio.ts`, test in `tests/prezzi-fic.test.ts`): Prodotti → colonna
   Prezzo € (vendita a scheda), Componenti → ultimo acquisto (prezzo, fornitore, data, pezzi). Da FIC con `tools/prezzi-da-fic.ts`: prodotto = il più recente tra
   ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice

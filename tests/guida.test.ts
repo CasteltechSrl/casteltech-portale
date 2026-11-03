@@ -175,3 +175,9 @@ test('guida: clienti non interessati nascosti nel CRM', () => {
 test('guida: aggiornare la conferma dopo aver corretto l\'ordine', () => {
   assert.ok(primi('aggiornare conferma ordine', 3).includes('conferma-ordine'));
 });
+
+test('guida: servizi una tantum (Adriano 3/11/2026)', () => {
+  assert.equal(primi('quante lamine ho venduto')[0], 'servizi-una-tantum');
+  assert.equal(primi('costi una tantum')[0], 'servizi-una-tantum');
+  assert.equal(primi('codice programmazione attrezzature')[0], 'servizi-una-tantum');
+});

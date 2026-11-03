@@ -19,6 +19,8 @@ import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
 import { aggiungiProdottoCliente, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { serviziAttivi, servizioPerCodice } from '../servizi-una-tantum-servizio.js';
+import { opzioniServizi } from '../views/scelta-prodotto.js';
 import { codiceProposto, numeroDa } from '../../engine/acquisizioni.js';
 import type { Utente } from '../views/layout.js';
 
@@ -283,9 +285,15 @@ export function rotteOrdini() {
     const conferme = await confermeDellOrdine(o.id);
     // codice delle righe solo dall'anagrafica del cliente (regola dei documenti, Adriano 31/10/2026)
     const prodotti: { id: number; codice: string; descrizione: string | null }[] = o.cliente_id ? await prodottiPerCliente(o.cliente_id) : [];
-    const sceltaProdotto = (nome: string, id: number | null | undefined, codiceVecchio?: string | null) => html`<select name="${nome}" aria-label="Codice dall'anagrafica del cliente">
-      <option value="">${codiceVecchio && !id ? `${codiceVecchio} (non in anagrafica)` : '— senza codice —'}</option>
-      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}</select>`;
+    // servizi una tantum (UT-…, Adriano 3/11/2026): stessi codici per tutti i clienti, in fondo al menu (valore "ut:CODICE")
+    const servizi = await serviziAttivi();
+    const sceltaProdotto = (nome: string, id: number | null | undefined, codiceVecchio?: string | null) => {
+      const servizio = !id && codiceVecchio ? servizi.find(s => s.codice === String(codiceVecchio).trim().toUpperCase()) : undefined;
+      return html`<select name="${nome}" aria-label="Codice dall'anagrafica del cliente o servizio una tantum">
+      <option value="">${codiceVecchio && !id && !servizio ? `${codiceVecchio} (non in anagrafica)` : '— senza codice —'}</option>
+      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}
+      ${opzioniServizi(servizi, servizio?.codice, s => `ut:${s.codice}`)}</select>`;
+    };
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
@@ -436,7 +444,9 @@ export function rotteOrdini() {
       if (x && 'prezzo' in x) await correggiRiga(id, Number(rigaId), x);
     }
     const n = req.body?.nuova;
-    if (n && (String(n.descrizione ?? '').trim() || Number(n.prodotto)) && (numeroDa(n.quantita) ?? 0) > 0) await aggiungiRiga(id, n);
+    const servizio = /^ut:/i.test(String(n?.prodotto ?? ''));     // servizio una tantum: senza quantità vale 1
+    if (n && (String(n.descrizione ?? '').trim() || Number(n.prodotto) || servizio) && ((numeroDa(n.quantita) ?? 0) > 0 || (servizio && !String(n.quantita ?? '').trim())))
+      await aggiungiRiga(id, n);
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
   }
 
@@ -479,27 +489,37 @@ async function prodottoDelCliente(ordineId: number, prodottoId: unknown) {
 const maiuscolo = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
 const dataRichiesta = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
 
-/** Correzione di una riga dell'ordine dalla sua scheda. Senza prodotto il codice vecchio (non in anagrafica) resta. Le righe con consegne a programma tengono la quantità. */
+/** Servizio una tantum scelto nel menu Codice dell'ordine (valore "ut:CODICE"). */
+const servizioScelto = (v: unknown) => (/^ut:/i.test(String(v ?? '')) ? servizioPerCodice(String(v).slice(3)) : Promise.resolve(null));
+
+/**
+ * Correzione di una riga dell'ordine dalla sua scheda. Senza prodotto il codice vecchio (non in anagrafica) resta, un servizio una tantum tolto no.
+ * Servizio una tantum scelto: codice UT-…, riga di tipo servizio. Le righe con consegne a programma tengono la quantità.
+ */
 async function correggiRiga(ordineId: number, rigaId: number, x: any) {
   const p = await prodottoDelCliente(ordineId, x.prodotto);
+  const s = p ? null : await servizioScelto(x.prodotto);
   const quantita = numeroDa(x.quantita);
-  await q(`UPDATE ordini_righe SET prodotto_id = $3, codice = CASE WHEN $3::int IS NULL THEN (CASE WHEN prodotto_id IS NULL THEN codice ELSE NULL END) ELSE $4 END,
-      descrizione = coalesce(nullif($5, ''), $6, descrizione), prezzo = coalesce($7, prezzo),
+  await q(`UPDATE ordini_righe SET prodotto_id = $3, codice = CASE WHEN $11::text IS NOT NULL THEN $11 WHEN $3::int IS NULL
+        THEN (CASE WHEN prodotto_id IS NULL AND upper(coalesce(codice, '')) NOT LIKE 'UT-%' THEN codice ELSE NULL END) ELSE $4 END,
+      tipo = CASE WHEN $11::text IS NOT NULL THEN 'servizio' ELSE tipo END,
+      descrizione = coalesce(nullif($5, ''), $6, $12, descrizione), prezzo = coalesce($7, prezzo),
       quantita = CASE WHEN $8::numeric IS NULL OR EXISTS (SELECT 1 FROM ordini_consegne k WHERE k.riga_id = ordini_righe.id) THEN quantita ELSE $8 END,
       consegna_richiesta = CASE WHEN $9 THEN consegna_richiesta ELSE $10::date END
     WHERE id = $1 AND ordine_id = $2`,
     [rigaId, ordineId, p?.id ?? null, p?.codice ?? null, maiuscolo(x.descrizione), p?.descrizione ?? null, numeroDa(x.prezzo), quantita != null && quantita > 0 ? quantita : null,
-      !('richiesta' in x), dataRichiesta(x.richiesta)]);
+      !('richiesta' in x), dataRichiesta(x.richiesta), s?.codice ?? null, s?.descrizione ?? null]);
 }
 
 /** Riga aggiunta a mano nella scheda dell'ordine (una riga che mancava nel documento letto). */
 async function aggiungiRiga(ordineId: number, n: any) {
   const p = await prodottoDelCliente(ordineId, n.prodotto);
+  const s = p ? null : await servizioScelto(n.prodotto);
   const posizione = (await q1<{ m: number | null }>(`SELECT max(posizione) AS m FROM ordini_righe WHERE ordine_id = $1`, [ordineId]))?.m ?? -1;
   await q(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, tipo, quantita, prezzo, consegna_richiesta)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [ordineId, `M${Date.now()}`, posizione + 1, p?.id ?? null, p?.codice ?? null, maiuscolo(n.descrizione) || p?.descrizione || null,
-      n.tipo === 'servizio' ? 'servizio' : 'scheda', numeroDa(n.quantita), numeroDa(n.prezzo) ?? 0, dataRichiesta(n.richiesta)]);
+    [ordineId, `M${Date.now()}`, posizione + 1, p?.id ?? null, p?.codice ?? s?.codice ?? null, maiuscolo(n.descrizione) || p?.descrizione || s?.descrizione || null,
+      n.tipo === 'servizio' || s ? 'servizio' : 'scheda', numeroDa(n.quantita) ?? (s ? 1 : null), numeroDa(n.prezzo) ?? s?.prezzo ?? 0, dataRichiesta(n.richiesta)]);
 }
 
 /** Elimina un ordine con righe e consegne (DDT e fatture restano, senza ordine). Prima un backup. */
