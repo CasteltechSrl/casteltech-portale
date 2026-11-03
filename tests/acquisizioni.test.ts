@@ -112,3 +112,24 @@ test('acquisizioni: DDT con più pezzi della riga d\'ordine, divisi solo se c\'�
   assert.deepEqual(dividiDdt([{ codice: 'A1', descrizione: '', quantita: 150, rigaId: 2 }], [riga(1, 100, '2026-11-10'), riga(2, 100, '2026-11-20')], '', '2026-11-05')
     .map(r => [r.rigaId, r.quantita]), [[2, 150]]);
 });
+
+test('prodotto riconosciuto dalla descrizione quando l\'ordine non ha il codice (Control Systems M0929-C)', async () => {
+  const { prodottoDaDescrizione, tipoRigaDa } = await import('../src/engine/acquisizioni.js');
+  const prodotti = [
+    { id: 1, codice: 'M0929-C', descrizione: 'M0929-C VERS. HELIOS (THT)' },
+    { id: 2, codice: 'M0929', descrizione: 'VECCHIA' },
+    { id: 3, codice: 'M0925-B', descrizione: 'M0925-B VERS. CRONOS' },
+  ];
+  assert.equal(prodottoDaDescrizione('SALDATURA SMD SCHEDA M0929-C VERS. CRONOS', prodotti)?.id, 1);
+  assert.equal(prodottoDaDescrizione('Ripresa PTH ns. scheda M0929C Vers. HELIOS', prodotti)?.id, 1);
+  assert.equal(prodottoDaDescrizione('SCHEDA M0929 SENZA REVISIONE', prodotti)?.id, 2);
+  assert.equal(prodottoDaDescrizione('COSTO UNA TANTUM: SPESE REALIZZAZIONE ATTREZZATURE', prodotti), null);
+  assert.equal(prodottoDaDescrizione('SCHEDA XM0929-CX', prodotti), null, 'il codice deve essere una parola a sé');
+  // stesso codice per due versioni: decide la parola della versione, altrimenti nessuna scelta
+  const versioni = [{ id: 7, codice: 'M0929-C', descrizione: 'M0929-C CRONOS' }, { id: 8, codice: 'M0929.C', descrizione: 'M0929-C HELIOS' }];
+  assert.equal(prodottoDaDescrizione('SALDATURA SMD M0929-C VERS. HELIOS', versioni)?.id, 8);
+  assert.equal(prodottoDaDescrizione('SALDATURA SMD M0929-C', versioni), null);
+  // codici troppo corti non contano
+  assert.equal(prodottoDaDescrizione('SMD A1 TOP', [{ id: 9, codice: 'A1' }]), null);
+  assert.equal(tipoRigaDa('COSTO UNA TANTUM'), 'servizio');
+});

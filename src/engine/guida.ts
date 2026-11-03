@@ -471,6 +471,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Gli ordini non si scrivono a mano: si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da e-mail e PDF".',
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',
+      'Ordine senza colonna codice (per esempio Control Systems: "Saldatura SMD ns. scheda M0929-C Vers. CRONOS"): il portale cerca nella descrizione i codici dei prodotti del cliente e collega la riga da solo. Se non trova niente, scegli il prodotto dal menu "Prodotto in anagrafica" e premi "Salva le correzioni". Le spese una tantum diventano righe di servizio.',
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi.', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
     pagine: [['/ordini/acquisire', 'Ordini da e-mail e PDF']],

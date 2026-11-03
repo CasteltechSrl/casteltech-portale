@@ -6,11 +6,12 @@
 import { createHash } from 'node:crypto';
 import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
+import { chiaveCodice } from '../engine/componenti-clienti.js';
 import { leggiFatturaEsteraConIa, leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
 import { collegaFatturaEstera } from './autofatture-servizio.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
-import { dividiDdt, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
+import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
@@ -61,13 +62,21 @@ async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null):
   else if (p.cliente) clienteId = (await risolvi(pool, p.cliente, '')).clienteId;
   const nomeCliente = clienteId ? (await q1<{ r: string }>(`SELECT ragione_sociale AS r FROM clienti WHERE id = $1`, [clienteId]))!.r : p.cliente;
   const righe: RigaPropostaDb[] = [];
+  let delCliente: { id: number; codice: string; descrizione: string | null }[] | null = null;
   for (const r of p.righe) {
     const x = r as Partial<RigaPropostaDb>;
     let prodottoId = x.prodottoId ?? null;
+    let codice = r.codice;
     // il prodotto scelto deve essere del cliente (o senza cliente); altrimenti si cerca dal codice letto
     if (prodottoId && !(await q1(`SELECT 1 FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [prodottoId, clienteId ?? -1]))) prodottoId = null;
-    if (!prodottoId && x.prodottoId === undefined && r.codice && clienteId) prodottoId = (await risolvi(pool, nomeCliente, r.codice)).prodottoId;
-    righe.push({ ...r, prodottoId, tipo: x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`)) });
+    if (!prodottoId && x.prodottoId === undefined && chiaveCodice(r.codice) && clienteId) prodottoId = (await risolvi(pool, nomeCliente, r.codice)).prodottoId;
+    // ordine senza codice (o con un segno al posto del codice): il codice del cliente scritto nella descrizione
+    if (!prodottoId && x.prodottoId === undefined && clienteId && !chiaveCodice(r.codice) && x.tipo !== 'servizio') {
+      delCliente ??= await q(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1`, [clienteId]);
+      const trovato = prodottoDaDescrizione(r.descrizione, delCliente);
+      if (trovato) { prodottoId = trovato.id; codice = trovato.codice; }
+    }
+    righe.push({ ...r, codice: chiaveCodice(codice) ? codice : '', prodottoId, tipo: x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`)) });
   }
   return { ...p, clienteId, cliente: maiuscolo(nomeCliente), righe };
 }

@@ -174,7 +174,7 @@ export const numeroOrdineEmail = (massimo: number | null | undefined) => Math.ma
 
 /** Riga di servizio (spese una tantum) o di schede, dalla descrizione: l'ufficio può cambiarla prima di confermare. */
 export const tipoRigaDa = (descrizione: string): 'scheda' | 'servizio' =>
-  /\b(ATTREZZ\w*|SETUP|SET-UP|LAMIN[AE]|STENCIL|PROGRAMMAZION\w*|SPESE|TRASPORTO|IMBALL\w*|CERTIFICAT\w*|NRE)\b/i.test(descrizione) ? 'servizio' : 'scheda';
+  /\b(UNA\s+TANTUM|ATTREZZ\w*|SETUP|SET-UP|LAMIN[AE]|STENCIL|PROGRAMMAZION\w*|SPESE|TRASPORTO|IMBALL\w*|CERTIFICAT\w*|NRE)\b/i.test(descrizione) ? 'servizio' : 'scheda';
 
 // ───────────────────────────── cartella Google Drive ─────────────────────────────
 /** La cartella si controlla solo nei giorni feriali dalle 8 alle 20 (ora italiana), come l'uso reale del portale. */
@@ -277,4 +277,35 @@ export function dividiDdt<R extends RigaDdtLetta & { rigaId?: number | null }>(r
     for (const p of pezzi) { resta.set(p.id, (resta.get(p.id) ?? 0) - p.q); out.push({ ...r, quantita: p.q, rigaId: p.id }); }
   }
   return out;
+}
+
+// ───────────────────────────── prodotto dalla descrizione ─────────────────────────────
+const parole = (s: string) => new Set(String(s ?? '').toUpperCase().split(/[^A-Z0-9]+/).filter(p => p.length >= 3));
+
+/**
+ * Prodotto del cliente riconosciuto dalla descrizione della riga, quando l'ordine non ha il codice
+ * (Control Systems 2026-ORD-0000542, 3/11/2026: "Saldatura SMD ns. scheda M0929-C Vers. CRONOS", colonna codice con un punto).
+ * Vale il codice del cliente scritto nella descrizione come parola a sé (trattini, punti e spazi interni non contano);
+ * se più codici si trovano vince il più lungo (M0929-C batte M0929); a parità, quello con più parole della descrizione
+ * in comune (CRONOS / HELIOS); se resta un pari non si sceglie (lo fa l'ufficio). Codici sotto le 4 lettere/cifre ignorati.
+ */
+export function prodottoDaDescrizione<T extends { id: number; codice: string; descrizione?: string | null }>(descrizione: string, prodotti: T[]): T | null {
+  const testo = String(descrizione ?? '').toUpperCase();
+  if (!testo.trim()) return null;
+  const trovati = prodotti.filter(p => {
+    const pezzi = String(p.codice ?? '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    if (pezzi.join('').length < 4) return false;
+    const re = new RegExp(`(^|[^A-Z0-9])${pezzi.join('[^A-Z0-9]?')}($|[^A-Z0-9])`);
+    return re.test(testo);
+  });
+  if (!trovati.length) return null;
+  const lung = (p: T) => String(p.codice).toUpperCase().replace(/[^A-Z0-9]/g, '').length;
+  const max = Math.max(...trovati.map(lung));
+  const lunghi = trovati.filter(p => lung(p) === max);
+  if (lunghi.length === 1) return lunghi[0];
+  const mie = parole(testo);
+  const comuni = (p: T) => [...parole(p.descrizione ?? '')].filter(w => mie.has(w)).length;
+  const best = Math.max(...lunghi.map(comuni));
+  const migliori = lunghi.filter(p => comuni(p) === best);
+  return migliori.length === 1 ? migliori[0] : null;
 }

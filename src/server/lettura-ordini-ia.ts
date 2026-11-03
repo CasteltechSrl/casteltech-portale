@@ -21,7 +21,7 @@ e, se lo è, estrarne i dati. Casteltech è il fornitore: il cliente è l'aziend
 Clienti già in anagrafica (usa esattamente uno di questi nomi se il cliente è uno di loro, altrimenti scrivi il nome come nel documento):
 ${clienti.join('; ') || '(nessuno)'}
 
-Per ogni riga ordinata: codice dell'articolo (quello del cliente o di Casteltech, come scritto), descrizione, quantità, prezzo unitario in euro
+Per ogni riga ordinata: codice dell'articolo (quello del cliente o di Casteltech, come scritto; se la colonna codice è vuota o ha solo un segno lascialo vuoto), descrizione completa, quantità, prezzo unitario in euro
 (senza IVA), data di consegna richiesta. Le spese una tantum (attrezzaggio, lamina, programmazione, PCB) sono righe anche loro.
 Se ci sono più consegne per lo stesso articolo scrivi una riga per ogni consegna.
 
