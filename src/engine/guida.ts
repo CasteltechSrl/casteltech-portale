@@ -1041,6 +1041,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/analisi', 'Analisi']],
   },
   {
+    id: 'previsione-cassa', area: 'amministrazione', titolo: 'Previsione di cassa a 30, 60 e 90 giorni',
+    parole: 'previsione cassa liquidità soldi saldo banca conto flusso cash flow 30 60 90 giorni incassi pagamenti stipendi f24 iva tredicesima pagare faccio basta bastano mancano scoperto rosso runway',
+    testo: [
+      'In Amministrazione → Analisi → Previsione di cassa vedi quanti soldi entrano ed escono nei prossimi 90 giorni, divisi in tre finestre da 30 giorni, e quanta cassa resta alla fine di ognuna.',
+      'Incassi: le rate aperte delle fatture ai clienti, spostate del ritardo medio con cui quel cliente paga (giorni dopo la scadenza, ultimi 12 mesi). Se il cliente ha meno di 3 incassi si usa il ritardo medio di tutti. Le rate già scadute si contano come incassate oggi, ma la pagina lo segnala. Le note di credito aperte tolgono.',
+      'Uscite: le rate aperte delle fatture dei fornitori alla scadenza (quelle già scadute e non segnate pagate vanno a oggi), più le uscite fisse di ogni mese: stipendi netti, F24 delle paghe, IVA e quelle che scrivete voi (affitto, leasing, finanziamenti, carta di credito). Se non scrivete nulla, stipendi, F24 e IVA sono stimati dai dati del portale (segnati "stima"). Un F24 vero letto dalla cartella o l\'IVA del mese chiuso dai Registri IVA prendono il posto della stima.',
+      'Il saldo della banca il portale non lo legge ancora: scrivetelo nel riquadro "Saldo della banca e uscite fisse", la previsione parte da lì. Senza saldo vedete solo quanto entra ed esce.',
+      'Scenario basso e alto: incassi più o meno di quanto variano di solito i ritardi dei clienti. "Punto più basso" è il giorno in cui la cassa scende di più. In "Da sapere" ci sono gli avvisi: cassa sotto zero, saldo vecchio, rate scadute, clienti che pesano troppo o pagano lenti, fornitori scaduti non segnati, tredicesima.',
+      'Non ci sono le fatture che emetterete o riceverete da oggi in poi: oltre i 30 giorni gli incassi sono prudenti. Il pulsante Excel scarica tutti i movimenti.',
+    ],
+    passi: ['Amministrazione → Analisi → Previsione di cassa.', 'Apri "Saldo della banca e uscite fisse", scrivi il saldo di oggi e le uscite che mancano, premi Salva e ricalcola.', 'Leggi "Da sapere" e il punto più basso.'],
+    pagine: [['/amministrazione/analisi/cassa', 'Previsione di cassa'], ['/amministrazione/crediti', 'Crediti verso clienti']],
+  },
+  {
     id: 'vies', area: 'amministrazione', titolo: 'Controllo VIES delle partite IVA europee',
     parole: 'vies partita iva europea estera ue comunitaria intracomunitaria cliente estero controllo verifica valida non imponibile art 41 consultazione',
     testo: [

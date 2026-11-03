@@ -11,6 +11,9 @@ import {
   analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeCategoria, nomeMese, perMese, quotaPrimi, raggruppaAcquisti, variazionePct,
   type AcquistoAnalisi, type FatturaAnalisi, type IncassoAnalisi, type PreventivoProdotto, type RigaAnalisi,
 } from '../../engine/analisi.js';
+import { leggiImpostazioniCassa, NOMI_FINESTRE, type CodiceFinestra, type Movimento } from '../../engine/previsione-cassa.js';
+import { caricaPrevisione, salvaImpostazioniCassa } from '../previsione-cassa-servizio.js';
+import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -50,8 +53,135 @@ async function caricaDati(anno: number, oggi: string) {
   return { fatture, righe, preventivi: mappaPreventivi, acquisti, incassi, aperte: aperte as (typeof aperte[number] & { importo60: number })[] };
 }
 
+/** Le due pagine dell'Analisi: andamento (fatturato, clienti, prodotti) e previsione di cassa. */
+function tastiAnalisi(attiva: 'andamento' | 'cassa'): Raw {
+  return html`<nav class="tasti-sezione non-stampare">
+    <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
+    <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">Previsione di cassa</a></nav>`;
+}
+
+const euroCent = (n: number) => `${num(n, 2)} €`;
+const dataIt = (d: string) => d.slice(0, 10).split('-').reverse().join('/');
+const scritto = (n: number | null) => (n == null ? '' : String(n).replace('.', ','));
+const conSegno = (n: number) => (n > 0 ? `+${euro(n)}` : euro(n));
+const NOMI_TIPO: Record<Movimento['tipo'], string> = { incasso: 'Incasso', pagamento: 'Fornitore', uscita: 'Uscita fissa' };
+
+function paginaCassa(req: Request, d: Awaited<ReturnType<typeof caricaPrevisione>>): Raw {
+  const { previsione: p, impostazioni: i, auto } = d;
+  const sola = req.session.utente?.ruolo !== 'ufficio';
+  const ICONE = { critico: '●', attenzione: '●', nota: '●' };
+  const LIVELLO = { critico: 'critico', attenzione: 'attenzione', nota: 'bene' };
+  const righeFinestra = (codice: CodiceFinestra) => p.movimenti.filter(m => m.finestra === codice);
+  const tabellaMovimenti = (mv: Movimento[]) => html`<div class="tabella-scorre"><table class="elenco">
+    <thead><tr><th>Data attesa</th><th>Tipo</th><th>Chi / voce</th><th>Documento</th><th>Scadenza</th><th class="num">Ritardo usato</th><th class="num">Importo</th></tr></thead>
+    <tbody>${mv.map(m => html`<tr class="${m.scaduta ? 'scaduta' : ''}"><td>${dataIt(m.data)}</td><td>${NOMI_TIPO[m.tipo]}</td>
+      <td>${m.nome} ${m.stima ? html`<span class="etichetta">stima</span>` : ''} ${m.scaduta ? html`<span class="etichetta prio-alta">scaduta</span>` : ''}</td>
+      <td>${m.riferimento}</td><td>${m.scadenza ? dataIt(m.scadenza) : ''}</td><td class="num">${m.tipo === 'incasso' ? `${m.ritardo} gg` : ''}</td>
+      <td class="num">${euroCent(m.importo)}</td></tr>`)}</tbody></table></div>`;
+  const fissa = (nome: string, campo: string, valore: number | null, automatico: number | null, da: string | null, giorno?: [string, number]) => html`
+    <label>${nome} € <input name="${campo}" inputmode="decimal" size="10" value="${scritto(valore)}" placeholder="${automatico != null ? scritto(automatico) : ''}"></label>
+    ${giorno ? html`<label>giorno del mese <input name="${giorno[0]}" inputmode="numeric" size="3" value="${giorno[1]}"></label>` : ''}
+    <small class="tenue">${valore != null ? 'scritto da voi' : automatico != null ? html`vuoto = stima ${euro(automatico)}: ${da}` : 'nessun dato nel portale: scrivilo tu'}</small>`;
+  const altre = [...i.altre, ...Array(Math.max(0, 5 - i.altre.length)).fill({ voce: '', importo: 0, giorno: 1 })].slice(0, 5);
+
+  return html`
+    <div class="intestazione-pagina"><h1>Previsione di cassa</h1>
+      <div class="azioni non-stampare"><a class="bottone" href="/amministrazione/analisi/cassa.xlsx">Excel</a> <button type="button" id="stampa">Stampa</button></div></div>
+    <div class="non-stampare">${menuAmministrazione('analisi')}</div>
+    ${tastiAnalisi('cassa')}
+    <p class="nota">Prossimi 90 giorni da oggi (${dataIt(p.oggi)}), importi IVA compresa perché sono soldi che entrano ed escono.
+      Incassi: rate aperte delle fatture spostate del ritardo medio di ogni cliente. Fornitori: rate aperte delle fatture ricevute.
+      Uscite fisse: stipendi, F24 e IVA (veri quando ci sono, altrimenti stimati), più quelle che scrivete voi.</p>
+    <div class="cifre">
+      <div class="cifra"><span>Saldo banca</span><b>${p.saldo ? euro(p.saldo.importo) : '—'}</b><small>${p.saldo ? `al ${dataIt(p.saldo.data)}` : 'da scrivere qui sotto'}</small></div>
+      ${p.finestre.map(f => html`<div class="cifra ${f.cassaFine != null && f.cassaFine < 0 ? 'allarme' : ''}"><span>${f.nome}</span>
+        <b>${f.cassaFine != null ? euro(f.cassaFine) : conSegno(f.netto)}</b>
+        <small>${f.cassaFine != null ? html`cassa al ${dataIt(f.fino)} · netto ${conSegno(f.netto)}` : html`netto fino al ${dataIt(f.fino)}`}
+          · scenario basso ${f.cassaFineBassa != null ? euro(f.cassaFineBassa) : conSegno(f.basso)}</small></div>`)}
+      ${p.puntoMinimo ? html`<div class="cifra ${p.puntoMinimo.cassa < 0 ? 'allarme' : ''}"><span>Punto più basso</span><b>${euro(p.puntoMinimo.cassa)}</b>
+        <small>il ${dataIt(p.puntoMinimo.data)}${p.puntoMinimoBasso ? ` · scenario basso ${euro(p.puntoMinimoBasso.cassa)} il ${dataIt(p.puntoMinimoBasso.data)}` : ''}</small></div>` : ''}
+    </div>
+
+    <h2>Da sapere</h2>
+    ${p.rischi.length ? html`<ul class="commenti-analisi">${p.rischi.map(x => html`<li class="${LIVELLO[x.livello]}"><span class="pallino" aria-hidden="true">${ICONE[x.livello]}</span>
+      <div>${x.testo}${x.link ? html` <a href="${x.link[0]}">${x.link[1]} →</a>` : ''}</div></li>`)}</ul>` : html`<p class="nota">Niente di particolare.</p>`}
+
+    <h2>Per finestra</h2>
+    <div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th></th>${p.finestre.map(f => html`<th class="num">${f.nome}<br><small class="tenue">fino al ${dataIt(f.fino)}</small></th>`)}</tr></thead>
+      <tbody>
+        <tr><td>Incassi dai clienti</td>${p.finestre.map(f => html`<td class="num">${euro(f.incassi)}</td>`)}</tr>
+        <tr><td>Pagamenti ai fornitori</td>${p.finestre.map(f => html`<td class="num">${euro(f.pagamenti)}</td>`)}</tr>
+        <tr><td>Uscite fisse</td>${p.finestre.map(f => html`<td class="num">${euro(f.uscite)}</td>`)}</tr>
+        <tr><th>Netto</th>${p.finestre.map(f => html`<th class="num">${conSegno(f.netto)}</th>`)}</tr>
+        <tr><td>Scenario basso / alto</td>${p.finestre.map(f => html`<td class="num">${conSegno(f.basso)} / ${conSegno(f.alto)}</td>`)}</tr>
+        ${p.saldo ? html`<tr><th>Cassa a fine finestra</th>${p.finestre.map(f => html`<th class="num">${euro(f.cassaFine ?? 0)}</th>`)}</tr>
+          <tr><td>Cassa, scenario basso</td>${p.finestre.map(f => html`<td class="num">${euro(f.cassaFineBassa ?? 0)}</td>`)}</tr>` : ''}
+      </tbody></table></div>
+    <p class="nota">Scenario basso e alto: incassi ± ${Math.round(p.banda * 100)} % (quanto variano i ritardi dei clienti rispetto ai ${p.giorniMediIncasso ?? '—'} giorni medi
+      dalla fattura all'incasso). Ritardo medio di tutti: ${num(p.ritardoGenerale, 1)} giorni dopo la scadenza (ultimi 12 mesi).
+      Non ci sono le fatture che emetterete o riceverete da oggi in poi: oltre i 30 giorni gli incassi sono prudenti.</p>
+
+    <details class="non-stampare" ${!p.saldo ? raw('open') : ''}><summary><b>Saldo della banca e uscite fisse</b>${sola ? ' (solo lettura)' : ''}</summary>
+      <form method="post" action="/amministrazione/analisi/cassa" class="modulo-qualita">
+        <label>Saldo banca (tutti i conti) € <input name="saldo" inputmode="decimal" size="12" value="${scritto(i.saldo)}"></label>
+        <label>alla data <input name="dataSaldo" type="date" value="${i.dataSaldo ?? p.oggi}"></label>
+        <small class="tenue largo">Il portale non legge ancora la banca: scrivete il saldo quando aprite la pagina, la previsione parte da lì.</small>
+        ${fissa('Stipendi netti al mese', 'stipendi', i.stipendi, auto.stipendi, auto.stipendiDa, ['giornoStipendi', i.giornoStipendi])}
+        ${fissa('F24 paghe al mese', 'f24', i.f24, auto.f24, auto.f24Da, ['giornoF24', i.giornoF24])}
+        ${fissa('IVA al mese', 'iva', i.iva, auto.iva, auto.ivaDa)}
+        <small class="tenue largo">L'IVA si versa il 16 (luglio: 20 agosto). Lasciando vuoto: l'IVA del mese chiuso si prende dai Registri IVA, poi la media.
+          Un F24 vero letto dalla cartella "Da acquisire" prende il posto della stima di quel mese.</small>
+        <b class="largo">Altre uscite di ogni mese (affitto, leasing, finanziamenti, addebito della carta…)</b>
+        ${altre.map((a, n) => html`<label>Voce <input name="altra${n}_voce" value="${a.voce}" size="22"></label>
+          <label>€ <input name="altra${n}_importo" inputmode="decimal" size="9" value="${a.importo ? scritto(a.importo) : ''}"></label>
+          <label>giorno <input name="altra${n}_giorno" inputmode="numeric" size="3" value="${a.voce ? a.giorno : ''}"></label>`)}
+        <label>Pagamenti minimi per usare il ritardo del cliente <input name="minimoPagamenti" inputmode="numeric" size="3" value="${i.minimoPagamenti}"></label>
+        ${sola ? '' : html`<button>Salva e ricalcola</button>`}
+      </form></details>
+
+    <h2>Come pagano i clienti con rate aperte</h2>
+    <div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th>Cliente</th><th class="num">Da incassare</th><th class="num">Incassi (12 mesi)</th><th class="num">Ritardo medio</th><th class="num">Ritardo max</th><th class="num">Ritardo usato</th></tr></thead>
+      <tbody>${p.clienti.map(c => html`<tr class="${c.usato >= 10 ? 'scaduta' : ''}"><td>${c.cliente}</td><td class="num">${euro(c.aperto)}</td><td class="num">${c.pagamenti}</td>
+        <td class="num">${c.ritardo != null ? `${c.ritardo} gg` : ''}</td><td class="num">${c.ritardoMax != null ? `${c.ritardoMax} gg` : ''}</td>
+        <td class="num">${c.usato} gg${c.daStorico ? '' : html` <small class="tenue">(media di tutti)</small>`}</td></tr>`)}</tbody></table></div>
+
+    ${(['f30', 'f60', 'f90'] as CodiceFinestra[]).map(c => html`<h2>${NOMI_FINESTRE[c]} · ${righeFinestra(c).length} movimenti</h2>
+      ${righeFinestra(c).length ? tabellaMovimenti(righeFinestra(c)) : html`<p class="nota">Nessun movimento.</p>`}`)}
+    ${righeFinestra('oltre').length ? html`<details><summary>Oltre 90 giorni · ${righeFinestra('oltre').length} movimenti
+      (${euro(righeFinestra('oltre').reduce((s, m) => s + m.importo, 0))})</summary>${tabellaMovimenti(righeFinestra('oltre'))}</details>` : ''}
+    <p class="nota">È una previsione calcolata sui documenti del portale, non un consiglio finanziario: per finanziamenti e scelte importanti sentite il commercialista.</p>`;
+}
+
 export function rotteAnalisi() {
   const r = Router();
+
+  // ── Previsione di cassa (Adriano 3/11/2026) ──
+  r.get('/cassa', async (req: Request, res) => {
+    const d = await caricaPrevisione(oggiRoma());
+    res.send(String(layout({ titolo: 'Previsione di cassa', utente: req.session.utente, attiva: 'amministrazione', contenuto: paginaCassa(req, d), script: 'stampa.js', largo: true })));
+  });
+  r.post('/cassa', async (req: Request, res) => {
+    const b = req.body ?? {};
+    const altre = [0, 1, 2, 3, 4].map(n => ({ voce: b[`altra${n}_voce`], importo: b[`altra${n}_importo`], giorno: b[`altra${n}_giorno`] }));
+    const i = leggiImpostazioniCassa({ ...b, altre, dataSaldo: b.dataSaldo || oggiRoma() });
+    if (i.saldo == null) i.dataSaldo = null;
+    await salvaImpostazioniCassa(i);
+    res.redirect(`/amministrazione/analisi/cassa?msg=${encodeURIComponent('Salvato: previsione ricalcolata.')}`);
+  });
+  r.get('/cassa.xlsx', async (_req: Request, res) => {
+    const { previsione: p } = await caricaPrevisione(oggiRoma());
+    const dati = await excelSemplice('Previsione di cassa', [
+      { header: 'Data attesa', key: 'data', width: 12, formato: 'data' }, { header: 'Finestra', key: 'finestra', width: 16 },
+      { header: 'Tipo', key: 'tipo', width: 14 }, { header: 'Chi / voce', key: 'nome', width: 36 }, { header: 'Documento', key: 'riferimento', width: 14 },
+      { header: 'Scadenza', key: 'scadenza', width: 12, formato: 'data' }, { header: 'Ritardo usato (gg)', key: 'ritardo', width: 12, formato: 'intero' },
+      { header: 'Importo €', key: 'importo', width: 14, formato: 'euro' }, { header: 'Note', key: 'note', width: 22 },
+    ], p.movimenti.map(m => ({ ...m, finestra: NOMI_FINESTRE[m.finestra], tipo: NOMI_TIPO[m.tipo], scadenza: m.scadenza ?? null,
+      ritardo: m.tipo === 'incasso' ? m.ritardo : null, note: [m.scaduta ? 'scaduta' : '', m.stima ? 'stima' : ''].filter(Boolean).join(', ') })));
+    inviaExcel(res, nomeExcel('previsione-cassa'), dati);
+  });
+
   r.get('/', async (req: Request, res) => {
     const oggi = oggiRoma(), annoOggi = Number(oggi.slice(0, 4));
     const anno = Math.min(annoOggi, Math.max(2019, Number(req.query.anno) || annoOggi));
@@ -82,6 +212,7 @@ export function rotteAnalisi() {
       <div class="intestazione-pagina"><h1>Analisi ${anno}</h1>
         <div class="azioni non-stampare"><button type="button" id="stampa">Stampa</button></div></div>
       <div class="non-stampare">${menuAmministrazione('analisi')}</div>
+      ${tastiAnalisi('andamento')}
       <form class="cerca non-stampare" method="get"><select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select><button>Mostra</button></form>
       <p class="nota">${finoA ? html`Dal 1° gennaio a oggi, confrontato con lo stesso periodo del ${anno - 1}.` : html`Anno intero, confrontato con il ${anno - 1}.`}
         Dalle fatture emesse e ricevute (anche lo storico di Fatture in Cloud), imponibili senza IVA. Non è il bilancio: mancano personale, ammortamenti e banca.</p>

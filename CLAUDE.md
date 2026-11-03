@@ -520,6 +520,14 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che
    pesano di più, dipendenza, clienti fermi/nuovi, ritardi d'incasso, scaduto > 60 gg, prezzi sotto preventivo, margine < 10 %); tabelle mesi, clienti (margine stimato
    = fatturato × margine dell'ultimo preventivo del codice, giorni di incasso), prodotti, acquisti per categoria FIC e fornitori. Non è il bilancio.
+   ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
+   `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
+   incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha
+   almeno N incassi (3, modificabile), altrimenti la media di tutti; mai prima di oggi. Fornitori alla scadenza, scaduti non pagati a oggi. Uscite fisse ogni mese:
+   stipendi (vuoto = netto totale dell'ultimo mese di `costi_personale`), F24 (vuoto = media ultimi 3 F24 di `paghe_documenti`; F24 letto non pagato = uscita vera
+   che sostituisce la stima del mese), IVA (vuoto = liquidazione del mese chiuso dai Registri IVA + media ultimi 3 mesi; scadenza di legge), altre 5 voci scritte.
+   Saldo banca scritto a mano (impostazioni 'previsione_cassa'; la banca non è collegata). Banda ± sugli incassi = deviazione ritardo ÷ giorni medi fattura→incasso,
+   max 50 % (30 % senza storico); punto più basso giorno per giorno; "Da sapere" (`rischiCassa`); Excel dei movimenti. Letta solo all'apertura (Neon).
    ✅ Spese, bollo, lettere d'intento (Adriano 31/10/2026, fase 1; `engine/fiscale.ts`, `rotte/fiscale.ts`, test `tests/fiscale.test.ts`): spese senza fattura elettronica
    (`/amministrazione/spese`: scontrini, affitto, polizze…, in `documenti_ricevuti` con elettronica=false, origine 'manuale', categoria = tipo; fuori dal registro IVA se
    senza IVA; si eliminano solo le manuali); bollo virtuale per trimestre (`/amministrazione/bollo`, `bolloPerTrimestre`: codici 2521–2524, 31/5, 30/9, 30/11, fine
