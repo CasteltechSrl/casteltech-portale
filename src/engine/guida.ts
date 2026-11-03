@@ -991,6 +991,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'commercialista contabilita contabile consulente sonia hts utente accesso password sola lettura profilo vedere consultare',
     testo: [
       'Il commercialista e chi aiuta con la contabilità (es. Sonia di HTS) possono entrare nel portale con il profilo "Contabilità (sola lettura)": vedono tutta l\'Amministrazione (cruscotto, documenti emessi, fatture fornitori, acquisti del mese, registri IVA, controllo VIES), scaricano Excel, file XML e stampe, leggono la Guida.',
+      'Dal 3/11/2026 vedono anche le buste paga (Dipendenti → Buste paga, con la password delle buste paga) e la Previsione di cassa.',
       'Non possono modificare nulla: niente bozze, emissioni, invii allo SdI, pagamenti segnati. I pulsanti che modificano non compaiono e il portale rifiuta comunque ogni modifica. Le altre sezioni (preventivi, commesse, ordini, impostazioni…) non le vedono.',
       'Dopo l\'accesso entrano direttamente nel cruscotto dell\'Amministrazione. In alto, al posto della tendina, hanno tutte le pagine in fila (Cruscotto, DDT, Fatture, Autofatture, Note di credito, Fatture fornitori, Registri IVA…); il menu dell\'ufficio resta com\'è.',
       'L\'utente lo crea l\'ufficio in Impostazioni → Utenti: nome, email, profilo "Contabilità (sola lettura)" e una password di almeno 10 caratteri da comunicare alla persona. Per bloccare l\'accesso si toglie la spunta Attivo.',
@@ -1070,6 +1071,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'previsione cassa liquidità soldi saldo banca conto flusso cash flow 30 60 90 giorni incassi pagamenti stipendi f24 iva tredicesima pagare faccio basta bastano mancano scoperto rosso runway',
     testo: [
       'In Amministrazione → Analisi → Previsione di cassa vedi quanti soldi entrano ed escono nei prossimi 90 giorni, divisi in tre finestre da 30 giorni, e quanta cassa resta alla fine di ognuna.',
+      'È riservata: dai totali si ricavano gli stipendi, quindi la vedono solo l\'amministratore, la contabilità e chi ha il permesso delle buste paga.',
       'Incassi: le rate aperte delle fatture ai clienti, spostate del ritardo medio con cui quel cliente paga (giorni dopo la scadenza, ultimi 12 mesi). Se il cliente ha meno di 3 incassi si usa il ritardo medio di tutti. Le rate già scadute si contano come incassate oggi, ma la pagina lo segnala. Le note di credito aperte tolgono.',
       'Uscite: le rate aperte delle fatture dei fornitori alla scadenza (quelle già scadute e non segnate pagate vanno a oggi), più le uscite fisse di ogni mese: stipendi netti, F24 delle paghe, IVA e quelle che scrivete voi (affitto, leasing, finanziamenti, carta di credito). Se non scrivete nulla, stipendi, F24 e IVA sono stimati dai dati del portale (segnati "stima"). Un F24 vero letto dalla cartella o l\'IVA del mese chiuso dai Registri IVA prendono il posto della stima.',
       'Il saldo della banca il portale non lo legge ancora: scrivetelo nel riquadro "Saldo della banca e uscite fisse", la previsione parte da lì. Senza saldo vedete solo quanto entra ed esce.',
@@ -1109,9 +1111,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/impostazioni/operatori', 'Impostazioni → Operatori']],
   },
   {
-    id: 'utenti', area: 'impostazioni', titolo: 'Utenti del portale',
-    parole: 'utenti nuovo utente password accesso ufficio produzione ruolo disattivare',
-    testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo (ufficio: tutto; produzione: solo tempi e note). Chi ha già lavorato non si elimina: si toglie la spunta "Attivo".'],
+    id: 'utenti', area: 'impostazioni', titolo: 'Utenti del portale e ruoli (amministratore)',
+    parole: 'utenti nuovo utente password accesso ufficio produzione ruolo ruoli disattivare amministratore admin permessi cambiare profilo',
+    testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo. Ruoli: Amministratore (tutto, più è l\'unico che sceglie i ruoli e vede stipendi, buste paga e previsione di cassa), Ufficio (tutto il resto), Produzione (solo tempi e note), Contabilità (sola lettura dell\'Amministrazione e delle buste paga), Esterno (vede tutto, non modifica nulla).',
+      'Solo l\'amministratore sceglie o cambia il ruolo degli utenti e modifica gli utenti amministratori. Chi è nell\'ufficio può aggiungere utenti della produzione e correggere nome, email e password degli altri. Nessuno può cambiarsi il ruolo da solo e resta sempre almeno un amministratore attivo. Un ruolo cambiato vale dal prossimo accesso di quella persona.',
+      'Chi ha già lavorato non si elimina: si toglie la spunta "Attivo".'],
     pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
   },
   {
@@ -1164,7 +1168,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'I documenti dello studio paghe (cedolini, riepilogo, nota contabile, F24) si mettono nella stessa cartella Google Drive "Da acquisire" degli ordini, con il nome con cui li manda lo studio (es. "Casteltech - ced 08-2026.pdf", "Casteltech - nc 08-2026.pdf", "Casteltech - f24 del 16-09-26.pdf"): il portale li riconosce dal nome e li porta in Dipendenti, non in Ordini → Da acquisire. Si possono anche caricare dalla pagina Costo del personale.',
       'La nota contabile la legge l\'IA e diventa il costo del mese; l\'F24 dà scadenza e totale. I cedolini e i riepiloghi NON vanno all\'IA e non si aprono senza la password.',
       'Le buste paga diventano dati (dal 1/11/2026): ogni cedolino arrivato si legge da solo nel portale, senza IA, e dà per ogni persona e mese ore lavorate, paga oraria, lordo, contributi, IRPEF, addizionali, ritenute, netto e tutte le voci (straordinari, ferie non godute, tredicesima…). Nell\'area riservata: tabella dell\'anno con il netto di ogni persona mese per mese, clic sul nome = tutte le sue buste paga anno per anno con i totali, clic sull\'importo = il cedolino con le voci. Un cedolino rifatto dallo studio sostituisce quello di prima; "!" vuol dire che qualcosa non torna e va guardato sul PDF.',
-      'Buste paga (area riservata): la apre solo l\'amministratore del portale e chi ha la sua spunta, scrivendo la password delle buste paga (diversa da quella di accesso). Dentro: costo per qualifica, netto in busta, tutti i PDF dello studio, F24 da segnare pagati, lo storico dall\'archivio. Si richiude da sola dopo 15 minuti senza aprire pagine, o con "Chiudi l\'area riservata".',
+      'Buste paga (area riservata): la aprono l\'amministratore del portale, la contabilità (il commercialista, in sola lettura) e chi dell\'ufficio ha la spunta dell\'amministratore, scrivendo la password delle buste paga (diversa da quella di accesso). Le stesse persone vedono la Previsione di cassa, dove ci sono gli stipendi netti. Dentro: costo per qualifica, netto in busta, tutti i PDF dello studio, F24 da segnare pagati, lo storico dall\'archivio. Si richiude da sola dopo 15 minuti senza aprire pagine, o con "Chiudi l\'area riservata".',
       'Lo storico 2019–2026 viene dalle note contabili della cartella 7_DIPENDENTI E SOCI (fino al 2021 dal "bilancino" del vecchio studio): file costi_personale.json.gz, si carica dall\'area riservata → Storico dall\'archivio. Le buste paga dell\'archivio (cartella 3_Buste paga, aprile 2019 – settembre 2026) sono nel file cedolini.json.gz, che si carica nello stesso punto. I mesi letti dal portale non vengono sovrascritti. L\'INAIL si paga una volta l\'anno (F24 di febbraio) e non è nei mesi.',
     ],
     passi: [

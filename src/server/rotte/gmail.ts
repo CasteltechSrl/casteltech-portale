@@ -23,7 +23,7 @@ const indirizzoPortale = (req: Request) => `${req.protocol}://${req.get('host')}
 /** Utente ufficio del portale con la stessa email di chi ha premuto il pulsante (altrimenti il caricamento resta senza firma). */
 async function utenteDa(email: string): Promise<{ id: number; nome: string } | null> {
   if (!email) return null;
-  return (await q1<{ id: number; nome: string }>(`SELECT id, nome FROM utenti WHERE email = lower($1) AND attivo AND ruolo = 'ufficio'`, [email])) ?? null;
+  return (await q1<{ id: number; nome: string }>(`SELECT id, nome FROM utenti WHERE email = lower($1) AND attivo AND ruolo IN ('ufficio', 'amministratore')`, [email])) ?? null;
 }
 
 /**

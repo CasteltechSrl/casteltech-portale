@@ -1,3 +1,4 @@
+import { contabilitaPuo } from '../src/engine/ruoli.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -76,8 +77,9 @@ test('profilo Contabilità: pagine dell\'Amministrazione in fila, senza tendine;
   assert.doesNotMatch(barra, /tendina|titolo-gruppo/);
   assert.deepEqual(link(barra).map(v => v[1]), MENU_CONTABILITA.map(v => v[1]));
   assert.equal(MENU_CONTABILITA[0][1], '/amministrazione');
-  // solo pagine dell'Amministrazione (le altre il profilo non le può aprire)
-  assert.ok(MENU_CONTABILITA.every(([, h]) => h === '/amministrazione' || h.startsWith('/amministrazione/')));
+  // solo pagine che il profilo può aprire: Amministrazione e, dal 3/11/2026, le buste paga
+  assert.ok(MENU_CONTABILITA.every(([, h]) => contabilitaPuo('GET', h.split('?')[0])));
+  assert.ok(MENU_CONTABILITA.some(([, h]) => h === '/dipendenti/riservata'));
   // ufficio: sempre i gruppi con le tendine
   assert.match(pagina('ufficio'), /<nav class="menu"><!--/);
   assert.doesNotMatch(pagina('ufficio'), /menu-piatto/);

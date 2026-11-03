@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   tipoDocumentoPaghe, periodoDaNome, numeroIt, leggiNotaContabile, leggiBilancino, costoAzienda, normalizzaNotaIa, normalizzaF24Ia,
-  sbloccoValido, puoAprireRiservata, controllaPasswordPaghe, kmRiga, rimborsoRiga, totaliNotaSpese, rigaNotaDaModulo, riepilogoAnno, tabellaCosti, righeCostiValide,
+  sbloccoValido, controllaPasswordPaghe, kmRiga, rimborsoRiga, totaliNotaSpese, rigaNotaDaModulo, riepilogoAnno, tabellaCosti, righeCostiValide,
   TIPI_RISERVATI,
 } from '../src/engine/dipendenti.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -127,11 +127,7 @@ test('lettura dell\'IA ripulita: niente TUTTE insieme alle qualifiche, importi n
   assert.equal(f.scadenza, '2026-09-16');
 });
 
-test('area riservata: permesso dell\'amministratore + password, aperta 15 minuti', () => {
-  assert.equal(puoAprireRiservata({ email: 'Admin@Esempio.it', paghe: false }, 'admin@esempio.it'), true);
-  assert.equal(puoAprireRiservata({ email: 'altro@esempio.it', paghe: false }, 'admin@esempio.it'), false);
-  assert.equal(puoAprireRiservata({ email: 'altro@esempio.it', paghe: true }, 'admin@esempio.it'), true);
-  assert.equal(puoAprireRiservata({ email: 'admin@esempio.it' }, undefined), false);
+test('area riservata: password, aperta 15 minuti (chi la apre: vedePaghe in tests/ruoli.test.ts)', () => {
   const ora = Date.now();
   assert.equal(sbloccoValido(ora - 14 * 60_000, ora), true);
   assert.equal(sbloccoValido(ora - 16 * 60_000, ora), false);

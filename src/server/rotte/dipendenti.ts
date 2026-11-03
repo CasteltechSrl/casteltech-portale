@@ -15,9 +15,10 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
 import { maiuscolo } from '../anagrafiche-servizio.js';
 import {
-  TIPI_PAGHE, TIPI_RISERVATI, MINUTI_SBLOCCO, controllaPasswordPaghe, costoAzienda, kmRiga, nomeMeseMaiuscolo, puoAprireRiservata, riepilogoAnno,
+  TIPI_PAGHE, TIPI_RISERVATI, MINUTI_SBLOCCO, controllaPasswordPaghe, costoAzienda, kmRiga, nomeMeseMaiuscolo, riepilogoAnno,
   rigaNotaDaModulo, rimborsoRiga, sbloccoValido, tabellaCosti, tipoDocumentoPaghe, totaliNotaSpese, type TipoPaghe,
 } from '../../engine/dipendenti.js';
+import { vedePaghe } from '../../engine/ruoli.js';
 import { caricaStoricoCedolini, caricaStoricoCosti, importaModuloKm, leggiDocumentoPaghe, registraDocumentoPaghe, totaliNoteAnno } from '../dipendenti-servizio.js';
 import { totaliCedolini } from '../../engine/cedolini.js';
 
@@ -44,14 +45,17 @@ function menuDipendenti(attiva: 'costi' | 'note' | 'persone' | 'riservata'): Raw
 
 /** Utente con email e permesso, per l'area riservata. */
 async function utenteCompleto(req: Request) {
-  return q1<{ id: number; email: string; paghe: boolean }>(`SELECT id, email, paghe FROM utenti WHERE id = $1 AND attivo`, [req.session.utente?.id ?? 0]);
+  return q1<{ id: number; email: string; paghe: boolean; ruolo: string }>(`SELECT id, email, paghe, ruolo FROM utenti WHERE id = $1 AND attivo`, [req.session.utente?.id ?? 0]);
 }
-const amministratore = (email?: string | null) => !!email && !!process.env.ADMIN_EMAIL && email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase();
+/** L'amministratore (ruolo, dal 3/11/2026; prima era l'utente di ADMIN_EMAIL): sceglie la password e chi apre le buste paga. */
+const amministratore = (u?: { ruolo?: string } | null) => u?.ruolo === 'amministratore';
+/** La contabilità vede solo le buste paga (niente costo del personale, persone, note spese): menu della sezione senza le altre pagine. */
+const menuRiservata = (req: Request) => (req.session.utente?.ruolo === 'contabilita' ? html`` : menuDipendenti('riservata'));
 
 /** Area riservata aperta: permesso + password scritta da meno di 15 minuti (ogni pagina vista la tiene aperta). */
 async function riservataAperta(req: Request): Promise<boolean> {
   const u = await utenteCompleto(req);
-  if (!u || !puoAprireRiservata(u, process.env.ADMIN_EMAIL)) return false;
+  if (!u || !vedePaghe(u)) return false;
   if (!sbloccoValido(req.session.pagheSbloccate, Date.now())) return false;
   req.session.pagheSbloccate = Date.now();
   return true;
@@ -477,21 +481,21 @@ export function rotteDipendenti() {
   // ───────────────────────────── area riservata: buste paga ─────────────────────────────
   r.get('/riservata', async (req, res) => {
     const u = await utenteCompleto(req);
-    const ammesso = !!u && puoAprireRiservata(u, process.env.ADMIN_EMAIL);
+    const ammesso = !!u && vedePaghe(u);
     const impostata = await q1(`SELECT 1 FROM impostazioni WHERE chiave = 'paghe_password'`);
-    const admin = amministratore(u?.email);
-    if (!ammesso) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuDipendenti('riservata')}
-      <p class="avviso">Area riservata: cedolini e costi per persona li vede solo chi ha il permesso dell'amministratore. Il costo totale del mese è in
+    const admin = amministratore(u);
+    if (!ammesso) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
+      <p class="avviso">Area riservata: cedolini e costi per persona li vedono solo l'amministratore, la contabilità e chi ha il permesso dell'amministratore. Il costo totale del mese è in
         <a href="/dipendenti">Costo del personale</a>.</p>`));
-    if (!impostata) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuDipendenti('riservata')}
+    if (!impostata) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
       ${admin ? html`<p>Prima volta: scegli la password delle buste paga (almeno 8 caratteri con lettere e numeri). È diversa da quella per entrare nel portale: chi non la conosce non apre i cedolini anche se usa il tuo computer.</p>
         <form method="post" action="/dipendenti/riservata/password" class="blocco"><div class="riga-campi">
           <label>Nuova password <input type="password" name="nuova" required minlength="8" autocomplete="new-password"></label>
           <label>Ripeti <input type="password" name="ripeti" required minlength="8" autocomplete="new-password"></label></div>
           <div class="barra-azioni"><button class="primario">Imposta la password</button></div></form>`
         : html`<p class="avviso">La password delle buste paga non è ancora stata scelta: la imposta l'amministratore del portale.</p>`}`));
-    if (!(await riservataAperta(req))) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuDipendenti('riservata')}
-      <form method="post" action="/dipendenti/riservata/sblocca" class="scheda-login">
+    if (!(await riservataAperta(req))) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
+      <form method="post" action="/dipendenti/riservata/sblocca" class="scheda-login sempre-attivo">
         <p>Scrivi la password delle buste paga. L'area si richiude da sola dopo ${MINUTI_SBLOCCO} minuti senza aprire pagine.</p>
         <label>Password delle buste paga <input type="password" name="password" required autofocus autocomplete="off"></label>
         <button class="primario">Apri</button></form>`));
@@ -513,8 +517,8 @@ export function rotteDipendenti() {
     const elencoAnni = [...new Set([annoOggi(), ...anni.map(a => a.anno)])].sort((a, b) => b - a);
     res.send(pagina(req, 'Buste paga', html`
       <div class="intestazione-pagina"><h1>🔒 Buste paga · ${anno}</h1>
-        <form method="post" action="/dipendenti/riservata/chiudi" class="inline"><button>Chiudi l'area riservata</button></form></div>
-      ${menuDipendenti('riservata')}
+        <form method="post" action="/dipendenti/riservata/chiudi" class="inline sempre-attivo"><button>Chiudi l'area riservata</button></form></div>
+      ${menuRiservata(req)}
       <form class="cerca" method="get"><select name="anno">${elencoAnni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select><button>Mostra</button></form>
       ${tabellaBuste(anno, buste)}
       <h2>Costo per qualifica</h2>
@@ -538,16 +542,17 @@ export function rotteDipendenti() {
             ${d.tipo === 'f24' ? html`<form method="post" action="/dipendenti/riservata/documenti/${d.id}/pagato" class="inline"><button class="link">${d.pagato_il ? 'Da pagare' : 'Segna pagato'}</button></form>` : ''}
             <form method="post" action="/dipendenti/riservata/documenti/${d.id}/elimina" class="inline" data-conferma="${`Eliminare ${d.nome_file}?`}"><button class="link negativo">Elimina</button></form></td></tr>`)}</tbody></table></div>`
         : html`<p class="vuoto">Nessun documento nel ${anno}.</p>`}
-      <h2>Storico dall'archivio</h2>
+      ${req.session.utente?.ruolo === 'contabilita' ? '' : html`<h2>Storico dall'archivio</h2>
       <p class="nota">File preparati da Claude dalla cartella "7_DIPENDENTI E SOCI" (2019–2026): costi_personale.json.gz (note contabili: costo per qualifica) e
         cedolini.json.gz (buste paga: un cedolino per persona e mese). Prima mostra cosa carica, poi chiede conferma.
         I mesi già letti dal portale dai documenti arrivati o corretti a mano non si toccano.</p>
-      <div class="blocco"><input type="file" id="file-storico" accept=".gz,.json"> <button class="primario" id="avvia-storico">Carica lo storico</button> <span id="esito-storico" class="nota"></span></div>
+      <div class="blocco"><input type="file" id="file-storico" accept=".gz,.json"> <button class="primario" id="avvia-storico">Carica lo storico</button> <span id="esito-storico" class="nota"></span></div>`}
       ${admin ? html`<h2>Chi può aprire le buste paga</h2>
-        <p class="nota">Solo tu (amministratore) e gli utenti dell'ufficio con la spunta; tutti devono scrivere la password delle buste paga.</p>
+        <p class="nota">Le aprono gli amministratori, la contabilità (commercialista) e gli utenti dell'ufficio con la spunta; tutti devono scrivere la password delle buste paga.
+          Le stesse persone vedono gli stipendi nella Previsione di cassa.</p>
         <form method="post" action="/dipendenti/riservata/permessi" class="blocco">
-          ${(utenti as any[]).filter(x => !amministratore(x.email)).map(x => html`<label class="spunta"><input type="checkbox" name="paghe" value="${x.id}" ${x.paghe ? raw('checked') : ''}> ${x.nome} (${x.email})</label>`)}
-          ${(utenti as any[]).filter(x => !amministratore(x.email)).length ? html`<div class="barra-azioni"><button>Salva i permessi</button></div>` : html`<p class="vuoto">Non ci sono altri utenti dell'ufficio.</p>`}</form>
+          ${(utenti as any[]).map(x => html`<label class="spunta"><input type="checkbox" name="paghe" value="${x.id}" ${x.paghe ? raw('checked') : ''}> ${x.nome} (${x.email})</label>`)}
+          ${(utenti as any[]).length ? html`<div class="barra-azioni"><button>Salva i permessi</button></div>` : html`<p class="vuoto">Non ci sono altri utenti dell'ufficio.</p>`}</form>
         <h2>Cambia la password delle buste paga</h2>
         <form method="post" action="/dipendenti/riservata/password" class="blocco"><div class="riga-campi">
           <label>Password attuale <input type="password" name="attuale" required autocomplete="off"></label>
@@ -561,7 +566,7 @@ export function rotteDipendenti() {
   const tentativi = new Map<number, { n: number; fino: number }>();
   r.post('/riservata/sblocca', async (req, res) => {
     const u = await utenteCompleto(req);
-    if (!u || !puoAprireRiservata(u, process.env.ADMIN_EMAIL)) return vai(res, '/dipendenti/riservata');
+    if (!u || !vedePaghe(u)) return vai(res, '/dipendenti/riservata');
     const t = tentativi.get(u.id);
     if (t && t.n >= 5 && t.fino > Date.now()) return vai(res, '/dipendenti/riservata', 'Troppi tentativi: riprova tra 15 minuti.');
     const p = await q1<{ valore: { hash: string } }>(`SELECT valore FROM impostazioni WHERE chiave = 'paghe_password'`);
@@ -576,7 +581,7 @@ export function rotteDipendenti() {
   r.post('/riservata/chiudi', (req, res) => { delete req.session.pagheSbloccate; vai(res, '/dipendenti', 'Area riservata chiusa.'); });
   r.post('/riservata/password', async (req, res) => {
     const u = await utenteCompleto(req);
-    if (!amministratore(u?.email)) return res.status(403).send('Solo l\'amministratore');
+    if (!amministratore(u)) return res.status(403).send('Solo l\'amministratore');
     const p = await q1<{ valore: { hash: string } }>(`SELECT valore FROM impostazioni WHERE chiave = 'paghe_password'`);
     if (p && !(await bcrypt.compare(String(req.body.attuale ?? ''), p.valore.hash))) return vai(res, '/dipendenti/riservata', 'La password attuale non è corretta.');
     const nuova = String(req.body.nuova ?? '');
@@ -597,7 +602,7 @@ export function rotteDipendenti() {
   };
   r.post('/riservata/permessi', async (req, res) => {
     const u = await utenteCompleto(req);
-    if (!amministratore(u?.email) || !(await aperta(req, res))) return res.headersSent ? undefined : res.status(403).send('Solo l\'amministratore');
+    if (!amministratore(u) || !(await aperta(req, res))) return res.headersSent ? undefined : res.status(403).send('Solo l\'amministratore');
     const scelti = [req.body.paghe ?? []].flat().map(Number).filter(n => n > 0);
     await q(`UPDATE utenti SET paghe = (id = ANY($1::int[])) WHERE ruolo = 'ufficio'`, [scelti]);
     vai(res, '/dipendenti/riservata', 'Permessi salvati.');
@@ -665,7 +670,7 @@ export function rotteDipendenti() {
     const anni = [...new Set(righe.map(x => x.anno))];
     res.send(pagina(req, ultima.nome, html`
       <div class="intestazione-pagina"><h1>🔒 ${ultima.nome}</h1><a href="/dipendenti/riservata?anno=${ultima.anno}">← Buste paga</a></div>
-      ${menuDipendenti('riservata')}
+      ${menuRiservata(req)}
       <p>${[ultima.qualifica, ultima.mansione, ultima.livello ? `livello ${ultima.livello}` : null, ultima.matricola ? `matricola ${ultima.matricola}` : null].filter(Boolean).join(' · ')}
         ${righe.find(x => x.data_assunzione) ? html` · assunzione ${data(righe.find(x => x.data_assunzione)!.data_assunzione!)}` : ''}
         ${ultima.data_cessazione ? html` · <b>cessazione ${data(ultima.data_cessazione)}</b>` : ''}</p>
@@ -698,7 +703,7 @@ export function rotteDipendenti() {
     res.send(pagina(req, `${c.nome} ${periodo}`, html`
       <div class="intestazione-pagina"><h1>🔒 ${c.nome} · ${periodo}</h1>
         <a href="/dipendenti/riservata/persona?p=${encodeURIComponent(c.codice_fiscale ?? c.nome)}">← Tutte le buste paga di ${c.nome}</a></div>
-      ${menuDipendenti('riservata')}
+      ${menuRiservata(req)}
       <div class="cifre">
         <div class="cifra"><span>Lordo (competenze)</span><b>${euro(c.lordo)}</b></div>
         <div class="cifra"><span>Ritenute</span><b>${euro(c.ritenute)}</b></div>

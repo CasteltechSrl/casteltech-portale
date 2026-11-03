@@ -40,7 +40,7 @@ import { rotteCalendario } from './rotte/calendario.js';
 import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
-import { contabilitaPuo, esternoPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
+import { contabilitaPuo, eUfficio, esternoPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -103,7 +103,9 @@ export function soloUfficio(req: Request, res: Response, next: NextFunction) {
       <p>Il tuo profilo può vedere le pagine del portale, scaricare Excel e stampe, ma non modificare nulla. Impostazioni e buste paga non sono visibili.</p>
       <p><a href="/cruscotto">← Cruscotto</a></p>` })));
   }
-  if (req.session.utente.ruolo !== 'ufficio') return res.status(403).send(String(layout({ titolo: 'Accesso negato', utente: req.session.utente, contenuto: html`<h1>Pagina riservata all'ufficio</h1>` })));
+  // la contabilità legge l'Amministrazione e le buste paga (engine/ruoli.ts, contabilitaPuo)
+  if (req.session.utente.ruolo === 'contabilita' && contabilitaPuo(req.method, req.baseUrl + req.path)) return next();
+  if (!eUfficio(req.session.utente.ruolo)) return res.status(403).send(String(layout({ titolo: 'Accesso negato', utente: req.session.utente, contenuto: html`<h1>Pagina riservata all'ufficio</h1>` })));
   next();
 }
 
@@ -198,7 +200,7 @@ app.get('/c/:codice', async (req, res) => {
   if (req.session.operatore) return res.redirect(reparto);
   const c = await q1<{ id: number }>(`SELECT id FROM commesse WHERE codice_qr = $1`, [req.params.codice]);
   if (!c) return res.status(404).send('Commessa non trovata');
-  if (req.session.utente?.ruolo === 'ufficio' || req.session.utente?.ruolo === 'esterno') return res.redirect(`/commesse/${c.id}`);
+  if (eUfficio(req.session.utente?.ruolo) || req.session.utente?.ruolo === 'esterno') return res.redirect(`/commesse/${c.id}`);
   res.redirect('/r/accesso?torna=' + encodeURIComponent(reparto));
 });
 

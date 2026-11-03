@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contabilitaPuo, paginaDopoAccesso, paginaIniziale, ruoloDaModulo } from '../src/engine/ruoli.js';
+import { contabilitaPuo, controlloEliminaUtente, controlloUtente, esternoPuo, eUfficio, paginaDopoAccesso, paginaIniziale, ruoloDaModulo, vedePaghe } from '../src/engine/ruoli.js';
 import { acquistiPerFornitore } from '../src/engine/cruscotto-amministrazione.js';
 import { layout } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
@@ -17,7 +17,8 @@ test('profilo Contabilità (commercialista, Sonia di HTS): solo lettura dell\'Am
   assert.equal(contabilitaPuo('GET', '/amministrazionefalsa'), false);
   assert.equal(paginaIniziale('contabilita'), '/amministrazione');
   assert.equal(ruoloDaModulo('contabilita'), 'contabilita');
-  assert.equal(ruoloDaModulo('amministratore'), 'produzione');
+  assert.equal(ruoloDaModulo('amministratore'), 'amministratore');
+  assert.equal(ruoloDaModulo('capo'), 'produzione');
 });
 
 test('profilo Contabilità: nel menu solo pagine dell\'Amministrazione e Guida, con la scritta "sola lettura"', () => {
@@ -58,4 +59,63 @@ test('dopo l\'accesso il commercialista va al cruscotto dell\'Amministrazione (A
   assert.equal(paginaDopoAccesso('ufficio', '/'), '/cruscotto');
   assert.equal(paginaDopoAccesso('ufficio', '/preventivi/3'), '/preventivi/3');
   assert.equal(paginaDopoAccesso('produzione', '/'), '/r');
+});
+
+test('ruolo Amministratore (Adriano 3/11/2026): fa tutto quello che fa l\'ufficio, entra nel cruscotto, ha Impostazioni nel menu', () => {
+  assert.equal(eUfficio('amministratore'), true);
+  assert.equal(eUfficio('ufficio'), true);
+  assert.equal(eUfficio('contabilita'), false);
+  assert.equal(eUfficio('esterno'), false);
+  assert.equal(paginaIniziale('amministratore'), '/cruscotto');
+  const p = String(layout({ titolo: 'Prova', utente: { id: 1, nome: 'Adriano', ruolo: 'amministratore' }, contenuto: html`` }));
+  assert.match(p, /href="\/impostazioni"/);
+  assert.doesNotMatch(p, /sola lettura/);
+});
+
+test('stipendi e buste paga: amministratore, contabilità, ufficio solo con il permesso; mai esterno e produzione', () => {
+  assert.equal(vedePaghe({ ruolo: 'amministratore' }), true);
+  assert.equal(vedePaghe({ ruolo: 'contabilita' }), true);
+  assert.equal(vedePaghe({ ruolo: 'ufficio', paghe: false }), false);
+  assert.equal(vedePaghe({ ruolo: 'ufficio', paghe: true }), true);
+  assert.equal(vedePaghe({ ruolo: 'esterno', paghe: true }), false);
+  assert.equal(vedePaghe({ ruolo: 'produzione', paghe: true }), false);
+  assert.equal(vedePaghe(null), false);
+  // la contabilità legge le buste paga e può solo aprirle con la password e richiuderle
+  assert.equal(contabilitaPuo('GET', '/dipendenti/riservata'), true);
+  assert.equal(contabilitaPuo('GET', '/dipendenti/riservata/cedolini/4'), true);
+  assert.equal(contabilitaPuo('POST', '/dipendenti/riservata/sblocca'), true);
+  assert.equal(contabilitaPuo('POST', '/dipendenti/riservata/chiudi'), true);
+  assert.equal(contabilitaPuo('POST', '/dipendenti/riservata/permessi'), false);
+  assert.equal(contabilitaPuo('POST', '/dipendenti/riservata/documenti/3/elimina'), false);
+  assert.equal(contabilitaPuo('GET', '/dipendenti'), false);
+  assert.equal(contabilitaPuo('GET', '/dipendenti/riservatafalsa'), false);
+  assert.equal(contabilitaPuo('GET', '/amministrazione/analisi/cassa'), true);
+  // l'esterno non vede la previsione di cassa (da lì si ricavano gli stipendi)
+  assert.equal(esternoPuo('GET', '/amministrazione/analisi/cassa'), false);
+  assert.equal(esternoPuo('GET', '/amministrazione/analisi/cassa.xlsx'), false);
+  assert.equal(esternoPuo('GET', '/amministrazione/analisi'), true);
+});
+
+test('Impostazioni → Utenti: solo l\'amministratore sceglie i ruoli e tocca gli amministratori; resta sempre un amministratore', () => {
+  const base = { altriAmministratoriAttivi: 1 };
+  // l'ufficio aggiunge solo utenti della produzione
+  assert.equal(controlloUtente({ ...base, chi: 'ufficio', nuovo: true, ruoloNuovo: 'produzione' }), null);
+  assert.match(controlloUtente({ ...base, chi: 'ufficio', nuovo: true, ruoloNuovo: 'contabilita' })!, /Solo l'amministratore/);
+  assert.match(controlloUtente({ ...base, chi: 'ufficio', nuovo: true, ruoloNuovo: 'amministratore' })!, /Solo l'amministratore/);
+  assert.equal(controlloUtente({ ...base, chi: 'amministratore', nuovo: true, ruoloNuovo: 'contabilita' }), null);
+  // l'ufficio corregge nome/email/password ma non cambia ruoli e non tocca gli amministratori
+  assert.equal(controlloUtente({ ...base, chi: 'ufficio', ruoloAttuale: 'produzione', ruoloNuovo: 'produzione', attivoNuovo: true }), null);
+  assert.match(controlloUtente({ ...base, chi: 'ufficio', ruoloAttuale: 'produzione', ruoloNuovo: 'ufficio' })!, /cambiare il ruolo/);
+  assert.match(controlloUtente({ ...base, chi: 'ufficio', ruoloAttuale: 'amministratore', ruoloNuovo: 'amministratore' })!, /utente amministratore/);
+  // l'amministratore cambia i ruoli, ma non il proprio e non toglie l'ultimo amministratore
+  assert.equal(controlloUtente({ ...base, chi: 'amministratore', ruoloAttuale: 'ufficio', ruoloNuovo: 'contabilita', attivoNuovo: true }), null);
+  assert.equal(controlloUtente({ ...base, chi: 'amministratore', ruoloAttuale: 'ufficio', ruoloNuovo: 'amministratore', attivoNuovo: true }), null);
+  assert.match(controlloUtente({ ...base, chi: 'amministratore', ruoloAttuale: 'amministratore', ruoloNuovo: 'ufficio', stessoUtente: true })!, /te stesso/);
+  assert.match(controlloUtente({ ...base, chi: 'amministratore', ruoloAttuale: 'amministratore', ruoloNuovo: 'amministratore', attivoNuovo: false, stessoUtente: true })!, /te stesso/);
+  assert.equal(controlloUtente({ ...base, chi: 'amministratore', ruoloAttuale: 'amministratore', ruoloNuovo: 'ufficio', attivoNuovo: true }), null);
+  assert.match(controlloUtente({ chi: 'amministratore', ruoloAttuale: 'amministratore', ruoloNuovo: 'ufficio', attivoNuovo: true, altriAmministratoriAttivi: 0 })!, /almeno un amministratore/);
+  // eliminare
+  assert.equal(controlloEliminaUtente({ chi: 'ufficio', ruoloBersaglio: 'produzione', altriAmministratoriAttivi: 1 }), null);
+  assert.match(controlloEliminaUtente({ chi: 'ufficio', ruoloBersaglio: 'amministratore', altriAmministratoriAttivi: 1 })!, /Solo l'amministratore/);
+  assert.match(controlloEliminaUtente({ chi: 'amministratore', ruoloBersaglio: 'amministratore', altriAmministratoriAttivi: 0 })!, /almeno un amministratore/);
 });

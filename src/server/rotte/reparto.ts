@@ -10,6 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { q, q1, transazione } from '../db.js';
+import { eUfficio } from '../../engine/ruoli.js';
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import { AIUTO_TEMPO, secondiDaTempo } from '../../engine/tempi-scritti.js';
 import { caricaOperatori, fasiCommessa, leggiCommessa, numeriFasi } from '../commesse-servizio.js';
@@ -116,7 +117,7 @@ export function rotteReparto() {
 
   // la pagina di chiusura si apre anche dall'ufficio (per chiudere fasi dimenticate)
   const operatoreOUfficio = (req: Request, res: Response, next: NextFunction) =>
-    req.session.operatore || req.session.utente?.ruolo === 'ufficio' ? next() : res.redirect('/r/accesso?torna=' + encodeURIComponent(req.originalUrl));
+    req.session.operatore || eUfficio(req.session.utente?.ruolo) ? next() : res.redirect('/r/accesso?torna=' + encodeURIComponent(req.originalUrl));
   const soloOperatore = (req: Request, res: Response, next: NextFunction) =>
     req.session.operatore ? next() : res.redirect('/r/accesso?torna=' + encodeURIComponent(req.originalUrl));
 
@@ -124,7 +125,7 @@ export function rotteReparto() {
   r.post('/chiudi/:id', operatoreOUfficio, async (req, res) => {
     const [f] = await fasiAperte({ id: Number(req.params.id) });
     if (!f) return res.redirect('/r?ok=' + encodeURIComponent('Fase già chiusa'));
-    if (req.session.utente?.ruolo !== 'ufficio' && f.sigla !== req.session.operatore?.sigla) return res.status(403).send('Fase di un altro operatore');
+    if (!eUfficio(req.session.utente?.ruolo) && f.sigla !== req.session.operatore?.sigla) return res.status(403).send('Fase di un altro operatore');
     const adesso = partiRoma(new Date());
     const fine = oraValida(req.body.fine) ?? (f.data === adesso.data ? adesso.ora : null);
     if (!fine) return res.status(400).send(await paginaChiudi(req, 'Scrivi l\'ora in cui hai finito.'));
@@ -147,7 +148,7 @@ export function rotteReparto() {
   r.post('/chiudi/:id/annulla', operatoreOUfficio, async (req, res) => {
     const [f] = await fasiAperte({ id: Number(req.params.id) });
     if (!f) return res.redirect('/r?ok=' + encodeURIComponent('Fase già chiusa'));
-    if (req.session.utente?.ruolo !== 'ufficio' && f.sigla !== req.session.operatore?.sigla) return res.status(403).send('Fase di un altro operatore');
+    if (!eUfficio(req.session.utente?.ruolo) && f.sigla !== req.session.operatore?.sigla) return res.status(403).send('Fase di un altro operatore');
     await q(`DELETE FROM rilevazioni WHERE id = $1 AND chiusa_il IS NULL`, [f.id]);
     annullaFase(f.id);
     const msg = `Apertura della fase ${f.numero} annullata`;

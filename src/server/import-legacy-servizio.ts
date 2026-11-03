@@ -68,4 +68,4 @@ export async function importaDocumenti(docs: any[], utenteId: number, avanz?: Av
   return stato;
 }
 
-export const primoUtenteUfficio = () => q1<{ id: number }>(`SELECT id FROM utenti WHERE ruolo = 'ufficio' ORDER BY id LIMIT 1`);
+export const primoUtenteUfficio = () => q1<{ id: number }>(`SELECT id FROM utenti WHERE ruolo IN ('ufficio', 'amministratore') ORDER BY id LIMIT 1`);

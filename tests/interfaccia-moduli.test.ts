@@ -72,6 +72,11 @@ test('numeri e date: lo script converte il punto in virgola solo nei decimali se
   const js = readFileSync('public/formati.js', 'utf8');
   assert.match(js, /inputmode.*decimal/);
   assert.match(js, /\^-\?\\d\+\\\.\\d\+\$/, 'solo numeri come 12.5, mai 1.000');
+  // punto delle migliaia (Adriano 3/11/2026): "1.800" = 1800, mai 1,8; "0.125" resta decimale
+  const migliaia = new RegExp(/var MIGLIAIA = \/(.+)\/;/.exec(js)![1]);
+  for (const v of ['1.800', '12.500', '1.234.567', '-1.800']) assert.ok(migliaia.test(v), v);
+  for (const v of ['0.125', '12.5', '1.80', '1.8000', '1800']) assert.ok(!migliaia.test(v), v);
+  assert.ok(js.indexOf('MIGLIAIA.test(v)') < js.indexOf("v.replace('.', ',')"), 'prima si controllano le migliaia');
   assert.match(js, /type="date"/);
   assert.match(js, /navigator\.language/);
   // nel portale non si usano caselle type="number" (il browser le mostra col punto): tutte inputmode="decimal"

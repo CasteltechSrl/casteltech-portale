@@ -77,6 +77,12 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Ordine a fornitore: P/N proposti dall'archivio Componenti mentre si scrive (`/anagrafiche/componenti-cerca`), stessa domanda per l'ultimo acquisto. Preventivi e
   Da acquisire avevano già il menu; autofatture escluse (righe del fornitore estero).
 
+- Ruoli e riservatezza (Adriano 3/11/2026; `engine/ruoli.ts`, migrazione 068, test in `tests/ruoli.test.ts`): ruolo **amministratore** (lo usa Adriano con
+  info@casteltech.net) = tutto quello che fa l'ufficio (`eUfficio(ruolo)`: usarlo al posto di `ruolo === 'ufficio'` in ogni controllo nuovo) + l'UNICO che sceglie
+  o cambia i ruoli in Impostazioni → Utenti (`controlloUtente`/`controlloEliminaUtente`: l'ufficio aggiunge solo Produzione, non tocca gli amministratori, nessuno
+  si cambia il ruolo, resta sempre un amministratore attivo). Primo amministratore all'avvio: l'utente di ADMIN_EMAIL se non ce n'è nessuno (`catalogo-db.ts`).
+  Stipendi, buste paga e previsione di cassa (da cui si ricavano gli stipendi) SOLO a chi `vedePaghe`: amministratore, contabilità, ufficio con `utenti.paghe`;
+  ruolo e permesso letti dal database. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
 - Email dagli indirizzi per funzione (Adriano 2/11/2026; `engine/mittenti-email.ts` `FUNZIONI_EMAIL`, `mittentePer(tipo)` in `server/gmail.ts`, test in `tests/mittenti-email.test.ts`):
   alias di info@ = amministrazione@ (DDT, fatture, NC, autofatture, solleciti), ordini@ (conferme d'ordine), preventivi@, acquisti@ (ordini a fornitore), produzione@.
   La delega resta su GMAIL_MITTENTE (info@); l'alias si usa nel From solo se è tra gli "Invia messaggio come" del Gmail di info@ (letti con gmail.readonly,
@@ -445,7 +451,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    scrive il messaggio sotto il campo e ci porta il cursore; password mai conservate; usato in Utenti, Fasi/Parametri/Voci, Clienti, Prodotti, attività CRM: un modulo
    nuovo che rifiuta un valore usa `conCampo`). Preventivo Semplice/Completo (`engine/preventivo-semplice.ts` `CAMPI_SEMPLICE` = quantità e costi che cambiano da una
    scheda all'altra, classe `campo-semplice`, pulsanti accanto a Salva, scelta in localStorage `preventivo-vista`, all'inizio Completo; i campi nascosti contano comunque).
-   Numeri e date (`public/formati.js`): nelle caselle `inputmode="decimal"` il punto diventa virgola uscendo (solo "12.5", mai "1.000"); browser non in italiano =
+   Numeri e date (`public/formati.js`): nelle caselle `inputmode="decimal"` il punto diventa virgola uscendo (solo "12.5"); punto delle migliaia
+   (Adriano 3/11/2026) "1.800" / "12.500.000" → 1800 (`MIGLIAIA`: non comincia per 0, quindi "0.125" resta 0,125); browser non in italiano =
    nota sotto la prima casella data; niente `type="number"` nel portale.
    ✅ Gruppo D delle proposte (Adriano 1/11/2026; `engine/reparto-oggi.ts`, test `tests/reparto-oggi.test.ts`): sul telefono `/r` "Le tue fasi di oggi" (righe `rilevazioni`
    dell'operatore di oggi, aperte prima; totale ore; "Riapri" = POST apri della stessa fase all'ora attuale) e "Le tue commesse degli ultimi giorni" (7 gg, senza QR);
@@ -538,6 +545,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    che sostituisce la stima del mese), IVA (vuoto = liquidazione del mese chiuso dai Registri IVA + media ultimi 3 mesi; scadenza di legge), altre 5 voci scritte.
    Saldo banca scritto a mano (impostazioni 'previsione_cassa'; la banca non è collegata). Banda ± sugli incassi = deviazione ritardo ÷ giorni medi fattura→incasso,
    max 50 % (30 % senza storico); punto più basso giorno per giorno; "Da sapere" (`rischiCassa`); Excel dei movimenti. Letta solo all'apertura (Neon).
+   Riservata (`vedeCassa` in `rotte/analisi.ts`, `PERCORSO_CASSA` fuori per l'esterno): solo chi `vedePaghe`; stipendi il 10 del mese (Adriano 3/11/2026).
    ✅ Spese, bollo, lettere d'intento (Adriano 31/10/2026, fase 1; `engine/fiscale.ts`, `rotte/fiscale.ts`, test `tests/fiscale.test.ts`): spese senza fattura elettronica
    (`/amministrazione/spese`: scontrini, affitto, polizze…, in `documenti_ricevuti` con elettronica=false, origine 'manuale', categoria = tipo; fuori dal registro IVA se
    senza IVA; si eliminano solo le manuali); bollo virtuale per trimestre (`/amministrazione/bollo`, `bolloPerTrimestre`: codici 2521–2524, 31/5, 30/9, 30/11, fine

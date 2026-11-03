@@ -3,7 +3,8 @@
  * Conti in `engine/analisi.ts`; qui le query (solo lettura, all'apertura della pagina: niente controlli periodici) e la pagina.
  */
 import { Router, type Request } from 'express';
-import { q } from '../db.js';
+import { q, q1 } from '../db.js';
+import { eUfficio, vedePaghe } from '../../engine/ruoli.js';
 import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione, graficoMesi } from './cruscotto-amministrazione.js';
@@ -57,7 +58,7 @@ async function caricaDati(anno: number, oggi: string) {
 function tastiAnalisi(attiva: 'andamento' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
-    <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">Previsione di cassa</a></nav>`;
+    <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
 
 const euroCent = (n: number) => `${num(n, 2)} €`;
@@ -68,7 +69,7 @@ const NOMI_TIPO: Record<Movimento['tipo'], string> = { incasso: 'Incasso', pagam
 
 function paginaCassa(req: Request, d: Awaited<ReturnType<typeof caricaPrevisione>>): Raw {
   const { previsione: p, impostazioni: i, auto } = d;
-  const sola = req.session.utente?.ruolo !== 'ufficio';
+  const sola = !eUfficio(req.session.utente?.ruolo);
   const ICONE = { critico: '●', attenzione: '●', nota: '●' };
   const LIVELLO = { critico: 'critico', attenzione: 'attenzione', nota: 'bene' };
   const righeFinestra = (codice: CodiceFinestra) => p.movimenti.filter(m => m.finestra === codice);
@@ -154,15 +155,34 @@ function paginaCassa(req: Request, d: Awaited<ReturnType<typeof caricaPrevisione
     <p class="nota">È una previsione calcolata sui documenti del portale, non un consiglio finanziario: per finanziamenti e scelte importanti sentite il commercialista.</p>`;
 }
 
+/**
+ * Previsione di cassa riservata (Adriano 3/11/2026): dai totali si ricava il netto degli stipendi, quindi la vede solo chi vede le paghe
+ * (amministratore, contabilità, ufficio con il permesso "buste paga"). Ruolo e permesso letti dal database, non dalla sessione.
+ */
+async function vedeCassa(req: Request): Promise<boolean> {
+  const u = await q1<{ ruolo: string; paghe: boolean }>(`SELECT ruolo, paghe FROM utenti WHERE id = $1 AND attivo`, [req.session.utente?.id ?? 0]);
+  return vedePaghe(u);
+}
+function cassaRiservata(req: Request): string {
+  return String(layout({ titolo: 'Previsione di cassa', utente: req.session.utente, attiva: 'amministrazione', contenuto: html`
+    <div class="intestazione-pagina"><h1>🔒 Previsione di cassa</h1></div>
+    <div class="non-stampare">${menuAmministrazione('analisi')}</div>
+    ${tastiAnalisi('cassa')}
+    <p class="avviso">Pagina riservata: dai totali si ricavano gli stipendi, quindi la vedono solo l'amministratore, la contabilità e chi ha il permesso
+      delle buste paga. Per il permesso chiedi all'amministratore.</p>` }));
+}
+
 export function rotteAnalisi() {
   const r = Router();
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
   r.get('/cassa', async (req: Request, res) => {
+    if (!(await vedeCassa(req))) return res.status(403).send(cassaRiservata(req));
     const d = await caricaPrevisione(oggiRoma());
     res.send(String(layout({ titolo: 'Previsione di cassa', utente: req.session.utente, attiva: 'amministrazione', contenuto: paginaCassa(req, d), script: 'stampa.js', largo: true })));
   });
   r.post('/cassa', async (req: Request, res) => {
+    if (!(await vedeCassa(req)) || !eUfficio(req.session.utente?.ruolo)) return res.status(403).send(cassaRiservata(req));
     const b = req.body ?? {};
     const altre = [0, 1, 2, 3, 4].map(n => ({ voce: b[`altra${n}_voce`], importo: b[`altra${n}_importo`], giorno: b[`altra${n}_giorno`] }));
     const i = leggiImpostazioniCassa({ ...b, altre, dataSaldo: b.dataSaldo || oggiRoma() });
@@ -170,7 +190,8 @@ export function rotteAnalisi() {
     await salvaImpostazioniCassa(i);
     res.redirect(`/amministrazione/analisi/cassa?msg=${encodeURIComponent('Salvato: previsione ricalcolata.')}`);
   });
-  r.get('/cassa.xlsx', async (_req: Request, res) => {
+  r.get('/cassa.xlsx', async (req: Request, res) => {
+    if (!(await vedeCassa(req))) return res.status(403).send(cassaRiservata(req));
     const { previsione: p } = await caricaPrevisione(oggiRoma());
     const dati = await excelSemplice('Previsione di cassa', [
       { header: 'Data attesa', key: 'data', width: 12, formato: 'data' }, { header: 'Finestra', key: 'finestra', width: 16 },

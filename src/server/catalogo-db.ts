@@ -66,10 +66,16 @@ export async function primoAvvio() {
     console.log('Catalogo iniziale caricato');
   }
   const email = process.env.ADMIN_EMAIL, pwd = process.env.ADMIN_PASSWORD;
-  const ufficio = await q1<{ n: number }>(`SELECT count(*)::int AS n FROM utenti WHERE ruolo = 'ufficio'`);
+  const ufficio = await q1<{ n: number }>(`SELECT count(*)::int AS n FROM utenti WHERE ruolo IN ('ufficio', 'amministratore')`);
   if (!ufficio?.n && email && pwd) {
-    await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, 'ufficio')`,
+    await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, 'amministratore')`,
       [process.env.ADMIN_NOME ?? 'Amministratore', email, await bcrypt.hash(pwd, 12)]);
-    console.log(`Creato utente ufficio ${email}`);
+    console.log(`Creato utente amministratore ${email}`);
+  }
+  // ruolo Amministratore (Adriano 3/11/2026): se non c'è ancora nessuno, lo diventa l'utente di ADMIN_EMAIL (solo lui poi cambia i ruoli)
+  const admin = await q1(`SELECT 1 FROM utenti WHERE ruolo = 'amministratore' AND attivo`);
+  if (!admin && email) {
+    const u = await q1<{ nome: string }>(`UPDATE utenti SET ruolo = 'amministratore' WHERE email = lower($1) AND attivo RETURNING nome`, [email]);
+    if (u) console.log(`${u.nome} (${email}) è ora amministratore`);
   }
 }

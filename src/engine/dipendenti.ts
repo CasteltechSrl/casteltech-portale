@@ -224,12 +224,7 @@ export function normalizzaF24Ia(x: any): F24Letto {
 export const MINUTI_SBLOCCO = 15;
 export const sbloccoValido = (sbloccataIl: number | undefined, ora: number) => !!sbloccataIl && ora - sbloccataIl < MINUTI_SBLOCCO * 60_000;
 
-/**
- * Chi può aprire l'area riservata: l'amministratore (l'utente con l'email di ADMIN_EMAIL su Render, cioè Adriano) e gli utenti
- * a cui lui ha dato il permesso. Tutti devono comunque scrivere la password delle buste paga.
- */
-export const puoAprireRiservata = (u: { email?: string | null; paghe?: boolean | null }, emailAmministratore: string | undefined) =>
-  !!u.paghe || (!!emailAmministratore && !!u.email && u.email.toLowerCase() === emailAmministratore.toLowerCase());
+// Chi può aprire l'area riservata: dal 3/11/2026 per ruolo, vedi `vedePaghe` in engine/ruoli.ts (amministratore, contabilità, ufficio con permesso).
 
 /** Password delle buste paga: almeno 8 caratteri, con almeno una cifra. */
 export function controllaPasswordPaghe(p: string): string | null {

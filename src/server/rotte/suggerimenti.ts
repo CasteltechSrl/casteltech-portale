@@ -44,7 +44,7 @@ export function rotteSuggerimenti() {
   const torna = (msg: string, dove = '') => `/suggerimenti${dove}?msg=${encodeURIComponent(msg)}`;
 
   // "Proposto da" = menu con gli utenti del portale; nel suggerimento nuovo è già scelto chi sta usando il portale (Federico, 2/11/2026)
-  const nomiUtenti = async () => (await q<{ nome: string }>(`SELECT nome FROM utenti WHERE attivo AND ruolo IN ('ufficio', 'produzione') ORDER BY nome`)).map(u => u.nome);
+  const nomiUtenti = async () => (await q<{ nome: string }>(`SELECT nome FROM utenti WHERE attivo AND ruolo IN ('amministratore', 'ufficio', 'produzione') ORDER BY nome`)).map(u => u.nome);
   const modulo = (s: Partial<Suggerimento>, azione: string, pulsante: string, utenti: string[], predefinito?: string | null) => {
     const scelto = s.proposto_da ?? predefinito ?? '';
     const nomi = elencoProponenti(utenti, scelto);

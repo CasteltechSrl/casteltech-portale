@@ -4,7 +4,7 @@ import { avvisoServizi } from '../stato-servizi.js';
 /** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
 export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
 
-import type { Ruolo } from '../../engine/ruoli.js';
+import { eUfficio, type Ruolo } from '../../engine/ruoli.js';
 
 export interface Utente { id: number; nome: string; ruolo: Ruolo }
 
@@ -40,6 +40,7 @@ export const MENU_CONTABILITA: [string, string][] = [
   ['Acquisti per mese', '/amministrazione/ricevuti/mesi'], ['Registri IVA', '/amministrazione/registri'], ['DDT da fatturare', '/amministrazione/differite'],
   ['Spese', '/amministrazione/spese'], ['Bollo', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'],
   ['VIES', '/amministrazione/vies'], ['Crediti', '/amministrazione/crediti'], ['Solleciti', '/amministrazione/solleciti'], ['Controlli', '/amministrazione/controlli'], ['Analisi', '/amministrazione/analisi'],
+  ['Previsione di cassa', '/amministrazione/analisi/cassa'], ['Buste paga', '/dipendenti/riservata'],
 ];
 
 export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
@@ -61,7 +62,7 @@ ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${MENU_CONTABILITA.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
-    ${(opz.utente.ruolo === 'ufficio' || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
+    ${(eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
       <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
     </div>`)}
@@ -71,7 +72,7 @@ ${opz.utente ? html`
     <div class="suggerimenti-ricerca" hidden></div>
   </form>`}
   <nav class="menu-destra">
-    ${opz.utente.ruolo === 'ufficio' ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
+    ${eUfficio(opz.utente.ruolo) ? html`${voce('/impostazioni', 'Impostazioni', 'impostazioni')}${voce('/suggerimenti', 'Suggerimenti', 'suggerimenti')}` : ''}
     ${opz.utente.ruolo === 'esterno' ? voce('/suggerimenti', 'Suggerimenti', 'suggerimenti') : ''}
     ${voce('/guida', 'Guida', 'guida')}
     ${opz.utente.ruolo === 'contabilita' || opz.utente.ruolo === 'esterno' ? html`<span class="etichetta">sola lettura</span>` : ''}
@@ -79,7 +80,7 @@ ${opz.utente ? html`
   <div class="utente" title="${opz.utente.nome}"><span class="nome-utente">${opz.utente.nome} · </span><form method="post" action="/esci" class="inline"><button class="link">Esci</button></form></div>
 </header>` : ''}
 <main class="${opz.utente ? (opz.largo ? 'largo' : '') : 'centrato'}">
-${opz.utente?.ruolo === 'ufficio' ? avvisoDeiServizi() : ''}
+${eUfficio(opz.utente?.ruolo) ? avvisoDeiServizi() : ''}
 ${opz.avviso ? html`<div class="avviso chiudibile">${opz.avviso}</div>` : ''}
 ${opz.contenuto}
 </main>

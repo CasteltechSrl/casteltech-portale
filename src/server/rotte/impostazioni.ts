@@ -31,7 +31,7 @@ import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
 import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
 import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
 import { rotteServizi } from './servizi.js';
-import { DESCRIZIONI_RUOLI, NOMI_RUOLI, RUOLI, ruoloDaModulo } from '../../engine/ruoli.js';
+import { controlloEliminaUtente, controlloUtente, DESCRIZIONI_RUOLI, NOMI_RUOLI, RUOLI, ruoloDaModulo, type Ruolo } from '../../engine/ruoli.js';
 
 /** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
 const CODICI_INIZIALI: Record<TabellaCatalogo, Set<string>> = {
@@ -550,18 +550,30 @@ export function rotteImpostazioni() {
     res.download(join(process.env.BACKUP_DIR, nome));
   });
 
+  /** Amministratori attivi diversi da questo utente: ne deve restare almeno uno. */
+  const altriAmministratori = async (id: number) =>
+    (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM utenti WHERE ruolo = 'amministratore' AND attivo AND id <> $1`, [id]))?.n ?? 0;
+
   // ── Utenti ──
   r.get('/utenti', async (req, res) => {
     const utenti = await q(`SELECT id, nome, email, ruolo, attivo, pin_hash IS NOT NULL AS ha_pin FROM utenti ORDER BY ruolo, nome`);
+    // solo l'amministratore sceglie i ruoli (Adriano 3/11/2026): per gli altri il ruolo si legge e basta, gli amministratori non si toccano
+    const admin = req.session.utente!.ruolo === 'amministratore';
+    const sceltaRuolo = (u: any, form: string) => admin
+      ? html`<select name="ruolo" form="${form}">${RUOLI.map(x => html`<option value="${x}" ${x === (u?.ruolo ?? 'produzione') ? raw('selected') : ''}>${NOMI_RUOLI[x]}</option>`)}</select>`
+      : html`<input type="hidden" name="ruolo" form="${form}" value="${u?.ruolo ?? 'produzione'}">${NOMI_RUOLI[(u?.ruolo ?? 'produzione') as Ruolo] ?? u?.ruolo}`;
     res.send(pag(req, 'Utenti', html`
       <p class="nota">${RUOLI.map((x, i) => html`${i ? ' · ' : ''}<strong>${NOMI_RUOLI[x]}</strong>: ${DESCRIZIONI_RUOLI[x]}`)}.
         La produzione entra anche da telefono con sigla e PIN (Impostazioni → Operatori).</p>
+      ${admin ? '' : html`<p class="avviso">Solo l'amministratore sceglie e cambia i ruoli e modifica gli utenti amministratori. Qui puoi aggiungere utenti della produzione
+        e correggere nome, email e password degli altri.</p>`}
       <table class="editor">
         <thead><tr><th>Nome</th><th>Email</th><th>Ruolo</th><th>Attivo</th><th>Nuova password</th><th></th></tr></thead>
-        <tbody>${utenti.map(u => html`<tr>
+        <tbody>${utenti.map(u => !admin && u.ruolo === 'amministratore' ? html`<tr><td>${u.nome}</td><td>${u.email ?? ''}</td><td>${NOMI_RUOLI.amministratore}</td>
+          <td>${u.attivo ? 'sì' : 'no'}</td><td colspan="2" class="tenue">lo modifica solo l'amministratore</td></tr>` : html`<tr>
           <td><input name="nome" value="${u.nome}" form="u-${u.id}"></td>
           <td><input name="email" value="${u.email ?? ''}" form="u-${u.id}" type="email"></td>
-          <td><select name="ruolo" form="u-${u.id}">${RUOLI.map(x => html`<option value="${x}" ${x === u.ruolo ? raw('selected') : ''}>${NOMI_RUOLI[x]}</option>`)}</select></td>
+          <td>${sceltaRuolo(u, `u-${u.id}`)}</td>
           <td><input type="checkbox" name="attivo" form="u-${u.id}" ${u.attivo ? raw('checked') : ''}></td>
           <td><input name="password" type="password" form="u-${u.id}" placeholder="lascia vuoto per non cambiarla" autocomplete="new-password"></td>
           <td class="nowrap"><form method="post" action="/impostazioni/utenti/${u.id}" id="u-${u.id}"><button>Salva</button></form>
@@ -570,7 +582,7 @@ export function rotteImpostazioni() {
           <tr class="nuova-riga">
             <td><input name="nome" form="u-nuovo" required placeholder="Nome e cognome"></td>
             <td><input name="email" form="u-nuovo" type="email" required></td>
-            <td><select name="ruolo" form="u-nuovo">${RUOLI.map(x => html`<option value="${x}" ${x === 'produzione' ? raw('selected') : ''}>${NOMI_RUOLI[x]}</option>`)}</select></td>
+            <td>${sceltaRuolo(null, 'u-nuovo')}</td>
             <td></td>
             <td><input name="password" type="password" form="u-nuovo" required minlength="10" autocomplete="new-password" placeholder="almeno 10 caratteri"></td>
             <td><form method="post" action="/impostazioni/utenti" id="u-nuovo"><button class="primario">Aggiungi</button></form></td>
@@ -580,6 +592,8 @@ export function rotteImpostazioni() {
   r.post('/utenti', async (req, res) => {
     const pwd = String(req.body.password ?? '');
     if (pwd.length < 10) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'), 'password', 'u-nuovo'));
+    const errore = controlloUtente({ chi: req.session.utente!.ruolo, nuovo: true, ruoloNuovo: ruoloDaModulo(req.body.ruolo), altriAmministratoriAttivi: 0 });
+    if (errore) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(errore));
     try {
       await q(`INSERT INTO utenti (nome, email, password_hash, ruolo) VALUES ($1, lower($2), $3, $4)`,
         [String(req.body.nome).trim(), String(req.body.email).trim(), await bcrypt.hash(pwd, 12), ruoloDaModulo(req.body.ruolo)]);
@@ -590,8 +604,10 @@ export function rotteImpostazioni() {
     const id = Number(req.params.id);
     const torna = (msg: string) => res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(msg));
     if (id === req.session.utente!.id) return torna('Non puoi eliminare te stesso.');
-    const u = await q1(`SELECT nome FROM utenti WHERE id = $1`, [id]);
+    const u = await q1(`SELECT nome, ruolo FROM utenti WHERE id = $1`, [id]);
     if (!u) return torna('Utente non trovato.');
+    const errore = controlloEliminaUtente({ chi: req.session.utente!.ruolo, ruoloBersaglio: u.ruolo, altriAmministratoriAttivi: await altriAmministratori(id) });
+    if (errore) return torna(errore);
     try {
       await q(`DELETE FROM utenti WHERE id = $1`, [id]);
     } catch (e: any) {
@@ -606,8 +622,11 @@ export function rotteImpostazioni() {
     const id = Number(req.params.id);
     const ruolo = ruoloDaModulo(req.body.ruolo);
     const attivo = req.body.attivo === 'on';
-    if (id === req.session.utente!.id && (!attivo || ruolo !== 'ufficio'))
-      return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Non puoi disattivare o declassare te stesso.'));
+    const attuale = await q1<{ ruolo: Ruolo }>(`SELECT ruolo FROM utenti WHERE id = $1`, [id]);
+    if (!attuale) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente non trovato.'));
+    const errore = controlloUtente({ chi: req.session.utente!.ruolo, ruoloAttuale: attuale.ruolo, ruoloNuovo: ruolo, attivoNuovo: attivo,
+      stessoUtente: id === req.session.utente!.id, altriAmministratoriAttivi: await altriAmministratori(id) });
+    if (errore) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(errore));
     await q(`UPDATE utenti SET nome = $2, email = lower(nullif($3, '')), ruolo = $4, attivo = $5 WHERE id = $1`,
       [id, String(req.body.nome).trim(), String(req.body.email ?? '').trim(), ruolo, attivo]);
     const pwd = String(req.body.password ?? '');

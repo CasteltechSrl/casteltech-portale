@@ -15,6 +15,11 @@ test('guida: argomenti con id unici, ogni area ha i suoi argomenti, pagine del p
   for (const a of ARGOMENTI_GUIDA) for (const [href] of a.pagine) assert.ok(sezioni.includes(href.split(/[/?]/)[1]), `pagina sconosciuta: ${href}`);
 });
 
+test('guida: ruoli e amministratore si trovano', () => {
+  assert.equal(primi('chi può cambiare i ruoli degli utenti')[0], 'utenti');
+  assert.equal(primi('amministratore')[0], 'utenti');
+});
+
 test('guida: radice delle parole italiane', () => {
   assert.equal(radice('ordine'), radice('ordini'));
   assert.equal(radice('ordinare'), radice('ordine'));
