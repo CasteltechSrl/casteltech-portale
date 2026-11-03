@@ -900,3 +900,4 @@ ul.elenco-trovati li.libero { color: #555; font-style: italic; }
 #materiali td.largo { min-width: 30rem; }
 #materiali td.largo input { width: 100%; }
 #materiali select { max-width: 13rem; }
+tr.da-controllare td { background: #fff2cc; }
