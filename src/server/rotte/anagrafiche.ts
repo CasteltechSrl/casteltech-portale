@@ -24,16 +24,18 @@ import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
 import { sezioneLettereIntento } from './fiscale.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
+import { aggiornaPrezzoMateriale, domandaPrezzoMateriale } from '../materiali-consumo-servizio.js';
 import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPrezzoDaDocumento, cercaComponentiPerOrdine, domandaPrezzoComponente,
   aggiornaAcquistoDaOrdine } from '../prezzi-servizio.js';
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
+import { rotteMateriali } from './materiali-consumo.js';
 
-export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti';
+export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti' | 'materiali';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti'],
-  ['componenti-clienti', 'Componenti clienti']];
+  ['componenti-clienti', 'Componenti clienti'], ['materiali', 'Materiali di consumo']];
 
 /** Pagina della sezione: tasti in alto (con quanti sono) e il contenuto della scheda scelta. */
 export type PaginaAnagrafiche = (req: Request, scheda: SchedaAnagrafiche, contenuto: Raw, avviso?: string, script?: string) => Promise<string>;
@@ -41,7 +43,8 @@ const paginaAnagrafiche: PaginaAnagrafiche = async (req, scheda, contenuto, avvi
   const n = (await q1<Record<SchedaAnagrafiche | 'senza_cliente', number>>(`SELECT (SELECT count(*)::int FROM clienti) AS clienti,
     (SELECT count(*)::int FROM prodotti WHERE cliente_id IS NULL) AS senza_cliente,
     (SELECT count(*)::int FROM fornitori_anagrafica) AS fornitori, (SELECT count(*)::int FROM prodotti) AS prodotti,
-    (SELECT count(*)::int FROM componenti) AS componenti, (SELECT count(*)::int FROM componenti_clienti) AS "componenti-clienti"`))!;
+    (SELECT count(*)::int FROM componenti) AS componenti, (SELECT count(*)::int FROM componenti_clienti) AS "componenti-clienti",
+    (SELECT count(*)::int FROM materiali_consumo) AS materiali`))!;
   const titolo = SCHEDE.find(([s]) => s === scheda)![1];
   return String(layout({ titolo, utente: req.session.utente, attiva: 'anagrafiche', avviso, script: ['ricerca.js', ...(script ? [script] : [])], contenuto: html`
     <h1>Anagrafiche</h1>
@@ -168,6 +171,8 @@ export function rotteAnagrafiche() {
     } catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
   });
   r.get('/componenti-cerca', async (req, res) => res.json(await cercaComponentiPerOrdine(String(req.query.q ?? ''))));
+  // ── Materiali di consumo (Adriano 3/11/2026): pagina, ricerca per le righe degli ordini a fornitore, aggiunta dalla riga ──
+  r.use('/materiali', rotteMateriali(paginaAnagrafiche));
   // righe del DDT (Adriano 2/11/2026): nostri componenti con codice gestionale e descrizione "P/N (codice produzione)"; componenti del cliente del DDT
   r.get('/componenti-ddt', async (req, res) => res.json(await cercaComponentiPerDdt(String(req.query.q ?? ''))));
   r.get('/componenti-clienti-cerca', async (req, res) => res.json(await cercaComponentiCliente(Number(req.query.cliente) || 0, String(req.query.q ?? ''))));
@@ -249,14 +254,19 @@ export function rotteAnagrafiche() {
     const errore = await eliminaComponenteCliente(Number(req.params.id));
     res.redirect(torna(errore ?? 'Componente eliminato.', '/componenti-clienti', `&cliente=${Number(req.query.cliente) || ''}`));
   });
-  r.get('/componenti-prezzo', async (req, res) =>
-    res.json({ domanda: await domandaPrezzoComponente(String(req.query.codice ?? ''), numeroQs(req.query.prezzo)) }));
+  // prezzo scritto nell'ordine a fornitore: prima i materiali di consumo (codici MC-…), poi i componenti
+  r.get('/componenti-prezzo', async (req, res) => {
+    const codice = String(req.query.codice ?? ''), prezzo = numeroQs(req.query.prezzo);
+    const materiale = await domandaPrezzoMateriale(codice, prezzo);
+    res.json({ domanda: materiale !== undefined ? materiale : await domandaPrezzoComponente(codice, prezzo) });
+  });
   r.post('/componenti-prezzo', async (req, res) => {
     const prezzo = numeroQs(req.body?.prezzo);
     if (!(prezzo >= 0)) return res.status(400).json({ errore: 'Prezzo non valido.' });
     try {
-      res.json({ messaggio: await aggiornaAcquistoDaOrdine(String(req.body?.codice ?? ''), prezzo, numeroQs(req.body?.quantita) || null,
-        String(req.body?.fornitore ?? '').trim() || null, String(req.body?.documento ?? '')) });
+      const a = [String(req.body?.codice ?? ''), prezzo, numeroQs(req.body?.quantita) || null, String(req.body?.fornitore ?? '').trim() || null,
+        String(req.body?.documento ?? '')] as const;
+      res.json({ messaggio: (await aggiornaPrezzoMateriale(...a)) ?? await aggiornaAcquistoDaOrdine(...a) });
     } catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
   });
 

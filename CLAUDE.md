@@ -50,6 +50,13 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   aggiunge e aggiorna, non toglie; CSV in Windows-1252 letto). DDT: ogni riga ha "Da" = prodotto / componente nostro (codice = gestionale, descrizione = "P/N (codice produzione)",
   ricerca su tutti e tre i codici) / componente cliente / libero (`documenti_righe.fonte`, `componente_id`, `componente_cliente_id`; `risolviFontiDdt` al salvataggio).
   "Libero" vale SOLO nei DDT. Ordini a fornitore: la ricerca dei P/N trova anche gestionale e produzione a metà codice (`cercaComponentiPerOrdine`).
+  Materiali di consumo (Adriano 3/11/2026; migrazione 065 `materiali_consumo`, `engine/materiali-consumo.ts`, `materiali-consumo-servizio.ts`, `rotte/materiali-consumo.ts`,
+  `public/articoli-ordine.js`, test in `tests/materiali-consumo.test.ts`): lamine, pasta saldante, barre/filo di stagno, Kapton, punte Weller (UN solo codice, modello
+  nella descrizione della riga), flussanti, pulizia, coating, imballaggio, ESD. Codici SOLO nostri `MC-<categoria>-<nnn>` dati dal portale (`prossimoCodice`), codici
+  del fornitore nella descrizione; elenco iniziale dagli acquisti 2022–26 delle fatture fornitori FIC, ultimi prezzi dal file `materiali_prezzi.json.gz` (Project Files →
+  materiali-consumo; 'manuale' non si tocca). Ordine a fornitore: nel Codice una parola ("lamina") → menu materiali + componenti (`/anagrafiche/materiali/cerca`),
+  descrizione sempre modificabile nella riga, in fondo "+ Nuovo materiale" e "Riga libera"; righe con codice fuori anagrafica → riquadro "Righe non in anagrafica"
+  con "Aggiungi ai materiali" (la riga prende il codice MC-…). Si elimina solo se in nessun ordine, altrimenti spunta "Attivo".
 - Prezzi in anagrafica (Adriano 31/10/2026; migrazione 051, `engine/prezzi-fic.ts`, `prezzi-servizio.ts`, test in `tests/prezzi-fic.test.ts`): Prodotti → colonna
   Prezzo € (vendita a scheda), Componenti → ultimo acquisto (prezzo, fornitore, data, pezzi). Da FIC con `tools/prezzi-da-fic.ts`: prodotto = il più recente tra
   ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice

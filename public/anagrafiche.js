@@ -100,3 +100,29 @@ confermaPrezzi?.addEventListener('click', () => inviaPrezzi(true));
   controlla.addEventListener('click', () => invia(false));
   conferma.addEventListener('click', () => invia(true));
 })();
+
+// Anagrafiche → Materiali di consumo: ultimi prezzi d'acquisto dal file preparato con Fatture in Cloud (anteprima, poi conferma)
+(() => {
+  const controlla = document.getElementById('carica-prezzi-materiali');
+  if (!controlla) return;
+  const conferma = document.getElementById('conferma-prezzi-materiali');
+  const out = document.getElementById('esito-prezzi-materiali');
+  async function invia(definitivo) {
+    const f = document.getElementById('file-prezzi-materiali').files[0];
+    if (!f) { out.textContent = 'Scegli prima il file.'; return; }
+    controlla.disabled = conferma.disabled = true;
+    out.textContent = definitivo ? 'Caricamento…' : 'Lettura del file…';
+    const res = await fetch('/anagrafiche/materiali/prezzi?conferma=' + (definitivo ? 1 : 0),
+      { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } }).catch(() => null);
+    const j = res ? await res.json().catch(() => ({})) : {};
+    controlla.disabled = conferma.disabled = false;
+    if (!res?.ok) { out.textContent = j.errore || 'Errore nel caricamento'; conferma.hidden = true; return; }
+    const testo = `${j.nelFile} prezzi nel file: ${j.aggiornati} da scrivere` + (j.manuali ? `, ${j.manuali} lasciati (scritti a mano)` : '')
+      + (j.nonTrovati?.length ? `, ${j.nonTrovati.length} codici non in anagrafica (${j.nonTrovati.slice(0, 5).join(', ')})` : '') + '.';
+    if (definitivo) { out.textContent = 'Fatto: ' + testo; conferma.hidden = true; setTimeout(() => location.reload(), 1200); return; }
+    out.textContent = testo;
+    conferma.hidden = !j.aggiornati;
+  }
+  controlla.addEventListener('click', () => invia(false));
+  conferma.addEventListener('click', () => invia(true));
+})();
