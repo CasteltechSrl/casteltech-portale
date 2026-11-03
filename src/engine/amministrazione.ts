@@ -4,6 +4,8 @@
  *
  * - Scadenze: data documento + giorni, poi fine mese se richiesto (come Fatture in Cloud:
  *   fattura del 09/10/2026 con 60 gg f.m. → 31/12/2026).
+ * - Pagamenti a rate (Adriano 3/11/2026): 30/60, 60/90, 30/60/90 = prima rata a "giorni", poi una ogni "ogni" giorni;
+ *   il totale si divide in parti uguali, i centesimi che avanzano vanno sull'ultima rata. Fine mese vale per ogni rata.
  * - Riepilogo IVA come nella fattura elettronica: un totale per aliquota/natura, imposta arrotondata al centesimo.
  * - Bollo da 2 € se gli importi senza IVA soggetti a bollo superano 77,47 €.
  * - Numerazione: il nuovo documento non può avere una data precedente all'ultimo della stessa serie, né un altro anno.
@@ -28,6 +30,33 @@ export function calcolaScadenza(dataDocumento: string, c: CondizionePagamento): 
   if (Number.isNaN(d.getTime())) throw new Error(`Data non valida: ${dataDocumento}`);
   d.setUTCDate(d.getUTCDate() + (Number(c.giorni) || 0));
   return (c.fine_mese ? fineMese(d) : d).toISOString().slice(0, 10);
+}
+
+/** Condizione con le rate: rate = quante (1 = pagamento unico), ogni = giorni tra una rata e l'altra (30). */
+export interface CondizioneRate extends CondizionePagamento { rate?: number | null; ogni?: number | null }
+
+/** Giorni di ogni rata: { giorni 30, rate 3, ogni 30 } → [30, 60, 90]. */
+export function giorniRate(c: CondizioneRate): number[] {
+  const n = Math.max(1, Math.trunc(Number(c.rate) || 1));
+  const primo = Number(c.giorni) || 0;
+  const ogni = Number(c.ogni) || 30;
+  return Array.from({ length: n }, (_, i) => primo + i * ogni);
+}
+
+/** Scritta delle rate: "30/60/90" (una sola rata: "30"). */
+export const scrittaRate = (c: CondizioneRate) => giorniRate(c).join('/');
+
+/**
+ * Scadenze di un importo: una per rata, importi uguali al centesimo, l'avanzo sull'ultima.
+ * Es. 1.000,00 € a 30/60/90 → 333,33 + 333,33 + 333,34.
+ */
+export function calcolaScadenze(dataDocumento: string, c: CondizioneRate, importo: number): { data: string; importo: number }[] {
+  const giorni = giorniRate(c);
+  const parte = arrotonda2(importo / giorni.length);
+  return giorni.map((g, i) => ({
+    data: calcolaScadenza(dataDocumento, { giorni: g, fine_mese: c.fine_mese }),
+    importo: i < giorni.length - 1 ? parte : arrotonda2(importo - parte * (giorni.length - 1)),
+  }));
 }
 
 export interface Aliquota { codice: string; percentuale: number; natura: string | null; riferimento_normativo?: string | null; soggetta_bollo: boolean }

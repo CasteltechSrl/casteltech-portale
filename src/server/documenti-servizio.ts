@@ -6,7 +6,7 @@
 import type pg from 'pg';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-servizio.js';
-import { calcolaScadenza, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
+import { calcolaScadenze, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
 import { risolviFontiDdt } from './componenti-clienti-servizio.js';
@@ -301,7 +301,7 @@ export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number>
 /** Tutto quello che serve per l'XML di un documento (bozza o emesso). */
 async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const query = (sql: string, p: unknown[]) => (c ? c.query(sql, p).then(r => r.rows) : q(sql, p));
-  const [d] = await query(`SELECT d.*, cp.giorni, cp.fine_mese, cp.modalita FROM documenti d
+  const [d] = await query(`SELECT d.*, cp.giorni, cp.fine_mese, cp.modalita, cp.rate, cp.ogni FROM documenti d
     LEFT JOIN condizioni_pagamento cp ON cp.codice = d.condizione_pagamento WHERE d.id = $1`, [id]);
   if (!d) throw new Error('Documento non trovato');
   const [cliente] = await query(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]);
@@ -321,7 +321,7 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   // split payment: il cliente paga imponibile + bollo, l'IVA la versa lui
   const daIncassare = importoDaIncassare(totali, !!cliente?.split_payment);
   const scadenze = d.condizione_pagamento && daIncassare > 0
-    ? [{ data: calcolaScadenza(d.data, { giorni: d.giorni, fine_mese: d.fine_mese }), importo: daIncassare, modalita: d.modalita }] : [];
+    ? calcolaScadenze(d.data, { giorni: d.giorni, fine_mese: d.fine_mese, rate: d.rate, ogni: d.ogni }, daIncassare).map(s => ({ ...s, modalita: d.modalita })) : [];
   const dataTesto = (v: unknown) => v == null ? null : typeof v === 'string' ? v.slice(0, 10) : new Date(v as Date).toLocaleDateString('sv-SE');
   const documento: DocumentoXml = {
     id: d.id, tipo: d.tipo, numero: numero ?? d.numero, sezionale: d.sezionale, data: d.data, causale: d.causale, riferimento_esterno: d.riferimento_esterno,

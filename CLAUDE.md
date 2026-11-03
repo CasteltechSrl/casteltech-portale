@@ -447,7 +447,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    chiave di prova; codice destinatario 7HD37X0 da registrare all'Agenzia quando la ricezione funziona; conservazione gratuita dell'Agenzia).
    ✅ Impostazioni → Amministrazione (`rotte/impostazioni-amministrazione.ts`, `engine/amministrazione.ts`, migrazione 032): dati dell'azienda,
    numerazioni per tipo/sezionale/anno (numero dato solo all'emissione, `assegnaNumero` in transazione, date in ordine; valori 2026 da FIC
-   da riallineare il giorno del passaggio), aliquote/nature IVA con bollo 2 € oltre 77,47 €, condizioni di pagamento (giorni poi fine mese),
+   da riallineare il giorno del passaggio), aliquote/nature IVA con bollo 2 € oltre 77,47 €, condizioni di pagamento (giorni poi fine mese; a rate dal 3/11/2026, migrazione 064: `rate` + `ogni`,
+   RiBa e bonifico 30/60, 60/90, 30/60/90 f.m., totale diviso in parti uguali con l'avanzo sull'ultima, `calcolaScadenze`, test in `tests/pagamenti-rate.test.ts`),
    dati fiscali dei clienti, lettere d'intento, tabelle `documenti` / `documenti_righe` / `documenti_scadenze` per tutti i documenti.
    ✅ Da Fatture in Cloud (Impostazioni → Amministrazione, file preparati fuori dal repository, anteprima poi conferma, ricaricabili):
    dati fiscali dei clienti già in anagrafica (`caricaClientiFiscali`) e storico dal 2025 (`caricaStoricoFic`, migrazione 033): fatture, note di
