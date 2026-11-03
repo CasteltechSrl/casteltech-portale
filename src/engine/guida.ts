@@ -919,10 +919,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'impostazioni-amministrazione', area: 'amministrazione', titolo: 'Numerazioni, IVA, pagamenti e dati fiscali dei clienti',
-    parole: 'numerazione sezionale aliquote iva natura bollo condizioni pagamento giorni fine mese dati fiscali sdi pec lettera intento azienda',
+    parole: 'numerazione sezionale aliquote iva natura bollo condizioni pagamento giorni fine mese rate rateale rateizzato scaglioni 30/60/90 riba bonifico dati fiscali sdi pec lettera intento azienda',
     testo: [
       'I dati fiscali di un cliente (indirizzo, P.IVA, codice SDI, PEC, pubblica amministrazione, split payment, IVA e pagamento predefiniti) si correggono da Anagrafiche → Clienti → "Dati fiscali".',
       'In Impostazioni → Amministrazione: dati dell\'azienda, ultimo numero usato per ogni serie (il numero si assegna solo all\'emissione), aliquote e nature IVA (bollo di 2 € oltre 77,47 €), condizioni di pagamento (es. 60 gg fine mese) e dati fiscali dei clienti con le lettere d\'intento.',
+      'Pagamenti a rate: ci sono già RiBa e bonifico 30/60, 60/90 e 30/60/90 giorni fine mese. Il totale della fattura si divide in 2 o 3 rate uguali (i centesimi che avanzano vanno sull\'ultima), ognuna con la sua scadenza: nell\'XML, nella copia di cortesia e tra gli incassi da segnare. Le stesse condizioni si scelgono per i clienti (Dati fiscali) e negli ordini a fornitore.',
+      'Per una rateizzazione diversa aggiungi una riga in Condizioni di pagamento: "Giorni" = prima rata, "Rate" = quante, "Ogni" = giorni tra una rata e l\'altra (es. 30/60/90 = giorni 30, rate 3, ogni 30). Senza la spunta "Fine mese" le scadenze sono a data fattura.',
     ],
     pagine: [['/impostazioni/amministrazione', 'Impostazioni → Amministrazione']],
   },

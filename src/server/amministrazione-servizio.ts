@@ -28,7 +28,7 @@ export async function caricaAliquote(soloAttive = false): Promise<(Aliquota & { 
 }
 
 export const caricaCondizioniPagamento = (soloAttive = false) =>
-  q<{ codice: string; descrizione: string; modalita: string; giorni: number; fine_mese: boolean; ordine: number; attiva: boolean }>(
+  q<{ codice: string; descrizione: string; modalita: string; giorni: number; fine_mese: boolean; rate: number; ogni: number; ordine: number; attiva: boolean }>(
     `SELECT * FROM condizioni_pagamento ${soloAttive ? 'WHERE attiva' : ''} ORDER BY ordine, codice`);
 
 export const caricaNumerazioni = () =>

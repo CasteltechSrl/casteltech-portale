@@ -7,7 +7,7 @@ import express, { Router, type Request } from 'express';
 import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
-import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, type CampoAzienda } from '../../engine/amministrazione.js';
+import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoAzienda } from '../../engine/amministrazione.js';
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
@@ -120,14 +120,18 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
 
       <h2 id="pagamenti">Condizioni di pagamento</h2>
       <p class="nota">Scadenza = data del documento + giorni, poi fine mese se spuntato (es. fattura del 09/10 a 60 gg f.m. → 31/12).
-        La condizione di ogni cliente si sceglie nella sua anagrafica.</p>
+        A rate: "Rate" = quante, "Ogni" = giorni tra una rata e l'altra; il totale si divide in parti uguali (centesimi in più sull'ultima).
+        Es. 30/60/90 = giorni 30, rate 3, ogni 30; 60/90 = giorni 60, rate 2, ogni 30.
+        La condizione di ogni cliente si sceglie nella sua anagrafica; negli ordini a fornitore si sceglie nell'ordine.</p>
       <div class="tabella-scorre"><table class="editor">
-        <thead><tr><th>Codice</th><th>Descrizione</th><th>Modalità</th><th>Giorni</th><th>Fine mese</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
+        <thead><tr><th>Codice</th><th>Descrizione</th><th>Modalità</th><th>Giorni</th><th>Rate</th><th>Ogni (gg)</th><th>Fine mese</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
         <tbody>${condizioni.map(c => { const id = `f-pag-${c.codice}`; return html`<tr>
           <td><code>${c.codice}</code></td>
           <td class="largo"><input name="descrizione" form="${id}" value="${c.descrizione}"></td>
           <td>${scelta('modalita', MODALITA, c.modalita, id)}</td>
           <td><input name="giorni" form="${id}" value="${c.giorni}" inputmode="numeric" class="corto"></td>
+          <td><input name="rate" form="${id}" value="${c.rate}" inputmode="numeric" class="corto" title="Scadenze: ${scrittaRate(c)}"></td>
+          <td><input name="ogni" form="${id}" value="${c.ogni}" inputmode="numeric" class="corto"></td>
           <td><input type="checkbox" name="fine_mese" form="${id}" ${c.fine_mese ? raw('checked') : ''}></td>
           <td><input name="ordine" form="${id}" value="${c.ordine}" inputmode="numeric" class="corto"></td>
           <td><input type="checkbox" name="attiva" form="${id}" ${c.attiva ? raw('checked') : ''}></td>
@@ -137,6 +141,8 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
           <td class="largo"><input name="descrizione" form="f-pag-nuova"></td>
           <td>${scelta('modalita', MODALITA, 'MP05', 'f-pag-nuova')}</td>
           <td><input name="giorni" form="f-pag-nuova" value="0" inputmode="numeric" class="corto"></td>
+          <td><input name="rate" form="f-pag-nuova" value="1" inputmode="numeric" class="corto"></td>
+          <td><input name="ogni" form="f-pag-nuova" value="30" inputmode="numeric" class="corto"></td>
           <td><input type="checkbox" name="fine_mese" form="f-pag-nuova"></td>
           <td><input name="ordine" form="f-pag-nuova" inputmode="numeric" class="corto"></td>
           <td><input type="checkbox" name="attiva" form="f-pag-nuova" checked></td>
@@ -255,14 +261,18 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   const valoriPagamento = (b: any) => {
     const giorni = numero(b.giorni || 0);
     if (!Number.isInteger(giorni) || giorni < 0 || giorni > 365) return { errore: 'Giorni non validi (da 0 a 365).' };
+    const rate = numero(b.rate || 1);
+    if (!Number.isInteger(rate) || rate < 1 || rate > 12) return { errore: 'Rate non valide (da 1 a 12).' };
+    const ogni = numero(b.ogni || 30);
+    if (!Number.isInteger(ogni) || ogni < 1 || ogni > 365) return { errore: 'Giorni tra le rate non validi (da 1 a 365).' };
     const modalita = String(b.modalita ?? 'MP05');
     if (!(modalita in MODALITA)) return { errore: 'Modalità non valida.' };
-    return { v: [String(b.descrizione ?? '').trim(), modalita, giorni, spunta(b.fine_mese), Math.trunc(numero(b.ordine || 0)) || 0, spunta(b.attiva)] };
+    return { v: [String(b.descrizione ?? '').trim(), modalita, giorni, spunta(b.fine_mese), Math.trunc(numero(b.ordine || 0)) || 0, spunta(b.attiva), rate, ogni] };
   };
   r.post('/pagamenti/:codice', async (req, res) => {
     const { v, errore } = valoriPagamento(req.body);
     if (errore) return res.redirect(torna(`${req.params.codice}: ${errore} Non salvato.`, '#pagamenti'));
-    await q(`UPDATE condizioni_pagamento SET descrizione = $2, modalita = $3, giorni = $4, fine_mese = $5, ordine = $6, attiva = $7 WHERE codice = $1`, [req.params.codice, ...v!]);
+    await q(`UPDATE condizioni_pagamento SET descrizione = $2, modalita = $3, giorni = $4, fine_mese = $5, ordine = $6, attiva = $7, rate = $8, ogni = $9 WHERE codice = $1`, [req.params.codice, ...v!]);
     res.redirect(torna(`${req.params.codice} salvata.`, '#pagamenti'));
   });
   r.post('/pagamenti', async (req, res) => {
@@ -272,7 +282,7 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
     const { v, errore } = valoriPagamento(req.body);
     if (errore) return res.redirect(torna(`${errore} Non aggiunta.`, '#pagamenti'));
     if (!v![0]) v![0] = codice;
-    await q(`INSERT INTO condizioni_pagamento (codice, descrizione, modalita, giorni, fine_mese, ordine, attiva) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [codice, ...v!]);
+    await q(`INSERT INTO condizioni_pagamento (codice, descrizione, modalita, giorni, fine_mese, ordine, attiva, rate, ogni) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [codice, ...v!]);
     res.redirect(torna(`${codice} aggiunta.`, '#pagamenti'));
   });
 
