@@ -18,8 +18,8 @@ import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
-import { prodottiPerCliente } from '../anagrafiche-servizio.js';
-import { numeroDa } from '../../engine/acquisizioni.js';
+import { aggiungiProdottoCliente, prodottiPerCliente } from '../anagrafiche-servizio.js';
+import { codiceProposto, numeroDa } from '../../engine/acquisizioni.js';
 import type { Utente } from '../views/layout.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -322,7 +322,10 @@ export function rotteOrdini() {
         <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Prezzo</th><th class="n">Fatturato</th>
           <th>Consegna richiesta</th><th>Arrivo materiale</th><th>Lavorazione</th><th>Ritardi (gg)</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th><th>Commessa</th><th>Note</th><th></th></tr></thead>
         <tbody>${righe.map(x => html`<tr class="${x.tipo === 'servizio' ? 'servizio' : ''}">
-          <td class="nowrap">${sceltaProdotto(`righe[r${x.id}][prodotto]`, x.prodottoId, x.codice)}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
+          <td class="nowrap">${sceltaProdotto(`righe[r${x.id}][prodotto]`, x.prodottoId, x.codice)}${!x.prodottoId && x.tipo !== 'servizio' && o.cliente_id ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
+            <label>Codice <input name="righe[r${x.id}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
+            <label>Descrizione <input name="righe[r${x.id}][np_descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo"></label>
+            <button formaction="/ordini/${o.id}/prodotto?riga=${x.id}" title="Va in Anagrafiche → Prodotti del cliente e si collega a questa riga">Aggiungi in anagrafica</button></details>` : ''}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
           <td><input name="righe[r${x.id}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo">${x.descrizioneCliente && x.descrizioneCliente !== x.descrizione ? html`<br><small class="nota">cliente: ${x.descrizioneCliente}</small>` : ''}</td>
           <td class="n">${x.consegne?.length ? num(x.quantita, 0) : html`<input name="righe[r${x.id}][quantita]" value="${numCampo(x.quantita, 3)}" inputmode="decimal" class="corto">`}</td>
           <td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
@@ -400,6 +403,25 @@ export function rotteOrdini() {
 
   r.post('/:id', async (req, res) => {
     const id = Number(req.params.id);
+    await salvaRigheOrdine(id, req.body);
+    res.redirect(`/ordini/${id}?salvato=1`);
+  });
+
+  // prodotto nuovo da una riga dell'ordine (Adriano 3/11/2026): va nell'anagrafica del cliente dell'ordine e si collega alla riga
+  r.post('/:id/prodotto', async (req, res) => {
+    const id = Number(req.params.id);
+    const o = await q1<{ cliente_id: number | null }>(`SELECT cliente_id FROM ordini WHERE id = $1`, [id]);
+    if (!o) return res.status(404).send('Ordine non trovato');
+    const riga = req.body?.righe?.[`r${Number(req.query.riga)}`];
+    const esito = riga ? await aggiungiProdottoCliente(o.cliente_id ?? 0, { codice: riga.np_codice, descrizione: riga.np_descrizione }) : { errore: 'Riga non trovata.' };
+    if ('id' in esito) riga.prodotto = String(esito.id);
+    await salvaRigheOrdine(id, req.body);
+    res.redirect(`/ordini/${id}?msg=${encodeURIComponent('id' in esito
+      ? `${esito.codice} ${esito.esisteva ? 'era già in anagrafica: collegato' : 'aggiunto in anagrafica e collegato'} alla riga.` : `Prodotto non aggiunto: ${esito.errore}`)}`);
+  });
+
+  async function salvaRigheOrdine(id: number, body: any) {
+    const req = { body };
     const dataO = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
     // chiavi "r<id>": con numeri piccoli il lettore del modulo creerebbe un elenco al posto delle righe per id
     for (const [chiave, x] of Object.entries<any>(req.body?.righe ?? {})) {
@@ -416,8 +438,7 @@ export function rotteOrdini() {
     const n = req.body?.nuova;
     if (n && (String(n.descrizione ?? '').trim() || Number(n.prodotto)) && (numeroDa(n.quantita) ?? 0) > 0) await aggiungiRiga(id, n);
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
-    res.redirect(`/ordini/${id}?salvato=1`);
-  });
+  }
 
   // ── Ordine consegnato ma non riconosciuto dai DDT (codici diversi, consegna senza DDT): l'ufficio lo chiude ──
   r.post('/:id/evaso', async (req, res) => {

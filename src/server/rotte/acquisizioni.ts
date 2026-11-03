@@ -8,8 +8,8 @@ import { aggiungiFile, conferma, elabora, salvaProposta, scarta, type PropostaDb
 import { iaConfigurata } from '../lettura-ordini-ia.js';
 import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { TIPI_ACQUISIZIONE, controlloTotali, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
-import { maiuscolo } from '../anagrafiche-servizio.js';
+import { TIPI_ACQUISIZIONE, codiceProposto, controlloTotali, dataDa, numeroDa, type TipoAcquisizione } from '../../engine/acquisizioni.js';
+import { aggiungiProdottoCliente, maiuscolo } from '../anagrafiche-servizio.js';
 import { pagina } from './ordini.js';
 import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta } from '../acquisizioni-servizio.js';
 import type { Request } from 'express';
@@ -204,7 +204,7 @@ export function rotteAcquisizioni() {
     const righe = [...(p?.righe ?? []), ...(modificabile ? [null, null] : [])];
     const conti = p ? controlloTotali(p.righe, p.totaleDocumento) : null;
     const righeSbagliate = new Set((conti?.avvisi ?? []).map(v => v.riga).filter(n => n != null));
-    const avviso = req.query.errore ? String(req.query.errore) : req.query.salvato ? 'Salvato' : undefined;
+    const avviso = req.query.errore ? String(req.query.errore) : req.query.msg ? String(req.query.msg) : req.query.salvato ? 'Salvato' : undefined;
     res.send(pagina(req.session.utente, a.nome_file, 'acquisire', html`
       <h2>${a.nome_file} <span class="stato acq-${a.stato}">${STATI[a.stato]}</span></h2>
       <dl class="dati-ordine">
@@ -235,7 +235,12 @@ export function rotteAcquisizioni() {
             <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}"></td>
             <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
             <td><select name="righe[r${i}][prodotto]"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: cerca dal codice' : '— cerca dal codice —'}</option>
-              ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</select></td>
+              ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</select>
+              ${x && !x.prodottoId && x.tipo !== 'servizio' && p.clienteId ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
+                <label>Codice <input name="righe[r${i}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
+                <label>Descrizione <input name="righe[r${i}][np_descrizione]" value="${x.descrizione}" class="maiuscolo lungo"></label>
+                <button formaction="/ordini/acquisire/${a.id}/prodotto?riga=${i}" title="Va in Anagrafiche → Prodotti del cliente scelto e si collega a questa riga">Aggiungi in anagrafica</button>
+              </details>` : ''}</td>
             <td><select name="righe[r${i}][tipo]">${[['scheda', 'schede'], ['servizio', 'servizio']].map(([v, t]) => html`<option value="${v}" ${(x?.tipo ?? 'scheda') === v ? raw('selected') : ''}>${t}</option>`)}</select></td>
             <td class="n"><input name="righe[r${i}][quantita]" value="${x ? numCampo(x.quantita, 3) : ''}" inputmode="decimal" class="corto"></td>
             <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto">${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
@@ -272,6 +277,21 @@ export function rotteAcquisizioni() {
     const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1`, [id]);
     if (a) await salvaProposta(id, propostaDa(req.body, a.proposta));
     res.redirect(`/ordini/acquisire/${id}?salvato=1`);
+  });
+
+  // prodotto nuovo dalla riga letta (Adriano 3/11/2026): va nell'anagrafica del cliente scelto e si collega alla riga; le altre correzioni si salvano
+  r.post('/:id/prodotto', async (req, res) => {
+    const id = Number(req.params.id);
+    const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1`, [id]);
+    if (!a) return res.status(404).send('Non trovato');
+    const riga = req.body?.righe?.[`r${Number(req.query.riga)}`];
+    const esito = riga ? await aggiungiProdottoCliente(Number(req.body?.cliente) || 0, { codice: riga.np_codice, descrizione: riga.np_descrizione })
+      : { errore: 'Riga non trovata.' };
+    if ('id' in esito) riga.prodotto = String(esito.id);
+    await salvaProposta(id, propostaDa(req.body, a.proposta));
+    res.redirect(`/ordini/acquisire/${id}?${'id' in esito
+      ? `salvato=1&msg=${encodeURIComponent(`${esito.codice} ${esito.esisteva ? 'era già in anagrafica: collegato' : 'aggiunto in anagrafica e collegato'} alla riga.`)}`
+      : `errore=${encodeURIComponent(`Prodotto non aggiunto: ${esito.errore}`)}`}`);
   });
 
   r.post('/:id/conferma', async (req, res) => {

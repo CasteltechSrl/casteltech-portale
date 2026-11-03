@@ -361,3 +361,19 @@ export function prodottoDaDescrizione<T extends { id: number; codice: string; de
   const migliori = lunghi.filter(p => comuni(p) === best);
   return migliori.length === 1 ? migliori[0] : null;
 }
+
+/**
+ * Codice da proporre per un prodotto nuovo nato da una riga d'ordine (Adriano 3/11/2026: "i nuovi codici, o come li gestisce
+ * il cliente, li scopriamo solo con l'ordine"). Il codice letto, se c'è; altrimenti il primo codice nella descrizione (lettere e
+ * cifre, es. M0929-C) più la versione se scritta "VERS. CRONOS" → "M0929-C CRONOS". Solo una proposta: l'ufficio la corregge.
+ */
+export function codiceProposto(codiceLetto: string | null | undefined, descrizione: string | null | undefined): string {
+  const letto = String(codiceLetto ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+  if (/[A-Z0-9]/.test(letto)) return letto;
+  const t = String(descrizione ?? '').toUpperCase();
+  const codice = t.split(/\s+/).map(p => p.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, ''))
+    .find(p => p.length >= 4 && /\d/.test(p) && /[A-Z]/.test(p) && /^[A-Z0-9][A-Z0-9._/-]*$/.test(p));
+  if (!codice) return '';
+  const versione = /(^|[^A-Z0-9])VERS(?:IONE)?\.?\s+([A-Z0-9][A-Z0-9-]*)/.exec(t)?.[2];
+  return versione ? `${codice} ${versione}` : codice;
+}
