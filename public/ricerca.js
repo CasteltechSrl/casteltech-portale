@@ -4,6 +4,7 @@
   const casella = document.querySelector('input[data-filtra]');
   if (!casella) return;
   const tabella = document.getElementById(casella.dataset.filtra);
+  if (!tabella) return;   // elenco vuoto: niente tabella
   const conta = document.getElementById(casella.dataset.conta);
   const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const compatto = s => s.replace(/[^a-z0-9]/g, '');

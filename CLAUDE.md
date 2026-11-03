@@ -98,6 +98,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Documenti emessi (Adriano 31/10/2026; regole in `engine/azioni-documenti.ts`, `azioni-documenti-servizio.ts`, test in `tests/azioni-documenti.test.ts`):
   pulsanti per tipo (fatture: Stampa, XML/zip, Excel, Segna incassate → pagina con data e modo, Duplica, Nota di credito, Elimina; NC; autofatture; DDT: Fattura i DDT
   dello stesso cliente, Annulla DDT); Elimina SOLO bozze senza numero, il resto si storna/annulla e il messaggio dice cosa non è stato toccato; niente spunte per Contabilità. Un elenco nuovo con azioni usa lo stesso schema.
+- Ordinare gli elenchi cliccando le colonne (Adriano 3/11/2026; `public/ordina-tabelle.js` in ogni pagina, stile `th.ordinabile` in `stile.css`, test in `tests/ordina-tabelle.test.ts`):
+  ogni `<table>` in `<main>` con `<thead>` si ordina da sola: clic = crescente, secondo = decrescente, terzo = ordine di partenza; date gg/mm/aaaa, numeri 61/2026,
+  importi all'italiana per valore, vuoti in fondo, scelta ricordata nel browser. Escluse da sole: intestazioni unite, righe di gruppo, caselle di un modulo che contiene
+  la tabella (righe dei documenti, rientro, fasi del preventivo); `data-ordina` / `data-non-ordinare` per forzare, `data-valore` sulla cella per il valore da usare.
+  Elenchi a pagine: il clic ordina la pagina; "Mostra tutte" (`?pagina=tutte` in `paginata`) mette tutto in una pagina. Una tabella nuova con `<thead>` è già ordinabile.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Sito casteltech.net (Adriano 2/11/2026): pagine statiche in `sito/pubblico` (Static Site `casteltech-sito` su Render, gratis; prima WordPress su Noamweb),
   vedi `sito/LEGGIMI.md`. Moduli Contatti/Preventivo → portale (`rotte/sito.ts`, `engine/sito.ts`, test in `tests/sito.test.ts`): email a info@ e pacchetto "SITO – AZIENDA"

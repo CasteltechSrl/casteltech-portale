@@ -81,6 +81,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cruscotto', 'Cruscotto generale']],
   },
   {
+    id: 'ordinare-elenchi', area: 'inizio', titolo: 'Mettere in ordine un elenco cliccando le colonne',
+    parole: 'ordinare ordinamento colonna colonne intestazione crescente decrescente alfabetico freccia mostra tutte',
+    testo: [
+      'In tutti gli elenchi (ordini, fatture, DDT, conferme, acquisti, preventivi, commesse, clienti, prodotti, CRM…) si può decidere l\'ordine delle righe cliccando il nome della colonna in alto: il primo clic ordina in crescente (A→Z, dalla data più vecchia, dal numero più piccolo), il secondo in decrescente, il terzo torna all\'ordine di partenza. La freccia ▲ o ▼ accanto al nome dice come è ordinato.',
+      'Le date, i numeri di documento (es. 61/2026) e gli importi in euro si ordinano per valore, non come testo; le celle vuote vanno sempre in fondo. L\'ordine scelto resta tornando sulla pagina, su quel computer.',
+      'Negli elenchi a pagine da 100 il clic ordina la pagina che vedi: per ordinare tutte le righe premi prima "Mostra tutte" in fondo all\'elenco. Le righe dei documenti in modifica (fattura, DDT, rientro) non si riordinano, perché lì l\'ordine delle righe conta.',
+    ],
+    passi: ['Apri l\'elenco (es. Ordini clienti).', 'Clicca "Cliente" in cima alla colonna: righe dalla A alla Z.', 'Clicca di nuovo: dalla Z alla A.'],
+    pagine: [['/ordini', 'Ordini clienti']],
+  },
+  {
     id: 'excel-elenchi', area: 'inizio', titolo: 'Ogni elenco in Excel e a pagine',
     parole: 'excel xlsx scaricare esportare esporta elenco tabella foglio pagine pagina successiva elenco lungo troppo lungo 100 righe filtro',
     testo: [

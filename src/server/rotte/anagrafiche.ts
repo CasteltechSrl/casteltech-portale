@@ -134,7 +134,7 @@ export function rotteAnagrafiche() {
         Il tasto <b>Elimina</b> compare solo sui clienti mai usati (preventivi, commesse, ordini): quelli inseriti per errore.</p>
       ${ricercaVeloce('tab-clienti', 'Cerca ragione sociale o partita IVA…', clienti.length)}
       <p class="nota"><a class="bottone" href="/anagrafiche/clienti.xlsx" title="Tutti i clienti con i dati fiscali in Excel">Excel</a></p>
-      <div class="tabella-scorre limitata"><table class="editor" id="tab-clienti">
+      <div class="tabella-scorre limitata"><table class="editor" id="tab-clienti" data-ordina>
         <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th class="n">Prodotti</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
           <tr class="nuova-riga">
@@ -303,7 +303,7 @@ export function rotteAnagrafiche() {
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length, String(req.query.q ?? ''))}
       <p class="nota"><a class="bottone" href="/anagrafiche/prodotti.xlsx${filtro > 0 ? `?cliente=${filtro}` : ''}" title="Prodotti e prezzi in Excel (del cliente scelto, o tutti)">Excel</a></p>
       <template id="modello-clienti">${opzClienti(null)}</template>
-      <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti">
+      <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti" data-ordina>
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>
           <th title="Facoltativi: prezzi diversi per quantità, es. 1-5=10; 6-20=8; 21+=7">Scaglioni di quantità</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
