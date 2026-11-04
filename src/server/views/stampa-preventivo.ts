@@ -10,7 +10,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, baseArrotondata, pareggiaSulPiuGrande, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -50,15 +50,18 @@ export function stampaPreventivo(o: {
   const numero = `${p.numero} del ${data(p.creato_il)}`;
   const salvatoIl = p.aggiornato_il ? new Date(p.aggiornato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' alle') : '';
   const qta = `${num(d.nSchede, 0)} pz`;
+  // prezzi a scheda per difetto all'euro intero (Adriano 4/11/2026): righe, una tantum e totale tornano con le cifre arrotondate
+  const b = baseArrotondata({ prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum, unaTantum: r.unaTantum, nSchede: d.nSchede });
+  const conUt = d.nSchede ? (b.lotto + b.unaTantum) / d.nSchede : b.prezzoScheda + b.unaTantum;
   const ut = righeUnaTantum(ris, { doppia: o.doppia, nLamine: o.nLamine });
+  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
   const essenziale = opz.versione === 'essenziale';
   // Essenziale: un solo prezzo; con la prima produzione comprende le una tantum (Adriano, 28/10/2026)
-  const prezzoUnico = essenziale && r.unaTantum > 0;
-  const totale = r.prezzoLottoConUnaTantum;
+  const prezzoUnico = essenziale && b.unaTantum > 0;
+  const totale = b.lotto + b.unaTantum;
   // ritocchi scritti dall'ufficio nel pannello (sconto, righe in più): cambiano solo gli importi stampati
   const rit = o.rit;
-  const conti = contiStampa({ prezzoScheda: prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, lotto: prezzoUnico ? totale : r.prezzoLotto,
-    unaTantum: prezzoUnico ? 0 : r.unaTantum, nSchede: d.nSchede }, rit);
+  const conti = contiStampa(prezzoUnico ? { prezzoScheda: conUt, lotto: totale, unaTantum: 0, nSchede: d.nSchede } : b, rit, true);
   const scontato = conti.sconto > 0 ? ' scontato' : '';
   // riquadro verde sotto le righe e sopra il totale: prezzo a scheda senza e con le una tantum (Adriano, 4/11/2026)
   const riquadro = prezziRiquadro({ prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede: d.nSchede,
@@ -86,26 +89,31 @@ export function stampaPreventivo(o: {
   let corpo: Raw;
   if (essenziale) {
     // sotto la descrizione solo la nota delle una tantum (Adriano, 28/10/2026: o il dettaglio con i prezzi o niente)
-    corpo = rigaProdotto(prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, prezzoUnico ? totale : r.prezzoLotto,
+    corpo = rigaProdotto(prezzoUnico ? conUt : b.prezzoScheda, prezzoUnico ? totale : b.lotto,
       prezzoUnico ? html`<div class="sotto">Comprensivo dei costi una tantum (programmazione e attrezzaggio)</div>` : VUOTO);
   } else if (opz.versione === 'dettaglio') {
-    corpo = html`${rigaProdotto(r.prezzoScheda, r.prezzoLotto)}
-      ${righeDettaglio(ris).map(x => html`<tr><td></td><td>${x.nome}${x.sotto ? html`<div class="sotto">${x.sotto}</div>` : ''}</td><td></td>
+    const dett = righeDettaglio(ris);
+    pareggiaSulPiuGrande(dett, x => x.lotto, (x, v) => { x.lotto = v; }, b.lotto);
+    pareggiaSulPiuGrande(dett, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
+    corpo = html`${rigaProdotto(b.prezzoScheda, b.lotto)}
+      ${dett.map(x => html`<tr><td></td><td>${x.nome}${x.sotto ? html`<div class="sotto">${x.sotto}</div>` : ''}</td><td></td>
         <td class="n">${euro(x.scheda)}</td><td class="n">${euro(x.lotto)}</td></tr>`)}`;
   } else {
-    const fasi = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0);
+    const fasi = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0).map(f => ({ ...f }));
     // energia insieme al materiale di consumo
-    const voci = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => (x.gruppo === 'ENERGIA' ? { ...x, gruppo: 'MATERIALE DI CONSUMO' } : x));
-    const gruppi = [...gruppiDi(fasi), ...gruppiDi(voci)];
-    corpo = html`${rigaProdotto(r.prezzoScheda, r.prezzoLotto)}
-      ${gruppi.map(({ g, righe }) => html`
-        <tr class="${opz.versione === 'fasi' ? 'area' : ''}"><td></td><td>${nomeGruppo(g)}</td><td></td><td class="n">${euro(somma(righe) / n)}</td><td class="n">${euro(somma(righe))}</td></tr>
+    const voci = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => ({ ...x, gruppo: x.gruppo === 'ENERGIA' ? 'MATERIALE DI CONSUMO' : x.gruppo }));
+    pareggiaSulPiuGrande<{ prezzo: number }>([...fasi, ...voci], x => x.prezzo, (x, v) => { x.prezzo = v; }, b.lotto);
+    const gruppi = [...gruppiDi(fasi), ...gruppiDi(voci)].map(x => ({ ...x, lotto: somma(x.righe), scheda: Math.round(somma(x.righe) / n * 100) / 100 }));
+    pareggiaSulPiuGrande(gruppi, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
+    corpo = html`${rigaProdotto(b.prezzoScheda, b.lotto)}
+      ${gruppi.map(({ g, righe, lotto, scheda }) => html`
+        <tr class="${opz.versione === 'fasi' ? 'area' : ''}"><td></td><td>${nomeGruppo(g)}</td><td></td><td class="n">${euro(scheda)}</td><td class="n">${euro(lotto)}</td></tr>
         ${opz.versione === 'fasi' ? righe.map(x => html`<tr class="fase"><td></td><td>${x.nome}</td><td></td><td></td><td class="n">${euro(x.prezzo)}</td></tr>`) : ''}`)}`;
   }
-  const rigaUnaTantum = !prezzoUnico && r.unaTantum > 0 ? html`
+  const rigaUnaTantum = !prezzoUnico && b.unaTantum > 0 ? html`
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
       <table class="ut">${ut.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</table></td>
-      <td class="n">1</td><td class="n">${euro(r.unaTantum)}</td><td class="n">${euro(r.unaTantum)}</td></tr>` : '';
+      <td class="n">1</td><td class="n">${euro(b.unaTantum)}</td><td class="n">${euro(b.unaTantum)}</td></tr>` : '';
   const righeAggiunte = html`${conti.righe.map(x => html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
       <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`)}
     ${conti.sconto > 0 ? html`<tr class="prodotto sconto"><td></td><td><b>${conti.etichettaSconto}</b></td><td></td><td></td><td class="n">− ${euro(conti.sconto)}</td></tr>` : ''}`;
