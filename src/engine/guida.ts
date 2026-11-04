@@ -1193,7 +1193,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo. Ruoli: Amministratore (tutto, più è l\'unico che sceglie i ruoli e vede stipendi, buste paga e previsione di cassa), Ufficio (tutto il resto), Produzione (solo tempi e note), Contabilità (sola lettura dell\'Amministrazione e delle buste paga), Esterno (vede tutto, non modifica nulla).',
       'Solo l\'amministratore sceglie o cambia il ruolo degli utenti e modifica gli utenti amministratori. Chi è nell\'ufficio può aggiungere utenti della produzione e correggere nome, email e password degli altri. Nessuno può cambiarsi il ruolo da solo e resta sempre almeno un amministratore attivo. Un ruolo cambiato vale dal prossimo accesso di quella persona.',
       'Chi ha già lavorato non si elimina: si toglie la spunta "Attivo". Togliendo "Attivo", cambiando il ruolo o la password, la persona esce subito da tutti i telefoni e computer dove era entrata (chi lascia l\'azienda non può più entrare, nemmeno con una pagina già aperta).',
-      'Password: almeno 10 caratteri e non facili da indovinare (niente soli numeri, sequenze di tasti, "password", "casteltech", il proprio nome o l\'email). Dopo 8 tentativi sbagliati dallo stesso posto, o 20 sulla stessa email, l\'accesso si blocca per qualche minuto.'],
+      'Password: almeno 10 caratteri e non facili da indovinare (niente soli numeri, sequenze di tasti, "password", "casteltech", il proprio nome o l\'email). Dopo 8 tentativi sbagliati dallo stesso posto, o 20 sulla stessa email, l\'accesso si blocca per qualche minuto.',
+      'Reparto: cambiando o togliendo il PIN di un operatore (Impostazioni → Operatori), o togliendolo dall\'elenco, il suo telefono esce subito e deve rientrare.'],
     pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
   },
   {
