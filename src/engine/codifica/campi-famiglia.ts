@@ -47,7 +47,7 @@ const ESEMPI: Record<string, Partial<Record<Attr, string>> & { caseTht?: string 
   QZ: { case: '3225', valore: '16MHZ', tolleranza: '20PPM' },
   OS: { case: '3225', valore: '25MHZ', tensione: '3V3' },
   RI: { valore: '8MHZ' },
-  CN: { tipo: tipi(CNT), passo: '2.54', poli: '10' },
+  CN: { tipo: 'RJ45, ' + tipi(CNT), passo: '2.54', poli: '10' },
   TI: { tipo: tipi(CNT), passo: '2.54', poli: '2' },
   IT: { tensione: '12V' },
   DW: { corrente: '25MA', tensione: '24V' },
@@ -55,6 +55,15 @@ const ESEMPI: Record<string, Partial<Record<Attr, string>> & { caseTht?: string 
   NT: { case: '0603', valore: '10K', tolleranza: '1' },
   BT: { tipo: tipi(TIPI_BATTERIE) },
   AN: { tipo: tipi(TIPI_ANTENNE, 4) },
+};
+
+/**
+ * Consiglio sotto i campi (Adriano 4/11/2026, RJ45 HR911105A in MI: "non riesce a trovare il codice gestionale"): in MI il gestionale vuole un case
+ * in tabella, che per un connettore THT non c'è; i connettori vanno in CN con Tipo, Passo e Poli.
+ */
+export const CONSIGLI: Record<string, string> = {
+  MI: 'Se è un connettore (RJ45, USB, morsetto, strip, presa…) scegli la famiglia CN · Connettori: servono Tipo (es. RJ45), Passo in mm e Poli. In MI il codice gestionale vuole un case in tabella (es. SOT-23, 0805): con "THT" non si calcola.',
+  IC: 'Per un integrato THT scrivi la custodia nel Case/Formato (es. DIP-8), non solo "THT".',
 };
 
 /** Esempio da mostrare nella casella (vuoto se non c'è un esempio sicuro). */
@@ -68,8 +77,8 @@ export function esempioCampo(famiglia: string | null | undefined, campo: Attr, t
 }
 
 /** Tutto quello che serve alla pagina: per famiglia i campi e gli esempi (SMD e THT), in un oggetto da mettere in data-campi. */
-export function mappaCampiFamiglie(): Record<string, { campi: Attr[]; esempi: Record<string, string>; esempiTht: Record<string, string> }> {
-  const out: Record<string, { campi: Attr[]; esempi: Record<string, string>; esempiTht: Record<string, string> }> = {};
+export function mappaCampiFamiglie(): Record<string, { campi: Attr[]; esempi: Record<string, string>; esempiTht: Record<string, string>; consiglio?: string }> {
+  const out: Record<string, { campi: Attr[]; esempi: Record<string, string>; esempiTht: Record<string, string>; consiglio?: string }> = {};
   for (const fam of Object.keys(FAMIGLIE)) {
     const campi = campiFamiglia(fam);
     const esempi: Record<string, string> = {}, esempiTht: Record<string, string> = {};
@@ -78,7 +87,7 @@ export function mappaCampiFamiglie(): Record<string, { campi: Attr[]; esempi: Re
       if (s) esempi[k] = s;
       if (t) esempiTht[k] = t;
     }
-    out[fam] = { campi, esempi, esempiTht };
+    out[fam] = CONSIGLI[fam] ? { campi, esempi, esempiTht, consiglio: CONSIGLI[fam] } : { campi, esempi, esempiTht };
   }
   return out;
 }
