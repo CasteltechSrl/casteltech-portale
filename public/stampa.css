@@ -121,6 +121,10 @@ table.righe-ddt td { border: 1px solid #000; padding: 1mm 1.5mm; font-size: 9pt;
 table.righe-ddt tr { break-inside: avoid; }
 table.righe-ddt .cod { width: 34mm; } table.righe-ddt .um { width: 12mm; text-align: center; } table.righe-ddt .q { width: 20mm; text-align: right; }
 .piede-ddt { break-inside: avoid; }
+/* Piede del DDT sempre in fondo alla pagina (public/piede-ddt.js, Adriano 4/11/2026): a schermo il foglio ha le misure della stampa
+   (A4 con i margini di @page, larghezza utile 194 mm) così le misure prese a schermo valgono anche sulla carta */
+.pagina.ddt-stampa:not(.fattura-stampa) { width: 210mm; padding: 7mm 8mm 8mm; min-height: 297mm; }
+@media print { .pagina.ddt-stampa:not(.fattura-stampa) { width: auto; padding: 0; min-height: 0; } }
 .piede-ddt .firma { height: 12mm; }
 .timbro-stampa { position: absolute; top: 45%; left: 0; right: 0; text-align: center; font-size: 60pt; font-weight: 700; color: rgba(200, 0, 0, .15);
   transform: rotate(-20deg); pointer-events: none; }
