@@ -22,6 +22,7 @@ import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
+import { righeNonQuotate } from '../engine/non-quotati.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
 export const ESITI = {
@@ -824,7 +825,8 @@ export function riepilogo(righe: RigaBom[], quantita: number[]): Riepilogo {
 export function costoMaterialiPer(righe: RigaBom[], schede: number, regole: RegoleScarto) {
   const copia: RigaBom[] = structuredClone(righe);
   calcolaAcquistiCon(copia, [schede], regole);
-  return riepilogo(copia, [schede]).perQuantita[0];
+  // componenti critici per queste schede: vanno nelle note del preventivo (Adriano 4/11/2026)
+  return { ...riepilogo(copia, [schede]).perQuantita[0], nonQuotati: righeNonQuotate(copia) };
 }
 
 /**

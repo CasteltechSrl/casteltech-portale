@@ -171,6 +171,16 @@
     esitoBom.textContent = `Per ${x.schede} schede: ${euro(x.totale)}, cioè ${euro(x.aScheda)} a scheda` +
       ` (prezzi del ${new Date(x.prezziDel).toLocaleDateString('it-IT')})` + (avvisi.length ? ' · ' + avvisi.join(' · ') : '');
     esitoBom.classList.toggle('negativo', avvisi.length > 0);
+    // componenti critici (non disponibili negli shop) nelle note del preventivo, una riga per componente (Adriano 4/11/2026):
+    // si tolgono solo le righe che finiscono con la frase e si rimettono quelle di adesso; il resto delle note non si tocca
+    const note = form.querySelector('[data-campo=note]');
+    if (note && Array.isArray(x.nonQuotati) && x.stato === 'pronta') {
+      const frase = 'componente non quotato perché attualmente non disponibile';
+      const altre = note.value.split('\n').filter(r => !r.trimEnd().toLowerCase().endsWith(frase));
+      while (altre.length && !altre[altre.length - 1].trim()) altre.pop();
+      const nuovo = [...altre, ...x.nonQuotati].join('\n');
+      if (nuovo !== note.value) note.value = nuovo;
+    }
     // problemi da risolvere: si va alla BOM quotata, che riporta qui al preventivo
     if (avvisi.length && id && x.stato === 'pronta') {
       const a = document.createElement('a');
