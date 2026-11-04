@@ -81,7 +81,8 @@ test('documenti emessi: "Già fatturato" solo sui DDT emessi non fatturati e non
 test('autofatture: Invia allo SdI solo emessi non ancora inviati; Elimina mai un documento emesso o inviato (Adriano 4/11/2026)', () => {
   const af = (x: Partial<DocumentoElenco>) => doc({ tipo: 'autofattura', ...x });
   assert.equal(motivoEscluso('invia', af({})), null);
-  assert.match(motivoEscluso('invia', af({ numero: null, stato: 'bozza' }))!, /bozza/);
+  assert.equal(motivoEscluso('invia', af({ numero: null, stato: 'bozza' })), null);   // si emette e parte
+  assert.match(motivoEscluso('invia', af({ numero: null, stato: 'bozza', origine: 'fic' }))!, /Fatture in Cloud/);
   assert.match(motivoEscluso('invia', af({ sdi_stato: 'caricato' }))!, /già stato inviato/);
   assert.match(motivoEscluso('invia', af({ stato: 'consegnato' }))!, /già stato inviato/);
   assert.match(motivoEscluso('invia', af({ origine: 'fic' }))!, /Fatture in Cloud/);
@@ -90,8 +91,8 @@ test('autofatture: Invia allo SdI solo emessi non ancora inviati; Elimina mai un
   assert.notEqual(motivoEscluso('elimina', af({ stato: 'inviato' })), null);
   assert.notEqual(motivoEscluso('elimina', af({ stato: 'consegnato', sdi_stato: 'Consegnato' })), null);
   assert.equal(motivoEscluso('elimina', af({ numero: null, stato: 'bozza' })), null);
-  const { si, no } = dividiPerAzione('invia', [af({ id: 1 }), af({ id: 2, numero: null, stato: 'bozza' })]);
-  assert.deepEqual(si.map(d => d.id), [1]);
+  const { si, no } = dividiPerAzione('invia', [af({ id: 1 }), af({ id: 2, numero: null, stato: 'bozza' }), af({ id: 3, stato: 'consegnato' })]);
+  assert.deepEqual(si.map(d => d.id), [1, 2]);
   assert.equal(no.length, 1);
   assert.ok(pulsantiDocumenti('autofattura').find(p => p.azione === 'invia')!.chiedi);
 });

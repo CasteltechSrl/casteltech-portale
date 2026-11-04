@@ -509,7 +509,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    (fornitore dal nome, numero senza segni, data) anche da file diverso (PDF + .eml) = quella arrivata dopo si scarta in `elabora`; nell'elenco "doppione" rosso,
    "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (POST `/amministrazione/fatture-estere/azioni`: "Prepara l'autofattura" = `confermaFatturaEstera` per ognuna, con gli errori
    nel messaggio; Elimina = scarta, non se l'autofattura è già preparata); "Invia allo SdI" con le spunte in Fatture, NC, Autofatture (`invia` in
-   `engine/azioni-documenti.ts`: solo emessi senza `sdi_stato`), il pulsante compare solo se nell'elenco c'è un documento da mandare (FIC = già inviati).
+   `engine/azioni-documenti.ts`: bozze del portale = `emettiDocumento` e poi invio; emessi senza `sdi_stato`), testo "Emetti e invia allo SdI", compare solo se nell'elenco
+   c'è un documento da mandare (FIC = già inviati). Nell'elenco i totali delle bozze si calcolano dalle righe con l'aliquota (in `documenti` arrivano solo all'emissione).
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).

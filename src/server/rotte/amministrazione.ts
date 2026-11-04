@@ -396,9 +396,16 @@ export function rotteAmministrazione() {
     const tipo = String(req.query.tipo ?? SCHEDE_DOCUMENTI[0].tipo);
     const anno = Number(req.query.anno) || new Date().getFullYear();
     const cerca = String(req.query.q ?? '').trim();
-    const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.imponibile, d.totale, d.fattura_id, d.sdi_stato,
+    // le bozze hanno gli importi solo all'emissione: nell'elenco si calcolano dalle righe (IVA dall'aliquota della riga)
+    const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.fattura_id, d.sdi_stato,
+        CASE WHEN d.stato = 'bozza' THEN coalesce(b.imponibile, 0) ELSE d.imponibile END AS imponibile,
+        CASE WHEN d.stato = 'bozza' THEN coalesce(b.totale, 0) ELSE d.totale END AS totale,
         coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
+      LEFT JOIN LATERAL (SELECT sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)) AS imponibile,
+          sum(round(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2) * (1 + coalesce(a.percentuale, 0) / 100), 2)) AS totale
+        FROM documenti_righe r LEFT JOIN aliquote_iva a ON a.codice = r.aliquota_iva
+        WHERE r.documento_id = d.id AND d.stato = 'bozza' AND NOT r.solo_descrizione) b ON true
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
         AND ($3 = '' OR coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
       ORDER BY d.numero IS NOT NULL, d.data DESC, d.numero DESC NULLS FIRST`, [tipo, anno, cerca]);
@@ -473,9 +480,16 @@ export function rotteAmministrazione() {
         }
         case 'invia': {
           // uno per volta, come il pulsante "Invia allo SdI" della pagina del documento (Adriano 4/11/2026)
+          // le bozze prima si emettono (numero, XML): se l'emissione ha errori la bozza resta e non parte
           let n = 0; const errori: string[] = [];
           for (const d of si) {
-            try { await inviaDocumento(d.id, utente); n++; } catch (e: any) { errori.push(`${d.etichetta}: ${e?.message ?? e}`); }
+            let nome = d.etichetta;
+            if (d.stato === 'bozza') {
+              const em = await emettiDocumento(d.id);
+              if ('errori' in em) { errori.push(`${d.etichetta} (${d.intestatario ?? ''}) non emessa: ${em.errori.join(' ')}`); continue; }
+              nome = `n. ${em.numero}`;
+            }
+            try { await inviaDocumento(d.id, utente); n++; } catch (e: any) { errori.push(`${nome}: emesso ma non inviato: ${e?.message ?? e}`); }
           }
           return torna(`${n === 1 ? '1 documento inviato allo SdI' : `${n} documenti inviati allo SdI`}${ambienteAttuale() === 'prova' ? ' in PROVA (chiave di prova: non arrivano davvero allo SdI)' : ": l'esito arriva di solito in pochi minuti"}. ${[esclusi, ...errori].filter(Boolean).join(' ')}`.trim());
         }
