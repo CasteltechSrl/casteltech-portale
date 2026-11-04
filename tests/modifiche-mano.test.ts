@@ -98,3 +98,11 @@ test('BOM: per ogni famiglia si vedono solo i campi che servono, con un esempio'
     assert.ok(c.prod, `${fam}: ${c.note.join('; ')}`);
   }
 });
+
+test('BOM: connettore in MI (RJ45 THT) → consiglio di usare CN, che dà il codice gestionale', async () => {
+  const { mappaCampiFamiglie } = await import('../src/engine/codifica/campi-famiglia.js');
+  const { calcola } = await import('../src/engine/codifica/regole.js');
+  assert.match(mappaCampiFamiglie().MI.consiglio!, /CN · Connettori/);
+  assert.equal(calcola('MI', { case: 'THT', tipo: 'RJ45', tecnologia: 'T' }, 'HR911105A').root, null);
+  assert.equal(calcola('CN', { tipo: 'RJ45', passo: '1.02', poli: '8', tecnologia: 'T' }, 'HR911105A').root, 'TCN-RJ45-10208');
+});
