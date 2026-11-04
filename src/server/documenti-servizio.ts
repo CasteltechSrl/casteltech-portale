@@ -7,6 +7,7 @@ import type pg from 'pg';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-servizio.js';
 import { calcolaScadenze, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
+import { attributiDaModulo } from '../engine/attributi-fatturapa.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
 import { risolviFontiDdt } from './componenti-clienti-servizio.js';
@@ -206,6 +207,11 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
     if (d.tipo === 'ddt') await c.query(`UPDATE documenti SET dati_trasporto = $2 WHERE id = $1`, [id, JSON.stringify(trasportoDaModulo(b))]);
     if (d.tipo === 'fattura' && (TIPI_SCEGLIBILI as readonly string[]).includes(String(b.tipo_sdi ?? '')))
       await c.query(`UPDATE documenti SET tipo_sdi = $2 WHERE id = $1`, [id, b.tipo_sdi]);
+    // esigibilità IVA (fattura e note) e attributi avanzati della fattura elettronica (anche autofatture; Adriano 4/11/2026)
+    if (d.tipo === 'fattura' || d.tipo === 'nota_credito')
+      await c.query(`UPDATE documenti SET esigibilita_iva = $2 WHERE id = $1`, [id, ['I', 'D', 'S'].includes(String(b.esigibilita_iva)) ? b.esigibilita_iva : null]);
+    if (['fattura', 'nota_credito', 'autofattura'].includes(d.tipo))
+      await c.query(`UPDATE documenti SET attributi_xml = $2 WHERE id = $1`, [id, JSON.stringify(attributiDaModulo(b.attributi))]);
     if (d.tipo !== 'ddt') await c.query(`UPDATE documenti SET cig = $2, cup = $3, data_ordine = $4 WHERE id = $1`, [id,
       String(b.cig ?? '').trim().toUpperCase() || null, String(b.cup ?? '').trim().toUpperCase() || null,
       /^\d{4}-\d{2}-\d{2}$/.test(String(b.data_ordine ?? '')) ? b.data_ordine : null]);
@@ -332,6 +338,7 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
     intento: intento ? { protocollo: intento.protocollo, data: intento.data_protocollo } : null, aliquota_predefinita: predefinita,
     tipo_sdi: d.tipo_sdi, cig: d.cig, cup: d.cup, data_ordine: dataTesto(d.data_ordine),
     acconti: acconti.map((a: any) => ({ numero: numeroCompleto(a.numero, a.sezionale), data: a.data })),
+    esigibilita_iva: d.esigibilita_iva, attributi: d.attributi_xml,
   };
   const clienteXml: ClienteXml = cliente ? { ...cliente, nazione: cliente.nazione || 'IT' } : { ragione_sociale: '' };
   if (!d.condizione_pagamento) totali.errori.push('Manca la condizione di pagamento.');
@@ -352,7 +359,7 @@ async function preparaXml(c: pg.PoolClient | null, id: number, numero: number) {
     const esito = generaAutofatturaXml({ id, tipo_sdi: d.tipo_sdi, numero, sezionale: d.sezionale, data: d.data, causale: d.causale,
       righe: righe.map((r: any) => ({ codice: r.codice, descrizione: r.descrizione, quantita: r.quantita, um: r.um, prezzo: r.prezzo, sconto: r.sconto,
         aliquota_iva: r.aliquota_iva, solo_descrizione: r.solo_descrizione })),
-      fattura: ricevuto ? { numero: ricevuto.numero, data: ricevuto.data } : null }, fornitore, azienda, aliquote);
+      fattura: ricevuto ? { numero: ricevuto.numero, data: ricevuto.data } : null, attributi: d.attributi_xml }, fornitore, azienda, aliquote);
     if (!f) esito.errori.push('Manca il fornitore.');
     const intestatario = Object.fromEntries(['ragione_sociale', 'partita_iva', 'codice_fiscale', 'indirizzo', 'cap', 'comune', 'provincia', 'nazione']
       .map(k => [k, (fornitore as any)[k] ?? null]).filter(([, v]) => v));

@@ -18,6 +18,10 @@
  */
 import { arrotonda2, calcolaTotali, numeroCompleto, preparaAzienda, type Aliquota, type DatiAzienda, type Totali } from './amministrazione.js';
 import { controlliOrdinePa, importoDaIncassare, tipoSdiEffettivo } from './tipi-fattura.js';
+import { applicaAttributi } from './attributi-fatturapa.js';
+
+/** Esigibilità IVA (2.2.2.7): I immediata (quasi sempre), D differita (all'incasso, art. 6 c. 5 DPR 633/72), S scissione dei pagamenti (split payment). */
+export const ESIGIBILITA_IVA: Record<string, string> = { I: 'Immediata', D: 'Differita', S: 'Scissione dei pagamenti (split payment)' };
 
 export interface RigaXml {
   codice?: string | null; descrizione: string; quantita: number; um?: string | null; prezzo: number; sconto?: number;
@@ -33,6 +37,8 @@ export interface DocumentoXml {
   tipo_sdi?: string | null;                                    // scelto sulla bozza: TD01 (o TD24 da solo), TD02, TD26, TD05
   cig?: string | null; cup?: string | null; data_ordine?: string | null;
   acconti?: { numero: string; data: string }[];                // fatture d'acconto scalate su questa
+  esigibilita_iva?: string | null;                             // I / D / S; vuoto = S se il cliente ha lo split payment, altrimenti I
+  attributi?: Record<string, string> | null;                   // attributi avanzati (src/engine/attributi-fatturapa.ts)
 }
 export interface ClienteXml {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null; indirizzo?: string | null; cap?: string | null;
@@ -85,7 +91,16 @@ function idFiscale(piva: string, nazione: string): { paese: string; codice: stri
 /** Progressivo d'invio (massimo 5 caratteri nel nome del file): l'id del documento in base 36. */
 export const progressivoInvio = (id: number) => id.toString(36).toUpperCase().padStart(5, '0').slice(-5);
 
-export interface EsitoXml { xml: string; nomeFile: string; totali: Totali; errori: string[]; tipoSdi?: string; daIncassare?: number }
+export interface EsitoXml { xml: string; nomeFile: string; totali: Totali; errori: string[]; tipoSdi?: string; daIncassare?: number;
+  xmlBase?: string; esigibilita?: string }
+
+/** Esigibilità effettiva del documento ed eventuale errore (split payment solo con il cliente che lo ha nei dati fiscali). */
+export function esigibilitaDocumento(scelta: string | null | undefined, split: boolean): { esigibilita: string; errore?: string } {
+  const e = scelta && ESIGIBILITA_IVA[scelta] ? scelta : split ? 'S' : 'I';
+  if (e === 'S' && !split) return { esigibilita: e, errore: 'Esigibilità IVA "split payment" ma il cliente non ha la spunta Split payment nei Dati fiscali (Anagrafiche → Clienti): mettila lì, così anche pagamento e stampa tolgono l\'IVA.' };
+  if (e !== 'S' && split) return { esigibilita: e, errore: `Il cliente è in split payment (Dati fiscali): l'esigibilità IVA deve essere "split payment", non "${ESIGIBILITA_IVA[e]}".` };
+  return { esigibilita: e };
+}
 
 export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, aziendaInput: DatiAzienda, aliquote: Aliquota[]): EsitoXml {
   const errori: string[] = [];
@@ -189,7 +204,9 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
     if (![...ddt.values()].some(d => d.numero === m[1] && d.data === data)) ddt.set(`${m[1]}|${data}`, { numero: m[1], data, linee: [] });
   }
   const tipoSdi = tipoSdiEffettivo(doc.tipo, doc.tipo_sdi, doc.data, [...ddt.values()].map(d => d.data));
-  const esigibilita = `<EsigibilitaIVA>${split ? 'S' : 'I'}</EsigibilitaIVA>`;
+  const esig = esigibilitaDocumento(doc.esigibilita_iva, split);
+  if (esig.errore) errori.push(esig.errore);
+  const esigibilita = `<EsigibilitaIVA>${esig.esigibilita}</EsigibilitaIVA>`;
 
   const riepilogo = totali.riepilogo.map(g =>
     `<DatiRiepilogo><AliquotaIVA>${importoXml(g.percentuale)}</AliquotaIVA>${el('Natura', g.natura)}`
@@ -238,7 +255,9 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
       + d.linee.map(l => `<RiferimentoNumeroLinea>${l}</RiferimentoNumeroLinea>`).join('') + `</DatiDDT>`).join('')
     + `</DatiGenerali><DatiBeniServizi>${linee}${riepilogo}${testoSenzaRiepilogo}</DatiBeniServizi>${pagamenti}`
     + `</FatturaElettronicaBody></p:FatturaElettronica>\n`;
-  return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali, errori, tipoSdi, daIncassare };
+  const attr = applicaAttributi(xml, doc.attributi);
+  errori.push(...attr.errori);
+  return { xml: attr.xml, xmlBase: xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali, errori, tipoSdi, daIncassare, esigibilita: esig.esigibilita };
 }
 
 // ───────────────────────────── autofatture TD17 / TD18 / TD19 ─────────────────────────────
@@ -250,6 +269,7 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
 export interface AutofatturaXml {
   id: number; tipo_sdi: string; numero: number | null; sezionale?: string; data: string; causale?: string | null;
   righe: RigaXml[]; fattura: { numero: string; data: string } | null;
+  attributi?: Record<string, string> | null;                   // attributi avanzati (src/engine/attributi-fatturapa.ts)
 }
 export interface FornitoreXml {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null; indirizzo?: string | null; cap?: string | null;
@@ -326,5 +346,7 @@ export function generaAutofatturaXml(doc: AutofatturaXml, fornitore: FornitoreXm
     + `<Data>${doc.data}</Data><Numero>${testoXml(numero, 20)}</Numero><ImportoTotaleDocumento>${importoXml(totale)}</ImportoTotaleDocumento>${causali}</DatiGeneraliDocumento>`
     + (doc.fattura ? `<DatiFattureCollegate><IdDocumento>${testoXml(doc.fattura.numero, 20)}</IdDocumento><Data>${doc.fattura.data}</Data></DatiFattureCollegate>` : '')
     + `</DatiGenerali><DatiBeniServizi>${linee}${riepilogo}</DatiBeniServizi></FatturaElettronicaBody></p:FatturaElettronica>\n`;
-  return { xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali: { ...totali, bollo: 0, totale }, errori };
+  const attr = applicaAttributi(xml, doc.attributi);
+  errori.push(...attr.errori);
+  return { xml: attr.xml, xmlBase: xml, nomeFile: `IT${azienda.partita_iva}_${progressivo}.xml`, totali: { ...totali, bollo: 0, totale }, errori, esigibilita: 'I' };
 }

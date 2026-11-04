@@ -971,6 +971,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/clienti', 'Anagrafiche → Clienti'], ['/amministrazione/documenti?tipo=fattura', 'Fatture']],
   },
   {
+    id: 'attributi-fattura', area: 'amministrazione', titolo: 'Esigibilità IVA e attributi avanzati della fattura elettronica',
+    parole: 'esigibilita iva immediata differita split payment scissione attributi avanzati fattura elettronica xml campi fatturapa contratto convenzione ricezione trasporto vettore periodo altri dati gestionali riferimento amministrazione iban abi cab bic art73 sal fattura principale',
+    testo: [
+      'Nella bozza di fattura e di nota di credito c\'è il menu "Esigibilità IVA": Immediata è quella giusta quasi sempre ed è già scelta. Differita = l\'IVA diventa dovuta quando il cliente paga (art. 6 c. 5 DPR 633/72, es. alcuni enti pubblici): sceglila solo se il commercialista lo dice. Split payment vale solo per i clienti con la spunta "Split payment" nei Dati fiscali (pubblica amministrazione): se non coincide il portale non emette.',
+      'Sotto le righe c\'è il riquadro "Attributi avanzati fattura elettronica" (anche nelle note di credito e nelle autofatture), come in Fatture in Cloud: l\'elenco dei campi dell\'XML con il numero delle specifiche (es. 2.1.9.3 CausaleTrasporto, 2.2.1(2).7 DataInizioPeriodo della riga 2). Si usa quando un cliente chiede un dato in più: contratto o convenzione, numero di riga dell\'ordine (NumItem), dati del trasporto e del corriere, periodo di una riga, "altri dati gestionali", riferimento amministrazione, dati della banca.',
+      'Spunta il campo e scrivi il valore (date come gg/mm/aaaa): finisce nell\'XML al posto giusto e vince sul valore automatico, che si vede in grigio nella casella. Con la ricerca trovi un campo per nome o numero. In cima al riquadro ci sono gli "Altri attributi" che il portale mette da solo (tipo documento, DDT, ordine, esigibilità).',
+      'Importi, aliquote, numero, data e tipo del documento non si cambiano da qui: li calcola il portale. Se un blocco nuovo non è completo (es. contratto senza IdDocumento) o un valore non va bene, lo trovi tra i "Da sistemare prima di emettere". Nel documento emesso "Attributi della fattura elettronica" mostra cosa è finito nell\'XML.',
+    ],
+    passi: ['Apri la bozza della fattura.', 'Controlla "Esigibilità IVA" (di solito Immediata).', 'Se il cliente chiede un dato in più apri "Attributi avanzati", spunta il campo e scrivi il valore.', 'Salva ed emetti.'],
+    pagine: [['/amministrazione/documenti?tipo=fattura', 'Fatture']],
+  },
+  {
     id: 'ritenute-fornitori', area: 'amministrazione', titolo: 'Fatture di consulenti con ritenuta d\'acconto e cassa',
     parole: 'ritenuta acconto professionista consulente commercialista avvocato notaio cassa previdenziale rivalsa inps f24 1040 netto',
     testo: [
