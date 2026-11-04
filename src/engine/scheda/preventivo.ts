@@ -3,9 +3,10 @@
  * che resta "da validare" finché l'ufficio non lo controlla e lo salva. Nessun accesso al database.
  *  - SMD su un lato solo (anche se il cliente lo chiama BOTTOM): per noi è "solo TOP".
  *  - THT a onda: componenti in giostra e stagno della saldatrice a grammi (le scorie le aggiunge la formula del costo).
- *  - THT a mano: punti di saldatura = refori, filo 0,125 g a piedino.
+ *  - THT a mano: punti di saldatura = piedini dei THT montati (controllati con i fori del Gerber), filo 0,125 g a piedino.
  */
 import { CONSUMI, type AnalisiScheda } from './analisi.js';
+import { campiStagno } from './piedini.js';
 
 export interface VoceCompilata { codice: string; valore: number; perche: string }
 
@@ -50,16 +51,22 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
     metti('qtTht', c.tht, 'componenti THT');
     metti('qtTipolTht', c.codiciTht, 'codici THT diversi');
     daControllare.push('THT da preparare (piegatura/taglio) e casi particolari onda/mano: li decide l\'ufficio');
-    const refori = c.refori ?? 0;
-    if (c.refori == null) daControllare.push('refori non contati (mancano CAD e forature): stagno da scrivere a mano');
+    // punti di saldatura = piedini dei THT montati, controllati con i fori del Gerber (piedini.ts, Adriano 4/11/2026)
+    const punti = c.refori ?? 0;
+    const da = c.reforiDa === 'CAD' ? 'piedini dal file CAD' : c.reforiDa === 'componenti' ? 'piedini dei THT montati'
+      : c.reforiDa === 'foratura' ? 'fori del Gerber' : c.reforiDa === 'stima' ? 'piedini in parte stimati' : 'piedini';
+    if (c.refori == null) daControllare.push('punti di saldatura non contati (mancano CAD, impronte chiare e forature): stagno da scrivere a mano');
+    if (c.reforiDa === 'stima') daControllare.push(`punti di saldatura in parte stimati (${a.puntiSaldatura?.senzaPiedini.join(', ') ?? 'THT senza piedini'}): controllarli`);
     if (l.saldaturaTht === 'onda') {
       metti('qntCompMontaggio', c.tht, 'THT montati in giostra prima dell\'onda');
-      metti('stagnoPerSaldature', arrot(refori * CONSUMI.ondaGrammiForo), `${refori} refori × ${CONSUMI.ondaGrammiForo} g (le scorie le aggiunge il calcolo)`);
+      const x = campiStagno(punti, 'onda');
+      metti('stagnoPerSaldature', x.stagnoPerSaldature, `${punti} ${da} × ${CONSUMI.ondaGrammiForo} g (le scorie le aggiunge il calcolo)`);
       metti('stagno', 0, 'stagno scritto in grammi');
       if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info' && !s.accettata)) daControllare.push('segnalazioni sulla saldatura a onda');
     } else if (l.saldaturaTht === 'mano') {
-      metti('qntPuntiSaldaturaMano', refori, `${refori} refori`);
-      metti('stagnoInFilo', arrot(refori * CONSUMI.filoGrammiPiedino), `${refori} piedini × ${CONSUMI.filoGrammiPiedino} g`);
+      const x = campiStagno(punti, 'mano');
+      metti('qntPuntiSaldaturaMano', punti, `${punti} ${da}`);
+      metti('stagnoInFilo', x.stagnoInFilo, `${punti} punti × ${CONSUMI.filoGrammiPiedino} g`);
     }
   }
   metti('nItemMateriale', c.item, `${c.item - 1} codici montati + PCB`);

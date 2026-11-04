@@ -130,3 +130,11 @@ export function contaRefori(f: Foratura[]): { refori: number; vias: number; nonM
   }
   return { refori, vias, nonMetallizzati };
 }
+
+/** Fori metallizzati di fissaggio (viti, distanziali): da 3 mm in su, contati tra i refori ma senza piedino da saldare. */
+export function contaForiFissaggio(f: Foratura[], minimo = 3.0): number {
+  let n = 0;
+  for (const file of f) for (const p of file.punte)
+    if (p.metallizzata !== false && (!p.funzione || p.funzione === 'componente') && p.diametro >= minimo - 1e-6) n += p.fori;
+  return n;
+}

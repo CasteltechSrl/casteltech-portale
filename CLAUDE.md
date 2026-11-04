@@ -259,6 +259,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    etichette, specifiche… = `accessorio` (non contano); "POST WAVE ASSEMBLY" = `dopoOnda` (vince il pezzo saldato sullo stesso riferimento).
    LPS Zapper (30/10/2026): "Non Montare" nella colonna Note = non montato; con la BOM, i riferimenti solo nel pick and place non si contano
    (restano nell'errore); vecchio Allegro senza "!" ("m" = BOT); strati CAM350 pastetop/maskbot/bot/int2; controllo piazzole muto se trovate per <30%.
+   Punti di saldatura THT (Adriano 4/11/2026; `engine/scheda/piedini.ts`, `punti-saldatura-servizio.ts`, GET `/preventivi/punti-saldatura`, test in `tests/punti-saldatura.test.ts`):
+   punti = piedini dei THT montati (CAD > impronta/descrizione: DIP8, TO-220, 2x05, poli, assiale/radiale = 2), confrontati con i fori metallizzati del Gerber
+   (fissaggio da 3 mm in su, fori dei non montati e fori senza componente NON contano); THT senza piedini = fori che restano, senza fori 2 a pezzo ("stima", da controllare).
+   Nel preventivo "Conta i punti dai componenti" (sezione THT; documenti del cliente, altrimenti BOM collegata con tecnologia T): THT a mano → punti a mano + filo 0,125 g,
+   onda → `stagnoPerSaldature` 0,016 g a punto (scorie nel calcolo); punti scritti a mano → filo segue da solo (`public/preventivo.js`).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

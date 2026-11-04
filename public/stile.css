@@ -225,6 +225,9 @@ button.pericolo { background: var(--negativo); border-color: var(--negativo); co
 form.solo-top .solo-bot { display: none !important; }
 form.materiale-da-restituire .solo-magazzino { display: none !important; }
 .campi-parametri .scelta-provenienza { grid-column: 1 / -1; }
+/* punti di saldatura THT contati dai componenti (Adriano 4/11/2026) */
+.campi-parametri .punti-saldatura { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; }
+.campi-parametri .punti-saldatura output.negativo { color: #b42318; }
 
 /* tabella fasi: riga di totale per gruppo */
 table.fasi tr.riga-gruppo td { background: #eef3f1; font-weight: 700; color: var(--accento); border-top: 2px solid #d5e4df; font-size: .82rem; letter-spacing: .02em; }
