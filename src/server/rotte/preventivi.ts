@@ -703,8 +703,11 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
           <td class="n" data-v="costo">${euro(v.costo)}</td><td class="n" data-v="prezzo">${euro(v.prezzo)}</td></tr>`)}</tbody>
       </table>
 
+      ${!salvato ? html`<div class="azioni-secondarie"><span class="nota stato-salvataggio-basso"></span><button type="button" class="primario salva-in-basso">Salva</button></div>` : ''}
       ${salvato ? html`
       <div class="azioni-secondarie">
+        <span class="nota stato-salvataggio-basso"></span>
+        <button type="button" class="primario salva-in-basso" title="Salva il preventivo (come il Salva in alto)">Salva</button>
         <label>Stato <select name="stato" form="stato-preventivo">${STATI.map(s => html`<option ${s === salvato.stato ? raw('selected') : ''}>${s}</option>`)}</select></label>
         <button form="stato-preventivo">Aggiorna stato</button>
         <a class="bottone" href="/preventivi/${salvato.id}/ordine" title="Il cliente ha confermato: ordine cliente con righe, quantità, prezzo e consegna proposta">Crea ordine</a>

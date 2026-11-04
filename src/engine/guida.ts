@@ -397,6 +397,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Il prezzo si calcola mentre compili. In alto scegli cliente e prodotto dall\'anagrafica, schede, schede per pannello e pannelli.',
       'Le spunte delle INFORMAZIONI GENERALI (1ª produzione, TOP, TOP+BOT, THT a onda o a mano, componenti, PCB, lamina, etichette, pulizia, lavaggio) mostrano solo le sezioni che servono e attivano fasi e costi. Le programmazioni ci sono solo con la 1ª produzione.',
       'Il riquadro dei totali mostra prezzo a scheda, costi una tantum (solo nel primo lotto), margini e ore ciclo/uomo.',
+      'Il pulsante Salva c\'è in alto e anche in fondo alla pagina, accanto a Stato, Crea ordine e Crea commessa: fanno la stessa cosa.',
       'Un preventivo salvato conserva le tariffe e le fasi del giorno in cui è stato fatto: se poi cambi le tariffe in Impostazioni, i preventivi vecchi non cambiano.',
       'Montaggio → AOI: TOP è spuntato con il TOP, BOT solo se c\'è anche quel lato. "Visivo" toglie l\'AOI (né ispezione né programmazione) e mette il controllo visivo, 60 secondi a scheda: si usa per campionature di pochi pezzi o schede con pochissimi componenti.',
       'Montaggio → SMD → "A mano" (campionature di pochi pezzi): gli SMD si montano a mano in giostra insieme ai THT, 15 secondi a componente SMD. Nel gruppo SMD resta solo l\'attrezzaggio serigrafia (45 minuti): niente programmazioni del pick and place, attrezzaggio, avvio, serigrafia a pannello e pick and place. Il forno resta, con tempi, energia e pasta. AOI o Visivo si scelgono come sempre.',
