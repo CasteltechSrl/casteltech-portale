@@ -10,6 +10,7 @@ import { riquadroInvio } from './invio.js';
 import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
+import { noteDaStampare } from '../../engine/non-quotati.js';
 import {
   VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, testoConsegna, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
@@ -48,8 +49,10 @@ export function stampaPreventivo(o: {
   email?: EmailStampa | null;
   /** messaggio dopo un'azione (email partita, errore) */
   messaggio?: string;
+  /** componenti non quotati perché non disponibili: stampati sempre nelle note (Adriano 4/11/2026) */
+  nonQuotati?: string[];
 }): Raw {
-  const { p, d, ris, opz } = o;
+  const { p, d, ris, opz, nonQuotati } = o;
   const r = riepilogo(ris);
   const i = p.intestazione ?? {};
   const a = o.azienda, c = o.cliente;
@@ -100,7 +103,7 @@ export function stampaPreventivo(o: {
       case 'sconto': return html`<tr class="prodotto sconto"><td></td><td><b>${x.descrizione}</b></td><td></td><td></td><td class="n">− ${euro(x.importo)}</td></tr>`;
     }
   });
-  const noteStampate = [rit.noteCliente, rit.noteInterne ? d.note ?? '' : ''].map(x => x.trim()).filter(Boolean).join('\n\n');
+  const noteStampate = noteDaStampare(rit.noteCliente, rit.noteInterne, d.note ?? '', nonQuotati ?? []);
   const valoreRiga = (k: number, campo: 'descrizione' | 'quantita' | 'prezzo') => {
     const x = rit.righe[k];
     if (!x) return '';

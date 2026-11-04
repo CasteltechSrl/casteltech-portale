@@ -14,6 +14,8 @@ import type { Catalogo } from './catalogo-db.js';
 import { consegnaCompleta, contenutoStampa, leggiRitocchi, testoConsegna, versioneStampa } from '../engine/stampa-preventivo.js';
 import { AZIENDA_PREDEFINITA, type ClienteStampa, type OpzioniStampa } from './views/stampa-preventivo.js';
 import { nomeFilePdfPreventivo, pdfPreventivo } from './pdf-preventivo.js';
+import { costoBomPerPreventivo } from './codifica-servizio.js';
+import { noteDaStampare, righeNonQuotateNelleNote } from '../engine/non-quotati.js';
 
 /** Opzioni della stampa dall'indirizzo (?vista=…&condizioni=0&firma=0) o dal modulo dell'email. */
 export const opzioniStampa = (x: Record<string, unknown>): OpzioniStampa =>
@@ -31,8 +33,15 @@ export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
     `SELECT c.ragione_sociale, c.partita_iva, c.codice_fiscale, c.indirizzo, c.cap, c.comune, c.provincia, c.nazione, c.codice_sdi, c.pec,
             cp.descrizione AS pagamento
        FROM clienti c LEFT JOIN condizioni_pagamento cp ON cp.codice = c.condizione_pagamento WHERE c.id = $1`, [p.cliente_id]) : undefined;
+  // componenti non disponibili (Adriano 4/11/2026): dalla BOM collegata se i componenti li compriamo noi (prezzo a mano nella BOM = tolti),
+  // altrimenti quelli già scritti nelle note del preventivo
+  let nonQuotati = righeNonQuotateNelleNote(dati.note ?? '');
+  if (dati.bomId && v('acquistoComponenti')) {
+    const b = await costoBomPerPreventivo(dati.bomId, dati.nSchede).catch(() => null);
+    if (b && b.stato === 'pronta') nonQuotati = b.nonQuotati;
+  }
   return {
-    p, d: dati, ris: calcola(cat, dati), doppia,
+    p, d: dati, ris: calcola(cat, dati), doppia, nonQuotati,
     nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
     nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
     azienda: await caricaAzienda(), cliente: cliente ?? null, opz, rit: leggiRitocchi(p.stampa),
@@ -50,7 +59,7 @@ export async function pdfDelPreventivo(id: number, opz: OpzioniStampa): Promise<
   const i = x.p.intestazione ?? {};
   const a = x.azienda, P = AZIENDA_PREDEFINITA;
   const cont = contenutoStampa({ ris: x.ris, nSchede: x.d.nSchede, doppia: x.doppia, nLamine: x.nLamine, versione: opz.versione, rit: x.rit, descrizione: i.descrizione ?? '' });
-  const note = [x.rit.noteCliente, x.rit.noteInterne ? x.d.note ?? '' : ''].map(s => s.trim()).filter(Boolean).join('\n\n');
+  const note = noteDaStampare(x.rit.noteCliente, x.rit.noteInterne, x.d.note ?? '', x.nonQuotati);
   const dati = await pdfPreventivo({
     numero: x.p.numero, data: dataGiorno(x.p.creato_il),
     azienda: {
