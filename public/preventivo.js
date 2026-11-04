@@ -340,6 +340,12 @@
     return true;
   }
   document.getElementById('salva').addEventListener('click', salva);
+  // Salva anche in fondo alla pagina (Adriano 4/11/2026): stesso salvataggio, e lo stato si vede anche lì
+  document.querySelectorAll('.salva-in-basso').forEach(b => b.addEventListener('click', salva));
+  const statiBasso = document.querySelectorAll('.stato-salvataggio-basso');
+  if (statiBasso.length) new MutationObserver(() => statiBasso.forEach(x => {
+    x.textContent = statoEl.textContent; x.classList.toggle('negativo', statoEl.classList.contains('negativo'));
+  })).observe(statoEl, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 
   // Stampa (Adriano 4/11/2026, P2026-2388): con modifiche non salvate prima si salva, poi si apre la stampa,
   // così la stampa è sempre il preventivo che si vede a schermo
