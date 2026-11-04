@@ -8,6 +8,8 @@ import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
 const { pdfPreventivo, nomeFilePdfPreventivo } = await import('../src/server/pdf-preventivo.js');
 const { segnoInvioElenco, riquadroInvio } = await import('../src/server/views/invio.js');
+const { parametriStampa } = await import('../src/server/views/stampa-preventivo.js');
+const { opzioniStampa } = await import('../src/server/preventivo-email-servizio.js');
 
 test('segno "Inviato" (Adriano 4/11/2026): nessun segno = da inviare; email con data e destinatario', () => {
   assert.deepEqual(segniInvio({ tipo: 'ddt', stato: 'emesso' }), []);
@@ -108,4 +110,17 @@ test('email per i preventivi dall\'anagrafica, DDT con l\'email delle fatture de
   // per i DDT vale l'email delle fatture (Adriano 4/11/2026)
   assert.equal(destinatarioDdt({ ultimoDdt: 'vecchio@cliente.it', amministrazione: 'amm@cliente.it' }), 'amm@cliente.it');
   assert.equal(destinatarioDdt({ ultimoDdt: 'vecchio@cliente.it' }), 'vecchio@cliente.it');
+});
+
+test('stampa del preventivo: dettaglio dei costi una tantum a scelta (Adriano 4/11/2026)', () => {
+  const con = contenutoStampa({ ris, nSchede: 10, doppia: false, nLamine: 1, versione: 'dettaglio', rit: leggiRitocchi({}), descrizione: 'SCHEDA' });
+  const senza = contenutoStampa({ ris, nSchede: 10, doppia: false, nLamine: 1, versione: 'dettaglio', rit: leggiRitocchi({}), descrizione: 'SCHEDA', dettaglioUnaTantum: false });
+  const ut = (c: typeof con) => c.righe.find(r => r.tipo === 'unaTantum') as Extract<(typeof con)['righe'][number], { tipo: 'unaTantum' }>;
+  assert.ok(ut(con).voci.length > 0);
+  assert.equal(ut(senza).voci.length, 0);
+  assert.equal(ut(senza).importo, ut(con).importo);
+  assert.equal(senza.totale, con.totale);
+  assert.deepEqual(parametriStampa({ versione: 'dettaglio', condizioni: true, firma: true, ut: false }), { vista: 'dettaglio', ut: '0' });
+  assert.deepEqual(opzioniStampa({ vista: 'macro', ut: '0' }).ut, false);
+  assert.equal(opzioniStampa({}).ut, true);
 });

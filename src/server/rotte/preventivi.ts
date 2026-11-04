@@ -20,7 +20,7 @@ import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
-import { stampaPreventivo } from '../views/stampa-preventivo.js';
+import { parametriStampa, stampaPreventivo } from '../views/stampa-preventivo.js';
 import { segnoInvioElenco } from '../views/invio.js';
 import { leggiRitocchi } from '../../engine/stampa-preventivo.js';
 import { datiStampaPreventivo, inviaPreventivoEmail, opzioniStampa, pdfDelPreventivo, propostaEmailPreventivo, segnaPreventivoInviato } from '../preventivo-email-servizio.js';
@@ -225,7 +225,7 @@ export function rottePreventivi() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const id = Number(req.params.id);
     const opz = opzioniStampa(req.body ?? {});
-    const torna = (t: string) => res.redirect(`/preventivi/${id}/stampa?${new URLSearchParams({ vista: opz.versione, ...(opz.condizioni ? {} : { condizioni: '0' }), ...(opz.firma ? {} : { firma: '0' }), msg: t })}`);
+    const torna = (t: string) => res.redirect(`/preventivi/${id}/stampa?${new URLSearchParams({ ...parametriStampa(opz), msg: t })}`);
     try {
       const a = await inviaPreventivoEmail(id, req.body ?? {}, opz);
       torna(`Preventivo mandato per email a ${a} con il PDF allegato.`);

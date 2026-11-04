@@ -312,7 +312,9 @@ export type RigaDocumentoPreventivo =
 const SIGLE_AREE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
 const nomeGruppoStampa = (g: string) => SIGLE_AREE[g] ?? nomeArea(g);
 
-export function contenutoStampa(o: { ris: Risultato; nSchede: number; doppia: boolean; nLamine: number; versione: VersioneStampa; rit: Ritocchi; descrizione: string }) {
+export function contenutoStampa(o: { ris: Risultato; nSchede: number; doppia: boolean; nLamine: number; versione: VersioneStampa; rit: Ritocchi; descrizione: string;
+  /** dettaglio dei costi una tantum sotto la riga (Adriano 4/11/2026): false = solo la riga con il totale */
+  dettaglioUnaTantum?: boolean }) {
   const { ris, rit } = o;
   const r = riepilogo(ris);
   const nSchede = o.nSchede;
@@ -356,7 +358,7 @@ export function contenutoStampa(o: { ris: Risultato; nSchede: number; doppia: bo
       if (o.versione === 'fasi') righe.push(...g.righe.map(x => ({ tipo: 'voce' as const, descrizione: x.nome, prezzo: null, importo: x.prezzo, stile: 'fase' as const })));
     }
   }
-  if (!prezzoUnico && b.unaTantum > 0) righe.push({ tipo: 'unaTantum', voci: ut, prezzo: b.unaTantum, importo: b.unaTantum });
+  if (!prezzoUnico && b.unaTantum > 0) righe.push({ tipo: 'unaTantum', voci: o.dettaglioUnaTantum === false ? [] : ut, prezzo: b.unaTantum, importo: b.unaTantum });
   righe.push(...conti.righe.map(x => ({ tipo: 'aggiunta' as const, descrizione: x.descrizione, quantita: x.quantita, prezzo: x.prezzo, importo: x.importo })));
   if (conti.sconto > 0) righe.push({ tipo: 'sconto', descrizione: conti.etichettaSconto, importo: conti.sconto });
   return { righe, riquadro, totale: conti.totale, scontato: conti.sconto > 0, primoLotto: r.unaTantum > 0, prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum };
