@@ -10,7 +10,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -48,6 +48,7 @@ export function stampaPreventivo(o: {
     tel: a.telefono || AZIENDA_PREDEFINITA.telefono, email: a.email || AZIENDA_PREDEFINITA.email, pec: a.pec || AZIENDA_PREDEFINITA.pec,
   };
   const numero = `${p.numero} del ${data(p.creato_il)}`;
+  const salvatoIl = p.aggiornato_il ? new Date(p.aggiornato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' alle') : '';
   const qta = `${num(d.nSchede, 0)} pz`;
   const ut = righeUnaTantum(ris, { doppia: o.doppia, nLamine: o.nLamine });
   const essenziale = opz.versione === 'essenziale';
@@ -59,6 +60,9 @@ export function stampaPreventivo(o: {
   const conti = contiStampa({ prezzoScheda: prezzoUnico ? r.prezzoSchedaConUnaTantum : r.prezzoScheda, lotto: prezzoUnico ? totale : r.prezzoLotto,
     unaTantum: prezzoUnico ? 0 : r.unaTantum, nSchede: d.nSchede }, rit);
   const scontato = conti.sconto > 0 ? ' scontato' : '';
+  // riquadro verde sotto le righe e sopra il totale: prezzo a scheda senza e con le una tantum (Adriano, 4/11/2026)
+  const riquadro = prezziRiquadro({ prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede: d.nSchede,
+    prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum }, rit);
 
   const link = (cambia: Partial<OpzioniStampa>) => {
     const x = { ...opz, ...cambia };
@@ -120,8 +124,9 @@ export function stampaPreventivo(o: {
 <html lang="it"><head><meta charset="utf-8"><title>Preventivo ${p.numero} · ${i.codice}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa-preventivo.css?v=${VERSIONE}"></head>
-<body>
-<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button><a href="/preventivi/${p.id}">← torna al preventivo</a></div>
+<body data-versione-url="/preventivi/${p.id}/stampa/versione">
+<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button><a href="/preventivi/${p.id}">← torna al preventivo</a>
+  ${salvatoIl ? html`<span class="salvato">Versione salvata il ${salvatoIl}: le modifiche non salvate nel preventivo non compaiono</span>` : ''}</div>
 <div class="schermo">
 <nav class="pannello-stampa" aria-label="Cosa stampare">
   <h2>Cosa stampare</h2>
@@ -168,12 +173,6 @@ export function stampaPreventivo(o: {
       ${c?.codice_sdi ? html`<b>Codice SDI</b> ${c.codice_sdi}<br>` : ''}${c?.pec ? html`<b>PEC</b> ${c.pec}` : ''}</div>
   </div>
 
-  <div class="riquadro-prezzi">
-    <div><div class="etic">Prezzo a scheda${scontato}${prezzoUnico ? ' (prima produzione)' : ''}</div><strong>${euro(conti.prezzoScheda)}</strong></div>
-    <div><div class="etic">Totale lotto (${num(d.nSchede, 0)} schede${d.nSchedeInPCB > 1 ? `, ${num(o.nPannelli, 0)} pannelli` : ''})</div><strong>${euro(conti.lotto)}</strong></div>
-    ${!prezzoUnico && r.unaTantum > 0 ? html`<div><div class="etic">Una tantum (primo lotto)</div><strong>${euro(conti.unaTantum)}</strong></div>` : ''}
-  </div>
-
   <table class="righe">
     <thead><tr><th class="codice">Codice</th><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo unitario</th><th class="n">Importo</th></tr></thead>
     <tbody>${corpo}${rigaUnaTantum}${righeAggiunte}</tbody>
@@ -181,6 +180,10 @@ export function stampaPreventivo(o: {
 
   ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
   <div class="spinta"></div>
+  <div class="riquadro-prezzi">
+    <div><div class="etic">Prezzo a scheda${scontato}${riquadro.con != null ? ' senza costi una tantum' : ''}</div><strong>${euro(riquadro.senza)}</strong></div>
+    ${riquadro.con != null ? html`<div><div class="etic">Prezzo a scheda${scontato} con i costi una tantum (primo lotto, ${num(d.nSchede, 0)} schede)</div><strong>${euro(riquadro.con)}</strong></div>` : ''}
+  </div>
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>

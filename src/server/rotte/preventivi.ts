@@ -205,6 +205,8 @@ export function rottePreventivi() {
       `SELECT c.ragione_sociale, c.partita_iva, c.codice_fiscale, c.indirizzo, c.cap, c.comune, c.provincia, c.nazione, c.codice_sdi, c.pec,
               cp.descrizione AS pagamento
          FROM clienti c LEFT JOIN condizioni_pagamento cp ON cp.codice = c.condizione_pagamento WHERE c.id = $1`, [p.cliente_id]) : undefined;
+    // sempre la versione salvata in questo momento: niente copie del browser (Adriano 4/11/2026, P2026-2388)
+    res.set('Cache-Control', 'no-store');
     res.send(String(stampaPreventivo({
       p, d: dati, ris: calcola(cat, dati), doppia,
       nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
@@ -213,6 +215,14 @@ export function rottePreventivi() {
       opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
       rit: leggiRitocchi(p.stampa),
     })));
+  });
+
+  // ── Versione salvata del preventivo: la pagina di stampa la controlla quando si torna sulla sua scheda del browser ──
+  r.get('/:id/stampa/versione', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const x = await q1<{ v: string }>(`SELECT to_char(aggiornato_il, 'YYYY-MM-DD"T"HH24:MI:SS.US') AS v FROM preventivi WHERE id = $1`, [Number(req.params.id)]);
+    res.set('Cache-Control', 'no-store');
+    res.json({ versione: x?.v ?? null });
   });
 
   // ── Data di consegna stimata (suggerimento di Federico): arrivo componenti e PCB + capacità del Gantt + 5 gg lavorativi ──
@@ -572,7 +582,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
         <span class="vista-preventivo" title="Semplice: solo quantità e costi che cambiano da una scheda all'altra; Completo: tutti i campi. I valori nascosti contano comunque."><button type="button" data-vista="semplice">Semplice</button><button type="button" data-vista="completo" class="attiva">Completo</button></span>
-        ${salvato ? html`<a class="bottone" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (salva prima le modifiche)">Stampa</a>
+        ${salvato ? html`<a class="bottone" id="apri-stampa" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (con modifiche non salvate prima salva il preventivo)">Stampa</a>
           <a class="bottone" href="/preventivi/${salvato.id}/consegna" title="Data di consegna stimata: arrivo materiale, capacità produttiva, + 5 giorni lavorativi">Data di consegna</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>

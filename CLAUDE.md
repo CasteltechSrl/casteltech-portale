@@ -161,6 +161,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `quotaSmd`), `macro`, `fasi`; condizioni generali (`CONDIZIONI_GENERALI`) in seconda pagina con la firma del cliente, tolte con `condizioni=0` / `firma=0`.
    Ritocchi per il cliente (Adriano 29/10/2026; migrazione 046, `preventivi.stampa`, `leggiRitocchi`/`contiStampa`, POST `/preventivi/:id/stampa`): note per il cliente,
    sconto (% su tutto o € sul lotto), righe in più; solo nella stampa, il calcolo non cambia. Le note del preventivo sono interne (stampate solo con la spunta).
+   Riquadro verde (Adriano 4/11/2026, `prezziRiquadro`): sotto le righe e sopra il totale, SOLO prezzo a scheda senza e con le una tantum. La stampa è sempre
+   l'ultima versione salvata: `Cache-Control: no-store`, "Stampa" con modifiche non salvate prima salva (`public/preventivo.js`), la scheda già aperta si ricarica
+   da sola se il preventivo cambia (GET `/preventivi/:id/stampa/versione`, `public/stampa.js`).
 2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):
    Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
    Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,

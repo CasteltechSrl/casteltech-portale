@@ -9,6 +9,7 @@ body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 10pt; col
 .barra-stampa { position: sticky; top: 0; padding: 10px 16px; background: #1b5e52; color: #fff; display: flex; gap: 16px; align-items: center; z-index: 2; }
 .barra-stampa button { font: inherit; font-weight: 600; padding: 6px 14px; border: 0; border-radius: 4px; cursor: pointer; }
 .barra-stampa a { color: #fff; }
+.barra-stampa .salvato { margin-left: auto; font-size: 12px; opacity: .85; }
 .schermo { display: flex; gap: 16px; justify-content: center; align-items: flex-start; padding: 14px 16px; }
 .pannello-stampa { position: sticky; top: 64px; width: 240px; flex: 0 0 240px; background: #fff; border-radius: 6px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
 .pannello-stampa h2 { margin: 0 0 8px; font-size: 12pt; color: #1b5e52; }
@@ -54,7 +55,7 @@ table.righe tr.sconto td { color: #1b5e52; }
 .titolo { text-align: right; margin-top: 3mm; font-size: 12pt; color: #555; }
 .titolo b { color: #111; }
 .destinatario { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; border-top: 1px solid #ccc; margin-top: 4mm; padding-top: 3mm; font-size: 9pt; line-height: 1.45; }
-.riquadro-prezzi { display: flex; border: 1px solid #9cc5ba; background: #e8f3f0; margin-top: 5mm; }
+.riquadro-prezzi { display: flex; border: 1px solid #9cc5ba; background: #e8f3f0; margin-top: 4mm; break-inside: avoid; }
 .riquadro-prezzi > div { flex: 1; padding: 2.3mm 3mm; border-right: 1px solid #9cc5ba; }
 .riquadro-prezzi > div:last-child { border-right: 0; }
 .riquadro-prezzi strong { display: block; font-size: 15pt; }

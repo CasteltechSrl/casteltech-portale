@@ -326,16 +326,31 @@
     document.getElementById('tabella-fasi').classList.toggle('mostra-zero', e.target.checked);
   });
 
-  document.getElementById('salva').addEventListener('click', async () => {
+  /** Salva il preventivo; true se è andato a buon fine. */
+  async function salva() {
     statoEl.textContent = 'Salvataggio…';
     const res = await fetch('/preventivi/salva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) }).catch(() => null);
-    if (!res) { statoEl.textContent = 'Portale non raggiungibile: controlla la connessione e riprova a salvare.'; statoEl.classList.add('negativo'); return; }
+    if (!res) { statoEl.textContent = 'Portale non raggiungibile: controlla la connessione e riprova a salvare.'; statoEl.classList.add('negativo'); return false; }
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) { statoEl.textContent = j.errore || 'Errore nel salvataggio'; statoEl.classList.add('negativo'); return; }
+    if (!res.ok) { statoEl.textContent = j.errore || 'Errore nel salvataggio'; statoEl.classList.add('negativo'); return false; }
     modificato = false;
-    if (!id) { location.href = '/preventivi/' + j.id; return; }
+    if (!id) { location.href = '/preventivi/' + j.id; return true; }
     statoEl.classList.remove('negativo');
     statoEl.textContent = 'Salvato ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    return true;
+  }
+  document.getElementById('salva').addEventListener('click', salva);
+
+  // Stampa (Adriano 4/11/2026, P2026-2388): con modifiche non salvate prima si salva, poi si apre la stampa,
+  // così la stampa è sempre il preventivo che si vede a schermo
+  const apriStampa = document.getElementById('apri-stampa');
+  if (apriStampa) apriStampa.addEventListener('click', async e => {
+    if (!modificato) return;
+    e.preventDefault();
+    const finestra = window.open('', '_blank');   // aperta subito, se no il browser la blocca come popup
+    if (await salva()) {
+      if (finestra) finestra.location.href = apriStampa.href; else location.href = apriStampa.href;
+    } else if (finestra) finestra.close();
   });
 
   window.addEventListener('beforeunload', e => { if (modificato) e.preventDefault(); });
