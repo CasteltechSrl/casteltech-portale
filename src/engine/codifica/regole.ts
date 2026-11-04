@@ -114,7 +114,7 @@ export const IC_FAM: Record<string, string> = { SOIC: 'SO', SO: 'SO', TSSOP: 'TS
   WQFN: 'QN', VQFN: 'QN', UQFN: 'QN', TFQFN: 'QN', TQFN: 'QN', VFQFPN: 'QN', UFQFN: 'QN',
   VSSOP: 'MS', SOP: 'SO', LGA: 'LG', VFDFN: 'DN', TDFN: 'DN', XDFN: 'DN', UFDN: 'DN',
   BGA: 'BG', HTSSOP: 'TS', TSOP: 'TP' };
-const IC_BIG: Record<string, string> = { LQ: 'L', TQ: 'Q', SO: 'S', QN: 'N', BG: 'B', LG: 'G', TP: 'P', DN: 'D', TS: 'T', MS: 'M', SS: 'S', QS: 'Q', WL: 'W' };
+export const IC_BIG: Record<string, string> = { LQ: 'L', TQ: 'Q', SO: 'S', QN: 'N', BG: 'B', LG: 'G', TP: 'P', DN: 'D', TS: 'T', MS: 'M', SS: 'S', QS: 'Q', WL: 'W' };
 
 type Case = [codice: string | null, tecnologia: string | null, stato: Stato, nota: string];
 

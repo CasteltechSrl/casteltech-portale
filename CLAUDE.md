@@ -340,7 +340,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `engine/codifica/valori-tabella.ts`, test in `tests/valori-tabella.test.ts`).
    Formato nuovo dalla riga (Adriano 4/11/2026; migrazione 076 `codifica_case`, `CASE_DAL_PORTALE` in `aggiunte.ts` letto da `caseLookup`, `controllaNuovoCase`/`caseDaAggiungere`
    in `valori-tabella.ts`, `aggiungiCase`/`caricaCaseDalPortale` in `codifica-servizio.ts`, POST `/quotazioni/bom/:id/riga/:n/nuovo-case`, test in `tests/case-dal-portale.test.ts`):
-   case "non in tabella" → riquadro in cima alla riga con codice di 4 caratteri + S/T, vale OK per tutte le BOM, riga ricalcolata; elenco con "Togli" in Impostazioni → Componenti.
+   case "non in tabella" → riquadro in cima alla riga con codice di 4 caratteri + S/T, vale OK per tutte le BOM, riga ricalcolata; elenco con "Togli" in Impostazioni → Componenti; tabella completa `/impostazioni/componenti/case` (+ `.xlsx`, `tabellaCase` in `valori-tabella.ts`).
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".

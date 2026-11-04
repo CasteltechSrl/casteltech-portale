@@ -6,7 +6,7 @@
  *   della tabella e quelli già usati nell'archivio per la stessa famiglia.
  * Qui solo regole, senza database: i valori dell'archivio li passa chi chiama.
  */
-import { CASE_FIX, CASE_VER, CNT, caseLookup, COLORI, COLORI_NUOVI, ETICHETTE, IC_FAM, THT_CASE, TOL, type Attr, type Attributi } from './regole.js';
+import { CASE_FIX, CASE_VER, CNT, caseLookup, COLORI, COLORI_NUOVI, ETICHETTE, IC_BIG, IC_FAM, THT_CASE, TOL, type Attr, type Attributi } from './regole.js';
 import { CASE_AGGIUNTI, CASE_DAL_PORTALE, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
 import { esempioCampo } from './campi-famiglia.js';
 
@@ -152,4 +152,29 @@ export function controllaNuovoCase(dati: { case: string; codice: string; tecnolo
   const tecnologia = String(dati.tecnologia ?? '').toUpperCase();
   if (tecnologia !== 'S' && tecnologia !== 'T') return { errore: 'Scegli la tecnologia: S (SMD) o T (THT).' };
   return { chiave, scritto, codice, tecnologia, sinonimoDi: codiciInTabella().get(codice) ?? null };
+}
+
+// ───────────────────── tabella completa dei case (Adriano 4/11/2026: "c'è una tabella online dei case esistenti?") ─────────────────────
+
+export interface VoceCase { case: string; codice: string; tecnologia: 'SMD' | 'THT'; stato: 'OK' | 'da verificare'; nota: string; origine: string }
+
+/** Tutti i case che la codifica conosce, con codice gestionale, tecnologia e stato; per gli integrati la regola con i piedini. */
+export function tabellaCase(): VoceCase[] {
+  const tec = (t: string) => (t === 'T' ? 'THT' : 'SMD') as VoceCase['tecnologia'];
+  const out: VoceCase[] = [];
+  for (const [k, v] of Object.entries(CASE_FIX)) out.push({ case: k, codice: v, tecnologia: 'SMD', stato: 'OK', nota: '', origine: 'programma Codifica componenti' });
+  for (const [k, v] of Object.entries(THT_CASE)) out.push({ case: k, codice: v, tecnologia: 'THT', stato: 'OK', nota: '', origine: 'programma Codifica componenti' });
+  for (const [k, [v, nota]] of Object.entries(CASE_VER)) out.push({ case: k, codice: v, tecnologia: 'SMD', stato: 'da verificare', nota, origine: 'programma Codifica componenti' });
+  for (const [k, [v, t, st, nota]] of Object.entries(CASE_AGGIUNTI))
+    out.push({ case: k, codice: v, tecnologia: tec(t), stato: st === 'OK' ? 'OK' : 'da verificare', nota, origine: 'regole aggiunte nel portale' });
+  for (const c of CASE_DAL_PORTALE.values())
+    out.push({ case: c.scritto, codice: c.codice, tecnologia: tec(c.tecnologia), stato: 'OK', nota: c.nota ?? '', origine: `aggiunto dalla riga BOM${c.creato_da ? ` da ${c.creato_da}` : ''}` });
+  const regolaIc = (f: string, sigla: string) => `fino a 99 piedini ${sigla}nn (${f}8 → ${sigla}08), da 100 in su ${IC_BIG[sigla] ?? sigla}nnn (${f}144 → ${IC_BIG[sigla] ?? sigla}144)`;
+  for (const [f, sigla] of Object.entries(IC_FAM))
+    out.push({ case: `${f} + piedini`, codice: `${sigla}nn`, tecnologia: 'SMD', stato: 'OK', nota: regolaIc(f, sigla), origine: 'integrati: programma Codifica componenti' });
+  for (const [f, [sigla, nota]] of Object.entries(IC_FAM_AGGIUNTE))
+    out.push({ case: `${f} + piedini`, codice: `${sigla}nn`, tecnologia: 'SMD', stato: 'da verificare', nota: `${nota}; ${regolaIc(f, sigla)}`, origine: 'integrati: regole aggiunte nel portale' });
+  for (const f of DIP_THT)
+    out.push({ case: `${f} + piedini`, codice: 'DPnn', tecnologia: 'THT', stato: 'da verificare', nota: `${f}-8 → DP08, come il DIP-6 già in tabella (DP06)`, origine: 'integrati: regole aggiunte nel portale' });
+  return out.sort((a, b) => a.case.localeCompare(b.case, 'it', { numeric: true }));
 }

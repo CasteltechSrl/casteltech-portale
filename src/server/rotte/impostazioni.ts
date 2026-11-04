@@ -11,6 +11,7 @@ import { q, q1 } from '../db.js';
 import { caricaCatalogo, caricaTariffe, controllaFormula } from '../catalogo-db.js';
 import { layout } from '../views/layout.js';
 import { html, data, raw, type Raw } from '../views/html.js';
+import { excelSemplice, inviaExcel } from '../excel.js';
 import { elencoBackup, nomeFileBackup, salvaBackupSuDisco, scriviBackup } from '../backup.js';
 import { leggiStatoBackupPc, nuovaChiaveBackupPc } from './api-backup.js';
 import { CARTELLA_PC_PREDEFINITA, installatoreBackupPc } from '../../engine/backup-pc.js';
@@ -22,7 +23,8 @@ import { calcolaEventiRitardi, dimenticaCopiaCalendario, indirizzoCalendario, le
 import { leggiOrari } from '../../engine/promemoria.js';
 import { caricaOreGiorno, importaOrdini, leggiFileOrdini } from '../ordini-servizio.js';
 import { completaCrm, importaCrm, importaFatturato, leggiFileCompletamento, leggiFileCrm, leggiFileFatturato } from '../crm-servizio.js';
-import { conteggiComponenti, importaComponenti, caricaRegoleScarto, elencoCaseDalPortale, togliCase } from '../codifica-servizio.js';
+import { conteggiComponenti, importaComponenti, caricaRegoleScarto, elencoCaseDalPortale, togliCase, caricaCaseDalPortale } from '../codifica-servizio.js';
+import { tabellaCase } from '../../engine/codifica/valori-tabella.js';
 import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, type Fornitore } from '../../engine/acquisti.js';
@@ -204,6 +206,8 @@ export function rotteImpostazioni() {
           <td class="nota"><code>ANTHROPIC_API_KEY</code> (già usata per la lettura delle schede): legge le righe di BOM senza P/N o non riconosciute.</td><td></td></tr>
         </tbody></table>
       </section>
+      <p><a class="bottone" href="/impostazioni/componenti/case">Tabella dei case (${tabellaCase().length})</a>
+        <span class="nota">tutti i formati che la codifica conosce, con il codice, da cercare o scaricare in Excel</span></p>
       <details class="blocco" id="formati-aggiunti" ${caseP.length ? raw('open') : ''}><summary>Formati aggiunti dalla pagina della riga BOM (${caseP.length})</summary>
         <p class="nota">Case aggiunti alla tabella con "Aggiungi il formato alla tabella" nella pagina di una riga della BOM. Togliere un formato vale per le prossime
           codifiche: i componenti già in archivio non cambiano codice.</p>
@@ -320,6 +324,30 @@ export function rotteImpostazioni() {
     const f = String(req.body.fornitore) as Fornitore;
     if (f in NOMI_FORNITORI) (req.session as any).proveFornitori = { [f]: await provaFornitore(f) };
     res.redirect('/impostazioni/componenti');
+  });
+  // tabella completa dei case della codifica, con ricerca ed Excel (Adriano 4/11/2026)
+  r.get('/componenti/case', async (req, res) => {
+    await caricaCaseDalPortale();
+    const voci = tabellaCase();
+    res.send(pag(req, 'Componenti', html`
+      <div class="intestazione-pagina"><h1>Tabella dei case</h1>
+        <span><a class="bottone" href="/impostazioni/componenti/case.xlsx">Excel</a> <a class="bottone" href="/impostazioni/componenti">← Componenti</a></span></div>
+      <p class="nota">Tutti i formati (case) che la codifica conosce: il codice di 4 caratteri entra nel codice gestionale (es. SRS-<b>0603</b>-10K0F-001).
+        Il case si confronta senza spazi e trattini (SOT-23-6 = SOT236). "Da verificare" = il codice si calcola ma la riga resta da controllare.
+        Un formato che manca si aggiunge dalla pagina della riga BOM ("Aggiungi il formato alla tabella").</p>
+      <div class="ricerca-veloce"><input type="search" data-filtra="tabella-case" data-conta="conta-tabella-case" placeholder="Cerca case, codice o nota (es. SOT23, 0805, THT)" autofocus autocomplete="off">
+        <span class="nota">Trovati: <b id="conta-tabella-case">${voci.length}</b></span></div>
+      <table id="tabella-case"><thead><tr><th>Case</th><th>Codice</th><th>Tecnologia</th><th>Stato</th><th>Nota</th><th>Da dove</th></tr></thead><tbody>
+        ${voci.map(v => html`<tr><td><b>${v.case}</b></td><td class="codice">${v.codice}</td><td>${v.tecnologia}</td>
+          <td>${v.stato === 'OK' ? 'OK' : html`<span class="esito verifica">da verificare</span>`}</td><td class="nota">${v.nota}</td><td class="nota">${v.origine}</td></tr>`)}
+      </tbody></table>`, undefined, 'ricerca.js'));
+  });
+  r.get('/componenti/case.xlsx', async (_req, res) => {
+    await caricaCaseDalPortale();
+    const dati = await excelSemplice('Case', [{ header: 'Case', key: 'case', width: 22 }, { header: 'Codice', key: 'codice', width: 10 },
+      { header: 'Tecnologia', key: 'tecnologia', width: 11 }, { header: 'Stato', key: 'stato', width: 14 }, { header: 'Nota', key: 'nota', width: 60 },
+      { header: 'Da dove', key: 'origine', width: 34 }], tabellaCase() as unknown as Record<string, unknown>[]);
+    inviaExcel(res, 'tabella-case.xlsx', dati);
   });
   r.post('/componenti/formati/elimina', async (req, res) => {
     const msg = await togliCase(String(req.body.chiave ?? ''));
