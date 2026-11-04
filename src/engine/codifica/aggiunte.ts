@@ -88,4 +88,7 @@ export const REGISTRO_AGGIUNTE: VoceRegistro[] = [
     perche: 'righe "da completare" della BOM del 4/11 (LMR51430YDDCR, SRP5030T-3R3M, FSMSMTR)' },
   { data: '04/11/2026', tipo: 'parole BOM', cosa: 'Quarzi Abracon ABM dal P/N (case dalla serie, frequenza); prese USB-A/USB-B: 4 poli a passo 2,5 mm; tipo USB prima di "Receptacle"',
     perche: 'ABM8G-12.000MHZ-D2Y-T e 5787834-1 restavano da completare; i valori standard restano da validare' },
+  { data: '04/11/2026', tipo: 'ricerca prezzi', cosa: 'Componenti in archivio ancora senza codice gestionale: i dati che mancano anche da DigiKey; la decodifica del P/N vale anche sulla famiglia',
+    perche: 'ABM8G in archivio come OS con case "4SMD" restavano da completare; ora prendono QZ 3225 dal P/N' },
+  { data: '04/11/2026', tipo: 'categoria', cosa: 'USB tipo A/B letto anche dalla descrizione DigiKey ("USB2.0 TYPE B")', perche: 'la presa 5787834-1 diventava HDMI dalla categoria "USB, DVI, HDMI"' },
 ];

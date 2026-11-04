@@ -182,7 +182,9 @@ export function daDigikey(p: ProdottoDigiKey): { famiglia: string | null; attrib
     a.tipo = CONTATTI[cf] ?? (cf.replace(/-/g, '') || null);
   } else if (fam === 'CN') {
     const ct = [x('Connector Type') ?? '', x('Contact Type') ?? '', cats.join(' ')].join(' ').toUpperCase();
-    a.tipo = CONN_TIPO.find(([k]) => ct.includes(k))?.[1] ?? null;
+    // USB tipo A/B scritto solo nella descrizione ("CONN RCPT USB2.0 TYPE B"): prima diventava HDMI dalla categoria "USB, DVI, HDMI"
+    const usb = `${ct} ${descr.toUpperCase()}`.match(/USB[\s\d.]*(?:-\s*|TYPE\s?)([AB])\b/);
+    a.tipo = (usb ? `USB${usb[1]}` : null) ?? CONN_TIPO.find(([k]) => ct.includes(k))?.[1] ?? null;
     const pm = (x('Pitch - Mating') || x('Pitch') || '').match(/\(([\d.]+)mm\)/);
     if (pm) a.passo = pm[1];
     const np = (x('Number of Positions') || x('Number of Positions Loaded') || '').match(/^\s*(\d+)/);
