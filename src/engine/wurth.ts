@@ -14,8 +14,8 @@
 import { leggiPrezzo, type Offerta } from './acquisti.js';
 import { pnKey } from './codifica/bom.js';
 
-/** Quantità chieste a WE per costruire gli scaglioni di prezzo. */
-export const QUANTITA_WURTH = [1, 10, 100, 500, 1000, 5000];
+/** Quantità chieste a WE per costruire gli scaglioni di prezzo: al massimo 5 per articolo (errore 400 "No more than 5 quantities", 4/11/2026). */
+export const QUANTITA_WURTH = [1, 10, 100, 1000, 5000];
 
 /**
  * Codici Würth Elektronik: solo cifre (es. 885012206071, 744227, 7447709100), al più una lettera in fondo, o con il prefisso "WE".
