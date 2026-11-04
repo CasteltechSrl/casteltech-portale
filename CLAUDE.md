@@ -512,6 +512,11 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `engine/azioni-documenti.ts`: bozze del portale = `emettiDocumento` e poi invio; emessi senza `sdi_stato`), testo "Emetti e invia allo SdI", compare solo se nell'elenco
    c'è un documento da mandare (FIC = già inviati). Nell'elenco i totali delle bozze si calcolano dalle righe con l'aliquota (in `documenti` arrivano solo all'emissione).
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
+   Esigibilità IVA e attributi avanzati (Adriano 4/11/2026, come FIC; migrazione 071 `documenti.esigibilita_iva` + `attributi_xml`, `engine/attributi-fatturapa.ts`,
+   `views/attributi-fattura.ts`, `public/attributi-fattura.js`, test in `tests/attributi-fatturapa.test.ts`): menu Esigibilità IVA in fattura/NC (Immediata predefinita, Differita,
+   Split payment solo se il cliente ha la spunta: altrimenti errore); riquadro "Attributi avanzati fattura elettronica" (fattura, NC, autofattura): albero con numeri delle
+   specifiche (2.1.9.3, 2.2.1(2).7), spunta + valore, ricerca, "Altri attributi" automatici; valori scritti nell'XML in ordine di schema e vincono sull'automatico;
+   importi/numero/date/tipo non modificabili. Campo nuovo = una voce in `CATALOGO`. Esempio completo in `tools/fatturapa/esempi.ts` (verifica-fatturapa).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).
    🟡 Invio allo SdI con Invoicetronic (Adriano 28/10/2026: passaggio dal portale lunedì 2/11; `server/invoicetronic.ts`, `engine/sdi.ts`, migrazione 040):

@@ -37,6 +37,7 @@ import {
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
 import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
@@ -733,6 +734,7 @@ export function rotteAmministrazione() {
         </table></div>
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
         ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
+        ${['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && d.origine === 'portale' ? attributiEmesso(d.xml, d.attributi_xml) : ''}
         ${await riquadroSdi(d)}
         ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
@@ -834,6 +836,7 @@ export function rotteAmministrazione() {
         ${cliente?.pubblica_amministrazione ? html`<p class="nota">Cliente pubblica amministrazione: fattura FPA12 al codice ufficio ${cliente.codice_sdi || '(manca: va in Anagrafiche → Clienti → Dati fiscali)'};
           servono numero dell'ordine e CIG${cliente.split_payment ? '. Split payment: il cliente paga solo imponibile e bollo, l\'IVA la versa lui.' : '.'}</p>`
           : cliente?.split_payment ? html`<p class="nota">Split payment: il cliente paga solo imponibile e bollo, l'IVA la versa lui.</p>` : ''}
+        ${d.tipo === 'fattura' || d.tipo === 'nota_credito' ? html`<div class="riga-campi">${campoEsigibilita(d.esigibilita_iva, !!cliente?.split_payment)}</div>` : ''}
         <label>Causale (stampata sulla fattura) <input name="causale" value="${d.causale ?? ''}"></label>
         <label>Note interne (non vanno in fattura) <input name="note" value="${d.note ?? ''}"></label>
         ${riepilogoAvvisi(avvisiMargine) ? html`<p class="avviso margine">${riepilogoAvvisi(avvisiMargine)} ${[...avvisiMargine.values()].map(a => a.testo).join(' ')}</p>` : ''}
@@ -842,6 +845,7 @@ export function rotteAmministrazione() {
           <tbody>${[...righe, ...vuote].map(rigaModulo)}</tbody>
         </table></div>
         ${conAnagrafica ? riquadriSceltaProdotto(d.cliente_id) : ''}
+        ${riquadroAttributi(esito.xmlBase, d.attributi_xml)}
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
           <span class="nota">${d.tipo === 'autofattura' ? 'Autofattura: IVA italiana (di solito 22 %) sulle righe della fattura estera, in euro.'
             : 'IVA "predefinita" = quella del cliente (lettera d\'intento, estero…) o 22 %.'}</span>
@@ -877,7 +881,7 @@ export function rotteAmministrazione() {
             <button class="pericolo">Elimina bozza</button></form>` : ''}
         </div>
       </div>
-      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), ['documenti.js', 'autosalva.js']));
+      ${ambienteAttuale() === 'prova' || d.numero != null ? await riquadroSdi(d, !errori.length) : ''}`, msg(req), ['documenti.js', 'autosalva.js', 'attributi-fattura.js']));
   });
 
   r.post('/documenti/:id', async (req, res) => {

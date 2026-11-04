@@ -909,3 +909,18 @@ ul.elenco-trovati li.libero { color: #555; font-style: italic; }
 #materiali select { max-width: 13rem; }
 tr.da-controllare td { background: #fff2cc; }
 .nuovo-prodotto-riga { margin-top: .3rem; } .nuovo-prodotto-riga label { display: block; margin: .2rem 0; } .nuovo-prodotto-riga summary { cursor: pointer; color: var(--accento, #1d6b57); font-size: .9em; }
+
+/* Attributi avanzati della fattura elettronica (views/attributi-fattura.ts) */
+details.attributi-avanzati { margin: .8rem 0; border: 1px solid var(--bordo, #d0d7de); border-radius: 6px; padding: .4rem .8rem; }
+details.attributi-avanzati > summary { cursor: pointer; font-weight: 600; }
+.attributi-automatici { margin: .4rem 0; }
+.cerca-attributi { max-width: 24rem; margin: .4rem 0; }
+.albero-attributi { width: 100%; border-collapse: collapse; }
+.albero-attributi td { padding: .2rem .4rem; border-bottom: 1px solid var(--bordo, #e5e7eb); }
+.albero-attributi tr.gruppo td { background: #f3f7fb; font-size: .9em; }
+.albero-attributi tr.foglia td:first-child { cursor: pointer; }
+.albero-attributi .attr-valore { width: 100%; min-width: 12rem; }
+.albero-attributi .attr-valore:disabled { background: #f6f6f6; }
+.albero-attributi .liv-0 { padding-left: .4rem; } .albero-attributi .liv-1 { padding-left: 1.2rem; } .albero-attributi .liv-2 { padding-left: 2rem; }
+.albero-attributi .liv-3 { padding-left: 2.8rem; } .albero-attributi .liv-4 { padding-left: 3.6rem; } .albero-attributi .liv-5 { padding-left: 4.4rem; }
+.albero-attributi .liv-6 { padding-left: 5.2rem; } .albero-attributi .liv-7 { padding-left: 6rem; } .albero-attributi .liv-8 { padding-left: 6.8rem; }

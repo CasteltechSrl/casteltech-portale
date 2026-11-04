@@ -128,6 +128,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
   </div>
   ${intento ? html`<p class="nota-stampa">Operazione non imponibile art. 8 c. 1 lett. c D.P.R. 633/72: lettera d'intento prot. ${intento.protocollo} del ${data(intento.data_protocollo)}.</p>` : ''}
   ${split ? html`<p class="nota-stampa">Scissione dei pagamenti (split payment) art. 17-ter D.P.R. 633/72: l'IVA è versata dal cliente all'Erario.</p>` : ''}
+  ${d.esigibilita_iva === 'D' ? html`<p class="nota-stampa">IVA ad esigibilità differita (art. 6, comma 5, D.P.R. 633/72).</p>` : ''}
   ${totali.bollo ? html`<p class="nota-stampa">Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.</p>` : ''}
   ${d.tipo === 'fattura' ? html`<table class="griglia"><colgroup><col class="meta"><col class="meta"></colgroup>
     <tr><td><div class="etic">Pagamento</div><div class="val">${pagamento?.descrizione ?? ''}</div>

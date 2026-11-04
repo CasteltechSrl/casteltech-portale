@@ -62,6 +62,8 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('fattura INFN split payment', 2).includes('pubblica-amministrazione'));
   assert.ok(primi('codice ufficio CIG pubblica amministrazione', 2).includes('pubblica-amministrazione'));
   assert.ok(primi('fattura di acconto', 2).includes('tipi-fattura'));
+  assert.ok(primi('esigibilità iva differita', 2).includes('attributi-fattura'));
+  assert.ok(primi('attributi avanzati fattura elettronica', 2).includes('attributi-fattura'));
   assert.ok(primi('nota di debito', 2).includes('tipi-fattura'));
   assert.ok(primi('ritenuta acconto commercialista F24', 2).includes('ritenute-fornitori'));
   assert.deepEqual(primi('fattura scartata dallo SdI', 1), ['invio-sdi']);

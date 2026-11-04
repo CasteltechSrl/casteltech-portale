@@ -89,6 +89,19 @@ export const ESEMPI: { nome: string; documento: DocumentoXml; cliente: ClienteXm
   { nome: 'fattura-acconto', documento: ACCONTO, cliente: CLIENTE_IT },
   { nome: 'fattura-saldo', documento: SALDO, cliente: CLIENTE_IT },
   { nome: 'nota-debito', documento: NOTA_DEBITO, cliente: CLIENTE_IT },
+  // esigibilità differita e attributi avanzati (Adriano 4/11/2026): trasporto, contratto, periodo e altri dati delle righe, banca
+  { nome: 'fattura-attributi-avanzati', documento: { ...FATTURA, esigibilita_iva: 'D', attributi: {
+    '1.1.5.1': '0523190246', '1.1.5.2': 'amministrazione@casteltech.net', '1.2.5.3': 'info@casteltech.net', '1.2.6': 'RIF-AMM-1', '2.1.1.12': 'SI',
+    '2.1.2(1).4': '10', '2.1.2(2).2': 'ORD 2', '2.1.2(2).3': '01/10/2026', '2.1.3(1).2': 'CONTRATTO 7', '2.1.3(1).1': '1', '2.1.5(1).2': 'ACC 3',
+    '2.1.7(1).1': '2', '2.1.9.1.1.1': 'IT', '2.1.9.1.1.2': '01234567890', '2.1.9.1.3.1': 'CORRIERE SPA', '2.1.9.2': 'FURGONE', '2.1.9.3': 'VENDITA',
+    '2.1.9.4': '2', '2.1.9.6': 'KG', '2.1.9.7': '12,5', '2.1.9.8': '11', '2.1.9.9': '04/11/2026 9:30', '2.1.9.10': '04/11/2026', '2.1.9.11': 'DAP',
+    '2.1.9.12.1': 'VIA ROMA', '2.1.9.12.2': '1', '2.1.9.12.3': '29017', '2.1.9.12.4': 'FIORENZUOLA', '2.1.9.12.5': 'pc', '2.1.9.12.6': 'IT',
+    '2.1.9.13': '05/11/2026 12:00', '2.1.10.1': '116', '2.1.10.2': '2026-10-30',
+    '2.2.1(1).7': '2026-10-01', '2.2.1(1).8': '2026-10-31', '2.2.1(1).15': 'RIF', '2.2.1(1).16(1).1': 'COMMESSA', '2.2.1(1).16(1).3': '12',
+    '2.2.1(1).16(1).4': '2026-10-01', '2.2.1(2).16(2).1': 'LOTTO', '2.2.1(2).16(2).2': 'A',
+    '2.4(1).2(1).1': 'CASTELTECH', '2.4(1).2(1).3': '2026-11-05', '2.4(1).2(1).4': '30', '2.4(1).2(1).14': '05387', '2.4(1).2(1).15': '65310',
+    '2.4(1).2(1).16': 'BPMOIT22XXX', '2.4(1).2(1).21': 'PAG-1',
+  } }, cliente: CLIENTE_IT },
 ];
 
 // autofatture: fornitori esteri inventati
