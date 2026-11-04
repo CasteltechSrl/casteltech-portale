@@ -195,7 +195,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
       <label>Cc <input name="cc" value=""></label>
       <label>Oggetto <input name="oggetto" value="${o.email.oggetto}"></label>
       <label>Testo <textarea name="testo" rows="8">${o.email.testo}</textarea></label>
-      <p class="aiuto">Allegato: il <a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a> come questa stampa (versione, condizioni, firma, dettaglio una tantum e ritocchi salvati).
+      <p class="aiuto">Allegato: il ${consegna ? html`<a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a>` : 'PDF'} come questa stampa (versione, condizioni, firma, dettaglio una tantum e ritocchi salvati).
         ${o.email.attivo ? html`Parte da <b>${o.email.mittente}</b>.` : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il PDF e mandalo dalla posta.`}</p>
       ${consegna ? '' : html`<p class="aiuto manca"><b>Mancano i tempi di consegna</b>: sceglili qui sopra e premi "Aggiorna la stampa".</p>`}
       <button type="submit" ${o.email.attivo && consegna ? '' : raw('disabled')}>${o.email.email_inviata_il ? 'Manda di nuovo' : 'Invia con Gmail'}</button>
