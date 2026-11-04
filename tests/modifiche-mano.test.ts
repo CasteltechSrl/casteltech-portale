@@ -106,3 +106,18 @@ test('BOM: connettore in MI (RJ45 THT) → consiglio di usare CN, che dà il cod
   assert.equal(calcola('MI', { case: 'THT', tipo: 'RJ45', tecnologia: 'T' }, 'HR911105A').root, null);
   assert.equal(calcola('CN', { tipo: 'RJ45', passo: '1.02', poli: '8', tecnologia: 'T' }, 'HR911105A').root, 'TCN-RJ45-10208');
 });
+
+test('BOM: connettore in MI (RJ45 HR911105A) passa da solo a CN con i valori standard e resta da validare', async () => {
+  const { famigliaProposta } = await import('../src/engine/codifica/famiglia-proposta.js');
+  const p = famigliaProposta({ famiglia: 'MI', pn: 'HR911105A', attributi: { case: 'THT', tipo: 'CONN.ETHERNET', tecnologia: 'T' },
+    footprint: 'Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal', valore: 'HR911105A', descrizione: 'MISC RJ45 HR911105A' });
+  assert.ok(p);
+  assert.equal(p!.famiglia, 'CN');
+  assert.equal(p!.attributi.tipo, 'RJ45');
+  assert.equal(p!.attributi.passo, '1.02');
+  assert.equal(p!.attributi.poli, '8');
+  assert.match(p!.motivo, /da MI a CN.*valori standard RJ45/);
+  // un integrato vero o una famiglia già giusta non si toccano
+  assert.equal(famigliaProposta({ famiglia: 'IC', pn: 'ULN2803A', attributi: { case: 'DIP18' }, footprint: 'Package_DIP:DIP-18_W7.62mm' }), null);
+  assert.equal(famigliaProposta({ famiglia: 'RS', pn: 'X', attributi: {}, footprint: 'Connector_RJ:RJ45' }), null);
+});

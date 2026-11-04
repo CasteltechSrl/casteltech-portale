@@ -23,6 +23,7 @@ import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnit
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
+import { famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
 export const ESITI = {
@@ -392,6 +393,14 @@ export async function ricalcola(righe: RigaBom[]) {
   const riservati = new Map<string, Set<string>>(), visti = new Map<string, RigaBom>();
   // righe senza P/N con lo stesso codice di produzione di un componente in archivio
   const calcoli = new Map<number, ReturnType<typeof calcola>>();
+  // connettori finiti in MI / IC / senza famiglia: si prova CN se così il codice gestionale si calcola (Adriano 4/11/2026)
+  for (const r of righe) {
+    if (![ESITI.INC, ESITI.DB_INC].includes(r.esito as any) || r.fonti.includes('modifica a mano')) continue;
+    const p = famigliaProposta(r);
+    if (!p) continue;
+    r.famiglia = p.famiglia; r.attributi = { ...r.attributi, ...p.attributi };
+    r.note = [...r.note.filter(n => !/^componente THT: indicare|^proposto: /.test(n)), `${NOTA_DA_VALIDARE}: ${p.motivo}`];
+  }
   for (const r of righe) if ([ESITI.INC, ESITI.NUOVO, ESITI.NUOVO_VER, ESITI.DB_INC, ESITI.DB_FATTO, ESITI.DB_PROD].includes(r.esito as any)) calcoli.set(r.n, calcola(r.famiglia, r.attributi, r.pn));
   const perProd = new Map<string, Componente[]>();
   for (const c of await perProduzione(unico([...calcoli.values()].map(c => c.prod).filter((x): x is string => !!x)))) {
