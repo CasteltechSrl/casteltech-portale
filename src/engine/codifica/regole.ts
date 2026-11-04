@@ -51,9 +51,9 @@ const VOLT: [number, string][] = [[2.5, 'A'], [4, 'B'], [6.3, 'C'], [10, 'D'], [
   [200, 'L'], [250, 'M'], [400, 'N'], [450, 'P'], [500, 'R'], [630, 'S'], [1000, 'T'], [2000, 'U'], [3000, 'V']];
 export const COLORI: Record<string, string> = { ROSSO: 'ROS', VERDE: 'VER', BLU: 'BLU', GIALLO: 'GIA', ARANCIONE: 'ARA', BIANCO: 'BIA',
   NERO: 'NER', GRIGIO: 'GRI', IR: 'IRR', RGB: 'RGB' };
-const COLORI_NUOVI: Record<string, string> = { AMBRA: 'AMB', 'ROSSO-VERDE': 'BIC', 'ROSSO-VERDE-B.': 'TRI' };
+export const COLORI_NUOVI: Record<string, string> = { AMBRA: 'AMB', 'ROSSO-VERDE': 'BIC', 'ROSSO-VERDE-B.': 'TRI' };
 
-const CASE_FIX: Record<string, string> = {
+export const CASE_FIX: Record<string, string> = {
   // chip
   '01005': '1005', '0201': '0201', '0402': '0402', '0603': '0603', '603': '0603', '0805': '0805', '1206': '1206',
   '1210': '1210', '1812': '1812', '2010': '2010', '2512': '2512', '2917': '2917', '2312': '2312', '1020': '1020',
@@ -79,7 +79,7 @@ const CASE_FIX: Record<string, string> = {
   SC70: 'T323', SOT26: 'T236', TSOT26: 'T236', SOT353: 'T353', SOT238: 'T238', SOT666: 'T666',
   SOT143: 'T143', TSOP5: 'T235', '2220': '2220', '0612': '0612', '0804': '0804',
 };
-const CASE_VER: Record<string, [string, string]> = { // mappati ma da confermare
+export const CASE_VER: Record<string, [string, string]> = { // mappati ma da confermare
   QFP100: ['L100', 'QFP-100 generico trattato come LQFP-100'],
   SSOT3: ['T023', 'SuperSOT-3 trattato come SOT-23'],
   '2012': ['0805', '2012 interpretato come metrico (= 0805 pollici)'],
@@ -102,13 +102,13 @@ const CASE_VER: Record<string, [string, string]> = { // mappati ma da confermare
   '8MOSP': ['MS08', 'letto come MSOP-8'], SOCI14: ['SO14', 'letto come SOIC-14'], '24FTSOP': ['MS24', 'TFSOP trattato come MSOP'],
   SOT65: ['T665', 'letto come SOT-665'], '1611': ['1611', 'dimensione LED da confermare'],
 };
-const THT_CASE: Record<string, string> = { TO92: 'TO92', DO41: 'DO41', '6DIP': 'DP06', TO220: 'T220', TO220AB: 'T220', TO220A: 'T220' };
+export const THT_CASE: Record<string, string> = { TO92: 'TO92', DO41: 'DO41', '6DIP': 'DP06', TO220: 'T220', TO220AB: 'T220', TO220A: 'T220' };
 export const CNT: Record<string, string> = { BASETTA: 'BASE', PIN: 'PINS', PRESA: 'PRES', PRESO: 'PRES', MORSETTO: 'MORS', AUDIOJ: 'AUDJ', FCP: 'FCC0', FFC: 'FCC0',
   MICROUSB: 'USBM', USBMICRO: 'USBM', USBMINI: 'USBN', USBC: 'USBC', USBTYC: 'USBC', MODULAR: 'MODU', PCIEXP: 'PCIE', MINIPCI: 'MPCI',
   SDCARD: 'SDCD', PC104: 'P104', PWJACK: 'PWJK', SPINAF: 'SPIN', PONTE: 'PONT', VITE: 'VITE', COASSIALE: 'COAX', HDMI: 'HDMI',
   VERTICALE: 'BASE', MOSET: 'MORS', SMD: 'BASE', STRIP: 'PINS', RJ45: 'RJ45', RJ11: 'RJ11', ZOCCOLO: 'ZOCC', FCC: 'FCC0', FPC: 'FCC0',
   RCPT: 'PRES', USBA: 'USBA', USBB: 'USBB', USBAB: 'USAB', BAS: 'BASE' };
-const IC_FAM: Record<string, string> = { SOIC: 'SO', SO: 'SO', TSSOP: 'TS', SSOP: 'SS', QSOP: 'QS', MSOP: 'MS', QFN: 'QN', VFQFN: 'QN',
+export const IC_FAM: Record<string, string> = { SOIC: 'SO', SO: 'SO', TSSOP: 'TS', SSOP: 'SS', QSOP: 'QS', MSOP: 'MS', QFN: 'QN', VFQFN: 'QN',
   SQFN: 'QN', XQFN: 'QN', STQFN: 'QN', DFN: 'DN', WFDFN: 'DN', WDFN: 'DN', XFDFN: 'DN', UDFN: 'DN',
   LQFP: 'LQ', TQFP: 'TQ',
   WQFN: 'QN', VQFN: 'QN', UQFN: 'QN', TFQFN: 'QN', TQFN: 'QN', VFQFPN: 'QN', UFQFN: 'QN',

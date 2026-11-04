@@ -959,3 +959,7 @@ table.bom tr.da-prezzare td:first-child { box-shadow: inset 4px 0 0 var(--negati
 .riquadro-da-prezzare h2 { color: var(--negativo); margin-top: 0; font-size: 1.05rem; }
 .riquadro-da-prezzare form.prezzo-veloce { display: flex; gap: .3rem; align-items: center; }
 .riquadro-da-prezzare form.prezzo-veloce input { width: 7rem; }
+/* Suggerimenti nella pagina della riga BOM (Adriano 4/11/2026) */
+.suggerimenti-riga { background: #fff8e1; border: 1px solid #f0d58a; border-radius: 6px; padding: .6rem .9rem; margin: .6rem 0; }
+.suggerimenti-riga ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+.suggerimenti-riga li { margin: .2rem 0; }
