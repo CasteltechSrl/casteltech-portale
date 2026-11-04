@@ -10,12 +10,12 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, verificaRiga, togliRiga, valoriArchivioFamiglia, esitoRicalcolo, type RigaBom, type Riepilogo,
+  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, verificaRiga, togliRiga, valoriArchivioFamiglia, esitoRicalcolo, aggiungiCase, caricaCaseDalPortale, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { campiFamiglia, esempioCampo, mappaCampiFamiglie } from '../../engine/codifica/campi-famiglia.js';
-import { suggerimentiRiga, valoriTabella, type ValoriArchivio } from '../../engine/codifica/valori-tabella.js';
+import { caseDaAggiungere, codiceProposto, suggerimentiRiga, valoriTabella, type ValoriArchivio } from '../../engine/codifica/valori-tabella.js';
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
@@ -215,6 +215,7 @@ export function rotteComponenti() {
     const riga: RigaBom | undefined = a?.righe?.find((x: RigaBom) => x.n === Number(req.params.n));
     if (!a || !riga) return res.status(404).send('Riga non trovata');
     const archivio = await valoriArchivioFamiglia(riga.famiglia);
+    await caricaCaseDalPortale();
     res.send(pag(req, `Riga ${riga.n}`, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga, archivio), req.query.msg ? String(req.query.msg) : undefined));
   });
   // prezzo scritto a mano (Adriano 28/10/2026): vale al posto di quello proposto; vuoto = di nuovo quello dei distributori
@@ -254,6 +255,12 @@ export function rotteComponenti() {
   // codice "da verificare" controllato dall'ufficio: si conferma e va nell'archivio (Adriano 4/11/2026)
   r.post('/bom/:id/riga/:n/verificata', async (req, res) => {
     const msg = await verificaRiga(Number(req.params.id), Number(req.params.n), req.session.utente!.nome);
+    res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}`);
+  });
+  // formato (case) nuovo aggiunto alla tabella da qui (Adriano 4/11/2026: "vorrei poter aggiungere un formato nuovo da qui")
+  r.post('/bom/:id/riga/:n/nuovo-case', async (req, res) => {
+    const msg = await aggiungiCase({ case: String(req.body.case ?? ''), codice: String(req.body.codice ?? ''), tecnologia: String(req.body.tecnologia ?? ''),
+      nota: String(req.body.nota ?? '') }, req.session.utente!.nome, { id: Number(req.params.id), n: Number(req.params.n) });
     res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}`);
   });
   r.post('/bom/:id/riga/:n/elimina', async (req, res) => {
@@ -667,6 +674,28 @@ function riquadroSuggerimenti(r: RigaBom, archivio: ValoriArchivio): Raw {
   return html`<div class="suggerimenti-riga"><b>Suggerimenti</b><ul>${s.map(x => html`<li>${x}</li>`)}</ul></div>`;
 }
 
+/** Case che la tabella non conosce: si aggiunge da qui con il suo codice di 4 caratteri (Adriano 4/11/2026). */
+function riquadroNuovoCase(a: any, r: RigaBom): Raw {
+  if (r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO) return html``;
+  const scritto = caseDaAggiungere(r);
+  if (!scritto) return html``;
+  const tecnologia = r.attributi.tecnologia === 'T' ? 'T' : 'S';
+  return html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/nuovo-case" class="blocco riquadro-nuovo-case" id="nuovo-case">
+    <h2>Aggiungi il formato "${scritto}" alla tabella</h2>
+    <p class="nota">Il formato non è tra quelli che la codifica conosce. Dagli un codice di 4 lettere o cifre: entra nel codice gestionale
+      (come 0603, T236, DPAK). Per un componente senza case standard usa le misure in mm (LLWW, es. 6035 per 6×3,5 mm).
+      Se è lo stesso formato di uno già in tabella con un altro nome, scrivi il suo codice. Da qui in avanti vale per tutte le BOM;
+      i componenti già in archivio non cambiano codice.</p>
+    <div class="riga-campi">
+      <label>Formato <input name="case" value="${scritto}" required autocomplete="off"></label>
+      <label class="stretto">Codice <small class="unita">4 caratteri</small><input name="codice" value="${codiceProposto(scritto)}" maxlength="4" required autocomplete="off"></label>
+      <label class="stretto">Tecnologia<select name="tecnologia">${(['S', 'T'] as const).map(t => html`<option value="${t}" ${t === tecnologia ? raw('selected') : ''}>${t === 'S' ? 'S · SMD' : 'T · THT'}</option>`)}</select></label>
+      <label>Nota <small class="unita">facoltativa</small><input name="nota" autocomplete="off" placeholder="es. pulsante SMD 2 piedini"></label>
+    </div>
+    <button class="primario">Aggiungi alla tabella e ricalcola</button>
+  </form>`;
+}
+
 function paginaRiga(a: any, r: RigaBom, archivio: ValoriArchivio = {}): Raw {
   const bloccata = r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO;
   const qta = r.acquisti[r.acquisti.length - 1]?.lorda ?? 0;
@@ -674,6 +703,7 @@ function paginaRiga(a: any, r: RigaBom, archivio: ValoriArchivio = {}): Raw {
   <div class="intestazione-pagina"><h1>Riga ${r.n}: ${r.pn ?? r.mpnAcquisto ?? r.valore ?? ''} ${badgeEsito(r)}</h1>
     <a class="bottone" href="/quotazioni/bom/${a.id}#riga-${r.n}">← Torna alla BOM</a></div>
   ${riquadroVerifica(a, r)}
+  ${riquadroNuovoCase(a, r)}
   <div class="griglia-preventivo">
     <form method="post" class="blocco">
       <p class="riepilogo">${r.designatori ? html`<b>Designatori:</b> ${r.designatori}<br>` : ''}

@@ -22,7 +22,7 @@ import { calcolaEventiRitardi, dimenticaCopiaCalendario, indirizzoCalendario, le
 import { leggiOrari } from '../../engine/promemoria.js';
 import { caricaOreGiorno, importaOrdini, leggiFileOrdini } from '../ordini-servizio.js';
 import { completaCrm, importaCrm, importaFatturato, leggiFileCompletamento, leggiFileCrm, leggiFileFatturato } from '../crm-servizio.js';
-import { conteggiComponenti, importaComponenti, caricaRegoleScarto } from '../codifica-servizio.js';
+import { conteggiComponenti, importaComponenti, caricaRegoleScarto, elencoCaseDalPortale, togliCase } from '../codifica-servizio.js';
 import { fornitoriConfigurati, provaFornitore } from '../fornitori.js';
 import { iaConfigurata } from '../lettura-ia.js';
 import { NOMI_FORNITORI, leggiRegoleScarto, type Fornitore } from '../../engine/acquisti.js';
@@ -169,6 +169,7 @@ export function rotteImpostazioni() {
     const conti = await conteggiComponenti();
     const f = fornitoriConfigurati();
     const rs = await caricaRegoleScarto();
+    const caseP = await elencoCaseDalPortale();
     const prove = (req.session as any).proveFornitori ?? {};
     delete (req.session as any).proveFornitori;
     const ISTRUZIONI: Record<Fornitore, Raw> = {
@@ -203,6 +204,15 @@ export function rotteImpostazioni() {
           <td class="nota"><code>ANTHROPIC_API_KEY</code> (già usata per la lettura delle schede): legge le righe di BOM senza P/N o non riconosciute.</td><td></td></tr>
         </tbody></table>
       </section>
+      <details class="blocco" id="formati-aggiunti" ${caseP.length ? raw('open') : ''}><summary>Formati aggiunti dalla pagina della riga BOM (${caseP.length})</summary>
+        <p class="nota">Case aggiunti alla tabella con "Aggiungi il formato alla tabella" nella pagina di una riga della BOM. Togliere un formato vale per le prossime
+          codifiche: i componenti già in archivio non cambiano codice.</p>
+        ${caseP.length ? html`<table><thead><tr><th>Formato</th><th>Codice</th><th>Tecnologia</th><th>Nota</th><th>Aggiunto da</th><th></th></tr></thead><tbody>
+          ${caseP.map(c => html`<tr><td>${c.scritto}</td><td class="codice">${c.codice}</td><td>${c.tecnologia === 'S' ? 'SMD' : 'THT'}</td><td class="nota">${c.nota ?? ''}</td>
+            <td>${c.creato_da ?? ''}${c.creato_il ? html` <small class="nota">${new Date(c.creato_il).toLocaleDateString('it-IT')}</small>` : ''}</td>
+            <td><form method="post" action="/impostazioni/componenti/formati/elimina" class="inline" data-conferma="Togliere il formato ${c.scritto} dalla tabella?">
+              <button name="chiave" value="${c.chiave}">Togli</button></form></td></tr>`)}</tbody></table>` : html`<p class="nota">Nessuno per ora.</p>`}
+      </details>
       <details class="blocco"><summary>Regole aggiunte alla codifica (${REGISTRO_AGGIUNTE.length})</summary>
         <p class="nota">Famiglie, case e categorie aggiunti dopo il programma "Codifica componenti". I componenti già in archivio non cambiano codice.</p>
         <table><thead><tr><th>Data</th><th>Tipo</th><th>Cosa</th><th>Perché / come</th></tr></thead><tbody>
@@ -218,7 +228,7 @@ export function rotteImpostazioni() {
         <label>Fino a <input name="sogliaMedio" value="${rs.sogliaMedio}" class="corto"> €/pz: più <input name="pezziMedi" value="${rs.pezziMedi}" class="corto"> pezzi
           <small class="unita">oltre: nessuno scarto</small></label>
         <button class="primario">Salva</button>
-      </form>`, req.query.ok ? 'Salvato.' : undefined, 'componenti.js'));
+      </form>`, req.query.msg ? String(req.query.msg) : req.query.ok ? 'Salvato.' : undefined, 'componenti.js'));
   });
   r.post('/componenti/importa', express.raw({ type: 'application/octet-stream', limit: '60mb' }), async (req, res) => {
     try { res.json(await importaComponenti(req.body as Buffer)); }
@@ -310,6 +320,10 @@ export function rotteImpostazioni() {
     const f = String(req.body.fornitore) as Fornitore;
     if (f in NOMI_FORNITORI) (req.session as any).proveFornitori = { [f]: await provaFornitore(f) };
     res.redirect('/impostazioni/componenti');
+  });
+  r.post('/componenti/formati/elimina', async (req, res) => {
+    const msg = await togliCase(String(req.body.chiave ?? ''));
+    res.redirect(`/impostazioni/componenti?msg=${encodeURIComponent(msg)}#formati-aggiunti`);
   });
   r.post('/componenti/scarto', async (req, res) => {
     const x = leggiRegoleScarto({ ...req.body, famigliePassive: String(req.body.famigliePassive ?? '').split(/[,\s]+/) });

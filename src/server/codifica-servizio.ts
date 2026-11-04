@@ -25,7 +25,8 @@ import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
-import type { ValoriArchivio } from '../engine/codifica/valori-tabella.js';
+import { controllaNuovoCase, type ValoriArchivio } from '../engine/codifica/valori-tabella.js';
+import { CASE_DAL_PORTALE, impostaCaseDalPortale, type CasePortale } from '../engine/codifica/aggiunte.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -408,6 +409,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boo
 
 /** Codici delle righe non in archivio (dopo le modifiche a mano si richiama da sola). */
 export async function ricalcola(righe: RigaBom[]) {
+  await caricaCaseDalPortale();
   const riservati = new Map<string, Set<string>>(), visti = new Map<string, RigaBom>();
   // righe senza P/N con lo stesso codice di produzione di un componente in archivio
   const calcoli = new Map<number, ReturnType<typeof calcola>>();
@@ -1160,4 +1162,52 @@ export function esitoRicalcolo(r: RigaBom | undefined): string {
   if (r.codiceGestionale && r.codiceProduzione) return `Ricalcolato: ${r.codiceProduzione} / ${r.codiceGestionale} (${r.esito}).`;
   const problemi = r.note.filter(n => /non in tabella|mancante|manca|non indicat|indicare/i.test(n));
   return `Ricalcolato, ma ${r.codiceGestionale ? 'manca il codice di produzione' : 'manca ancora il codice gestionale'}${problemi.length ? `: ${problemi.join('; ')}` : ''}. Guarda i suggerimenti qui sotto.`;
+}
+
+// ───────────── formati (case) aggiunti dall'ufficio dalla pagina della riga (Adriano 4/11/2026, migrazione 076) ─────────────
+let caseCaricati = false;
+
+/** Carica in memoria i formati aggiunti dal portale: una query sola per avvio, poi si rilegge solo dopo un'aggiunta o un'eliminazione. */
+export async function caricaCaseDalPortale(forza = false) {
+  if (caseCaricati && !forza) return;
+  impostaCaseDalPortale(await q<CasePortale>(`SELECT * FROM codifica_case ORDER BY creato_il`));
+  caseCaricati = true;
+}
+
+export async function elencoCaseDalPortale(): Promise<CasePortale[]> {
+  await caricaCaseDalPortale();
+  return [...CASE_DAL_PORTALE.values()];
+}
+
+/** Aggiunge un formato alla tabella; se c'è una riga BOM la ricalcola con il formato nuovo e resta sulla riga. */
+export async function aggiungiCase(dati: { case: string; codice: string; tecnologia: string; nota: string }, utente: string,
+  riga?: { id: number; n: number }): Promise<string> {
+  await caricaCaseDalPortale();
+  const x = controllaNuovoCase(dati);
+  if ('errore' in x) return x.errore;
+  const nota = String(dati.nota ?? '').trim().slice(0, 300) || null;
+  await q(`INSERT INTO codifica_case (chiave, scritto, codice, tecnologia, nota, creato_da) VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (chiave) DO NOTHING`, [x.chiave, x.scritto, x.codice, x.tecnologia, nota, utente]);
+  await caricaCaseDalPortale(true);
+  let msg = `Formato ${x.scritto} aggiunto alla tabella con il codice ${x.codice} (${x.tecnologia === 'S' ? 'SMD' : 'THT'})`
+    + (x.sinonimoDi ? `, lo stesso codice di ${x.sinonimoDi}.` : '.');
+  if (riga) {
+    const a = await q1<any>(`SELECT righe, quantita FROM bom_analisi WHERE id = $1`, [riga.id]);
+    const righe: RigaBom[] = a?.righe ?? [];
+    const r = righe.find(y => y.n === riga.n);
+    if (r) {
+      await ricalcola(righe);
+      await calcolaAcquisti(righe, a.quantita);
+      await salvaRighe(riga.id, righe);
+      msg += ` ${esitoRicalcolo(r)}`;
+    }
+  }
+  return msg;
+}
+
+/** Toglie un formato aggiunto dal portale: vale per le prossime codifiche, i componenti già in archivio non cambiano codice. */
+export async function togliCase(chiave: string): Promise<string> {
+  const x = await q1<{ scritto: string }>(`DELETE FROM codifica_case WHERE chiave = $1 RETURNING scritto`, [chiave]);
+  await caricaCaseDalPortale(true);
+  return x ? `Formato ${x.scritto} tolto dalla tabella (i componenti già in archivio restano come sono).` : 'Formato non trovato.';
 }
