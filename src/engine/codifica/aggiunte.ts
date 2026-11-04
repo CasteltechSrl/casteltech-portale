@@ -33,6 +33,8 @@ export const CASE_AGGIUNTI: Record<string, [string, 'S' | 'T', 'OK' | 'VER', str
   LFPAK56: ['LF56', 'S', 'OK', ''], LFPAK33: ['LF33', 'S', 'OK', ''],
   TO247: ['T247', 'T', 'OK', ''], TO2473: ['T247', 'T', 'OK', ''], TO126: ['T126', 'T', 'OK', ''],
   TO220F: ['T22F', 'T', 'OK', ''], TO220FP: ['T22F', 'T', 'OK', ''], ITO220: ['T22F', 'T', 'OK', ''], TO3P: ['T03P', 'T', 'OK', ''],
+  // 4/11/2026: SOT-23-THIN di Texas Instruments (DDC, 6 piedini) = TSOT-23-6
+  SOT236THIN: ['T236', 'S', 'OK', ''], SOT23THIN6: ['T236', 'S', 'OK', ''], SOT23THIN: ['T236', 'S', 'VER', 'SOT-23-THIN trattato come SOT-23-6 (TI DDC: 6 piedini)'],
   DO201AD: ['D201', 'T', 'OK', ''], DO201: ['D201', 'T', 'OK', ''], DO15: ['DO15', 'T', 'OK', ''], DO35: ['DO35', 'T', 'OK', ''],
 };
 
@@ -78,4 +80,12 @@ export const REGISTRO_AGGIUNTE: VoceRegistro[] = [
     perche: 'accorpati alla famiglia di forma più vicina (es. WSON come DFN), da verificare' },
   { data: '01/11/2026', tipo: 'parole BOM', cosa: 'Parole e riferimenti: NTC/termistore (RT, TH), batteria (BT), antenna (ANT), trimmer/potenziometro, fotoaccoppiatore (OK, ISO), film/MKP/MKT',
     perche: 'righe senza P/N riconosciute dalla descrizione o dal riferimento' },
+  { data: '04/11/2026', tipo: 'famiglia', cosa: 'Codice di produzione (Adriano Croci): famiglia-THT-… per i THT, case degli integrati come SOIC8/DIP8, morsetti in TI con poli prima del passo',
+    perche: 'suggerimento di Croci; solo codici nuovi: quelli in archivio restano e si ritrovano anche con il codice scritto alla vecchia maniera' },
+  { data: '04/11/2026', tipo: 'categoria', cosa: 'Power Distribution Switches, Load Drivers, Gate Drivers, LED Drivers, Analog Switches, PMIC → IC',
+    perche: 'contengono "switches" o "LED" nel nome e finivano tra gli interruttori o i LED (AP22913, MIC2981)' },
+  { data: '04/11/2026', tipo: 'case', cosa: 'SOT-23-THIN (TI DDC) = T236; induttanze con misure decimali (5.7X5.2 → 0505); pulsanti senza case: misura in mm LLWW',
+    perche: 'righe "da completare" della BOM del 4/11 (LMR51430YDDCR, SRP5030T-3R3M, FSMSMTR)' },
+  { data: '04/11/2026', tipo: 'parole BOM', cosa: 'Quarzi Abracon ABM dal P/N (case dalla serie, frequenza); prese USB-A/USB-B: 4 poli a passo 2,5 mm; tipo USB prima di "Receptacle"',
+    perche: 'ABM8G-12.000MHZ-D2Y-T e 5787834-1 restavano da completare; i valori standard restano da validare' },
 ];

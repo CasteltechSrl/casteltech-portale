@@ -45,13 +45,13 @@ test('famiglie nuove: film, termistori, batterie, antenne con codici come le fam
   assert.equal(film.famiglia, 'CF');
   assert.equal(film.attributi.case, 'P150');
   const cf = calcola('CF', film.attributi, 'B32922C3104K');
-  assert.equal(cf.prod, 'CF-P150-100NF-10-275V');
+  assert.equal(cf.prod, 'CF-THT-P150-100NF-10-275V');
   assert.equal(cf.root, 'TCF-P150-100NX'); // 275 V non è nella tabella delle tensioni: X, come per i ceramici
   const nt = calcola('NT', { case: '0603', valore: '10K', tolleranza: '1' }, 'NCP18XH103F03RB');
   assert.equal(nt.prod, 'NT-0603-10K-1');
   assert.equal(nt.root, 'SNT-0603-10K0F');
   const bt = calcola('BT', { tipo: 'PORTABATTERIA', tecnologia: 'T' }, 'BK-912');
-  assert.equal(bt.prod, 'BT-PORTABATTERIA-BK-912');
+  assert.equal(bt.prod, 'BT-THT-PORTABATTERIA-BK-912');
   assert.equal(bt.root, 'TBT-PBAT-BK912');
   assert.equal(calcola('AN', { tipo: 'CHIP' }, '2450AT18A100E').root, 'SAN-ANTC-2450A');
   assert.ok(REGISTRO_AGGIUNTE.some(v => v.cosa.startsWith('CF')), 'ogni aggiunta è nel registro');
@@ -134,4 +134,46 @@ test('compatibile da verificare: dà il prezzo quando il P/N non si trova, mai u
     calcolaAcquistiCon([r], [100], REGOLE_SCARTO_DEFAULT, new Map());
     assert.equal(r.reperibilita.livello, 'ok');
   } finally { if (prima === undefined) delete process.env.MOUSER_API_KEY; else process.env.MOUSER_API_KEY = prima; }
+});
+
+test('codifica Croci (4/11/2026): THT dopo la famiglia, case IC come SOIC8, morsetti in TI con poli prima del passo', () => {
+  assert.equal(calcola('IC', { case: '8SOIC', tecnologia: 'S' }, 'LM358DR').prod, 'IC-SOIC8-LM358DR');
+  const dip = calcola('IC', { case: '8DIP', tecnologia: 'T' }, 'NE555P');
+  assert.equal(dip.prod, 'IC-THT-DIP8-NE555P');
+  assert.equal(dip.prodPrima, 'IC-DIP8-NE555P', 'il codice di prima serve a ritrovare i componenti già in archivio');
+  const mors = calcola('CN', { tipo: 'MORSETTO', passo: '5.08', poli: '2', tecnologia: 'T' }, '1729128');
+  assert.equal(mors.famiglia, 'TI');
+  assert.equal(mors.prod, 'TI-THT-MORSETTO-2-508-1729128');
+  // il case "THT" già scritto non si ripete
+  assert.equal(calcola('CN', { tipo: 'RJ45', passo: '1.02', poli: '8', case: 'THT', tecnologia: 'T' }, 'HR911105A').prod, 'CN-THT-RJ45-102-8-HR911105A');
+});
+
+test('righe da completare del 4/11/2026: categorie DigiKey, SOT-23-THIN, induttanze con decimali, quarzi Abracon, USB-B', async () => {
+  const { decodificaMpn } = await import('../src/engine/codifica/decoder.js');
+  const { connettoreStandard } = await import('../src/engine/codifica/famiglia-proposta.js');
+  // AP22913 / MIC2981: "Power Distribution Switches, Load Drivers" sono integrati, non interruttori
+  assert.equal(famigliaDaDk(['Integrated Circuits (ICs)', 'Power Management (PMIC)', 'Power Distribution Switches, Load Drivers'], {}, ''), 'IC');
+  assert.equal(famigliaDaDk(['Integrated Circuits (ICs)', 'Power Management (PMIC)', 'LED Drivers'], {}, ''), 'IC');
+  assert.equal(famigliaDaDk(['Switches', 'Tactile Switches'], {}, ''), 'IT');
+  // LMR51430YDDCR
+  assert.equal(calcola('IC', { case: 'SOT-23-6 THIN' }, 'LMR51430YDDCR').root, 'SIC-T236-LMR51');
+  assert.equal(caseLookup('SOT-23-THIN')[2], VER);
+  // SRP5030T-3R3M: DigiKey dà 5.7X5.2
+  assert.equal(calcola('ID', { case: '5.7X5.2', valore: '3.3uH' }, 'SRP5030T-3R3M').root, 'SID-0505-3U30X');
+  // ABM8G: case dalla serie, frequenza dal P/N
+  const [fam, a] = decodificaMpn('ABM8G-25.000MHZ-18-D2Y-T');
+  assert.equal(fam, 'QZ'); assert.equal(a.case, '3225'); assert.equal(a.valore, '25MHz');
+  assert.equal(calcola('QZ', a, 'ABM8G-25.000MHZ-18-D2Y-T').root, 'SQZ-3225-25M0X');
+  assert.equal(decodificaMpn('ABM8G-12.000MHZ-D2Y-T')[1].case, '3225');
+  // presa USB-B senza passo: valori standard (4 poli, 2,5 mm), solo quelli che mancano
+  const std = connettoreStandard('CN', { tipo: 'USBB', case: 'THT', tecnologia: 'T' })!;
+  assert.equal(std.attributi.passo, '2.5'); assert.equal(std.attributi.poli, '4');
+  assert.equal(calcola('CN', std.attributi, '5787834-1').root, 'TCN-USBB-25004');
+  assert.equal(connettoreStandard('CN', { tipo: 'USBB', passo: '2.0', poli: '4' }), null);
+  assert.equal(connettoreStandard('MI', { tipo: 'USBB' }), null);
+  // DigiKey: tipo USB prima di "Receptacle"
+  const dk = daDigikey({ ManufacturerProductNumber: '5787834-1', Description: { ProductDescription: 'CONN RCPT USB-B 4POS' },
+    Category: { Name: 'Connectors, Interconnects', ChildCategories: [{ Name: 'USB, DVI, HDMI Connectors' }] },
+    Parameters: [{ ParameterText: 'Connector Type', ValueText: 'USB-B' }, { ParameterText: 'Mounting Type', ValueText: 'Through Hole' }] } as any);
+  assert.equal(dk.attributi.tipo, 'USBB');
 });

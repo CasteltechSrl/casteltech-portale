@@ -42,8 +42,10 @@ export const REGOLE_CATEGORIE: [string, string][] = [
   ['TANTALUM', 'CT'], ['FILM CAPACITORS', 'CF'], ['FERRITE BEADS', 'FR'], ['COMMON MODE CHOKES', 'FE'], ['FIXED INDUCTORS', 'ID'], ['INDUCTORS', 'ID'],
   ['PTC RESETTABLE FUSES', 'FS'], ['FUSES', 'FS'], ['ZENER', 'DZ'], ['VARISTORS', 'VR'], ['TVS', 'SP'],
   ['OPTOISOLATORS', 'IC'], ['DIGITAL ISOLATORS', 'IC'], ['ISOLATORS', 'IC'],
-  ['LED INDICATION', 'DL'], ['LED ', 'DL'], ['FETS, MOSFETS', 'TM'], ['BIPOLAR (BJT)', 'TB'],
+  ['LED DRIVER', 'IC'], ['LED INDICATION', 'DL'], ['LED ', 'DL'], ['FETS, MOSFETS', 'TM'], ['BIPOLAR (BJT)', 'TB'],
   ['THYRISTORS', 'TS'], ['SCRS', 'TS'], ['TRIACS', 'TS'], ['OSCILLATORS', 'OS'], ['RESONATORS', 'RI'], ['CRYSTALS', 'QZ'],
+  // integrati con "switch" o "driver" nel nome della categoria (4/11/2026: AP22913, MIC2981 finivano tra gli interruttori)
+  ['POWER DISTRIBUTION', 'IC'], ['LOAD DRIVER', 'IC'], ['GATE DRIVER', 'IC'], ['ANALOG SWITCH', 'IC'], ['PMIC', 'IC'],
   ['RELAYS', 'RL'], ['DIP SWITCHES', 'DW'], ['SWITCHES', 'IT'],
   ['BATTERY HOLDERS', 'BT'], ['BATTERIES', 'BT'], ['BATTERY PRODUCTS', 'BT'], ['RF ANTENNAS', 'AN'], ['ANTENNAS', 'AN'],
   ['DC DC CONVERTERS', 'CV'], ['AC DC CONVERTERS', 'CV'], ['TRANSFORMERS', 'TF'], ['EMI/RFI FILTERS', 'FE'],
@@ -104,14 +106,20 @@ function caseDk(par: Record<string, string>, fam: string): string | null {
       return `${String(Math.round(d[0] * 10)).padStart(2, '0')}${String(Math.round(d[1] * 10)).padStart(2, '0')}`;
     }
   }
+  if (fam === 'IT' && (!pc || pc.trim() === '-')) { // pulsanti senza case: dimensione in mm LLWW (4/11/2026, FSMSMTR)
+    const d = mm(par['Size / Dimension']);
+    if (d && d.length === 2) return `${String(Math.round(d[0] * 10)).padStart(2, '0')}${String(Math.round(d[1] * 10)).padStart(2, '0')}`;
+  }
   let s = sdp || pc;
   if (!s) return null;
   s = s.replace(/\(.*?\)/g, '').split(',')[0].trim().toUpperCase();
   return s.replace(/^(SOT-23|TO-220|TO-92|TO-252|TO-263)-3$/, '$1');
 }
 
-const CONN_TIPO: [string, string][] = [['HEADER', 'BASETTA'], ['RECEPTACLE', 'PRESA'], ['SOCKET', 'PRESA'], ['USB - C', 'USBC'], ['USB-C', 'USBC'],
-  ['USB - MICRO', 'MICROUSB'], ['MICRO USB', 'MICROUSB'], ['USB - MINI', 'USBMINI'], ['RJ45', 'RJ45'], ['8P8C', 'RJ45'], ['FFC', 'FFC'], ['FPC', 'FFC'],
+// i tipi USB prima di "Receptacle" (4/11/2026: la presa USB-B 5787834-1 diventava una PRESA generica senza passo)
+const CONN_TIPO: [string, string][] = [['USB - C', 'USBC'], ['USB-C', 'USBC'], ['USB - MICRO', 'MICROUSB'], ['MICRO USB', 'MICROUSB'], ['USB - MINI', 'USBMINI'],
+  ['USB - B', 'USBB'], ['USB-B', 'USBB'], ['USB - A', 'USBA'], ['USB-A', 'USBA'],
+  ['HEADER', 'BASETTA'], ['RECEPTACLE', 'PRESA'], ['SOCKET', 'PRESA'], ['RJ45', 'RJ45'], ['8P8C', 'RJ45'], ['FFC', 'FFC'], ['FPC', 'FFC'],
   ['TERMINAL BLOCK', 'MORSETTO'], ['MICROSD', 'SDCARD'], ['SD', 'SDCARD'], ['HDMI', 'HDMI'], ['COAXIAL', 'COASSIALE'], ['U.FL', 'COASSIALE'], ['JACK', 'PWJACK']];
 const COLORI_DK: Record<string, string> = { RED: 'ROSSO', GREEN: 'VERDE', BLUE: 'BLU', YELLOW: 'GIALLO', ORANGE: 'ARANCIONE', WHITE: 'BIANCO',
   AMBER: 'AMBRA', INFRARED: 'IR', RGB: 'RGB', 'RED, GREEN, BLUE (RGB)': 'RGB' };
