@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
-  stessoNomeFornitore, tipoAutofattura,
+  stessoNomeFornitore, tipoAutofattura, stessaFatturaEstera, chiaveNumeroFattura, motivoNonScartabile,
 } from '../src/engine/autofatture.js';
 import { generaAutofatturaXml } from '../src/engine/fatturapa.js';
 import { ALIQUOTE, AUTOFATTURA_CINA, AUTOFATTURA_UE, AZIENDA, FORNITORE_CINA, FORNITORE_UE } from '../tools/fatturapa/esempi.js';
@@ -101,4 +101,23 @@ test('Autofatture: date scritte all\'inglese sulle fatture estere', () => {
 test('Autofatture: righe arrotondate una per una come sulla fattura (DigiKey 123868019 = 277,58)', () => {
   assert.equal(sommaRighe([{ codice: '', descrizione: 'a', quantita: 800, prezzo: 0.15068 }, { codice: '', descrizione: 'b', quantita: 500, prezzo: 0.12288 },
     { codice: '', descrizione: 'c', quantita: 550, prezzo: 0.17382 }]), 277.58);
+});
+
+test('Fatture estere doppie: stesso fornitore, numero e data anche da file diversi (Mouser 93214557 PDF + .eml, Adriano 4/11/2026)', () => {
+  const pdf = { fornitore: { ragione_sociale: 'MOUSER ELECTRONICS' }, numero: '93214557', data: '2026-10-24' };
+  const eml = { fornitore: { ragione_sociale: 'Mouser Electronics, Inc.' }, numero: '93214557', data: '2026-10-24' };
+  assert.equal(stessaFatturaEstera(pdf, eml), true);
+  assert.equal(stessaFatturaEstera(pdf, { ...eml, numero: '93338407' }), false);          // altra fattura
+  assert.equal(stessaFatturaEstera(pdf, { ...eml, data: '2026-10-29' }), false);          // stessa numerazione, altra data
+  assert.equal(stessaFatturaEstera(pdf, { ...eml, fornitore: { ragione_sociale: 'DIGI-KEY' } }), false);
+  assert.equal(stessaFatturaEstera({ ...pdf, numero: '' }, { ...eml, numero: '' }), false); // senza numero non si giudica
+  assert.equal(stessaFatturaEstera({ ...pdf, data: null }, { ...eml, data: null }), false);
+  // numero scritto in modo diverso
+  assert.equal(chiaveNumeroFattura('9bf0758d-10211386'), '9BF0758D10211386');
+  assert.equal(stessaFatturaEstera({ fornitore: { ragione_sociale: 'ANTHROPIC IRELAND, LIMITED' }, numero: '9BF0758D-10211386', data: '2026-10-24' },
+    { fornitore: { ragione_sociale: 'ANTHROPIC IRELAND' }, numero: '9BF0758D 10211386', data: '2026-10-24' }), true);
+  // si elimina solo se l'autofattura non è ancora stata preparata
+  assert.equal(motivoNonScartabile('da_confermare'), null);
+  assert.equal(motivoNonScartabile('errore'), null);
+  assert.notEqual(motivoNonScartabile('confermato'), null);
 });

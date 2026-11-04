@@ -909,9 +909,22 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       '"Scartata" vuol dire che per lo SdI la fattura non esiste: premi "Correggi", sistema righe o dati del cliente in anagrafica, poi "Emetti" (stesso numero e stessa data) e "Rimanda allo SdI", entro 5 giorni.',
       'Con la chiave di prova di Invoicetronic il pulsante è "Prova l\'invio", anche sulle bozze: niente arriva allo SdI e gli esiti sono simulati. Chiave, crediti e collegamento degli esiti sono in Impostazioni → Amministrazione.',
       'Non si può rimandare un documento già consegnato o in attesa di esito, né mandare una bozza con la chiave reale.',
+      'Più documenti insieme: nell\'elenco (Fatture, Note di credito, Autofatture) spunta le righe e premi "Invia allo SdI" in alto a destra: partono solo quelli emessi e non ancora inviati, il messaggio dice quali sono rimasti fuori e perché.',
     ],
     passi: ['Emetti il documento.', 'Invia allo SdI.', 'Controlla l\'esito nel riquadro SdI.'],
     pagine: [['/amministrazione/documenti?tipo=fattura', 'Fatture'], ['/impostazioni/amministrazione#sdi', 'Impostazioni → Invio allo SdI']],
+  },
+  {
+    id: 'autofatture-estere', area: 'amministrazione', titolo: 'Autofatture dalle fatture dei fornitori esteri',
+    parole: 'autofattura autofatture fattura estera estero fornitore mouser digikey anthropic reverse charge td17 td18 td19 doppione doppia due volte caricata errore eliminare elimina scartare spunta inviare sdi',
+    testo: [
+      'La fattura del fornitore estero (PDF o mail .eml) si carica in Amministrazione → Autofatture, riquadro "Fatture dei fornitori esteri", o arriva dalla cartella Drive: l\'IA legge fornitore, numero, data e righe. Si controlla, si preme "Prepara l\'autofattura" e nasce la bozza da emettere e mandare allo SdI.',
+      'La stessa fattura non entra due volte: se arriva di nuovo (stesso fornitore, numero e data, anche come file diverso, es. prima il PDF e poi la mail) il portale non la carica e lo scrive nel messaggio. Se due copie sono già nell\'elenco, la seconda ha la scritta rossa "doppione" e non si può preparare l\'autofattura finché non se ne elimina una.',
+      'Per togliere fatture caricate per errore: spunta le righe nel riquadro e premi "Elimina". Una fattura che ha già preparato l\'autofattura non si elimina da lì.',
+      'Nell\'elenco delle autofatture le spunte servono per scaricare XML ed Excel, "Invia allo SdI" (solo quelle emesse e non ancora inviate) ed "Elimina" (solo le bozze senza numero: un\'autofattura emessa o inviata allo SdI non si elimina mai).',
+    ],
+    passi: ['Amministrazione → Autofatture.', 'Carica la fattura estera e aprila.', 'Controlla fornitore e righe, poi "Prepara l\'autofattura".', 'Emetti la bozza e Invia allo SdI.'],
+    pagine: [['/amministrazione/documenti?tipo=autofattura', 'Autofatture']],
   },
   {
     id: 'nota-credito', area: 'amministrazione', titolo: 'Stornare una fattura (nota di credito)',

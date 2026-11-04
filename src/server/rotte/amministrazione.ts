@@ -425,7 +425,7 @@ export function rotteAmministrazione() {
         <input name="q" value="${cerca}" placeholder="Cliente o numero">
         <button>Cerca</button>
       </form>
-      ${tipo === 'autofattura' ? await riquadroFattureEstere() : ''}
+      ${tipo === 'autofattura' ? await riquadroFattureEstere(spunte) : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
         <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
@@ -468,6 +468,14 @@ export function rotteAmministrazione() {
         case 'elimina': {
           const n = await eliminaBozze(si.map(d => d.id));
           return torna(`${n === 1 ? '1 bozza eliminata' : `${n} bozze eliminate`}. ${esclusi}`.trim());
+        }
+        case 'invia': {
+          // uno per volta, come il pulsante "Invia allo SdI" della pagina del documento (Adriano 4/11/2026)
+          let n = 0; const errori: string[] = [];
+          for (const d of si) {
+            try { await inviaDocumento(d.id, utente); n++; } catch (e: any) { errori.push(`${d.etichetta}: ${e?.message ?? e}`); }
+          }
+          return torna(`${n === 1 ? '1 documento inviato allo SdI' : `${n} documenti inviati allo SdI`}${ambienteAttuale() === 'prova' ? ' in PROVA (chiave di prova: non arrivano davvero allo SdI)' : ": l'esito arriva di solito in pochi minuti"}. ${[esclusi, ...errori].filter(Boolean).join(' ')}`.trim());
         }
         case 'gia_fatturato': {
           const n = await segnaGiaFatturati(si.map(d => d.id), req.session.utente?.nome ?? 'ufficio');

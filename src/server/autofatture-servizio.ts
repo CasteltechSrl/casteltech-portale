@@ -11,7 +11,7 @@ import { controllaPartitaIva, preparaFornitore } from '../engine/anagrafica-forn
 import { nomeNazione, siglaNazione } from '../engine/amministrazione.js';
 import {
   SEZIONALE_AUTOFATTURE, cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, paeseDaPartitaIva, paeseFiscale, righeInEuro,
-  sommaRighe, stessoNomeFornitore, tipoAutofattura, type FatturaEstera,
+  sommaRighe, stessaFatturaEstera, stessoNomeFornitore, tipoAutofattura, type FatturaEstera,
 } from '../engine/autofatture.js';
 
 /** Quello che si salva in acquisizioni.proposta per una fattura estera. */
@@ -31,6 +31,23 @@ export async function autofatturaGiaFatta(numero: string, escluso = 0): Promise<
   if (!r) return null;
   return `Esiste già ${r.numero ? `l'autofattura n. ${r.numero}${r.sezionale ? `/${r.sezionale}` : ''} del ${r.data.split('-').reverse().join('/')}` : 'una bozza di autofattura'} per la fattura n. ${numero}.`;
 }
+
+/**
+ * La stessa fattura estera già caricata (Adriano 4/11/2026): un'altra acquisizione non scartata con stesso fornitore, numero e data,
+ * anche se il file è diverso (PDF e poi la mail .eml). `soloPrima` = solo quelle arrivate prima (per scartare quella arrivata dopo).
+ */
+export async function fatturaEsteraGiaCaricata(id: number, f: { fornitore?: { ragione_sociale?: string | null } | null; numero?: string | null; data?: string | null },
+  soloPrima = false): Promise<{ id: number; nome_file: string; stato: string; creato_il: Date } | null> {
+  if (!f?.numero || !f?.data) return null;
+  const altre = await q<{ id: number; nome_file: string; stato: string; creato_il: Date; proposta: any }>(`SELECT id, nome_file, stato, creato_il, proposta
+    FROM acquisizioni WHERE tipo = 'fattura_estera' AND stato <> 'scartato' AND id <> $1 AND ($2::boolean = false OR id < $1)
+      AND proposta->>'data' = $3 ORDER BY id`, [id, soloPrima, f.data]);
+  return altre.find(a => stessaFatturaEstera(a.proposta, f)) ?? null;
+}
+
+/** "il 04/11/2026 (file FATTURA MOUSER….pdf)" per i messaggi sui doppioni. */
+export const descriviCaricata = (a: { nome_file: string; creato_il: Date }) =>
+  `il ${new Date(a.creato_il).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })} (file ${a.nome_file})`;
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 

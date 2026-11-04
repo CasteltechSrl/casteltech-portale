@@ -181,3 +181,28 @@ export function cambioDaCsv(csv: string, data: string): number | null {
   }
   return migliore?.valore ?? null;
 }
+
+/**
+ * Stessa fattura del fornitore estero caricata due volte (Adriano 4/11/2026: la fattura Mouser 93214557 arrivata come PDF e poi come
+ * email .eml, file diversi): stesso fornitore (dal nome, come `stessoNomeFornitore`), stesso numero (senza spazi, punti, trattini e
+ * maiuscole/minuscole) e stessa data. Senza numero o senza data non si giudica (null = non è un doppione).
+ */
+export function chiaveNumeroFattura(numero: string | null | undefined): string {
+  return String(numero ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+export function stessaFatturaEstera(
+  a: { fornitore?: { ragione_sociale?: string | null } | null; numero?: string | null; data?: string | null } | null | undefined,
+  b: { fornitore?: { ragione_sociale?: string | null } | null; numero?: string | null; data?: string | null } | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  const na = chiaveNumeroFattura(a.numero), nb = chiaveNumeroFattura(b.numero);
+  if (!na || na !== nb || !a.data || a.data !== b.data) return false;
+  return stessoNomeFornitore(a.fornitore?.ragione_sociale, b.fornitore?.ragione_sociale);
+}
+
+/** Fattura estera da controllare: si elimina (si scarta) solo se non ha già preparato l'autofattura. */
+export function motivoNonScartabile(stato: string): string | null {
+  if (stato === 'confermato') return "ha già preparato l'autofattura (si elimina la bozza dell'autofattura, se non è emessa)";
+  if (stato === 'scartato') return 'è già eliminata';
+  return null;
+}
