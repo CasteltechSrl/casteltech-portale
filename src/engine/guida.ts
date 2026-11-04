@@ -534,12 +534,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'bom-preventivo', area: 'preventivi', titolo: 'Costo dei componenti dal preventivo (BOM collegata)',
-    parole: 'bom costo componenti acquisti materiali collegare prezzo componenti quotare quotata quotazione documenti cliente critico critici non quotato disponibile note',
+    parole: 'bom costo componenti acquisti materiali collegare prezzo componenti quotare quotata quotazione documenti cliente critico critici non quotato disponibile note senza prezzo evidenziati filtro',
     testo: [
       'Nel gruppo ACQUISTI del preventivo puoi scegliere una BOM già caricata in Quotazioni: il costo dei componenti a scheda si ricalcola sulle schede del preventivo con le offerte già lette dai distributori.',
       'Se scrivi il costo a mano, il collegamento alla BOM si toglie. Se la BOM viene eliminata, il costo salvato resta.',
       'Preventivo nato dai documenti del cliente: spuntando "Componenti" in Acquisti la BOM del cliente va da sola in Quotazioni e si quota (codici e prezzi dei distributori). Finita la quotazione il costo a scheda arriva nel preventivo; se ci sono righe da completare, codici da validare, righe senza prezzo o componenti non disponibili compare "Risolvi nella BOM quotata".',
       'Nella BOM quotata il riquadro in alto dice cosa resta da sistemare; quando hai finito premi "Torna al preventivo per la quota": il costo si ricalcola, poi Salva.',
+      'Componenti senza prezzo: in cima alla BOM quotata un riquadro rosso elenca le righe senza prezzo o non disponibili, con il link a ognuna; nella tabella quelle righe sono in rosso e il filtro "Senza prezzo" mostra solo loro. Non serve scorrere tutta la lista.',
       'Componenti non disponibili (critici): quando il costo arriva dalla BOM, ogni componente che non si trova in nessuno degli shop collegati viene scritto da solo nelle note del preventivo, una riga per componente: "P/N (riferimenti): componente non quotato perché attualmente non disponibile". Le note restano modificabili. Se nella BOM scrivi un prezzo a mano per quel componente, non è più critico: tornando al preventivo con "Torna al preventivo per la quota" la sua riga sparisce dalle note (poi Salva). Per mandarle al cliente spunta "Stampa anche le note interne del preventivo" nella stampa.',
     ],
     pagine: [['/quotazioni', 'Quotazioni → BOM caricate']],

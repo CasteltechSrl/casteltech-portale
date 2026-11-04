@@ -34,3 +34,24 @@ export function aggiornaNoteNonQuotati(note: string, righe: string[]): string {
   while (altre.length && !altre[altre.length - 1].trim()) altre.pop();
   return [...altre, ...righe].join('\n');
 }
+
+export interface RigaPerPrezzo {
+  n: number; pn: string | null; alternativaScelta?: string | null; designatori: string | null; valore: string | null; descrizioneBom?: string | null;
+  esito?: string; clienteFornisce?: boolean; acquisti: { scelta?: { disponibile: boolean } }[];
+}
+
+/**
+ * Righe della BOM quotata senza prezzo o non disponibili (Adriano 4/11/2026: "senza dover scorrere tutta la lista").
+ * Contano solo le righe da comprare; basta una quantità senza prezzo (o non disponibile) per finire nell'elenco.
+ */
+export function righeDaPrezzare(righe: RigaPerPrezzo[], nonMontato = 'NON MONTATO'): { n: number; nome: string; rif: string; motivo: 'senza prezzo' | 'non disponibile' }[] {
+  const uscita: { n: number; nome: string; rif: string; motivo: 'senza prezzo' | 'non disponibile' }[] = [];
+  for (const r of righe) {
+    if (r.esito === nonMontato || r.clienteFornisce || !r.acquisti?.length) continue;
+    const motivo = r.acquisti.some(x => !x.scelta) ? 'senza prezzo' : r.acquisti.some(x => x.scelta && !x.scelta.disponibile) ? 'non disponibile' : null;
+    if (!motivo) continue;
+    uscita.push({ n: r.n, nome: accorcia((r.alternativaScelta || r.pn || r.valore || r.descrizioneBom || 'senza P/N').trim(), 40),
+      rif: accorcia((r.designatori ?? '').trim(), 30), motivo });
+  }
+  return uscita;
+}

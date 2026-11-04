@@ -2,6 +2,7 @@
  * Sezione Quotazioni (fino al 28/10/2026 "Componenti"; solo ufficio): BOM con codifica e preventivo materiali, codifica di un P/N (l'archivio sta in Anagrafiche → Componenti).
  * Logica in src/server/codifica-servizio.ts; regole in src/engine/codifica/* e src/engine/acquisti.ts.
  */
+import { righeDaPrezzare } from '../../engine/non-quotati.js';
 import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -401,6 +402,17 @@ function avvisoNonMontati(righe: RigaBom[]): Raw {
     Se una voce non serve proprio, "togli" in fondo alla riga la toglie dalla BOM.</div>`;
 }
 
+/** Righe senza prezzo o non disponibili in evidenza sopra la tabella, con il link alla riga (Adriano 4/11/2026). */
+function avvisoDaPrezzare(righe: RigaBom[]): Raw {
+  const x = righeDaPrezzare(righe);
+  if (!x.length) return html``;
+  const senza = x.filter(r => r.motivo === 'senza prezzo').length, nd = x.length - senza;
+  return html`<div class="avviso da-prezzare-avviso" id="da-prezzare"><b>${[senza ? (senza === 1 ? '1 componente senza prezzo' : `${senza} componenti senza prezzo`) : '',
+    nd ? (nd === 1 ? '1 non disponibile' : `${nd} non disponibili`) : ''].filter(Boolean).join(' e ')}</b>:
+    ${x.map((r, i) => html`${i ? ' · ' : ''}<a href="#riga-${r.n}">riga ${r.n} ${r.nome}</a>${r.rif ? ` (${r.rif})` : ''}${r.motivo === 'non disponibile' ? html` <small>non disponibile</small>` : ''}`)}.
+    Si sistemano con "modifica" sulla riga (prezzo a mano, alternativa) o con "Aggiorna prezzi". Nella tabella sono in rosso; il filtro "Senza prezzo" mostra solo loro.</div>`;
+}
+
 function paginaAnalisi(a: any): Raw {
   const righe: RigaBom[] = a.righe ?? []; const quantita: number[] = a.quantita ?? [];
   const rp: Riepilogo | undefined = a.riepilogo?.perQuantita ? a.riepilogo : undefined;
@@ -409,6 +421,7 @@ function paginaAnalisi(a: any): Raw {
   const solo = !!a.solo_codifica; // codifica senza prezzi: niente totali, acquisti, reperibilità né compatibili
   const daSalvare = righe.filter(r => r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER || r.esito === ESITI.DB_FATTO).length;
   const mappa: Record<string, string> = a.mappatura ?? {};
+  const daPrezzare = new Set(solo || inCorso ? [] : righeDaPrezzare(righe).map(x => x.n));
   return html`
   <div class="intestazione-pagina"><h1>${a.nome}</h1>
     <div class="azioni">
@@ -443,15 +456,17 @@ function paginaAnalisi(a: any): Raw {
       <button title="La BOM va in Quotazioni e si rielabora con prezzi e disponibilità dai distributori">Cerca i prezzi</button></form></details>` : ''}
   ${righe.length ? html`
   ${avvisoNonMontati(righe)}
+  ${solo ? '' : avvisoDaPrezzare(righe)}
   ${solo ? '' : bloccoCompatibili(a, righe)}
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
     <button data-filtro="manca">Da completare (${righe.filter(r => CLASSE_ESITO[r.esito] === 'manca').length})</button>
     <button data-filtro="nuovo verifica">Nuovi (${righe.filter(r => ['nuovo', 'verifica'].includes(CLASSE_ESITO[r.esito])).length})</button>
     <button data-filtro="escluso" title="Non montati (DNP), PCB, fiducial, forniti dal cliente">Esclusi (${righe.filter(r => r.esito === ESITI.NON_MONTATO || r.clienteFornisce).length})</button>
+    ${solo ? '' : html`<button data-filtro="da-prezzare" title="Righe da comprare senza prezzo o non disponibili">Senza prezzo (${daPrezzare.size})</button>`}
     ${solo ? '' : html`<button data-filtro="critico attenzione">Reperibilità (${righe.filter(r => r.reperibilita && r.reperibilita.livello !== 'ok').length})</button>`}</div>
   <div class="tabella-scorre"><table class="bom"><thead><tr><th>Riga</th><th>P/N</th><th class="n">Qtà</th><th>Esito</th><th>Codice produzione</th><th>Codice gestionale</th>
     <th>Descrizione</th>${solo ? '' : html`<th>Reperib.</th>`}${quantita.map(s => html`<th class="n">${num(s, 0)} schede</th>`)}<th>Note</th><th></th></tr></thead><tbody>
-    ${righe.map(r => html`<tr id="riga-${r.n}" data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}">
+    ${righe.map(r => html`<tr id="riga-${r.n}"${daPrezzare.has(r.n) ? raw(' class="da-prezzare"') : ''} data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}${daPrezzare.has(r.n) ? ' da-prezzare' : ''}">
       <td>${r.n}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
         ${r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
           : r.alternativaProposta ? html`<br><a class="compatibile-da-verificare" href="#compatibili" title="P/N non trovato: il prezzo è quello di un compatibile, da verificare">→ ${r.alternativaProposta} <b>compatibile da verificare</b></a>`
