@@ -22,7 +22,7 @@ import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
-import { leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
+import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -977,13 +977,14 @@ export async function correggiRiga(id: number, n: number, dati: { famiglia: stri
 }
 
 /** Scrive nell'archivio i componenti nuovi completi e completa quelli già presenti. */
-export async function salvaInArchivio(id: number, utente: string): Promise<{ nuovi: number; aggiornati: number }> {
+export async function salvaInArchivio(id: number, utente: string, soloRiga?: number): Promise<{ nuovi: number; aggiornati: number }> {
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   const righe: RigaBom[] = a.righe;
   const fonte = `BOM ${a.nome} (${utente})`;
   let nuovi = 0, aggiornati = 0;
   await transazione(async c => {
     for (const r of righe) {
+      if (soloRiga != null && r.n !== soloRiga) continue;
       if ((r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER) && r.codiceGestionale) {
         if (r.pn && (await c.query(`SELECT 1 FROM componenti WHERE pn_key = $1`, [pnKey(r.pn)])).rowCount) continue;
         let gest = r.codiceGestionale;
@@ -1006,6 +1007,25 @@ export async function salvaInArchivio(id: number, utente: string): Promise<{ nuo
   });
   await salvaRighe(id, righe);
   return { nuovi, aggiornati };
+}
+
+/**
+ * "Verificato, salva nell'archivio" su una riga NUOVO - DA VERIFICARE (Adriano 4/11/2026): il codice è confermato dall'ufficio
+ * e il componente entra subito nell'archivio con stato OK; le prossime BOM con lo stesso P/N lo trovano già "in archivio".
+ */
+export async function verificaRiga(id: number, n: number, utente: string): Promise<string> {
+  const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
+  const righe: RigaBom[] | undefined = a?.righe;
+  const i = righe?.findIndex(x => x.n === n) ?? -1;
+  if (!righe || i < 0) return 'Riga non trovata.';
+  const oggi = new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' });
+  const x = confermaVerifica(righe[i], ESITI, NOTA_DA_VALIDARE, utente, oggi);
+  if (!x.ok) return x.errore;
+  righe[i] = x.riga;
+  await salvaRighe(id, righe);
+  const s = await salvaInArchivio(id, utente, n);
+  return s.nuovi ? `Codice ${righe[i].codiceGestionale} verificato e salvato nell'archivio componenti.`
+    : `Codice verificato. Il P/N era già nell'archivio: non è stato aggiunto di nuovo.`;
 }
 
 // ───────────────────────────── codifica di un singolo P/N ─────────────────────────────

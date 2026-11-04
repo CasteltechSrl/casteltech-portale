@@ -9,7 +9,7 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, togliRiga, type RigaBom, type Riepilogo,
+  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, verificaRiga, togliRiga, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
@@ -244,6 +244,11 @@ export function rotteComponenti() {
     if (x.n) avviaElaborazione(id);
     res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}${x.n ? '' : '&aggiungi=1'}#aggiungi-riga`);
   });
+  // codice "da verificare" controllato dall'ufficio: si conferma e va nell'archivio (Adriano 4/11/2026)
+  r.post('/bom/:id/riga/:n/verificata', async (req, res) => {
+    const msg = await verificaRiga(Number(req.params.id), Number(req.params.n), req.session.utente!.nome);
+    res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}`);
+  });
   r.post('/bom/:id/riga/:n/elimina', async (req, res) => {
     const msg = await togliRiga(Number(req.params.id), Number(req.params.n));
     res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent(msg)}`);
@@ -364,9 +369,10 @@ function statoCollegamenti() {
     <b>${iaConfigurata() ? 'attiva' : 'non attiva'}</b>${attivi.length < Object.keys(f).length || !iaConfigurata() ? html` · <a href="/impostazioni/componenti">come collegarli</a>` : ''}</p>`;
 }
 
-function badgeEsito(r: RigaBom) {
+function badgeEsito(r: RigaBom, aVerifica = '#verifica') {
   const e = r.clienteFornisce ? ESITI.CLIENTE : r.esito;
-  return html`<span class="esito ${CLASSE_ESITO[e] ?? ''}">${e}</span>`;
+  return e === ESITI.NUOVO_VER ? html`<a href="${aVerifica}" class="esito ${CLASSE_ESITO[e] ?? ''}" title="Apri la riga e premi Verificato">${e}</a>`
+    : html`<span class="esito ${CLASSE_ESITO[e] ?? ''}">${e}</span>`;
 }
 const badgeLivello = (r: RigaBom) => r.reperibilita ? html`<span class="livello ${r.reperibilita.livello}" title="${r.reperibilita.motivi.join('\n')}">${
   r.reperibilita.livello === 'ok' ? 'ok' : r.reperibilita.livello}</span>` : html``;
@@ -450,7 +456,7 @@ function paginaAnalisi(a: any): Raw {
           : r.alternativaProposta ? html`<br><a class="compatibile-da-verificare" href="#compatibili" title="P/N non trovato: il prezzo è quello di un compatibile, da verificare">→ ${r.alternativaProposta} <b>compatibile da verificare</b></a>`
           : r.alternative?.length ? html`<br><a class="alternative-pronte" href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative.length === 1 ? '1 alternativa' : `${r.alternative.length} alternative`}: scegli</a>` : ''}
         ${!r.pn && (r.valore || r.descrizioneBom) ? html`<br><small class="nota">${[r.valore, r.footprint].filter(Boolean).join(' · ') || r.descrizioneBom}</small>` : ''}</td>
-      <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r)}</td>
+      <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r, `/quotazioni/bom/${a.id}/riga/${r.n}#verifica`)}</td>
       <td class="codice">${r.codiceProduzione}</td><td class="codice">${r.codiceGestionale}</td><td class="taglia" title="${r.descrizione ?? ''}">${r.descrizione}</td>
       ${solo ? '' : html`<td>${badgeLivello(r)}</td>`}
       ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${nomeFornitore(x.scelta.fornitore)}
@@ -592,12 +598,31 @@ function bloccoAggiungiRiga(a: any): Raw {
     </form></details>`;
 }
 
+/**
+ * Riquadro "Da verificare" (Adriano 4/11/2026: "come faccio a verificarlo? dove devo cliccare?"): dice cosa controllare
+ * (le note della riga) e il pulsante che conferma il codice e lo salva nell'archivio.
+ */
+function riquadroVerifica(a: any, r: RigaBom): Raw {
+  if (r.esito !== ESITI.NUOVO_VER || r.clienteFornisce) return html``;
+  return html`<section class="blocco da-verificare" id="verifica">
+    <h2>Codice da verificare</h2>
+    <p>Il portale ha calcolato i codici ma non è sicuro di tutto: leggi le note qui sopra (es. case simile a uno già in tabella, valori standard usati).</p>
+    <ol class="nota"><li>Controlla famiglia e campi con il datasheet; se qualcosa è sbagliato correggilo e premi <b>Ricalcola</b>.</li>
+      <li>Se i codici vanno bene premi <b>Verificato</b>: la riga diventa "NUOVO" e il componente entra subito nell'archivio componenti con questi codici.</li></ol>
+    ${r.codiceGestionale ? html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/verificata" class="inline"
+        data-conferma="Confermi i codici ${r.codiceProduzione ?? ''} / ${r.codiceGestionale} e li salvi nell'archivio componenti?">
+      <button class="primario">✓ Verificato, salva nell'archivio</button></form>`
+      : html`<p class="avviso">Manca il codice gestionale: completa i dati e premi Ricalcola.</p>`}
+  </section>`;
+}
+
 function paginaRiga(a: any, r: RigaBom): Raw {
   const bloccata = r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO;
   const qta = r.acquisti[r.acquisti.length - 1]?.lorda ?? 0;
   return html`
   <div class="intestazione-pagina"><h1>Riga ${r.n}: ${r.pn ?? r.mpnAcquisto ?? r.valore ?? ''} ${badgeEsito(r)}</h1>
     <a class="bottone" href="/quotazioni/bom/${a.id}#riga-${r.n}">← Torna alla BOM</a></div>
+  ${riquadroVerifica(a, r)}
   <div class="griglia-preventivo">
     <form method="post" class="blocco">
       <p class="riepilogo">${r.designatori ? html`<b>Designatori:</b> ${r.designatori}<br>` : ''}

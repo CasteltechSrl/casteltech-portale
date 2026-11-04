@@ -82,3 +82,20 @@ export function leggiQuantitaScheda(testo: unknown): number | null {
   if (!/^\d+(\.\d+)?$/.test(t)) return null;
   return Number(t);
 }
+
+/** Inizio della nota lasciata quando l'ufficio conferma un codice "da verificare". */
+export const NOTA_VERIFICATO = 'codice verificato da';
+
+/**
+ * "Verificato" su una riga NUOVO - DA VERIFICARE (Adriano 4/11/2026: "dove devo cliccare?"): l'ufficio ha controllato famiglia e campi
+ * (ed eventualmente corretto e premuto Ricalcola) e conferma il codice. La riga diventa NUOVO (stato OK in archivio), le note
+ * "CODICE DA VALIDARE" si tolgono, le altre restano. Si può solo su una riga da verificare con il codice gestionale calcolato.
+ */
+export function confermaVerifica<R extends { esito: string; codiceGestionale: string | null; note: string[] }>(
+  r: R, esiti: { NUOVO: string; NUOVO_VER: string }, notaDaValidare: string, chi: string, oggi: string,
+): { ok: true; riga: R } | { ok: false; errore: string } {
+  if (r.esito !== esiti.NUOVO_VER) return { ok: false, errore: 'Questa riga non è da verificare.' };
+  if (!r.codiceGestionale) return { ok: false, errore: 'Manca il codice gestionale: completa i dati e premi Ricalcola.' };
+  const note = r.note.filter(n => !n.startsWith(notaDaValidare) && !n.startsWith(NOTA_VERIFICATO));
+  return { ok: true, riga: { ...r, esito: esiti.NUOVO, note: [...note, `${NOTA_VERIFICATO} ${chi} il ${oggi}`] } };
+}

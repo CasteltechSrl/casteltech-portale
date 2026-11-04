@@ -63,3 +63,19 @@ test('guida: modifiche a mano della BOM e ordine da più preventivi si trovano',
   assert.equal(cercaGuida('aggiungere riga bom componente comprato altrove')[0]?.argomento.id, 'bom-modifiche-mano');
   assert.equal(cercaGuida('ordine unico più preventivi')[0]?.argomento.id, 'ordine-da-preventivo');
 });
+
+test('BOM: "Verificato" conferma un codice da verificare e toglie la nota CODICE DA VALIDARE', async () => {
+  const { confermaVerifica, NOTA_VERIFICATO } = await import('../src/engine/codifica/modifiche-mano.js');
+  const E = { NUOVO: 'NUOVO', NUOVO_VER: 'NUOVO - DA VERIFICARE' };
+  const riga = { esito: E.NUOVO_VER, codiceGestionale: 'TTB-DP18-ULN28-001', note: ['PDIP-18 come il DIP-6 già in tabella (DP06)', 'CODICE DA VALIDARE: valori standard'] };
+  const x = confermaVerifica(riga, E, 'CODICE DA VALIDARE', 'ADRIANO', '04/11/2026');
+  assert.ok(x.ok);
+  if (x.ok) {
+    assert.equal(x.riga.esito, 'NUOVO');
+    assert.deepEqual(x.riga.note, ['PDIP-18 come il DIP-6 già in tabella (DP06)', `${NOTA_VERIFICATO} ADRIANO il 04/11/2026`]);
+  }
+  const giaOk = confermaVerifica({ ...riga, esito: 'NUOVO' }, E, 'CODICE DA VALIDARE', 'A', 'oggi');
+  assert.equal(giaOk.ok, false);
+  const senzaCodice = confermaVerifica({ ...riga, codiceGestionale: null }, E, 'CODICE DA VALIDARE', 'A', 'oggi');
+  assert.ok(!senzaCodice.ok && /Ricalcola/.test(senzaCodice.errore));
+});

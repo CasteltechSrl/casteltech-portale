@@ -193,3 +193,7 @@ test('guida: fattura estera caricata due volte e spunte delle autofatture', () =
   assert.equal(primi('fattura estera caricata due volte')[0], 'autofatture-estere');
   assert.equal(primi('eliminare autofattura doppione')[0], 'autofatture-estere');
 });
+
+test('guida: "componente da verificare nella BOM" porta alla codifica della BOM', () => {
+  assert.ok(primi('come verifico un componente da verificare nella bom', 3).includes('codifica-bom'));
+});
