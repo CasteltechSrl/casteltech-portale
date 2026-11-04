@@ -119,3 +119,14 @@ table.ut td { padding: .3mm 0; }
 .pannello-stampa .riquadro-invio form input { width: 100%; box-sizing: border-box; font: inherit; font-size: 8.5pt; margin-bottom: 3px; }
 .pannello-stampa .riquadro-invio button { font: inherit; font-size: 8.5pt; padding: 3px 8px; cursor: pointer; }
 @media print { .messaggio-stampa { display: none; } }
+
+/* Tempi di consegna (Adriano 4/11/2026): obbligatori prima di stampare o mandare, sempre "circa" */
+.consegna-stampa { border-top: 1px solid #ccc; margin-top: 4mm; padding: 2.5mm 3mm 0; font-size: 8.5pt; line-height: 1.4; break-inside: avoid; }
+.consegna-stampa + .fondo { margin-top: 2mm; }
+#tempi-consegna select { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 9pt; margin-top: 2px; }
+#tempi-consegna > label:not(.spunta) { display: block; margin-bottom: 5px; }
+#tempi-consegna.da-scegliere { border-color: #d9a400; background: #fff8dc; }
+#tempi-consegna:has(input[value="no"]:checked) .solo-acquisto,
+#tempi-consegna:has(input[value="si"]:checked) .solo-conto-lavoro { display: none; }
+.messaggio-stampa.manca-consegna { border-color: #d9a400; font-weight: 600; }
+.pannello-stampa .invia-email .aiuto.manca { color: #8a5a00; }

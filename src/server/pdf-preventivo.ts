@@ -17,7 +17,9 @@ export interface DatiPdfPreventivo {
   codice: string; revisione?: string | null; nSchede: number;
   righe: RigaDocumentoPreventivo[];
   riquadro: { senza: number; con: number | null }; scontato: boolean; primoLotto: boolean; totale: number;
-  note?: string; pagamento?: string | null; condizioni: boolean; firma: boolean;
+  note?: string; pagamento?: string | null;
+  /** tempi di consegna già scritti ("Circa 3 settimane dall'arrivo del materiale"), vuoto = non stampati */
+  consegna?: string; condizioni: boolean; firma: boolean;
 }
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -181,8 +183,8 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
   }
 
   // ── riquadro verde con i prezzi a scheda, poi pagamento e totale ──
-  const altoRiq = 40, altoFondo = 46, altoFirme = d.firma && !d.condizioni ? 50 : 0;
-  if (y - altoRiq - altoFondo - altoFirme - 40 < PIEDE) { p = nuovaPagina(); y = H - M - 10; }
+  const altoRiq = 40, altoFondo = 46, altoFirme = d.firma && !d.condizioni ? 50 : 0, altoConsegna = d.consegna ? 30 : 0;
+  if (y - altoRiq - altoConsegna - altoFondo - altoFirme - 40 < PIEDE) { p = nuovaPagina(); y = H - M - 10; }
   y -= 14;
   const sc = d.scontato ? ' scontato' : '';
   const caselle: [string, string][] = [[`PREZZO A SCHEDA${sc.toUpperCase()}${d.riquadro.con != null ? ' SENZA COSTI UNA TANTUM' : ''}`, euro(d.riquadro.senza)]];
@@ -197,6 +199,12 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     scrivi(p, v, x + 8, y - 31, { f: grassetto, dim: 14, colore: VERDE });
   });
   y -= altoRiq + 12;
+  if (d.consegna) {
+    linea(p, M, y, L - M);
+    scrivi(p, 'TEMPI DI CONSEGNA', M + 6, y - 11, { dim: 6.5, colore: GRIGIO });
+    scrivi(p, d.consegna, M + 6, y - 23, { f: grassetto, dim: 9 });
+    y -= altoConsegna;
+  }
   const xTot = L - M - 175;
   linea(p, M, y, L - M); linea(p, M, y - altoFondo, L - M);
   p.drawLine({ start: { x: xTot, y }, end: { x: xTot, y: y - altoFondo }, thickness: 0.7, color: LINEA });
