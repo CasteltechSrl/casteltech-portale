@@ -303,6 +303,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    famiglie CF film, NT termistori, BT batterie, AN antenne; case nuovi/sinonimi (`CASE_AGGIUNTI`, `IC_FAM_AGGIUNTE`, DIP); categorie DigiKey dalla più specifica.
    I componenti in archivio non cambiano codice; le aggiunte toccano solo casi che il Python lasciava "da completare" (`tools/verifica-codifica.ts` da rifare con i dati veri).
    Archivio iniziale: file componenti_casteltech.json.gz da Impostazioni → Componenti.
+   Righe "NUOVO - DA VERIFICARE" (Adriano 4/11/2026; `confermaVerifica` in `engine/codifica/modifiche-mano.ts`, `verificaRiga` in `codifica-servizio.ts`,
+   POST `/quotazioni/bom/:id/riga/:n/verificata`): riquadro "Codice da verificare" nella pagina della riga, "✓ Verificato, salva nell'archivio" = esito NUOVO,
+   note CODICE DA VALIDARE tolte, componente subito in archivio con stato OK (solo quella riga). Il punto finale nel codice di produzione = P/N accorciato a 30 caratteri (`PROD_MAX`).
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".

@@ -948,3 +948,7 @@ button.piccolo { font-size: .8rem; padding: .2rem .6rem; }
 /* Sede operativa del cliente (Adriano 4/11/2026): i campi si vedono solo con la spunta "Sede operativa diversa dalla sede legale" */
 fieldset.campi-sede-operativa { display: none; border: 1px solid #d0d7de; border-radius: 6px; padding: .5rem .8rem; margin: .4rem 0 .8rem; }
 form:has(#sede-operativa-diversa:checked) fieldset.campi-sede-operativa { display: block; }
+/* riga BOM "NUOVO - DA VERIFICARE": riquadro con il pulsante Verificato (Adriano 4/11/2026) */
+.blocco.da-verificare { border-left: 4px solid #e0b000; background: #fffbea; margin-bottom: 1rem; }
+.blocco.da-verificare ol { margin: .3rem 0 .6rem; padding-left: 1.3rem; }
+a.esito { text-decoration: none; }
