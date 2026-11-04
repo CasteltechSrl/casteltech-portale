@@ -172,39 +172,72 @@ export function leggiRitocchi(x: any): Ritocchi {
   };
 }
 
+/** Per difetto all'euro intero (Adriano 4/11/2026: 174,63 → 174); il margine evita che 174,9999999 diventi 173. */
+export const perDifetto = (x: number) => Math.floor(r2(x) + 1e-6);
+
+/**
+ * Importi della stampa arrotondati per difetto (Adriano 4/11/2026, P2026-2388): prezzo a scheda senza una tantum e prezzo a scheda
+ * con le una tantum all'euro intero; il lotto = prezzo a scheda × schede, le una tantum = differenza (con − senza) × schede,
+ * così il totale torna con le cifre stampate (es. 5 schede, 174,63 e 201,75 → 174 e 201, totale 1.005).
+ */
+export function baseArrotondata(x: { prezzoScheda: number; prezzoSchedaConUnaTantum: number; unaTantum: number; nSchede: number }) {
+  const scheda = perDifetto(x.prezzoScheda);
+  const lotto = r2(scheda * x.nSchede);
+  if (!(x.unaTantum > 0)) return { prezzoScheda: scheda, lotto, unaTantum: 0, nSchede: x.nSchede };
+  const con = Math.max(perDifetto(x.prezzoSchedaConUnaTantum), scheda);
+  return { prezzoScheda: scheda, lotto, unaTantum: r2((con - scheda) * x.nSchede), nSchede: x.nSchede };
+}
+
+/** Toglie (o aggiunge) la differenza alla voce più grande, così le righe stampate tornano con il totale arrotondato. */
+export function pareggiaSulPiuGrande<T>(xs: T[], valore: (x: T) => number, cambia: (x: T, nuovo: number) => void, totale: number): void {
+  if (!xs.length) return;
+  const grande = xs.reduce((a, x) => (valore(x) > valore(a) ? x : a));
+  cambia(grande, r2(valore(grande) + totale - xs.reduce((a, x) => a + valore(x), 0)));
+}
+
 /**
  * Importi stampati con i ritocchi. Sconto in %: vale per tutto (prezzo a scheda, lotto, una tantum, righe in più);
  * sconto in €: si toglie dal totale del lotto (e quindi dal prezzo a scheda). Le righe in più vanno solo nel totale.
+ * Con `arrotonda` (la stampa per il cliente) anche i prezzi a scheda scontati sono per difetto all'euro e lo sconto
+ * stampato è la differenza che fa tornare il totale.
  */
-export function contiStampa(base: { prezzoScheda: number; lotto: number; unaTantum: number; nSchede: number }, rit: Ritocchi) {
+export function contiStampa(base: { prezzoScheda: number; lotto: number; unaTantum: number; nSchede: number }, rit: Ritocchi, arrotonda = false) {
   const righe = rit.righe.map(x => ({ ...x, importo: r2(x.quantita * x.prezzo) }));
   const extra = r2(righe.reduce((a, x) => a + x.importo, 0));
   const lordo = r2(base.lotto + base.unaTantum + extra);
   const s = rit.sconto;
-  const sconto = !s ? 0 : s.tipo === 'percento' ? r2(lordo * s.valore / 100) : r2(Math.min(s.valore, base.lotto + extra));
+  let sconto = !s ? 0 : s.tipo === 'percento' ? r2(lordo * s.valore / 100) : r2(Math.min(s.valore, base.lotto + extra));
   const f = s?.tipo === 'percento' ? 1 - s.valore / 100 : 1;
   const menoLotto = s?.tipo === 'euro' ? Math.min(sconto, base.lotto) : 0;
+  let prezzoScheda = r2(base.nSchede ? (base.lotto * f - menoLotto) / base.nSchede : base.prezzoScheda * f);
+  let lotto = r2(base.lotto * f - menoLotto);
+  let unaTantum = r2(base.unaTantum * f);
+  let totale = r2(lordo - sconto);
+  if (arrotonda && s && base.nSchede) {
+    const con = perDifetto((lotto + unaTantum) / base.nSchede);
+    prezzoScheda = perDifetto(prezzoScheda);
+    lotto = r2(prezzoScheda * base.nSchede);
+    unaTantum = base.unaTantum > 0 ? r2((Math.max(con, prezzoScheda) - prezzoScheda) * base.nSchede) : 0;
+    const extraScontato = s.tipo === 'percento' ? r2(extra * f) : r2(extra - Math.max(0, sconto - menoLotto));
+    totale = r2(lotto + unaTantum + extraScontato);
+    sconto = r2(lordo - totale);
+  }
   return {
     righe, extra, lordo, sconto,
     etichettaSconto: !s ? '' : s.tipo === 'percento' ? `Sconto ${String(s.valore).replace('.', ',')}%` : 'Sconto',
-    prezzoScheda: r2(base.nSchede ? (base.lotto * f - menoLotto) / base.nSchede : base.prezzoScheda * f),
-    lotto: r2(base.lotto * f - menoLotto),
-    unaTantum: r2(base.unaTantum * f),
-    totale: r2(lordo - sconto),
+    prezzoScheda, lotto, unaTantum, totale,
   };
 }
 
 /**
  * Riquadro verde della stampa (Adriano, 4/11/2026): solo il prezzo a scheda SENZA le una tantum e, se ce ne sono,
- * il prezzo a scheda CON le una tantum (una tantum divise sulle schede del lotto). Con lo sconto valgono i prezzi scontati;
+ * il prezzo a scheda CON le una tantum, tutti e due per difetto all'euro intero. Con lo sconto valgono i prezzi scontati;
  * le righe in più scritte nella stampa non entrano (vanno solo nel totale).
  */
 export function prezziRiquadro(
   base: { prezzoScheda: number; lotto: number; unaTantum: number; nSchede: number; prezzoSchedaConUnaTantum: number }, rit: Ritocchi,
 ): { senza: number; con: number | null } {
-  const c = contiStampa({ prezzoScheda: base.prezzoScheda, lotto: base.lotto, unaTantum: base.unaTantum, nSchede: base.nSchede }, rit);
+  const c = contiStampa(baseArrotondata(base), rit, true);
   if (!(base.unaTantum > 0)) return { senza: c.prezzoScheda, con: null };
-  const con = !rit.sconto ? base.prezzoSchedaConUnaTantum
-    : base.nSchede ? r2((c.lotto + c.unaTantum) / base.nSchede) : r2(c.prezzoScheda + c.unaTantum);
-  return { senza: c.prezzoScheda, con };
+  return { senza: c.prezzoScheda, con: base.nSchede ? r2((c.lotto + c.unaTantum) / base.nSchede) : r2(c.prezzoScheda + c.unaTantum) };
 }
