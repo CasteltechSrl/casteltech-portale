@@ -9,16 +9,17 @@
 import { unisciAlternative } from '../codifica/alternative-bom.js';
 import { elencoDesignatori, nomiColonne, pnKey, rigaIntestazione, rilevaColonne } from '../codifica/bom.js';
 import type { ComponenteCad } from './gencad.js';
-import { contaRefori, type Foratura } from './foratura.js';
+import { contaForiFissaggio, contaRefori, type Foratura } from './foratura.js';
+import { contaPuntiSaldatura, DIAMETRO_FISSAGGIO, PIEDINI_STIMATI, STAGNO_A_PUNTO, type PuntiSaldatura } from './piedini.js';
 import type { Lato, LetturaPickPlace, Posizione } from './pick-place.js';
 import type { Piazzola } from './gerber.js';
 import { controllaPiazzole } from './piazzole.js';
 import type { PropostaProdotto } from './prodotto.js';
 
 export const CONSUMI = {
-  ondaGrammiForo: 0.016,
+  ondaGrammiForo: STAGNO_A_PUNTO.saldatrice,
   ondaScorie: 0.20,
-  filoGrammiPiedino: 0.125,
+  filoGrammiPiedino: STAGNO_A_PUNTO.filo,
   pastaGrammi: 1.5,
   pastaOgniComponenti: 450, // "ogni 400–500 componenti": si usa il valore di mezzo
   // stima dai Gerber della pasta (suggerimento di Adriano Croci, 29/10/2026): area delle aperture × spessore lamina × densità della pasta
@@ -87,7 +88,8 @@ export interface AnalisiScheda {
   conteggi: {
     smdTop: number; smdBot: number; tht: number; nonMontati: number;
     feederTop: number; feederBot: number; codiciTht: number; item: number;
-    refori: number | null; reforiDa: 'CAD' | 'foratura' | null; vias: number | null; foriNonMetallizzati: number | null;
+    /** punti di saldatura THT a scheda (piedini dei THT montati, vedi `piedini.ts`) */
+    refori: number | null; reforiDa: 'CAD' | 'componenti' | 'foratura' | 'stima' | null; vias: number | null; foriNonMetallizzati: number | null;
     fiducialTop: number; fiducialBot: number;
   };
   lavorazione: {
@@ -98,6 +100,8 @@ export interface AnalisiScheda {
     motivo: string;
   };
   consumi: { pastaGrammi: number; stagnoOndaGrammi: number; filoGrammi: number; pastaDaGerber?: StimaPasta | null };
+  /** punti di saldatura THT e confronto BOM–fori del Gerber (Adriano 4/11/2026); manca nei pacchetti analizzati prima */
+  puntiSaldatura?: PuntiSaldatura;
   dimensioni: { larghezza: number; altezza: number; stima: boolean } | null;
   noteCliente: { refs: string[]; nota: string }[];
   segnalazioni: Segnalazione[];
@@ -383,13 +387,18 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   const codici = (l: Componente[]) => new Set(l.map(chiave)).size;
   const feederTop = codici(smdTop), feederBot = codici(smdBot), codiciTht = codici(tht);
   const item = new Set(smd.map(chiave)).size + codiciTht + 1; // + il PCB
-  const daCad = tht.every(c => c.piediniTht != null) && tht.length > 0;
   const forature = (ing.forature ?? []).map(f => f.foratura);
   const fori = forature.length ? contaRefori(forature) : null;
-  let refori: number | null = null, reforiDa: AnalisiScheda['conteggi']['reforiDa'] = null;
-  if (daCad) { refori = tht.reduce((s, c) => s + (c.piediniTht ?? 0), 0); reforiDa = 'CAD'; }
-  else if (fori) { refori = fori.refori; reforiDa = 'foratura'; }
-  if (daCad && fori && Math.abs(fori.refori - refori!) > Math.max(4, refori! * 0.1))
+  // punti di saldatura (Adriano 4/11/2026): piedini dei THT montati (CAD, poi impronta), confrontati con i fori del Gerber
+  const punti = contaPuntiSaldatura(componenti, fori ? { refori: fori.refori, fissaggio: contaForiFissaggio(forature, DIAMETRO_FISSAGGIO) } : null);
+  const refori: number | null = tht.length ? punti.punti : (fori ? 0 : null);
+  const reforiDa: AnalisiScheda['conteggi']['reforiDa'] = tht.length ? punti.fonte : null;
+  if (punti.fonte === 'stima') S('avviso', `Punti di saldatura stimati: di ${punti.senzaPiedini.length} THT non si leggono i piedini (né CAD né impronta chiara) e i fori del Gerber non bastano a dirlo: contati ${PIEDINI_STIMATI} a pezzo, da controllare.`, punti.senzaPiedini);
+  if (punti.fonte === 'foratura') S('info', `Piedini non letti per ${punti.senzaPiedini.length} THT: i punti di saldatura vengono dai fori del Gerber.`, punti.senzaPiedini);
+  if (punti.fori?.senzaComponente) S('info', `${punti.fori.senzaComponente} fori metallizzati del Gerber non hanno un componente montato (fissaggi, test point, componenti non in BOM): non contano come punti di saldatura.`);
+  if (punti.nonMontati.piedini) S('info', `${punti.nonMontati.refs.length} THT non montati: ${punti.nonMontati.piedini} fori restano vuoti (niente stagno).`, punti.nonMontati.refs);
+  const daCad = punti.fonte === 'CAD';
+  if (daCad && fori && Math.abs(fori.refori - punti.nonMontati.piedini - (punti.fori?.fissaggio ?? 0) - refori!) > Math.max(4, refori! * 0.1))
     S('avviso', `Refori: ${refori} dai piedini THT del CAD, ${fori.refori} fori metallizzati da almeno 0,7 mm nella foratura (la differenza può essere di fori di fissaggio o componenti non montati).`);
   if (tht.length && refori == null) S('avviso', 'Mancano CAD e foratura: non posso contare i refori per lo stagno.');
   const fidTop = fiducial.filter(f => f.lato !== 'BOT').length, fidBot = fiducial.filter(f => f.lato === 'BOT').length;
@@ -455,6 +464,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
       vias: fori?.vias ?? null, foriNonMetallizzati: fori?.nonMetallizzati ?? null, fiducialTop: fidTop, fiducialBot: fidBot },
     lavorazione: { latiSmd, latoSmdUnico, latoCorpiTht, saldaturaTht, motivo },
     consumi, dimensioni, noteCliente,
+    ...(tht.length || fori ? { puntiSaldatura: punti } : {}),
     segnalazioni: seg.sort((a, b) => ordine[a.livello] - ordine[b.livello]),
     ...(controlloPiazzole ? { piazzole: controlloPiazzole } : {}),
   };

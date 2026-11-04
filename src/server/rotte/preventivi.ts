@@ -19,6 +19,8 @@ import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
+import { puntiSaldaturaPreventivo } from '../punti-saldatura-servizio.js';
+import { STAGNO_A_PUNTO } from '../../engine/scheda/piedini.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
 import { parametriStampa, stampaPreventivo } from '../views/stampa-preventivo.js';
 import { segnoInvioElenco } from '../views/invio.js';
@@ -167,6 +169,13 @@ export function rottePreventivi() {
   });
 
   // costo componenti a scheda dalla BOM scelta, ricalcolato sulle schede del preventivo
+  // punti di saldatura THT (Adriano 4/11/2026): dai documenti del cliente o dalla BOM collegata
+  r.get('/punti-saldatura', async (req, res) => {
+    const x = await puntiSaldaturaPreventivo(Number(req.query.preventivo) || null, Number(req.query.bom) || null);
+    if (!x) return res.status(404).json({ errore: 'Niente da cui contare i piedini: collega la BOM (spunta Componenti) o crea il preventivo dai documenti del cliente. Altrimenti scrivi i punti a mano: lo stagno si calcola da solo.' });
+    res.json(x);
+  });
+
   r.get('/costo-bom', async (req, res) => {
     const x = await costoBomPerPreventivo(Number(req.query.bom) || 0, Number(req.query.schede) || 0);
     if (!x) return res.status(404).json({ errore: 'BOM non trovata (forse eliminata)' });
@@ -584,7 +593,14 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       <output id="esito-bom" class="nota">${d.bomId && !bom.some(b => b.id === d.bomId) ? 'La BOM collegata è stata eliminata: il costo resta quello salvato.' : ''}</output>
       ${salvato?.pacchetto?.bom_file && !d.bomId ? html`<small class="nota">BOM dei documenti del cliente: spuntando <b>Componenti</b> si quota da sola.</small>` : ''}
       <small class="nota"><a href="/quotazioni/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/quotazioni/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
-  const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}` : campoBase(p);
+  // punti di saldatura THT contati dai componenti (Adriano 4/11/2026): il pulsante compila punti a mano e stagno (filo o saldatrice)
+  const riquadroPunti = () => html`
+    <div class="largo punti-saldatura" id="punti-saldatura" data-filo="${STAGNO_A_PUNTO.filo}" data-saldatrice="${STAGNO_A_PUNTO.saldatrice}">
+      <button type="button" id="conta-punti" title="Conta i piedini dei THT (documenti del cliente o BOM collegata), controlla i fori del Gerber e compila punti di saldatura e stagno">Conta i punti dai componenti</button>
+      <output id="esito-punti" class="nota">Con THT a mano: punti × ${num(STAGNO_A_PUNTO.filo, 3)} g di filo. Con la saldatrice: punti × ${num(STAGNO_A_PUNTO.saldatrice, 3)} g (+ scorie).</output>
+    </div>`;
+  const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}`
+    : p.codice === 'qntPuntiSaldaturaMano' ? html`${riquadroPunti()}${campoBase(p)}` : campoBase(p);
   const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`

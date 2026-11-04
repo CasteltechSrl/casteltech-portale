@@ -310,6 +310,59 @@
   });
   form.addEventListener('submit', e => e.preventDefault());
 
+  // ── Punti di saldatura THT (Adriano 4/11/2026) ──
+  // "Conta i punti dai componenti": piedini dei THT dai documenti del cliente o dalla BOM collegata (fori del Gerber controllati);
+  // THT a mano → punti di saldatura a mano + stagno in filo; THT a onda → stagno della saldatrice in grammi.
+  // Scrivendo i punti a mano, lo stagno in filo segue (se era vuoto o calcolato dal portale).
+  const boxPunti = document.getElementById('punti-saldatura');
+  if (boxPunti) {
+    const gFilo = Number(boxPunti.dataset.filo), gSald = Number(boxPunti.dataset.saldatrice);
+    const esitoPunti = document.getElementById('esito-punti');
+    const campo = cod => form.querySelector(`input[data-param="${cod}"]`);
+    const numero = el => { const t = String(el && el.value || '').trim(); return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); };
+    const scrivi = (cod, n) => {
+      const el = campo(cod); if (!el) return;
+      el.value = String(Math.round(n * 1000) / 1000).replace('.', ',');
+      el.dataset.auto = el.value;
+    };
+    const spuntato = cod => { const c = casella(cod); return !!(c && c.checked); };
+    const puntiEl = campo('qntPuntiSaldaturaMano'), filoEl = campo('stagnoInFilo');
+    if (puntiEl && filoEl) puntiEl.addEventListener('input', () => {
+      const libero = !filoEl.value.trim() || numero(filoEl) === 0 || filoEl.value === filoEl.dataset.auto;
+      const n = numero(puntiEl);
+      if (libero && Number.isFinite(n)) scrivi('stagnoInFilo', n * gFilo);
+    });
+    document.getElementById('conta-punti').addEventListener('click', async () => {
+      esitoPunti.classList.remove('negativo');
+      esitoPunti.textContent = 'Conto i piedini dei THT…';
+      const bom = selBom ? selBom.value : '';
+      const res = await fetch(`/preventivi/punti-saldatura?preventivo=${encodeURIComponent(id || '')}&bom=${encodeURIComponent(bom)}`);
+      const x = await res.json().catch(() => ({}));
+      if (!res.ok) { esitoPunti.textContent = x.errore || 'Errore nel conteggio dei piedini'; esitoPunti.classList.add('negativo'); return; }
+      if (x.punti == null || !x.thtMontati) { esitoPunti.textContent = x.testo || 'Nessun THT da saldare.'; return; }
+      // a mano o saldatrice: le spunte del preventivo; se non ce n'è nessuna, quella proposta dai documenti
+      let saldatura = spuntato('usaOnda') ? 'onda' : spuntato('presenteTht') ? 'mano' : x.saldatura;
+      if (!saldatura) {
+        esitoPunti.textContent = `${x.testo} Metti la spunta "THT onda" o "THT a mano" e premi di nuovo: così so quale stagno compilare.`;
+        esitoPunti.classList.add('negativo'); return;
+      }
+      const spunta = casella(saldatura === 'onda' ? 'usaOnda' : 'presenteTht');
+      if (spunta && !spunta.checked) { spunta.checked = true; aggiornaDipendenze(); }
+      let fatto;
+      if (saldatura === 'mano') {
+        scrivi('qntPuntiSaldaturaMano', x.punti); scrivi('stagnoInFilo', x.punti * gFilo);
+        fatto = `Punti di saldatura a mano ${x.punti}, stagno in filo ${String(Math.round(x.punti * gFilo * 1000) / 1000).replace('.', ',')} g a scheda.`;
+      } else {
+        scrivi('stagnoPerSaldature', x.punti * gSald); scrivi('stagno', 0);
+        fatto = `Stagno saldatrice ${String(Math.round(x.punti * gSald * 1000) / 1000).replace('.', ',')} g a scheda (le scorie le aggiunge il calcolo).`;
+      }
+      esitoPunti.textContent = `${x.origine === 'documenti' ? 'Documenti del cliente' : 'BOM collegata'}: ${x.testo} → ${fatto}`;
+      esitoPunti.classList.toggle('negativo', x.fonte === 'stima');
+      modificato = true; statoEl.textContent = 'Modifiche non salvate';
+      ricalcola();
+    });
+  }
+
   // Vista Semplice / Completo (src/engine/preventivo-semplice.ts): nasconde i campi che non si toccano quasi mai; il calcolo non cambia
   const bottoniVista = form.querySelectorAll('.vista-preventivo button');
   const applicaVista = vista => {
