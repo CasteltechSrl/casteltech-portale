@@ -952,3 +952,6 @@ form:has(#sede-operativa-diversa:checked) fieldset.campi-sede-operativa { displa
 .blocco.da-verificare { border-left: 4px solid #e0b000; background: #fffbea; margin-bottom: 1rem; }
 .blocco.da-verificare ol { margin: .3rem 0 .6rem; padding-left: 1.3rem; }
 a.esito { text-decoration: none; }
+/* BOM quotata: righe senza prezzo o non disponibili in evidenza (Adriano 4/11/2026) */
+table.bom tr.da-prezzare td { background: #fdecea; }
+table.bom tr.da-prezzare td:first-child { box-shadow: inset 4px 0 0 var(--negativo); font-weight: 600; }
