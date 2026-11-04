@@ -3,6 +3,7 @@
  * Il numero si prende solo all'emissione, nella stessa transazione che genera l'XML: se l'XML ha errori
  * la transazione si annulla e il numero non si consuma.
  */
+import { destinazioneProposta } from '../engine/sede-operativa.js';
 import type pg from 'pg';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-servizio.js';
@@ -44,9 +45,11 @@ async function trasportoProposto(clienteId: number): Promise<DatiTrasporto> {
   const u = await q1<{ t: any }>(`SELECT dati_trasporto AS t FROM documenti WHERE tipo = 'ddt' AND cliente_id = $1 AND numero IS NOT NULL
     AND stato <> 'annullato' AND dati_trasporto IS NOT NULL ORDER BY data DESC, numero DESC LIMIT 1`, [clienteId]);
   const prima = u?.t ?? {};
+  // sede operativa del cliente (Adriano 4/11/2026): se c'è, è lei il luogo di destinazione proposto
+  const cliente = await q1(`SELECT * FROM clienti WHERE id = $1`, [clienteId]);
   // lo storico di FIC scrive il corriere (o MITTENTE / DESTINATARIO) in "trasportatore"
   return trasportoDaModulo({ causale_trasporto: prima.causale || 'RESO LAVORATO', a_cura: prima.a_cura || prima.trasportatore || 'MITTENTE',
-    trasportatore: prima.a_cura ? prima.trasportatore : '', porto: prima.porto, aspetto: prima.aspetto, destinazione: prima.destinazione });
+    trasportatore: prima.a_cura ? prima.trasportatore : '', porto: prima.porto, aspetto: prima.aspetto, destinazione: destinazioneProposta(cliente, prima.destinazione) });
 }
 
 /**

@@ -22,6 +22,7 @@ import { barraPagine } from '../views/paginazione.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
+import { sedeDaModulo, sedeDelCliente, testoSede } from '../../engine/sede-operativa.js';
 import { sezioneLettereIntento } from './fiscale.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
 import { aggiornaPrezzoMateriale, domandaPrezzoMateriale } from '../materiali-consumo-servizio.js';
@@ -465,6 +466,10 @@ export function rotteAnagrafiche() {
     ['cap', 'CAP'], ['comune', 'Comune'], ['provincia', 'Provincia (sigla)'], ['nazione', 'Nazione (sigla, IT)'],
     ['codice_sdi', 'Codice destinatario SDI', '7 caratteri; per la pubblica amministrazione il codice ufficio di 6'], ['pec', 'PEC'],
     ['email_amministrazione', 'Email per le fatture']];
+  // sede operativa (Adriano 4/11/2026): campi visibili solo con la spunta (stile.css, :has)
+  const CAMPI_SEDE: [string, string, string?][] = [['sede_op_presso', 'Presso (facoltativo)', 'es. C/O MAIL BOXES ETC'], ['sede_op_indirizzo', 'Indirizzo'],
+    ['sede_op_cap', 'CAP'], ['sede_op_comune', 'Comune'], ['sede_op_provincia', 'Provincia (sigla)'], ['sede_op_nazione', 'Nazione (sigla, IT)'],
+    ['sede_op_note', 'Note per la consegna', 'es. ATT. SIG. ROSSI']];
   // ── Scheda unica del cliente (proposta della revisione, Adriano 1/11/2026): tutto quel che riguarda un cliente in una pagina ──
   r.get('/clienti/:id', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
@@ -494,19 +499,34 @@ export function rotteAnagrafiche() {
           Pubblica amministrazione (fattura FPA12 al codice ufficio, con numero d'ordine e CIG)</label>
         <label class="spunta"><input type="checkbox" name="split_payment" ${c.split_payment ? raw('checked') : ''}>
           Split payment: il cliente paga solo imponibile e bollo, l'IVA la versa lui (art. 17-ter)</label>
+        <h3>Sedi</h3>
+        <p class="nota">L'indirizzo qui sopra è la <b>sede legale</b> (va in fattura e nell'intestazione del DDT).</p>
+        <label class="spunta"><input type="checkbox" name="sede_operativa_diversa" id="sede-operativa-diversa" ${c.sede_operativa_diversa ? raw('checked') : ''}>
+          Sede operativa diversa dalla sede legale (la merce va lì: è il luogo di destinazione proposto nei DDT)</label>
+        <fieldset class="campi-sede-operativa"><legend>Sede operativa</legend>
+          <div class="riga-campi">${CAMPI_SEDE.map(([k, t, aiuto]) => html`<label>${t}
+            <input name="${k}" value="${c[k] ?? (k === 'sede_op_nazione' ? 'IT' : '')}" class="maiuscolo" ${aiuto ? raw(`placeholder="${aiuto}"`) : ''}></label>`)}</div>
+        </fieldset>
         <div class="barra-azioni"><button class="primario">Salva</button></div>
       </form>
       ${await sezioneLettereIntento(c.id)}`, msg(req)));
   });
   r.post('/clienti/:id/fiscali', async (req, res) => {
     const id = Number(req.params.id);
-    const { dati, errori } = datiFiscaliDaModulo(req.body ?? {});
+    const { dati, errori: erroriFiscali } = datiFiscaliDaModulo(req.body ?? {});
+    const sede = sedeDaModulo(req.body ?? {});
+    const errori = [...erroriFiscali, ...sede.errori];
     if (errori.length) return res.redirect(`/anagrafiche/clienti/${id}/fiscali?msg=${encodeURIComponent(`Non salvato: ${errori.join(' ')}`)}`);
     await q(`UPDATE clienti SET partita_iva = $2, codice_fiscale = $3, indirizzo = $4, cap = $5, comune = $6, provincia = $7, nazione = $8,
       codice_sdi = $9, pec = $10, email_amministrazione = $11, pubblica_amministrazione = $12, split_payment = $13,
       aliquota_iva = (SELECT codice FROM aliquote_iva WHERE codice = $14), condizione_pagamento = (SELECT codice FROM condizioni_pagamento WHERE codice = $15),
       aggiornato_il = now() WHERE id = $1`, [id, dati.partita_iva, dati.codice_fiscale, dati.indirizzo, dati.cap, dati.comune, dati.provincia, dati.nazione,
       dati.codice_sdi, dati.pec, dati.email_amministrazione, dati.pubblica_amministrazione, dati.split_payment, dati.aliquota_iva, dati.condizione_pagamento]);
+    // senza spunta i campi della sede operativa restano com'erano (si ritrovano rimettendo la spunta)
+    const s = sede.sede;
+    await q(`UPDATE clienti SET sede_operativa_diversa = $2${sede.diversa ? `, sede_op_presso = $3, sede_op_indirizzo = $4, sede_op_cap = $5, sede_op_comune = $6,
+      sede_op_provincia = $7, sede_op_nazione = $8, sede_op_note = $9` : ''} WHERE id = $1`,
+      sede.diversa ? [id, true, s.presso, s.indirizzo, s.cap, s.comune, s.provincia, s.nazione, s.note] : [id, false]);
     res.redirect(`/anagrafiche/clienti/${id}/fiscali?msg=${encodeURIComponent('Dati fiscali salvati.')}`);
   });
 
@@ -645,7 +665,8 @@ function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
   return html`
     <div class="intestazione-pagina scheda-cliente">
       <div><h1>${c.ragione_sociale}</h1>
-        <p class="nota">${[c.partita_iva ? `P.IVA ${c.partita_iva}` : '', [c.indirizzo, c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' '),
+        <p class="nota">${[c.partita_iva ? `P.IVA ${c.partita_iva}` : '', (sedeDelCliente(c) ? 'sede legale ' : '') + [c.indirizzo, c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' '),
+          sedeDelCliente(c) ? `sede operativa ${testoSede(sedeDelCliente(c)!).replace(/\n/g, ', ')}` : '',
           c.pec ? `PEC ${c.pec}` : '', c.email_amministrazione ? c.email_amministrazione : '', c.condizione_pagamento ? `pagamento ${c.condizione_pagamento}` : '',
           c.pubblica_amministrazione ? 'pubblica amministrazione' : '', c.split_payment ? 'split payment' : ''].filter(Boolean).join(' · ')}
           ${d.storico && d.storico.media > 0 ? html` · <span class="etichetta cliente" title="fatturato medio annuo dagli export di Fatture in Cloud">fascia ${d.storico.fascia}</span>` : ''}</p></div>

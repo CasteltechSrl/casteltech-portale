@@ -67,6 +67,12 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   (eccezione voluta alla regola codice-cliente, per questo non sono in `prodotti`). Gruppo "Servizi una tantum" in fondo al menu Codice (`opzioniServizi`: documenti con
   `cellaCodice(x, i, prodotti, servizi)`, ordine con valore `ut:CODICE` → riga tipo servizio), descrizione modificabile, prezzo proposto; Ordini da e-mail e PDF propongono
   il servizio dalla descrizione (`servizioProposto`). Venduto per anno nella pagina: codice UT o, per le fatture di prima/FIC, la prima riga della descrizione che cita UN servizio.
+- Sede operativa dei clienti (Adriano 4/11/2026, caso ELEXES; migrazione 072 `clienti.sede_operativa_diversa` + `sede_op_*`, `engine/sede-operativa.ts`, test in
+  `tests/sede-operativa.test.ts`): l'indirizzo dei dati fiscali è la sede legale (fattura, intestazione DDT); spunta "Sede operativa diversa dalla sede legale" in
+  Anagrafiche → Clienti → Dati fiscali mostra i campi della seconda sede (presso, indirizzo, CAP, comune, provincia, nazione, note per la consegna; CSS `:has`).
+  Nei DDT nuovi il luogo di destinazione proposto è la sede operativa (`destinazioneProposta`, prima dell'ultimo DDT), avviso se il DDT ne ha un'altra.
+  Da FIC (campo "Indirizzo di spedizione"): file `sedi_operative_fic.json.gz` (Project Files → sedi-operative) in Impostazioni → Amministrazione → Sedi operative
+  (`caricaSediOperative`: solo clienti in anagrafica, non tocca sedi già scritte nel portale né altri dati).
 - Prezzi in anagrafica (Adriano 31/10/2026; migrazione 051, `engine/prezzi-fic.ts`, `prezzi-servizio.ts`, test in `tests/prezzi-fic.test.ts`): Prodotti → colonna
   Prezzo € (vendita a scheda), Componenti → ultimo acquisto (prezzo, fornitore, data, pezzi). Da FIC con `tools/prezzi-da-fic.ts`: prodotto = il più recente tra
   ultima fattura emessa al cliente e anagrafica prodotti FIC (differenze in un Excel per Adriano); componente = ultimo ordine a fornitore con quel P/N o codice
