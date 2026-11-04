@@ -157,6 +157,17 @@ export function elencoBackup(): { nome: string; kb: number; byte: number }[] {
   } catch { return []; }
 }
 
+/**
+ * La copia serale di oggi manca? Contano SOLO le copie serali (nome senza motivo): quelle "prima-di-eliminare-…" del giorno
+ * non la sostituiscono (3/11/2026: due copie prima di eliminare ordini e preventivi hanno fatto saltare la copia delle 18).
+ * Il nome ha l'ora UTC: alle 18 italiane è sempre lo stesso giorno.
+ */
+export function backupSeraleDaFare(nomi: string[], giorno: string): boolean {
+  const serale = new RegExp(`^casteltech-backup-${giorno}-(\\d\\d)-\\d\\d\\.json\\.gz$`);
+  // copia serale = fatta dalle 16 UTC in poi (18 italiane d'inverno, 18 d'estate = 16 UTC); quelle del mattino non contano
+  return !nomi.some(n => { const m = serale.exec(n); return m != null && Number(m[1]) >= 16; });
+}
+
 /** Controlla ogni 10 minuti se è l'ora del backup (18:00 ora italiana, lunedì–venerdì). Non tocca il database finché non è l'ora. */
 export function avviaBackupNotturno() {
   let ultimoGiorno = '';
@@ -165,10 +176,10 @@ export function avviaBackupNotturno() {
     const p = Object.fromEntries(ora.map(x => [x.type, x.value]));
     const giorno = `${p.year}-${p.month}-${p.day}`;
     const feriale = !['Sat', 'Sun'].includes(p.weekday);
-    if (feriale && p.hour === '18' && giorno !== ultimoGiorno) {
+    // dalle 18 alle 21: se il portale riparte dopo le 18 (pubblicazione serale) la copia si fa lo stesso
+    if (feriale && Number(p.hour) >= 18 && Number(p.hour) < 22 && giorno !== ultimoGiorno) {
       ultimoGiorno = giorno;
-      // il portale è ripartito dopo le 18:00 (pubblicazione serale): la copia di oggi c'è già
-      if (elencoBackup().some(b => b.nome.startsWith(`casteltech-backup-${giorno}`))) return;
+      if (!backupSeraleDaFare(elencoBackup().map(b => b.nome), giorno)) return;
       void backupNotturno();
     }
   }, 10 * 60_000).unref();

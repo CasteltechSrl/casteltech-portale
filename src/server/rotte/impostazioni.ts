@@ -31,6 +31,9 @@ import { FASI, PARAMETRI, MATERIALI, VOCI } from '../../catalogo/iniziale.js';
 import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine/eliminazioni.js';
 import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
 import { rotteServizi } from './servizi.js';
+import { chiudereSessioni, ETICHETTE_TIPO, problemaPassword, type TipoRegistro } from '../../engine/registro.js';
+import { chiudiSessioniUtente } from '../registro-servizio.js';
+import { paginata } from '../views/paginazione.js';
 import { controlloEliminaUtente, controlloUtente, DESCRIZIONI_RUOLI, NOMI_RUOLI, RUOLI, ruoloDaModulo, type Ruolo } from '../../engine/ruoli.js';
 
 /** Codici del catalogo di partenza: il programma li usa, non si eliminano (si spengono con "Attiva"). */
@@ -586,14 +589,15 @@ export function rotteImpostazioni() {
             <td><input name="email" form="u-nuovo" type="email" required></td>
             <td>${sceltaRuolo(null, 'u-nuovo')}</td>
             <td></td>
-            <td><input name="password" type="password" form="u-nuovo" required minlength="10" autocomplete="new-password" placeholder="almeno 10 caratteri"></td>
+            <td><input name="password" type="password" form="u-nuovo" required minlength="10" autocomplete="new-password" placeholder="almeno 10 caratteri, non facile"></td>
             <td><form method="post" action="/impostazioni/utenti" id="u-nuovo"><button class="primario">Aggiungi</button></form></td>
           </tr>
         </tbody></table>`, req.query.msg ? String(req.query.msg) : undefined));
   });
   r.post('/utenti', async (req, res) => {
     const pwd = String(req.body.password ?? '');
-    if (pwd.length < 10) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('La password deve avere almeno 10 caratteri.'), 'password', 'u-nuovo'));
+    const debole = problemaPassword(pwd, { email: String(req.body.email ?? ''), nome: String(req.body.nome ?? '') });
+    if (debole) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent(`Utente non aggiunto: ${debole}.`), 'password', 'u-nuovo'));
     const errore = controlloUtente({ chi: req.session.utente!.ruolo, nuovo: true, ruoloNuovo: ruoloDaModulo(req.body.ruolo), altriAmministratoriAttivi: 0 });
     if (errore) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(errore));
     try {
@@ -612,6 +616,7 @@ export function rotteImpostazioni() {
     if (errore) return torna(errore);
     try {
       await q(`DELETE FROM utenti WHERE id = $1`, [id]);
+      await chiudiSessioniUtente(id);
     } catch (e: any) {
       // ha creato preventivi, commesse, tempi…: resta per lo storico
       if (e?.code === '23503') return torna(`${u.nome} non eliminato: ha già lavorato nel portale. Togli la spunta Attivo per bloccare l'accesso.`);
@@ -624,26 +629,71 @@ export function rotteImpostazioni() {
     const id = Number(req.params.id);
     const ruolo = ruoloDaModulo(req.body.ruolo);
     const attivo = req.body.attivo === 'on';
-    const attuale = await q1<{ ruolo: Ruolo }>(`SELECT ruolo FROM utenti WHERE id = $1`, [id]);
+    const attuale = await q1<{ ruolo: Ruolo; attivo: boolean }>(`SELECT ruolo, attivo FROM utenti WHERE id = $1`, [id]);
     if (!attuale) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente non trovato.'));
     const errore = controlloUtente({ chi: req.session.utente!.ruolo, ruoloAttuale: attuale.ruolo, ruoloNuovo: ruolo, attivoNuovo: attivo,
       stessoUtente: id === req.session.utente!.id, altriAmministratoriAttivi: await altriAmministratori(id) });
     if (errore) return res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent(errore));
+    const pwd = String(req.body.password ?? '');
+    const debole = pwd ? problemaPassword(pwd, { email: String(req.body.email ?? ''), nome: String(req.body.nome ?? '') }) : null;
+    if (debole) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent(`Non salvato: ${debole}.`), 'password', `u-${id}`));
     await q(`UPDATE utenti SET nome = $2, email = lower(nullif($3, '')), ruolo = $4, attivo = $5 WHERE id = $1`,
       [id, String(req.body.nome).trim(), String(req.body.email ?? '').trim(), ruolo, attivo]);
-    const pwd = String(req.body.password ?? '');
-    if (pwd) {
-      if (pwd.length < 10) return res.redirect(conCampo('/impostazioni/utenti?msg=' + encodeURIComponent('Password non cambiata: almeno 10 caratteri.'), 'password', `u-${id}`));
-      await q(`UPDATE utenti SET password_hash = $2 WHERE id = $1`, [id, await bcrypt.hash(pwd, 12)]);
-    }
-    res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente salvato.'));
+    if (pwd) await q(`UPDATE utenti SET password_hash = $2 WHERE id = $1`, [id, await bcrypt.hash(pwd, 12)]);
+    // chi viene disattivato, cambia ruolo o password esce subito da tutti i dispositivi (chi lavora qui resta dentro)
+    let chiuse = 0;
+    if (chiudereSessioni({ attivoPrima: attuale.attivo, attivoDopo: attivo, ruoloPrima: attuale.ruolo, ruoloDopo: ruolo, passwordCambiata: !!pwd }))
+      chiuse = await chiudiSessioniUtente(id, id === req.session.utente!.id ? req.sessionID : undefined);
+    res.redirect('/impostazioni/utenti?msg=' + encodeURIComponent('Utente salvato.' + (chiuse ? ` Accessi aperti chiusi: ${chiuse}.` : '')));
+  });
+
+  // ── Registro delle attività: chi ha cambiato cosa e quando (engine/registro.ts) ──
+  r.get('/registro', async (req, res) => {
+    const tipo = String(req.query.tipo ?? '');
+    const utente = Number(req.query.utente) || null;
+    const dal = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dal ?? '')) ? String(req.query.dal) : null;
+    const al = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.al ?? '')) ? String(req.query.al) : null;
+    const cerca = String(req.query.cerca ?? '').trim();
+    const tipi = tipo === 'accessi' ? ['accesso', 'accesso_fallito'] : tipo ? [tipo] : null;
+    // al massimo 5.000 righe per volta (lette solo quando si apre la pagina)
+    const righe = await q(`SELECT il, utente_nome, tipo, sezione, azione, oggetto, link, indirizzo FROM registro_attivita
+      WHERE ($1::text[] IS NULL OR tipo = ANY($1)) AND ($2::int IS NULL OR utente_id = $2)
+        AND ($3::date IS NULL OR il >= $3::date) AND ($4::date IS NULL OR il < $4::date + 1)
+        AND ($5 = '' OR concat_ws(' ', utente_nome, sezione, azione, oggetto, percorso) ILIKE '%' || $5 || '%')
+      ORDER BY il DESC LIMIT 5000`, [tipi, utente, dal, al, cerca]);
+    const utenti = await q(`SELECT id, nome FROM utenti ORDER BY nome`);
+    const { righe: pagina, barra } = paginata(righe, req.query);
+    const ora = (d: Date) => new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
+    res.send(pag(req, 'Registro', html`
+      <p class="nota">Chi ha salvato, eliminato o è entrato nel portale, e quando. Si scrive da solo dal 4/11/2026; non contiene i valori scritti
+        (password, importi), solo la sezione, l'azione e le righe toccate. Le bozze che si salvano da sole compaiono una volta ogni 10 minuti.</p>
+      <form method="get" class="filtri">
+        <label>Tipo <select name="tipo">
+          ${[['', 'Tutto'], ['modifica', 'Modifiche'], ['eliminazione', 'Eliminazioni'], ['accessi', 'Accessi']].map(([v, t]) => html`<option value="${v}" ${v === tipo ? raw('selected') : ''}>${t}</option>`)}
+        </select></label>
+        <label>Chi <select name="utente"><option value="">Tutti</option>
+          ${utenti.map(u => html`<option value="${u.id}" ${u.id === utente ? raw('selected') : ''}>${u.nome}</option>`)}</select></label>
+        <label>Dal <input type="date" name="dal" value="${dal ?? ''}"></label>
+        <label>Al <input type="date" name="al" value="${al ?? ''}"></label>
+        <label>Cerca <input name="cerca" value="${cerca}" placeholder="sezione, azione, numero"></label>
+        <button>Filtra</button>
+      </form>
+      ${righe.length ? '' : html`<p>Nessuna riga.</p>`}
+      ${righe.length ? html`<table>
+        <thead><tr><th>Quando</th><th>Chi</th><th>Tipo</th><th>Sezione</th><th>Azione</th><th>Righe</th></tr></thead>
+        <tbody>${pagina.map(x => html`<tr class="${x.tipo === 'eliminazione' || x.tipo === 'accesso_fallito' ? 'negativo' : ''}">
+          <td class="nowrap" data-valore="${new Date(x.il).toISOString()}">${ora(new Date(x.il))}</td><td>${x.utente_nome ?? ''}</td>
+          <td>${ETICHETTE_TIPO[x.tipo as TipoRegistro] ?? x.tipo}</td><td>${x.sezione ?? ''}</td>
+          <td>${x.azione ?? ''}${x.indirizzo ? html` <span class="tenue">(${x.indirizzo})</span>` : ''}</td>
+          <td>${x.link ? html`<a href="${x.link}">${x.oggetto ?? 'apri'}</a>` : x.oggetto ?? ''}</td></tr>`)}</tbody>
+      </table>${barra}` : ''}`));
   });
 
   return r;
 }
 
 function menu(attiva: string) {
-  const voci = [['tariffe', 'Tariffe'], ['amministrazione', 'Amministrazione'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['importa', 'Importa'], ['backup', 'Backup'], ['servizi', 'Servizi']];
+  const voci = [['tariffe', 'Tariffe'], ['amministrazione', 'Amministrazione'], ['operatori', 'Operatori'], ['promemoria', 'Promemoria'], ['componenti', 'Componenti'], ['ordini', 'Ordini'], ['crm', 'CRM'], ['fasi', 'Fasi'], ['parametri', 'Parametri'], ['materiali', 'Materiali di consumo'], ['voci', 'Voci di costo'], ['utenti', 'Utenti'], ['registro', 'Registro'], ['importa', 'Importa'], ['backup', 'Backup'], ['servizi', 'Servizi']];
   return html`<h1>Impostazioni</h1><nav class="schede">${voci.map(([s, t]) => html`<a href="/impostazioni/${s}" class="${t === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 
