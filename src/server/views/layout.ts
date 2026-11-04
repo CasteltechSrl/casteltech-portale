@@ -93,7 +93,8 @@ ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></scri
 <script src="/static/errori-campo.js?v=${VERSIONE}" defer></script>
 <script src="/static/formati.js?v=${VERSIONE}" defer></script>
 <script src="/static/sola-lettura.js?v=${VERSIONE}" defer></script>
-<script src="/static/ordina-tabelle.js?v=${VERSIONE}" defer></script>`) : ''}
+<script src="/static/ordina-tabelle.js?v=${VERSIONE}" defer></script>
+<script src="/static/elenchi-scelta.js?v=${VERSIONE}" defer></script>`) : ''}
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>
 </html>`;
