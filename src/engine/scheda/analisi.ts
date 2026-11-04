@@ -2,7 +2,7 @@
  * Incrocio dei documenti di una scheda (BOM, pick and place, CAD, forature, Gerber) e segnalazioni per il preventivo e la produzione.
  * Regole di Adriano (27/10/2026):
  *  - SMD su tutti e due i lati → THT saldati a mano; altrimenti a onda (i casi particolari per ora li decide l'ufficio).
- *  - Stagno: onda 0,016 g a foro + 20% di scorie; filo per saldatura a mano 0,125 g a piedino; pasta 1,5 g ogni 400–500 componenti.
+ *  - Stagno: onda 0,02 g a foro (Impostazioni, Adriano 4/11/2026) + 20% di scorie; filo per saldatura a mano 0,125 g a piedino; pasta 1,5 g ogni 400–500 componenti.
  *  - Il codice del componente: quello del cliente se è nella BOM, altrimenti la codifica Casteltech (sezione Componenti).
  * Nessun accesso al database.
  */

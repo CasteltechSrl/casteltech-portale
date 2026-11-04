@@ -70,7 +70,8 @@ test('BOM collegata: righe THT montate × quantità, poli dei connettori', () =>
 
 test('campi del preventivo: a mano punti + filo, saldatrice stagno in grammi', () => {
   assert.deepEqual(campiStagno(40, 'mano'), { qntPuntiSaldaturaMano: 40, stagnoInFilo: 40 * STAGNO_A_PUNTO.filo });
-  assert.deepEqual(campiStagno(40, 'onda'), { stagnoPerSaldature: 0.64, stagno: 0 });
+  assert.deepEqual(campiStagno(40, 'onda'), { stagno: 40, stagnoPerSaldature: 0 });
+  assert.equal(STAGNO_A_PUNTO.saldatrice, 0.02, 'Adriano 4/11/2026: 0,02 g a reoforo come in Impostazioni');
 });
 
 test('analisi dei documenti: punti dai piedini, fori in più segnalati, preventivo a onda con lo stagno della saldatrice', () => {
@@ -87,5 +88,6 @@ test('analisi dei documenti: punti dai piedini, fori in più segnalati, preventi
   assert.ok(a.segnalazioni.some(s => /2 fori metallizzati del Gerber non hanno un componente/.test(s.testo)));
   const { parametri } = parametriDaAnalisi(a);
   assert.equal(parametri.usaOnda, 1);
-  assert.equal(parametri.stagnoPerSaldature, 0.16);
+  assert.equal(parametri.stagno, 10);
+  assert.equal(parametri.stagnoPerSaldature, 0);
 });

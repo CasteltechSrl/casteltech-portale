@@ -312,7 +312,7 @@
 
   // ── Punti di saldatura THT (Adriano 4/11/2026) ──
   // "Conta i punti dai componenti": piedini dei THT dai documenti del cliente o dalla BOM collegata (fori del Gerber controllati);
-  // THT a mano → punti di saldatura a mano + stagno in filo; THT a onda → stagno della saldatrice in grammi.
+  // THT a mano → punti di saldatura a mano + stagno in filo; THT a onda → punti nello stagno della saldatrice a reofori (g a reoforo da Impostazioni).
   // Scrivendo i punti a mano, lo stagno in filo segue (se era vuoto o calcolato dal portale).
   const boxPunti = document.getElementById('punti-saldatura');
   if (boxPunti) {
@@ -353,8 +353,8 @@
         scrivi('qntPuntiSaldaturaMano', x.punti); scrivi('stagnoInFilo', x.punti * gFilo);
         fatto = `Punti di saldatura a mano ${x.punti}, stagno in filo ${String(Math.round(x.punti * gFilo * 1000) / 1000).replace('.', ',')} g a scheda.`;
       } else {
-        scrivi('stagnoPerSaldature', x.punti * gSald); scrivi('stagno', 0);
-        fatto = `Stagno saldatrice ${String(Math.round(x.punti * gSald * 1000) / 1000).replace('.', ',')} g a scheda (le scorie le aggiunge il calcolo).`;
+        scrivi('stagno', x.punti); scrivi('stagnoPerSaldature', 0);
+        fatto = `Stagno saldatrice ${x.punti} reofori a scheda, cioè ${String(Math.round(x.punti * gSald * 1000) / 1000).replace('.', ',')} g + scorie.`;
       }
       esitoPunti.textContent = `${x.origine === 'documenti' ? 'Documenti del cliente' : 'BOM collegata'}: ${x.testo} → ${fatto}`;
       esitoPunti.classList.toggle('negativo', x.fonte === 'stima');
