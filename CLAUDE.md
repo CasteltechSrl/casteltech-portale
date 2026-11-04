@@ -507,8 +507,9 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    dell'autofattura (sezionale AF, righe in euro con IVA 22 %) → Emetti: XML `generaAutofatturaXml` (cedente estero RF18, CAP 00000, DatiFattureCollegate).
    Doppioni (Adriano 4/11/2026; `stessaFatturaEstera` in `engine/autofatture.ts`, `fatturaEsteraGiaCaricata`, migrazione 070, test in `tests/autofatture.test.ts`): stessa fattura
    (fornitore dal nome, numero senza segni, data) anche da file diverso (PDF + .eml) = quella arrivata dopo si scarta in `elabora`; nell'elenco "doppione" rosso,
-   "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (Elimina = scarta, non se l'autofattura è già preparata, POST `/amministrazione/fatture-estere/azioni`);
-   "Invia allo SdI" con le spunte in Fatture, NC, Autofatture (`invia` in `engine/azioni-documenti.ts`: solo emessi senza `sdi_stato`).
+   "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (POST `/amministrazione/fatture-estere/azioni`: "Prepara l'autofattura" = `confermaFatturaEstera` per ognuna, con gli errori
+   nel messaggio; Elimina = scarta, non se l'autofattura è già preparata); "Invia allo SdI" con le spunte in Fatture, NC, Autofatture (`invia` in
+   `engine/azioni-documenti.ts`: solo emessi senza `sdi_stato`), il pulsante compare solo se nell'elenco c'è un documento da mandare (FIC = già inviati).
    ⬜ Sottocartella Drive dedicata (per ora la stessa cartella degli ordini).
    Nota di credito da una fattura emessa (righe copiate, fattura collegata). XML controllato con lo schema ufficiale: `npx tsx tools/verifica-fatturapa.ts`
    (rifarlo a ogni modifica di fatturapa.ts). Documenti emessi non si eliminano (si stornano).

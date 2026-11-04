@@ -920,8 +920,8 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'La fattura del fornitore estero (PDF o mail .eml) si carica in Amministrazione → Autofatture, riquadro "Fatture dei fornitori esteri", o arriva dalla cartella Drive: l\'IA legge fornitore, numero, data e righe. Si controlla, si preme "Prepara l\'autofattura" e nasce la bozza da emettere e mandare allo SdI.',
       'La stessa fattura non entra due volte: se arriva di nuovo (stesso fornitore, numero e data, anche come file diverso, es. prima il PDF e poi la mail) il portale non la carica e lo scrive nel messaggio. Se due copie sono già nell\'elenco, la seconda ha la scritta rossa "doppione" e non si può preparare l\'autofattura finché non se ne elimina una.',
-      'Per togliere fatture caricate per errore: spunta le righe nel riquadro e premi "Elimina". Una fattura che ha già preparato l\'autofattura non si elimina da lì.',
-      'Nell\'elenco delle autofatture le spunte servono per scaricare XML ed Excel, "Invia allo SdI" (solo quelle emesse e non ancora inviate) ed "Elimina" (solo le bozze senza numero: un\'autofattura emessa o inviata allo SdI non si elimina mai).',
+      'Più fatture insieme: spunta le righe nel riquadro e premi "Prepara l\'autofattura" (nasce una bozza per ognuna; quelle con errori o dubbi restano e il messaggio dice cosa sistemare aprendole) oppure "Elimina" per quelle caricate per errore. Una fattura che ha già preparato l\'autofattura non si elimina da lì.',
+      'Nell\'elenco delle autofatture le spunte servono per scaricare XML ed Excel, "Invia allo SdI" (solo quelle emesse e non ancora inviate) ed "Elimina" (solo le bozze senza numero: un\'autofattura emessa o inviata allo SdI non si elimina mai). "Invia allo SdI" compare solo quando nell\'elenco c\'è un\'autofattura emessa dal portale e non ancora inviata: quelle di Fatture in Cloud sono già state mandate da lì.',
     ],
     passi: ['Amministrazione → Autofatture.', 'Carica la fattura estera e aprila.', 'Controlla fornitore e righe, poi "Prepara l\'autofattura".', 'Emetti la bozza e Invia allo SdI.'],
     pagine: [['/amministrazione/documenti?tipo=autofattura', 'Autofatture']],
