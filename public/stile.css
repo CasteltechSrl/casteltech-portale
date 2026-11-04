@@ -955,3 +955,7 @@ a.esito { text-decoration: none; }
 /* BOM quotata: righe senza prezzo o non disponibili in evidenza (Adriano 4/11/2026) */
 table.bom tr.da-prezzare td { background: #fdecea; }
 table.bom tr.da-prezzare td:first-child { box-shadow: inset 4px 0 0 var(--negativo); font-weight: 600; }
+.riquadro-da-prezzare { border-left: 4px solid var(--negativo); }
+.riquadro-da-prezzare h2 { color: var(--negativo); margin-top: 0; font-size: 1.05rem; }
+.riquadro-da-prezzare form.prezzo-veloce { display: flex; gap: .3rem; align-items: center; }
+.riquadro-da-prezzare form.prezzo-veloce input { width: 7rem; }

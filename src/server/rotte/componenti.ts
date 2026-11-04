@@ -144,7 +144,7 @@ export function rotteComponenti() {
     // BOM quotata per un preventivo (spunta Componenti dai documenti del cliente): da qui si torna al preventivo per la quota
     const chiesto = Number(req.query.preventivo) || 0;
     const prev = await q1<{ id: number; numero: string }>(`SELECT id, numero FROM preventivi WHERE bom_id = $1 ORDER BY (id = $2) DESC, id DESC LIMIT 1`, [a.id, chiesto]);
-    res.send(pag(req, a.nome, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', html`${prev ? rimandoPreventivo(a, prev) : ''}${paginaAnalisi(a)}`, req.query.msg ? String(req.query.msg) : undefined));
+    res.send(pag(req, a.nome, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', html`${prev ? rimandoPreventivo(a, prev) : ''}${paginaAnalisi(a, chiesto)}`, req.query.msg ? String(req.query.msg) : undefined));
   });
   r.get('/bom/:id/stato', async (req, res) => {
     const id = Number(req.params.id);
@@ -221,6 +221,8 @@ export function rotteComponenti() {
     const msg = prezzo != null && !(prezzo >= 0) ? 'Prezzo non valido.'
       : testo && prezzo == null && !req.body.togli ? 'Prezzo non valido: scrivi ad esempio 0,125.'
       : await impostaPrezzoManuale(Number(req.params.id), Number(req.params.n), prezzo);
+    // dal riquadro "senza prezzo" in cima alla BOM si torna lì (Adriano 4/11/2026)
+    if (req.body.torna === 'bom') return res.redirect(`/quotazioni/bom/${req.params.id}?${Number(req.body.preventivo) > 0 ? `preventivo=${Number(req.body.preventivo)}&` : ''}msg=${encodeURIComponent(msg)}#da-prezzare`);
     res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(msg)}#prezzo-manuale`);
   });
   // alternative al P/N (Adriano 28/10/2026): usa una proposta, scrivine una a mano, torna al P/N della BOM
@@ -402,18 +404,29 @@ function avvisoNonMontati(righe: RigaBom[]): Raw {
     Se una voce non serve proprio, "togli" in fondo alla riga la toglie dalla BOM.</div>`;
 }
 
-/** Righe senza prezzo o non disponibili in evidenza sopra la tabella, con il link alla riga (Adriano 4/11/2026). */
-function avvisoDaPrezzare(righe: RigaBom[]): Raw {
+/**
+ * Riquadro con SOLO le righe senza prezzo o non disponibili (Adriano 4/11/2026: "fammi vedere solo le righe con i prezzi mancanti"):
+ * una tabella piccola in cima alla BOM, con la casella per scrivere il prezzo a mano senza aprire la riga.
+ */
+function riquadroDaPrezzare(a: any, righe: RigaBom[], preventivo = 0): Raw {
   const x = righeDaPrezzare(righe);
   if (!x.length) return html``;
   const senza = x.filter(r => r.motivo === 'senza prezzo').length, nd = x.length - senza;
-  return html`<div class="avviso da-prezzare-avviso" id="da-prezzare"><b>${[senza ? (senza === 1 ? '1 componente senza prezzo' : `${senza} componenti senza prezzo`) : '',
-    nd ? (nd === 1 ? '1 non disponibile' : `${nd} non disponibili`) : ''].filter(Boolean).join(' e ')}</b>:
-    ${x.map((r, i) => html`${i ? ' · ' : ''}<a href="#riga-${r.n}">riga ${r.n} ${r.nome}</a>${r.rif ? ` (${r.rif})` : ''}${r.motivo === 'non disponibile' ? html` <small>non disponibile</small>` : ''}`)}.
-    Si sistemano con "modifica" sulla riga (prezzo a mano, alternativa) o con "Aggiorna prezzi". Nella tabella sono in rosso; il filtro "Senza prezzo" mostra solo loro.</div>`;
+  return html`<section class="blocco riquadro-da-prezzare" id="da-prezzare">
+    <h2>${[senza ? (senza === 1 ? '1 componente senza prezzo' : `${senza} componenti senza prezzo`) : '',
+      nd ? (nd === 1 ? '1 non disponibile' : `${nd} non disponibili`) : ''].filter(Boolean).join(' e ')}</h2>
+    <p class="nota">Scrivi il prezzo €/pz e premi Salva: da quel momento vale quello e la riga esce da qui. Per un'alternativa o altre modifiche apri la riga.</p>
+    <div class="tabella-scorre"><table data-non-ordinare><thead><tr><th>Riga</th><th>P/N</th><th>Riferimenti</th><th class="n">Qtà a scheda</th><th>Problema</th><th>Prezzo a mano €/pz</th><th></th></tr></thead><tbody>
+    ${x.map(r => html`<tr><td><a href="#riga-${r.n}">${r.n}</a></td><td><b>${r.nome}</b></td><td>${r.rif}</td><td class="n">${num(r.qtaScheda, 2)}</td>
+      <td><span class="livello critico">${r.motivo}</span></td>
+      <td><form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/prezzo" class="inline prezzo-veloce">
+        <input type="hidden" name="torna" value="bom">${preventivo ? html`<input type="hidden" name="preventivo" value="${preventivo}">` : ''}<input name="prezzo" inputmode="decimal" placeholder="es. 0,125" size="8" aria-label="Prezzo €/pz riga ${r.n}">
+        <button>Salva</button></form></td>
+      <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">modifica</a></td></tr>`)}
+    </tbody></table></div></section>`;
 }
 
-function paginaAnalisi(a: any): Raw {
+function paginaAnalisi(a: any, preventivo = 0): Raw {
   const righe: RigaBom[] = a.righe ?? []; const quantita: number[] = a.quantita ?? [];
   const rp: Riepilogo | undefined = a.riepilogo?.perQuantita ? a.riepilogo : undefined;
   const inCorso = a.stato === 'in_corso' || a.stato === 'da_elaborare' || avanzamenti.has(a.id);
@@ -456,7 +469,7 @@ function paginaAnalisi(a: any): Raw {
       <button title="La BOM va in Quotazioni e si rielabora con prezzi e disponibilità dai distributori">Cerca i prezzi</button></form></details>` : ''}
   ${righe.length ? html`
   ${avvisoNonMontati(righe)}
-  ${solo ? '' : avvisoDaPrezzare(righe)}
+  ${solo || inCorso ? '' : riquadroDaPrezzare(a, righe, preventivo)}
   ${solo ? '' : bloccoCompatibili(a, righe)}
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
     <button data-filtro="manca">Da completare (${righe.filter(r => CLASSE_ESITO[r.esito] === 'manca').length})</button>
