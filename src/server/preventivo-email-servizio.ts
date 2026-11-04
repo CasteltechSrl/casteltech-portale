@@ -35,7 +35,8 @@ export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
        FROM clienti c LEFT JOIN condizioni_pagamento cp ON cp.codice = c.condizione_pagamento WHERE c.id = $1`, [p.cliente_id]) : undefined;
   // componenti non disponibili (Adriano 4/11/2026): dalla BOM collegata se i componenti li compriamo noi (prezzo a mano nella BOM = tolti),
   // altrimenti quelli già scritti nelle note del preventivo
-  let nonQuotati = righeNonQuotateNelleNote(dati.note ?? '');
+  // componenti in conto lavoro (spunta Componenti tolta): niente righe "non quotato" (controllo del 4/11/2026)
+  let nonQuotati = v('acquistoComponenti') ? righeNonQuotateNelleNote(dati.note ?? '') : [];
   if (dati.bomId && v('acquistoComponenti')) {
     const b = await costoBomPerPreventivo(dati.bomId, dati.nSchede).catch(() => null);
     if (b && b.stato === 'pronta') nonQuotati = b.nonQuotati;

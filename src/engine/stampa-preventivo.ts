@@ -182,7 +182,8 @@ const numeroIt = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   const s = String(v ?? '').replace(/[€%\s]/g, '');
   if (!s) return null;
-  const n = Number(/,/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s);
+  // "1.800" = milleottocento, come nelle altre caselle del portale (public/formati.js; controllo del 4/11/2026: la stampa lo leggeva 1,80)
+  const n = Number(/,/.test(s) || /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s);
   return Number.isFinite(n) ? n : null;
 };
 /** Prezzo a scheda scritto a mano: solo se > 0, al centesimo; vuoto = quello calcolato. */
@@ -237,11 +238,18 @@ export function basePrezzi(x: { prezzoScheda: number; prezzoSchedaConUnaTantum: 
   return { prezzoScheda: scheda, lotto, unaTantum, nSchede: n };
 }
 
-/** Toglie (o aggiunge) la differenza alla voce più grande, così le righe stampate tornano con il totale arrotondato. */
+/**
+ * Porta le voci al totale voluto. Differenza di centesimi (arrotondamenti): sulla voce più grande. Differenza più grande (prezzo con le
+ * una tantum riscritto a mano): divisa in proporzione su tutte le voci, mai sotto zero (controllo del 4/11/2026: prima finiva tutta
+ * sulla voce più grande, che poteva stamparsi negativa, es. "Lamina −40,00 €", e l'ordine aveva una tantum diverse dalla stampa).
+ */
 export function pareggiaSulPiuGrande<T>(xs: T[], valore: (x: T) => number, cambia: (x: T, nuovo: number) => void, totale: number): void {
   if (!xs.length) return;
+  const somma = xs.reduce((a, x) => a + valore(x), 0);
+  const obiettivo = Math.max(r2(totale), 0);
+  if (Math.abs(obiettivo - somma) > 1 && somma > 0) for (const x of xs) cambia(x, r2(valore(x) * obiettivo / somma));
   const grande = xs.reduce((a, x) => (valore(x) > valore(a) ? x : a));
-  cambia(grande, r2(valore(grande) + totale - xs.reduce((a, x) => a + valore(x), 0)));
+  cambia(grande, Math.max(r2(valore(grande) + obiettivo - xs.reduce((a, x) => a + valore(x), 0)), 0));
 }
 
 /**
@@ -288,13 +296,17 @@ export function prezziRiquadro(
  * pareggiate sul nuovo totale. Li usa anche "Crea ordine" dal preventivo (Adriano 4/11/2026), così l'ordine ha i prezzi del preventivo mandato.
  */
 export function prezziComeInStampa(
-  r: { prezzoScheda: number; prezzoSchedaConUnaTantum: number; unaTantum: number }, nSchede: number, voci: { nome: string; prezzo: number }[], prezzi: Ritocchi['prezzi'],
+  r: { prezzoScheda: number; prezzoSchedaConUnaTantum: number; unaTantum: number; prezzoLotto?: number }, nSchede: number, voci: { nome: string; prezzo: number }[], prezzi: Ritocchi['prezzi'],
+  sconto: Ritocchi['sconto'] = null,
 ): { prezzoScheda: number; unaTantum: { nome: string; prezzo: number }[] } {
-  const b = basePrezzi({ ...r, nSchede }, prezzi);
+  // stesso lotto della stampa (prezzoLotto del riepilogo), così le una tantum tornano al centesimo
+  const b = basePrezzi({ ...r, nSchede, lotto: r.prezzoLotto }, prezzi);
+  // sconto della stampa (controllo del 4/11/2026): il cliente ha visto i prezzi scontati, l'ordine li riprende
+  const c = sconto ? contiStampa(b, { ...RITOCCHI_VUOTI, righe: [], prezzi, consegna: { ...RITOCCHI_VUOTI.consegna }, sconto }) : null;
   const ut = voci.filter(x => x.prezzo > 0).map(x => ({ ...x }));
   if (!ut.length && b.unaTantum > 0) ut.push({ nome: 'Costi una tantum', prezzo: b.unaTantum });
-  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
-  return { prezzoScheda: b.prezzoScheda, unaTantum: ut.filter(x => x.prezzo > 0) };
+  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, c ? c.unaTantum : b.unaTantum);
+  return { prezzoScheda: c ? c.prezzoScheda : b.prezzoScheda, unaTantum: ut.filter(x => x.prezzo > 0) };
 }
 
 /**

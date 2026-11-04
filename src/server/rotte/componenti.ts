@@ -164,7 +164,7 @@ export function rotteComponenti() {
     const mappa: Partial<Record<Ruolo, string>> = {};
     for (const k of Object.keys(ETICHETTE_RUOLI) as Ruolo[]) { const v = String(req.body[k] ?? ''); if (v && a.colonne.includes(v)) mappa[k] = v; }
     await q(`UPDATE bom_analisi SET mappatura = $2 WHERE id = $1`, [req.params.id, JSON.stringify(mappa)]);
-    avviaElaborazione(Number(req.params.id));
+    avviaElaborazione(Number(req.params.id), { mancanti: true }); // solo i P/N mai cercati vanno ai distributori
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   // BOM codificata senza prezzi → "Cerca anche i prezzi": diventa una BOM di Quotazioni con le schede scritte e si rielabora con i distributori
@@ -241,7 +241,7 @@ export function rotteComponenti() {
     const id = Number(req.params.id), n = Number(req.params.n);
     const x = await modificaRigaAMano(id, n, { pn: req.body.pn == null ? undefined : String(req.body.pn), qta: req.body.qta == null ? undefined : String(req.body.qta),
       scarto: String(req.body.scarto ?? ''), nota: String(req.body.nota ?? '') });
-    if (x.rielabora) { avviaElaborazione(id); return res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}#riga-${n}`); }
+    if (x.rielabora) { avviaElaborazione(id, { mancanti: true }); return res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}#riga-${n}`); }
     res.redirect(`/quotazioni/bom/${id}/riga/${n}?msg=${encodeURIComponent(x.messaggio)}#modifica-mano`);
   });
   // riga aggiunta a mano: componente che manca nella BOM o comprato altrove (Federico, 2/11/2026)
@@ -249,7 +249,7 @@ export function rotteComponenti() {
     const id = Number(req.params.id);
     const b = req.body ?? {};
     const x = await aggiungiRigaBom(id, { pn: b.pn, descrizione: b.descrizione, designatori: b.designatori, qta: b.qta, prezzo: b.prezzo, dove: b.dove, nota: b.nota });
-    if (x.n) avviaElaborazione(id);
+    if (x.n) avviaElaborazione(id, { mancanti: true });
     res.redirect(`/quotazioni/bom/${id}?msg=${encodeURIComponent(x.messaggio)}${x.n ? '' : '&aggiungi=1'}#aggiungi-riga`);
   });
   // codice "da verificare" controllato dall'ufficio: si conferma e va nell'archivio (Adriano 4/11/2026)
@@ -280,7 +280,9 @@ export function rotteComponenti() {
   r.get('/prezzo', async (req, res) => {
     const pn = String(req.query.pn ?? '').trim().slice(0, 80);
     const qta = Math.min(Math.max(parseInt(String(req.query.qta ?? ''), 10) || 1, 1), 1e7);
-    const esito = pn && pnKey(pn) ? await cercaPn([pn], { forza: req.query.aggiorna === '1' }) : null;
+    // profilo Esterno (sola lettura): solo i prezzi già letti, niente richieste ai distributori (controllo del 4/11/2026)
+    const esterno = req.session.utente?.ruolo === 'esterno';
+    const esito = pn && pnKey(pn) ? await cercaPn([pn], esterno ? { soloCache: true } : { forza: req.query.aggiorna === '1' }) : null;
     const perFornitore = esito?.perPn.get(pnKey(pn)!) ?? {};
     const offerte = Object.values(perFornitore).flatMap(x => x?.offerte ?? []);
     const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f]);

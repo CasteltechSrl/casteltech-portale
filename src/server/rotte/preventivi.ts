@@ -24,7 +24,7 @@ import { STAGNO_A_PUNTO } from '../../engine/scheda/piedini.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
 import { parametriStampa, stampaPreventivo } from '../views/stampa-preventivo.js';
 import { segnoInvioElenco } from '../views/invio.js';
-import { leggiRitocchi } from '../../engine/stampa-preventivo.js';
+import { consegnaCompleta, leggiRitocchi } from '../../engine/stampa-preventivo.js';
 import { datiStampaPreventivo, inviaPreventivoEmail, opzioniStampa, pdfDelPreventivo, propostaEmailPreventivo, segnaPreventivoInviato } from '../preventivo-email-servizio.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { pianificaProduzione } from '../ordini-servizio.js';
@@ -221,7 +221,14 @@ export function rottePreventivi() {
   // ── PDF del preventivo (lo stesso che parte per email), con le scelte della stampa ──
   r.get('/:id/pdf', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
-    const pdf = await pdfDelPreventivo(Number(req.params.id), opzioniStampa(req.query as Record<string, unknown>));
+    const id = Number(req.params.id), opz = opzioniStampa(req.query as Record<string, unknown>);
+    // stesse regole dell'invio per email (controllo del 4/11/2026): niente PDF senza tempi di consegna o da validare
+    const st = await datiStampaPreventivo(id, opz);
+    if (!st) return res.status(404).send('Preventivo non trovato');
+    if (st.p.stato === 'da_validare') return res.status(400).send('Il preventivo è ancora "da validare": controllalo e salvalo prima di mandarlo al cliente.');
+    if (!consegnaCompleta(st.rit.consegna, st.acquisto))
+      return res.status(400).send('Scegli prima i tempi di consegna nella pagina di stampa (a sinistra, "Tempi di consegna"), premi "Aggiorna la stampa" e poi scarica il PDF.');
+    const pdf = await pdfDelPreventivo(id, opz);
     if (!pdf) return res.status(404).send('Preventivo non trovato');
     res.set('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/pdf');
@@ -361,7 +368,14 @@ export function rottePreventivi() {
   // ── Ritocchi della stampa (note per il cliente, sconto, righe in più): solo nella stampa (Adriano, 29/10/2026) ──
   r.post('/:id/stampa', async (req, res) => {
     const id = Number(req.params.id);
-    await q(`UPDATE preventivi SET stampa = $2 WHERE id = $1`, [id, JSON.stringify(leggiRitocchi(req.body))]);
+    // si ricorda anche il prezzo calcolato e le schede di adesso: se il preventivo cambia, la stampa avvisa dei prezzi scritti a mano
+    // (prezzi non toccati in questo salvataggio = resta il riferimento di quando sono stati scritti)
+    const nuovi = leggiRitocchi(req.body);
+    const prima = (await q1<{ stampa: any }>(`SELECT stampa FROM preventivi WHERE id = $1`, [id]))?.stampa;
+    const stessi = prima?.riferimento && prima.prezzi?.senza === nuovi.prezzi.senza && prima.prezzi?.con === nuovi.prezzi.con;
+    const st = stessi ? null : await datiStampaPreventivo(id, opzioniStampa({})).catch(() => null);
+    const riferimento = stessi ? prima.riferimento : st ? { scheda: riepilogo(st.ris).prezzoScheda, n: st.d.nSchede } : undefined;
+    await q(`UPDATE preventivi SET stampa = $2 WHERE id = $1`, [id, JSON.stringify({ ...nuovi, riferimento })]);
     const torna = String(req.body.torna ?? '');
     res.redirect(`/preventivi/${id}/stampa${/^\?[\w=&%.-]*$/.test(torna) ? torna : ''}`);
   });

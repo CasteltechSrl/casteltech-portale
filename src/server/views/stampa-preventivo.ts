@@ -45,6 +45,17 @@ export const AZIENDA_PREDEFINITA = {
 
 const VUOTO = '';
 
+/**
+ * Prezzi scritti a mano su un preventivo poi cambiato (controllo del 4/11/2026): quando si scrivono si ricorda il prezzo calcolato e le schede
+ * di quel momento (`stampa.riferimento`); se oggi sono diversi, avviso rosso accanto alle caselle.
+ */
+function prezziDaRicontrollare(rif: { scheda?: number; n?: number } | undefined, rit: Ritocchi, scheda: number, n: number): Raw {
+  if (!rif || (rit.prezzi.senza == null && rit.prezzi.con == null)) return html``;
+  if (Math.abs(Number(rif.scheda) - scheda) < 0.005 && Number(rif.n) === n) return html``;
+  return html`<p class="avviso">Il preventivo è cambiato dopo che hai scritto questi prezzi (allora ${num(Number(rif.n) || 0, 0)} schede a ${num(Number(rif.scheda) || 0, 2)} €,
+    oggi ${num(n, 0)} schede a ${num(scheda, 2)} €): controllali, oppure svuota le caselle per usare quelli calcolati.</p>`;
+}
+
 export function stampaPreventivo(o: {
   p: any; d: { nSchede: number; nSchedeInPCB: number; note?: string };
   ris: Risultato; doppia: boolean; nLamine: number; nPannelli: number;
@@ -154,6 +165,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
       <label>Senza una tantum <input name="prezzoSenza" inputmode="decimal" value="${rit.prezzi.senza != null ? String(rit.prezzi.senza).replace('.', ',') : ''}" placeholder="${num(r.prezzoScheda, 2)}"></label>
       ${r.unaTantum > 0 || rit.prezzi.con != null ? html`<label>Con le una tantum <input name="prezzoCon" inputmode="decimal" value="${rit.prezzi.con != null ? String(rit.prezzi.con).replace('.', ',') : ''}" placeholder="${num(r.prezzoSchedaConUnaTantum, 2)}"></label>` : ''}
       <small>Vuoto = prezzo calcolato (in grigio). Scrivi una cifra diversa (es. 174) e premi "Aggiorna la stampa": righe e totale cambiano di conseguenza.</small>
+      ${prezziDaRicontrollare(p.stampa?.riferimento, rit, r.prezzoScheda, o.d.nSchede)}
     </fieldset>
     <label>Note per il cliente<textarea name="noteCliente" rows="4">${rit.noteCliente}</textarea></label>
     <label class="spunta"><input type="checkbox" name="noteInterne" value="si"${rit.noteInterne ? html` checked` : ''}> Stampa anche le note interne del preventivo</label>
@@ -237,6 +249,7 @@ ${opz.condizioni ? html`<section class="foglio seconda">
 </div>
 </div>
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
+<script src="/static/formati.js?v=${VERSIONE}" defer></script>
 <script src="/static/conferma.js?v=${VERSIONE}" defer></script>
 </body></html>`;
 }

@@ -48,7 +48,8 @@ export async function propostaOrdineDaPreventivo(preventivoId: number, oggi: str
   const r = riepilogo(ris);
   const primoLotto = p.parametri?.primaProduzione !== 0 && (p.prodotto_id ? !(await haCommessePrecedenti(p.prodotto_id)) : true);
   // stessi prezzi della stampa per il cliente: quelli scritti a mano nella stampa, se ci sono (Adriano 4/11/2026)
-  const prezzi = prezziComeInStampa(r, p.n_schede, righeUnaTantum(ris, { doppia, nLamine }), leggiRitocchi(p.stampa).prezzi);
+  const rit = leggiRitocchi(p.stampa);
+  const prezzi = prezziComeInStampa(r, p.n_schede, righeUnaTantum(ris, { doppia, nLamine }), rit.prezzi, rit.sconto);
   const righe = righeOrdineDaPreventivo({
     codice: p.intestazione?.codice ?? null, descrizione: p.intestazione?.descrizione ?? null, nSchede: p.n_schede,
     prezzoScheda: prezzi.prezzoScheda, unaTantum: prezzi.unaTantum,

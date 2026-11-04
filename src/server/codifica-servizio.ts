@@ -12,6 +12,7 @@
  * L'elaborazione gira in background: la pagina segue l'avanzamento.
  */
 import { testoCella } from '../engine/excel-celle.js';
+import { codiceWurth } from '../engine/wurth.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
@@ -187,7 +188,12 @@ const CELLA_ESCLUSA = /^(DNP|DNM|DNI|NM|EXCLUDED FROM BOM|NON MONTARE|NON MONTAT
 const unico = <T>(xs: T[]) => [...new Set(xs)];
 
 /** Elabora (o rielabora) una BOM in background. */
-export function avviaElaborazione(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boolean } = {}) {
+/**
+ * opz.soloCache = nessuna richiesta ai distributori (Rielabora, cambio schede); opz.mancanti = come soloCache, ma i P/N mai cercati
+ * (riga corretta o aggiunta a mano, colonne cambiate) si chiedono ai distributori: controllo del 4/11/2026, prima si rifaceva tutto
+ * (prezzi scaduti dopo 24 ore, alternative, IA) per una sola riga cambiata.
+ */
+export function avviaElaborazione(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boolean; mancanti?: boolean } = {}) {
   if (avanzamenti.has(id)) return;
   avanzamenti.set(id, { fase: 'avvio', fatti: 0, totale: 0 });
   void (async () => {
@@ -207,7 +213,8 @@ export async function sistemaInterrotte() {
   await q(`UPDATE bom_analisi SET stato = 'errore', messaggio = 'elaborazione interrotta dal riavvio del portale: premi Rielabora' WHERE stato = 'in_corso'`);
 }
 
-async function elabora(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boolean }): Promise<string> {
+async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?: boolean; mancanti?: boolean }): Promise<string> {
+  const opz = { ...opzioni, soloCache: !!(opzioni.soloCache || opzioni.mancanti) };
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   if (!a) throw new Error('analisi non trovata');
   const av = avanzamenti.get(id)!;
@@ -257,8 +264,8 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boo
   const daCercare = righe.filter(r => !(r as any)._escluso && !rigaPcb(r) && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
     .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
   const ricerca: EsitoRicerca = solo ? { perPn: new Map(), errori: {} }
-    : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, soloCache: opz.soloCache, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
-  const maiCercati = opz.soloCache ? unico(daCercare).filter(pn => !Object.keys(ricerca.perPn.get(pnKey(pn)!) ?? {}).length).length : 0;
+    : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, soloCache: !!opzioni.soloCache, cacheLunga: !!opzioni.mancanti, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+  const maiCercati = opzioni.soloCache ? unico(daCercare).filter(pn => !Object.keys(ricerca.perPn.get(pnKey(pn)!) ?? {}).length).length : 0;
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
   // codici trovati in Valore / Descrizione: si compra quello che i distributori hanno (anche se costa di più)
   const maxSchede = Math.max(1, ...(a.quantita ?? []));
@@ -377,6 +384,15 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boo
   for (const r of righe) {
     if (r.dbId || r.esito !== ESITI.INC) continue;
     const x = regolaCondensatori(r.famiglia, r.attributi); r.attributi = x.attributi; r.note = unico([...r.note, ...x.note]);
+  }
+  // famiglia e campi corretti a mano con "Ricalcola" (stesso P/N): si rimettono prima di calcolare i codici
+  for (const r of righe) {
+    const cod = righeFile.find(x => x.n === r.n)?.mano?.codifica;
+    if (!cod || pnKey(cod.pn) !== pnKey(r.pn) || r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO) continue;
+    r.famiglia = cod.famiglia; r.attributi = { ...cod.attributi } as Attributi;
+    if (r.esito === ESITI.DB_PROD) { r.esito = ESITI.INC; r.dbId = null; r.mpnAcquisto = null; }
+    if (!r.fonti.includes('modifica a mano')) r.fonti.push('modifica a mano');
+    r.note = r.note.filter(x => !x.startsWith(NOTA_DA_VALIDARE));
   }
   // 6. codici
   await ricalcola(righe);
@@ -797,7 +813,11 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
     else if (perPnDist && pn) {
       const trovati = perPnDist.get(pnKey(pn)!) ?? {};
       r.offerte = Object.values(trovati).flatMap(x => x?.offerte ?? []);
-      r.nonControllati = attivi.filter(f => !trovati[f]);
+      // "non ha risposto" solo per chi si doveva interrogare (controllo del 4/11/2026): Würth solo per i suoi codici; Arrow (mai in cache,
+      // quindi assente con Rielabora) non conta se un altro distributore ha risposto. Prima ogni P/N introvabile restava "attenzione" e
+      // non diventava mai "critico": niente alternative né righe "non quotato" nel preventivo.
+      const altri = Object.keys(trovati).some(f => f !== 'arrow');
+      r.nonControllati = attivi.filter(f => !trovati[f] && !(f === 'wurth' && !codiceWurth(pn)) && !(f === 'arrow' && altri));
     }
     r.acquisti = []; r.reperibilita = undefined;
     if (!quantita.length) continue; // BOM "solo codifica": nessuna quantità, niente acquisti né giudizio di reperibilità
@@ -1007,6 +1027,10 @@ export async function correggiRiga(id: number, n: number, dati: { famiglia: stri
     if (!r.fonti.includes('modifica a mano')) r.fonti.push('modifica a mano');
     r.note = r.note.filter(x => !x.startsWith(NOTA_DA_VALIDARE)); // controllata a mano: non è più da validare
     await ricalcola(righe);
+    // la correzione resta anche quando la BOM si rielabora (scritta nella riga del file, come P/N e quantità a mano)
+    const rf = (a.righe_file ?? []) as RigaFile[];
+    const f = rf.find(x => x.n === n);
+    if (f) { f.mano = { ...(f.mano ?? {}), codifica: { pn: r.pn ?? null, famiglia: r.famiglia, attributi: { ...r.attributi } } }; await q(`UPDATE bom_analisi SET righe_file = $2 WHERE id = $1`, [id, JSON.stringify(rf)]); }
   }
   await calcolaAcquisti(righe, a.quantita);
   await salvaRighe(id, righe);

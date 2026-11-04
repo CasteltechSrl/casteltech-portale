@@ -317,23 +317,29 @@ export async function cercaVarianti(pn: string, forza = false): Promise<{ varian
   const salvate = !forza && k0 ? await daCache('varianti', k0) as unknown as { elenco: { mpn: string; produttore: string; descrizione: string }[] } | null : null;
   if (salvate?.elenco) return { varianti: new Map(salvate.elenco.map(x => [pnKey(x.mpn)!, x])), errori: [] };
   const esito = await cercaVariantiDistributori(pn);
-  if (k0 && !esito.errori.length) await inCache('varianti', k0, { elenco: [...esito.varianti.values()] } as unknown as RisultatoFornitore);
-  return esito;
+  // in cache solo le varianti trovate da DigiKey, Mouser, Farnell: quelle di Arrow no (condizioni d'uso della chiave; controllo del 4/11/2026)
+  if (k0 && !esito.errori.length)
+    await inCache('varianti', k0, { elenco: [...esito.varianti.entries()].filter(([x]) => !esito.soloArrow.has(x)).map(([, v]) => v) } as unknown as RisultatoFornitore);
+  return { varianti: esito.varianti, errori: esito.errori };
 }
-async function cercaVariantiDistributori(pn: string): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[] }> {
+async function cercaVariantiDistributori(pn: string): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[]; soloArrow: Set<string> }> {
   const attivi = fornitoriConfigurati(); const k = pnKey(pn) ?? '';
   const varianti = new Map<string, { mpn: string; produttore: string; descrizione: string }>(), errori: string[] = [];
   const variante = (mpn: string) => { const x = pnKey(mpn); return !!x && k.length >= 6 && x !== k && (x.startsWith(k) || (x.length >= 6 && k.startsWith(x))); };
   const aggiungi = (mpn: string, produttore: string, descrizione: string) => { if (variante(mpn) && !varianti.has(pnKey(mpn)!)) varianti.set(pnKey(mpn)!, { mpn, produttore, descrizione }); };
-  if (k.length < 6) return { varianti, errori };
+  const daArrow: { mpn: string; produttore: string; descrizione: string }[] = [];
+  if (k.length < 6) return { varianti, errori, soloArrow: new Set() };
   await Promise.all([
     attivi.digikey && digikeyParametri(pn).then(xs => { for (const x of xs) aggiungi(x.prodotto.ManufacturerProductNumber ?? '', x.prodotto.Manufacturer?.Name ?? '', x.offerte[0]?.descrizione ?? ''); })
       .catch(e => { errori.push(`DigiKey: ${e.message}`); }),
     attivi.mouser && mouserParametri(pn).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Mouser: ${e.message}`); }),
     attivi.farnell && farnellParola(pn).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Farnell: ${e.message}`); }),
-    attivi.arrow && arrowCerca(pn, true).then(os => { for (const o of os) aggiungi(o.mpn, o.produttore, o.descrizione); }).catch(e => { errori.push(`Arrow: ${e.message}`); }),
+    attivi.arrow && arrowCerca(pn, true).then(os => { daArrow.push(...os); }).catch(e => { errori.push(`Arrow: ${e.message}`); }),
   ]);
-  return { varianti, errori };
+  // Arrow per ultimo: si segnano le varianti che ha trovato solo lui
+  const soloArrow = new Set<string>();
+  for (const o of daArrow) { const x = pnKey(o.mpn); if (x && variante(o.mpn) && !varianti.has(x)) { aggiungi(o.mpn, o.produttore, o.descrizione); soloArrow.add(x); } }
+  return { varianti, errori, soloArrow };
 }
 
 /** Sostituto proposto da DigiKey per un P/N (anche obsoleto): tipo come lo scrive DigiKey (Direct, Parametric Equivalent, Similar, Upgrade…). */
@@ -385,7 +391,7 @@ async function conRiprova<T>(fn: () => Promise<T>): Promise<T> {
  * `soloCache` ("Rielabora", Adriano 4/11/2026: ogni richiesta costa o consuma il limite giornaliero): si usano solo i prezzi già letti,
  * anche più vecchi di 24 ore, e non si chiama nessun distributore.
  */
-export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
+export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?: boolean; cacheLunga?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
   const attivi = fornitoriConfigurati();
   const unici = [...new Map(pns.filter(Boolean).map(p => [pnKey(p)!, p.trim()])).entries()].filter(([k]) => k);
   const perPn = new Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>(unici.map(([k]) => [k, {}]));
@@ -398,7 +404,8 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?:
     if (!attivi[f]) continue;
     for (const [k, pn] of unici) {
       if (f === 'wurth' && !codiceWurth(pn)) continue; // a Würth si chiedono solo i suoi codici
-      const c = opz.forza ? null : await daCache(f, k, opz.soloCache ? 24 * 365 : ORE_CACHE);
+      // cacheLunga: va bene anche una risposta vecchia, si chiede solo il P/N mai cercato
+      const c = opz.forza ? null : await daCache(f, k, opz.soloCache || opz.cacheLunga ? 24 * 365 : ORE_CACHE);
       if (c) segna(k, f, c); else if (!opz.soloCache) daCercare[f].push([k, pn]);
     }
   }
