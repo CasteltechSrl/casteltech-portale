@@ -306,6 +306,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Righe "NUOVO - DA VERIFICARE" (Adriano 4/11/2026; `confermaVerifica` in `engine/codifica/modifiche-mano.ts`, `verificaRiga` in `codifica-servizio.ts`,
    POST `/quotazioni/bom/:id/riga/:n/verificata`): riquadro "Codice da verificare" nella pagina della riga, "✓ Verificato, salva nell'archivio" = esito NUOVO,
    note CODICE DA VALIDARE tolte, componente subito in archivio con stato OK (solo quella riga). Il punto finale nel codice di produzione = P/N accorciato a 30 caratteri (`PROD_MAX`).
+   Campi per famiglia (Adriano 4/11/2026; `engine/codifica/campi-famiglia.ts` + `public/campi-famiglia.js`, test in `tests/modifiche-mano.test.ts`): nella pagina della riga
+   si vedono solo i campi di `FAMIGLIE[fam].prod` + case (tranne CN/TI/BT/AN), con l'esempio nella casella (case THT se Tecnologia T); "Mostra tutti i campi" li riapre.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
