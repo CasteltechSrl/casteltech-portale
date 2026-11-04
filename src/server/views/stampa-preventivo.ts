@@ -4,19 +4,26 @@
  * pagamento e totale in fondo), riquadro verde con i prezzi, condizioni generali e firma del cliente per accettazione.
  * A schermo, a sinistra, il pannello "Cosa stampare" con le quattro versioni (src/engine/stampa-preventivo.ts).
  */
-import { html, euro, data, num, type Raw } from './html.js';
+import { html, euro, data, num, raw, type Raw } from './html.js';
 import { VERSIONE } from './layout.js';
+import { riquadroInvio } from './invio.js';
 import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, basePrezzi, pareggiaSulPiuGrande, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contenutoStampa, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null;
   indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; nazione?: string | null;
   codice_sdi?: string | null; pec?: string | null; pagamento?: string | null;
+}
+
+export interface EmailStampa {
+  a: string; oggetto: string; testo: string; attivo: boolean; mittente: string; stato: string;
+  richiesta: { mittente: string; oggetto: string } | null;
+  email_a: string | null; email_inviata_il: Date | string | null; inviato_a_mano?: boolean;
 }
 
 export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean }
@@ -35,6 +42,10 @@ export function stampaPreventivo(o: {
   p: any; d: { nSchede: number; nSchedeInPCB: number; note?: string };
   ris: Risultato; doppia: boolean; nLamine: number; nPannelli: number;
   azienda: Partial<DatiAzienda>; cliente: ClienteStampa | null; opz: OpzioniStampa; rit: Ritocchi;
+  /** invio per email da preventivi@ (Adriano 4/11/2026): proposta dell'email; null = niente riquadro */
+  email?: EmailStampa | null;
+  /** messaggio dopo un'azione (email partita, errore) */
+  messaggio?: string;
 }): Raw {
   const { p, d, ris, opz } = o;
   const r = riepilogo(ris);
@@ -50,22 +61,11 @@ export function stampaPreventivo(o: {
   const numero = `${p.numero} del ${data(p.creato_il)}`;
   const salvatoIl = p.aggiornato_il ? new Date(p.aggiornato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' alle') : '';
   const qta = `${num(d.nSchede, 0)} pz`;
-  // prezzi a scheda calcolati o scritti a mano nella stampa (Adriano 4/11/2026): righe, una tantum e totale cambiano di conseguenza
-  const b = basePrezzi({ prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum, unaTantum: r.unaTantum, nSchede: d.nSchede, lotto: r.prezzoLotto }, o.rit.prezzi);
-  const conUt = d.nSchede ? (b.lotto + b.unaTantum) / d.nSchede : b.prezzoScheda + b.unaTantum;
-  const ut = righeUnaTantum(ris, { doppia: o.doppia, nLamine: o.nLamine });
-  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
-  const essenziale = opz.versione === 'essenziale';
-  // Essenziale: un solo prezzo; con la prima produzione comprende le una tantum (Adriano, 28/10/2026)
-  const prezzoUnico = essenziale && b.unaTantum > 0;
-  const totale = b.lotto + b.unaTantum;
-  // ritocchi scritti dall'ufficio nel pannello (sconto, righe in più): cambiano solo gli importi stampati
+  // righe, riquadro verde e totale: gli stessi del PDF mandato per email (engine/stampa-preventivo.ts `contenutoStampa`)
   const rit = o.rit;
-  const conti = contiStampa(prezzoUnico ? { prezzoScheda: conUt, lotto: totale, unaTantum: 0, nSchede: d.nSchede } : b, rit);
-  const scontato = conti.sconto > 0 ? ' scontato' : '';
-  // riquadro verde sotto le righe e sopra il totale: prezzo a scheda senza e con le una tantum (Adriano, 4/11/2026)
-  const riquadro = prezziRiquadro({ prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede: d.nSchede,
-    prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum }, rit);
+  const cont = contenutoStampa({ ris, nSchede: d.nSchede, doppia: o.doppia, nLamine: o.nLamine, versione: opz.versione, rit, descrizione: i.descrizione ?? '' });
+  const riquadro = cont.riquadro;
+  const scontato = cont.scontato ? ' scontato' : '';
 
   const link = (cambia: Partial<OpzioniStampa>) => {
     const x = { ...opz, ...cambia };
@@ -75,48 +75,23 @@ export function stampaPreventivo(o: {
     return `?${q}`;
   };
 
-  // righe della tabella principale, secondo la versione scelta
-  const rigaProdotto = (prezzo: number, importo: number, sotto: Raw | string = VUOTO) => html`
+  const sotto = (t?: string) => (t ? html`<div class="sotto">${t}</div>` : VUOTO);
+  const corpo = cont.righe.map(x => {
+    switch (x.tipo) {
+      case 'prodotto': return html`
     <tr class="prodotto"><td><b>${i.codice}</b>${i.revisione ? html`<br><small>rev. ${i.revisione}</small>` : ''}</td>
-      <td><b>${i.descrizione}</b>${sotto}</td><td class="n">${qta}</td><td class="n">${euro(prezzo)}</td><td class="n">${euro(importo)}</td></tr>`;
-  const gruppiDi = <T extends { gruppo: string; prezzo: number; nome: string }>(xs: T[]) =>
-    [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) }));
-  const somma = (xs: { prezzo: number }[]) => xs.reduce((s, x) => s + x.prezzo, 0);
-  const SIGLE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
-  const nomeGruppo = (g: string) => SIGLE[g] ?? (g.charAt(0) + g.slice(1).toLowerCase()).replace(/\b(smd|tht|aoi|pcb|bot|top)\b/gi, x => x.toUpperCase());
-  const n = d.nSchede || 1;
-
-  let corpo: Raw;
-  if (essenziale) {
-    // sotto la descrizione solo la nota delle una tantum (Adriano, 28/10/2026: o il dettaglio con i prezzi o niente)
-    corpo = rigaProdotto(prezzoUnico ? conUt : b.prezzoScheda, prezzoUnico ? totale : b.lotto,
-      prezzoUnico ? html`<div class="sotto">Comprensivo dei costi una tantum (programmazione e attrezzaggio)</div>` : VUOTO);
-  } else if (opz.versione === 'dettaglio') {
-    const dett = righeDettaglio(ris);
-    pareggiaSulPiuGrande(dett, x => x.lotto, (x, v) => { x.lotto = v; }, b.lotto);
-    pareggiaSulPiuGrande(dett, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
-    corpo = html`${rigaProdotto(b.prezzoScheda, b.lotto)}
-      ${dett.map(x => html`<tr><td></td><td>${x.nome}${x.sotto ? html`<div class="sotto">${x.sotto}</div>` : ''}</td><td></td>
-        <td class="n">${euro(x.scheda)}</td><td class="n">${euro(x.lotto)}</td></tr>`)}`;
-  } else {
-    const fasi = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0).map(f => ({ ...f }));
-    // energia insieme al materiale di consumo
-    const voci = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => ({ ...x, gruppo: x.gruppo === 'ENERGIA' ? 'MATERIALE DI CONSUMO' : x.gruppo }));
-    pareggiaSulPiuGrande<{ prezzo: number }>([...fasi, ...voci], x => x.prezzo, (x, v) => { x.prezzo = v; }, b.lotto);
-    const gruppi = [...gruppiDi(fasi), ...gruppiDi(voci)].map(x => ({ ...x, lotto: somma(x.righe), scheda: Math.round(somma(x.righe) / n * 100) / 100 }));
-    pareggiaSulPiuGrande(gruppi, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
-    corpo = html`${rigaProdotto(b.prezzoScheda, b.lotto)}
-      ${gruppi.map(({ g, righe, lotto, scheda }) => html`
-        <tr class="${opz.versione === 'fasi' ? 'area' : ''}"><td></td><td>${nomeGruppo(g)}</td><td></td><td class="n">${euro(scheda)}</td><td class="n">${euro(lotto)}</td></tr>
-        ${opz.versione === 'fasi' ? righe.map(x => html`<tr class="fase"><td></td><td>${x.nome}</td><td></td><td></td><td class="n">${euro(x.prezzo)}</td></tr>`) : ''}`)}`;
-  }
-  const rigaUnaTantum = !prezzoUnico && b.unaTantum > 0 ? html`
+      <td><b>${i.descrizione}</b>${sotto(x.sotto)}</td><td class="n">${qta}</td><td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      case 'voce': return html`<tr class="${x.stile}"><td></td><td>${x.descrizione}${sotto(x.sotto)}</td><td></td>
+        <td class="n">${x.prezzo == null ? '' : euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      case 'unaTantum': return html`
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
-      <table class="ut">${ut.map(x => html`<tr><td>${x.nome}</td><td class="n">${euro(x.prezzo)}</td></tr>`)}</table></td>
-      <td class="n">1</td><td class="n">${euro(b.unaTantum)}</td><td class="n">${euro(b.unaTantum)}</td></tr>` : '';
-  const righeAggiunte = html`${conti.righe.map(x => html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
-      <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`)}
-    ${conti.sconto > 0 ? html`<tr class="prodotto sconto"><td></td><td><b>${conti.etichettaSconto}</b></td><td></td><td></td><td class="n">− ${euro(conti.sconto)}</td></tr>` : ''}`;
+      <table class="ut">${x.voci.map(v => html`<tr><td>${v.nome}</td><td class="n">${euro(v.prezzo)}</td></tr>`)}</table></td>
+      <td class="n">1</td><td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      case 'aggiunta': return html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
+      <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      case 'sconto': return html`<tr class="prodotto sconto"><td></td><td><b>${x.descrizione}</b></td><td></td><td></td><td class="n">− ${euro(x.importo)}</td></tr>`;
+    }
+  });
   const noteStampate = [rit.noteCliente, rit.noteInterne ? d.note ?? '' : ''].map(x => x.trim()).filter(Boolean).join('\n\n');
   const valoreRiga = (k: number, campo: 'descrizione' | 'quantita' | 'prezzo') => {
     const x = rit.righe[k];
@@ -133,8 +108,12 @@ export function stampaPreventivo(o: {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa-preventivo.css?v=${VERSIONE}"></head>
 <body data-versione-url="/preventivi/${p.id}/stampa/versione">
-<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button><a href="/preventivi/${p.id}">← torna al preventivo</a>
+<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
+  ${o.email ? html`<a class="bottone-email" href="#invia-email">✉ Invia per email</a>` : ''}
+  ${o.email?.email_inviata_il ? html`<span class="inviato" title="${o.email.email_a ?? ''}">✓ Inviato il ${new Date(o.email.email_inviata_il).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}${o.email.email_a ? ` a ${o.email.email_a}` : ''}</span>` : ''}
+  <a href="/preventivi/${p.id}">← torna al preventivo</a>
   ${salvatoIl ? html`<span class="salvato">Versione salvata il ${salvatoIl}: le modifiche non salvate nel preventivo non compaiono</span>` : ''}</div>
+${o.messaggio ? html`<div class="messaggio-stampa">${o.messaggio}</div>` : ''}
 <div class="schermo">
 <nav class="pannello-stampa" aria-label="Cosa stampare">
   <h2>Cosa stampare</h2>
@@ -169,6 +148,23 @@ export function stampaPreventivo(o: {
     </fieldset>
     <button type="submit">Aggiorna la stampa</button>
   </form>
+  ${o.email ? html`<section class="invia-email" id="invia-email">
+    <h2>Invia per email</h2>
+    ${riquadroInvio({ tipo: 'preventivo', stato: o.email.stato, email_a: o.email.email_a, email_inviata_il: o.email.email_inviata_il, inviato_a_mano: o.email.inviato_a_mano },
+      { segna: `/preventivi/${p.id}/segna-inviato`, torna: `/preventivi/${p.id}/stampa${link({})}`, cosa: 'preventivo' })}
+    ${o.email.stato === 'da_validare' ? html`<p class="aiuto"><b>Preventivo da validare</b>: controllalo e salvalo, poi si può mandare.</p>` : html`
+    <form method="post" action="/preventivi/${p.id}/email" data-conferma="Mandare il preventivo per email con il PDF allegato (${VERSIONI_STAMPA.find(v => v.codice === opz.versione)?.nome ?? ''})?">
+      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}">
+      ${o.email.richiesta ? html`<p class="aiuto">Risposta alla richiesta "${o.email.richiesta.oggetto}" di ${o.email.richiesta.mittente}.</p>` : ''}
+      <label>A <input name="a" value="${o.email.a}" placeholder="indirizzo@cliente.it (più indirizzi con la virgola)"></label>
+      <label>Cc <input name="cc" value=""></label>
+      <label>Oggetto <input name="oggetto" value="${o.email.oggetto}"></label>
+      <label>Testo <textarea name="testo" rows="8">${o.email.testo}</textarea></label>
+      <p class="aiuto">Allegato: il <a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a> come questa stampa (versione, condizioni, firma e ritocchi salvati).
+        ${o.email.attivo ? html`Parte da <b>${o.email.mittente}</b>.` : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il PDF e mandalo dalla posta.`}</p>
+      <button type="submit" ${o.email.attivo ? '' : raw('disabled')}>${o.email.email_inviata_il ? 'Manda di nuovo' : 'Invia con Gmail'}</button>
+    </form>`}
+  </section>` : ''}
 </nav>
 
 <div class="fogli">
@@ -188,7 +184,7 @@ export function stampaPreventivo(o: {
 
   <table class="righe">
     <thead><tr><th class="codice">Codice</th><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo unitario</th><th class="n">Importo</th></tr></thead>
-    <tbody>${corpo}${rigaUnaTantum}${righeAggiunte}</tbody>
+    <tbody>${corpo}</tbody>
   </table>
 
   ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
@@ -200,7 +196,7 @@ export function stampaPreventivo(o: {
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>
-    <div class="totale"><div class="etic">Totale preventivo${r.unaTantum > 0 ? ' (primo lotto)' : ''}</div><strong>${euro(conti.totale)}</strong><small>IVA esclusa</small></div>
+    <div class="totale"><div class="etic">Totale preventivo${r.unaTantum > 0 ? ' (primo lotto)' : ''}</div><strong>${euro(cont.totale)}</strong><small>IVA esclusa</small></div>
   </div>
   ${opz.firma && !opz.condizioni ? firme : ''}
   ${piede}
@@ -216,5 +212,6 @@ ${opz.condizioni ? html`<section class="foglio seconda">
 </div>
 </div>
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
+<script src="/static/conferma.js?v=${VERSIONE}" defer></script>
 </body></html>`;
 }

@@ -20,8 +20,10 @@ import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
-import { stampaPreventivo, type ClienteStampa } from '../views/stampa-preventivo.js';
-import { leggiRitocchi, versioneStampa } from '../../engine/stampa-preventivo.js';
+import { stampaPreventivo } from '../views/stampa-preventivo.js';
+import { segnoInvioElenco } from '../views/invio.js';
+import { leggiRitocchi } from '../../engine/stampa-preventivo.js';
+import { datiStampaPreventivo, inviaPreventivoEmail, opzioniStampa, pdfDelPreventivo, propostaEmailPreventivo, segnaPreventivoInviato } from '../preventivo-email-servizio.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { pianificaProduzione } from '../ordini-servizio.js';
 import { caricoGiornaliero } from '../../engine/ordini.js';
@@ -39,7 +41,7 @@ export function rottePreventivi() {
 
   // ── Elenco ──
   const elencoPreventivi = (cerca: string, limite = 2000) => q(`
-      SELECT id, numero, creato_il, intestazione, n_schede, totale_secondo_lotto, stato, origine,
+      SELECT id, numero, creato_il, intestazione, n_schede, totale_secondo_lotto, stato, origine, email_a, email_inviata_il, inviato_a_mano,
         (tariffe->>'ricarico')::numeric AS ricarico,
         (risultato->'totali'->>'prezzoOrarioMedio')::numeric AS prezzo_orario,
         (risultato->'totali'->>'prezzoSchedaSecondoLotto')::numeric AS prezzo_scheda,
@@ -89,7 +91,7 @@ export function rottePreventivi() {
       <div class="tabella-scorre"><table class="elenco preventivi">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
           <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
-          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th></tr></thead>
+          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th><th title="Nessun segno = ancora da inviare al cliente">Inviato</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
             ${casella(p.id, p.numero)}
@@ -98,6 +100,7 @@ export function rottePreventivi() {
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
             <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
+            <td class="nowrap" data-valore="${p.email_inviata_il ? new Date(p.email_inviata_il).toISOString() : ''}">${segnoInvioElenco({ ...p, tipo: 'preventivo', origine: null })}</td>
           </tr>`)}
         </tbody></table></div>${barra}
       ${modulo.chiudi}
@@ -194,27 +197,52 @@ export function rottePreventivi() {
   });
 
   // ── Anteprima di stampa (per il cliente: solo prezzi). Versioni e aggiunte nel pannello a sinistra (Adriano, 28/10/2026) ──
-  r.get('/:id/stampa', async (req, res) => {
-    const p = await leggiPreventivo(Number(req.params.id));
-    if (!p) return res.status(404).send('Preventivo non trovato');
-    const cat: Catalogo = p.catalogo;
-    const dati = datiDaRiga(p);
-    const v = (cod: string) => dati.parametri[cod] ?? cat.parametri.find(x => x.codice === cod)?.default;
-    const doppia = !!v('doppiaFaccia');
-    const cliente = p.cliente_id ? await q1<ClienteStampa>(
-      `SELECT c.ragione_sociale, c.partita_iva, c.codice_fiscale, c.indirizzo, c.cap, c.comune, c.provincia, c.nazione, c.codice_sdi, c.pec,
-              cp.descrizione AS pagamento
-         FROM clienti c LEFT JOIN condizioni_pagamento cp ON cp.codice = c.condizione_pagamento WHERE c.id = $1`, [p.cliente_id]) : undefined;
+  r.get('/:id/stampa', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const x = await datiStampaPreventivo(id, opzioniStampa(req.query as Record<string, unknown>));
+    if (!x) return res.status(404).send('Preventivo non trovato');
     // sempre la versione salvata in questo momento: niente copie del browser (Adriano 4/11/2026, P2026-2388)
     res.set('Cache-Control', 'no-store');
-    res.send(String(stampaPreventivo({
-      p, d: dati, ris: calcola(cat, dati), doppia,
-      nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
-      nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
-      azienda: await caricaAzienda(), cliente: cliente ?? null,
-      opz: { versione: versioneStampa(req.query.vista), condizioni: req.query.condizioni !== '0', firma: req.query.firma !== '0' },
-      rit: leggiRitocchi(p.stampa),
-    })));
+    const email = await propostaEmailPreventivo(id);
+    res.send(String(stampaPreventivo({ ...x, email: email ? { ...email, inviato_a_mano: !!x.p.inviato_a_mano } : null,
+      messaggio: req.query.msg ? String(req.query.msg) : undefined })));
+  });
+
+  // ── PDF del preventivo (lo stesso che parte per email), con le scelte della stampa ──
+  r.get('/:id/pdf', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const pdf = await pdfDelPreventivo(Number(req.params.id), opzioniStampa(req.query as Record<string, unknown>));
+    if (!pdf) return res.status(404).send('Preventivo non trovato');
+    res.set('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdf.nome}"`);
+    res.send(pdf.dati);
+  });
+
+  // ── Invio per email da preventivi@ (Adriano 4/11/2026) ──
+  r.post('/:id/email', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const opz = opzioniStampa(req.body ?? {});
+    const torna = (t: string) => res.redirect(`/preventivi/${id}/stampa?${new URLSearchParams({ vista: opz.versione, ...(opz.condizioni ? {} : { condizioni: '0' }), ...(opz.firma ? {} : { firma: '0' }), msg: t })}`);
+    try {
+      const a = await inviaPreventivoEmail(id, req.body ?? {}, opz);
+      torna(`Preventivo mandato per email a ${a} con il PDF allegato.`);
+    } catch (e: any) {
+      torna(`Email non partita: ${e?.message ?? e}`);
+    }
+  });
+
+  // ── "Segna come inviato" per un preventivo mandato da fuori del portale (o togli il segno messo a mano) ──
+  r.post('/:id/segna-inviato', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const togli = req.body?.togli === '1';
+    await segnaPreventivoInviato(id, String(req.body?.a ?? ''), togli);
+    const torna = String(req.body?.torna ?? '');
+    const indirizzo = torna.startsWith(`/preventivi/${id}`) && !torna.includes('//') ? torna : `/preventivi/${id}`;
+    res.redirect(`${indirizzo}${indirizzo.includes('?') ? '&' : '?'}msg=${encodeURIComponent(togli ? 'Segno "inviato" tolto.' : 'Preventivo segnato come inviato.')}`);
   });
 
   // ── Versione salvata del preventivo: la pagina di stampa la controlla quando si torna sulla sua scheda del browser ──
@@ -578,11 +606,13 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     contenuto: html`
     <form id="preventivo" data-id="${salvato?.id ?? ''}" autocomplete="off" class="${conLati && !doppia ? 'solo-top' : ''} ${provenienza === 1 ? 'materiale-da-restituire' : ''}">
     <div class="intestazione-pagina">
-      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>` : 'Nuovo preventivo'}</h1>
+      <h1>${salvato ? html`Preventivo ${salvato.numero} <span class="stato ${salvato.stato}">${salvato.stato.replace('_', ' ')}</span>
+        ${segnoInvioElenco({ ...salvato, tipo: 'preventivo', origine: null })}` : 'Nuovo preventivo'}</h1>
       <div class="azioni">
         <span id="stato-salvataggio" class="nota"></span>
         <span class="vista-preventivo" title="Semplice: solo quantità e costi che cambiano da una scheda all'altra; Completo: tutti i campi. I valori nascosti contano comunque."><button type="button" data-vista="semplice">Semplice</button><button type="button" data-vista="completo" class="attiva">Completo</button></span>
         ${salvato ? html`<a class="bottone" id="apri-stampa" href="/preventivi/${salvato.id}/stampa" target="_blank" rel="noopener" title="Anteprima di stampa e PDF (con modifiche non salvate prima salva il preventivo)">Stampa</a>
+          <a class="bottone" id="apri-email" href="/preventivi/${salvato.id}/stampa#invia-email" target="_blank" rel="noopener" title="Dalla stampa: manda il PDF al cliente da preventivi@">Invia per email</a>
           <a class="bottone" href="/preventivi/${salvato.id}/consegna" title="Data di consegna stimata: arrivo materiale, capacità produttiva, + 5 giorni lavorativi">Data di consegna</a>` : ''}
         <button type="button" id="salva" class="primario">Salva</button>
       </div>

@@ -930,6 +930,21 @@ input.con-elenco { padding-right: 1.6rem; cursor: pointer;
 input.con-elenco:focus { cursor: text; }
 ul.elenco-scelta li .nota { color: #777; }
 
+/* Segno "Inviato" (Adriano 4/11/2026, views/invio.ts): nessun segno = ancora da inviare */
+.invio { display: inline-block; font-size: .72rem; padding: .08rem .45rem; border-radius: 99px; white-space: nowrap; font-weight: 600; margin: .05rem .15rem .05rem 0;
+  background: #ddf3e5; color: var(--positivo); }
+.invio.invio-attesa { background: #fff2cc; color: #8a6100; }
+.invio.invio-errore { background: #fbe2e0; color: var(--negativo); }
+.invio.invio-fic { background: #eef0ee; color: var(--tenue); }
+.invio.invio-sdi.invio-ok { background: #e1ecfb; color: #1f55a6; }
+.riquadro-invio { border: 1px solid #b9dcc6; background: #f1faf4; border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0 1rem; }
+.riquadro-invio.da-inviare { border-color: var(--bordo); background: #fafaf8; }
+.riquadro-invio .invio-frase { margin: .15rem 0; }
+.riquadro-invio .invio-frase.invio-ok { color: var(--positivo); font-weight: 550; }
+.riquadro-invio .invio-frase.invio-attesa { color: #8a6100; font-weight: 550; }
+.riquadro-invio .invio-frase.invio-errore { color: var(--negativo); font-weight: 550; }
+.riquadro-invio form.segna-inviato input { padding: .2rem .4rem; font-size: .85rem; }
+button.piccolo { font-size: .8rem; padding: .2rem .6rem; }
 /* Sede operativa del cliente (Adriano 4/11/2026): i campi si vedono solo con la spunta "Sede operativa diversa dalla sede legale" */
 fieldset.campi-sede-operativa { display: none; border: 1px solid #d0d7de; border-radius: 6px; padding: .5rem .8rem; margin: .4rem 0 .8rem; }
 form:has(#sede-operativa-diversa:checked) fieldset.campi-sede-operativa { display: block; }

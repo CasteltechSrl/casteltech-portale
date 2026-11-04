@@ -24,11 +24,13 @@ type Db = { query: (s: string, v?: unknown[]) => Promise<any> };
 export interface OrdineFornitoreElenco {
   id: number; numero: number | null; anno: number; data: string; stato: string; totale: number; fornitore: string | null; fornitore_id: number | null;
   riferimento_esterno: string | null; commessa: string | null; prima_consegna: string | null; arrivo: StatoArrivo; fattura: string | null; email_inviata_il: Date | null;
+  email_a: string | null; inviato_a_mano: boolean; tipo: string; origine: string | null;
 }
 
 /** Elenco degli ordini a fornitore (più recenti in cima), con lo stato dell'arrivo calcolato dalle righe. */
 export async function elencoOrdiniFornitore(): Promise<OrdineFornitoreElenco[]> {
   const righe = await q<any>(`SELECT d.id, d.numero, d.anno, d.data, d.stato, d.imponibile AS totale, d.fornitore_id, d.riferimento_esterno, d.email_inviata_il,
+      d.email_a, d.inviato_a_mano, d.tipo, d.origine,
       coalesce(d.intestatario->>'ragione_sociale', f.ragione_sociale) AS fornitore, c.numero AS commessa,
       CASE WHEN r.id IS NULL THEN NULL ELSE coalesce(nullif(r.numero, ''), '?') || ' del ' || to_char(r.data, 'DD/MM/YYYY') END AS fattura,
       (SELECT min(consegna) FROM documenti_righe x WHERE x.documento_id = d.id) AS prima_consegna,
@@ -318,7 +320,7 @@ export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: str
   const messaggio = messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ordine_fornitore')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } });
   const inviato = await inviaGmail(messaggio);
-  await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, aggiornato_il = now() WHERE id = $1`,
+  await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, inviato_a_mano = false, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
   return a.indirizzi.join(', ');
 }

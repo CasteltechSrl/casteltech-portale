@@ -99,6 +99,12 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   La delega resta su GMAIL_MITTENTE (info@); l'alias si usa nel From solo se è tra gli "Invia messaggio come" del Gmail di info@ (letti con gmail.readonly,
   `settings/sendAs`, in memoria 1 ora), altrimenti parte da info@. Stato in Impostazioni → Servizi → "Da chi partono le email". Un invio nuovo usa `mittentePer('<tipo>')`.
 
+- Invio dei documenti (Adriano 4/11/2026; `engine/invii.ts`, `views/invio.ts`, migrazione 073, test in `tests/invii.test.ts`): colonna "Inviato" negli elenchi e riquadro
+  nella scheda di preventivi, conferme, DDT, fatture/NC/autofatture, ordini a fornitore; NESSUN segno = da inviare. ✉ email del portale (data e destinatario), ✓ a mano
+  ("Segna come inviato", POST `/amministrazione/documenti/:id/segna-inviato` o `/preventivi/:id/segna-inviato`) o "Da FIC"; fatture: segno SdI a parte con l'esito.
+  Un invio email nuovo scrive `email_a`/`email_inviata_il` e `inviato_a_mano = false`. Preventivo per email dalla stampa (`preventivo-email-servizio.ts`, PDF in
+  `pdf-preventivo.ts` con le righe di `contenutoStampa`, uguali alla pagina; da `mittentePer('preventivo')` = preventivi@).
+
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).
   Se tocca formule economiche, preventivi salvati o anagrafiche, chiedi conferma ad Adriano prima di scrivere codice; il resto si fa e si pubblica dopo i test.

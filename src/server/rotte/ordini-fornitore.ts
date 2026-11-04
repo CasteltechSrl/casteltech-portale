@@ -3,6 +3,8 @@
  * "+ Nuovo ordine" con il fornitore SOLO dall'anagrafica, bozza → Emetti (numero e PDF) → Invia con Gmail,
  * arrivo della merce riga per riga, fattura del fornitore collegata. Dalla BOM quotata: un ordine per distributore.
  */
+import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
+import { INVIATO_TITOLO } from '../../engine/invii.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { Router } from 'express';
 import { caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -72,15 +74,16 @@ export function rotteOrdiniFornitore() {
       ${modulo.apri}
       <table class="elenco">
         <thead><tr>${casellaTutti()}<th>N.</th><th>Data</th><th>Fornitore</th><th>Vostra offerta</th><th>Commessa</th><th>Consegna</th>
-          <th class="n">Totale</th><th>Stato</th><th>Merce</th><th>Fattura</th></tr></thead>
+          <th class="n">Totale</th><th>Stato</th><th title="${INVIATO_TITOLO}">Inviato</th><th>Merce</th><th>Fattura</th></tr></thead>
         <tbody>${elenco.length ? elenco.map(o => html`<tr>
           ${casella(o.id, o.numero ? `ordine ${o.numero}/${o.anno}` : 'bozza')}
           <td><a href="/ordini/fornitori/${o.id}">${o.numero ? `${o.numero}/${o.anno}` : 'bozza'}</a></td>
           <td>${data(o.data)}</td><td>${o.fornitore ?? html`<span class="nota">da scegliere</span>`}</td>
           <td>${o.riferimento_esterno ?? ''}</td><td>${o.commessa ?? ''}</td><td>${o.prima_consegna ? data(o.prima_consegna) : ''}</td>
           <td class="n">${euro(o.totale)}</td><td>${stato(o.stato)}</td>
+          <td data-valore="${o.email_inviata_il ? new Date(o.email_inviata_il).toISOString() : ''}">${o.numero && o.stato !== 'annullato' ? segnoInvioElenco(o) : ''}</td>
           <td>${o.stato === 'bozza' || o.stato === 'annullato' ? '' : arrivo(o.arrivo)}</td><td>${o.fattura ?? ''}</td>
-        </tr>`) : html`<tr><td colspan="11" class="nota">Nessun ordine${vista === 'tutti' ? '' : ' da completare'}.</td></tr>`}</tbody>
+        </tr>`) : html`<tr><td colspan="12" class="nota">Nessun ordine${vista === 'tutti' ? '' : ' da completare'}.</td></tr>`}</tbody>
       </table>
       ${modulo.chiudi}`, { avviso: req.query.msg ? String(req.query.msg) : undefined }));
   });
@@ -220,8 +223,8 @@ export function rotteOrdiniFornitore() {
         <a href="/ordini/fornitori">← Ordini a fornitore</a></div>
       ${avviso ? html`<div class="avviso info">${avviso}</div>` : ''}
       <p>${nomeFornitoreOrdine ? html`Fornitore <b>${nomeFornitoreOrdine}</b>` : html`<b>Fornitore da scegliere</b>`}${d.bom_id
-        ? html` · dalla BOM <a href="/quotazioni/bom/${d.bom_id}">${d.bom_nome ?? d.bom_id}</a>` : ''}${d.email_inviata_il
-        ? html` · inviato a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}` : ''}</p>
+        ? html` · dalla BOM <a href="/quotazioni/bom/${d.bom_id}">${d.bom_nome ?? d.bom_id}</a>` : ''}</p>
+      ${emesso && !annullato ? riquadroInvio({ ...d, tipo: 'ordine_fornitore' }, { segna: `/amministrazione/documenti/${d.id}/segna-inviato`, torna: base, cosa: 'ordine' }) : ''}
       ${emesso && !annullato ? html`<p class="nota">L'ordine è già emesso: se lo correggi e salvi, il PDF si rifà con lo stesso numero${d.email_inviata_il ? ' (poi rimandalo al fornitore)' : ''}. Il fornitore non si cambia più.</p>` : ''}
       <form method="post" action="${base}" class="blocco" id="modulo-documento" data-autosalva="${annullato ? '' : '1'}">
         <div class="riga-campi">

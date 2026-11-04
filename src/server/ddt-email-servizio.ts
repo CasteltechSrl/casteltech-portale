@@ -63,7 +63,7 @@ export async function inviaDdtEmail(id: number, b: { a?: string; cc?: string; og
   const azienda = String(x.azienda.ragione_sociale || 'Casteltech S.r.l.').replace(/"/g, '');
   const inviato = await inviaGmail(messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ddt')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } }));
-  await q(`UPDATE documenti SET email_a = $2, email_inviata_il = now(), email_id = $3, aggiornato_il = now() WHERE id = $1`,
+  await q(`UPDATE documenti SET email_a = $2, email_inviata_il = now(), email_id = $3, inviato_a_mano = false, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
   return a.indirizzi.join(', ');
 }
