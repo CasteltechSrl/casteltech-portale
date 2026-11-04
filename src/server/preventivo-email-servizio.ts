@@ -17,9 +17,9 @@ import { nomeFilePdfPreventivo, pdfPreventivo } from './pdf-preventivo.js';
 import { costoBomPerPreventivo } from './codifica-servizio.js';
 import { noteDaStampare, righeNonQuotateNelleNote } from '../engine/non-quotati.js';
 
-/** Opzioni della stampa dall'indirizzo (?vista=…&condizioni=0&firma=0) o dal modulo dell'email. */
+/** Opzioni della stampa dall'indirizzo (?vista=…&condizioni=0&firma=0&ut=0) o dal modulo dell'email. */
 export const opzioniStampa = (x: Record<string, unknown>): OpzioniStampa =>
-  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0' });
+  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0', ut: x.ut !== '0' });
 
 /** Tutto quello che serve alla stampa (pagina e PDF): preventivo, calcolo, azienda, cliente, ritocchi. */
 export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
@@ -58,7 +58,7 @@ export async function pdfDelPreventivo(id: number, opz: OpzioniStampa): Promise<
   if (!x) return null;
   const i = x.p.intestazione ?? {};
   const a = x.azienda, P = AZIENDA_PREDEFINITA;
-  const cont = contenutoStampa({ ris: x.ris, nSchede: x.d.nSchede, doppia: x.doppia, nLamine: x.nLamine, versione: opz.versione, rit: x.rit, descrizione: i.descrizione ?? '' });
+  const cont = contenutoStampa({ ris: x.ris, nSchede: x.d.nSchede, doppia: x.doppia, nLamine: x.nLamine, versione: opz.versione, rit: x.rit, descrizione: i.descrizione ?? '', dettaglioUnaTantum: opz.ut });
   const note = noteDaStampare(x.rit.noteCliente, x.rit.noteInterne, x.d.note ?? '', x.nonQuotati);
   const dati = await pdfPreventivo({
     numero: x.p.numero, data: dataGiorno(x.p.creato_il),

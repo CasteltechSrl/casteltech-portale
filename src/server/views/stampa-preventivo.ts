@@ -27,7 +27,13 @@ export interface EmailStampa {
   email_a: string | null; email_inviata_il: Date | string | null; inviato_a_mano?: boolean;
 }
 
-export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean }
+/** ut = dettaglio dei costi una tantum (Adriano 4/11/2026; `?ut=0` lo toglie) */
+export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean; ut: boolean }
+
+/** Scelte della stampa nell'indirizzo (solo quelle diverse dal solito). */
+export function parametriStampa(x: OpzioniStampa): Record<string, string> {
+  return { vista: x.versione, ...(x.condizioni ? {} : { condizioni: '0' }), ...(x.firma ? {} : { firma: '0' }), ...(x.ut ? {} : { ut: '0' }) };
+}
 /** Righe vuote del modulo per aggiungere righe alla stampa. */
 const RIGHE_VUOTE = 2;
 
@@ -68,7 +74,7 @@ export function stampaPreventivo(o: {
   const qta = `${num(d.nSchede, 0)} pz`;
   // righe, riquadro verde e totale: gli stessi del PDF mandato per email (engine/stampa-preventivo.ts `contenutoStampa`)
   const rit = o.rit;
-  const cont = contenutoStampa({ ris, nSchede: d.nSchede, doppia: o.doppia, nLamine: o.nLamine, versione: opz.versione, rit, descrizione: i.descrizione ?? '' });
+  const cont = contenutoStampa({ ris, nSchede: d.nSchede, doppia: o.doppia, nLamine: o.nLamine, versione: opz.versione, rit, descrizione: i.descrizione ?? '', dettaglioUnaTantum: opz.ut });
   const riquadro = cont.riquadro;
   const scontato = cont.scontato ? ' scontato' : '';
   // tempi di consegna (Adriano 4/11/2026): obbligatori prima di stampare o mandare, sempre "circa"
@@ -80,10 +86,7 @@ export function stampaPreventivo(o: {
 
   const link = (cambia: Partial<OpzioniStampa>) => {
     const x = { ...opz, ...cambia };
-    const q = new URLSearchParams({ vista: x.versione });
-    if (!x.condizioni) q.set('condizioni', '0');
-    if (!x.firma) q.set('firma', '0');
-    return `?${q}`;
+    return `?${new URLSearchParams(parametriStampa(x))}`;
   };
 
   const sotto = (t?: string) => (t ? html`<div class="sotto">${t}</div>` : VUOTO);
@@ -96,7 +99,7 @@ export function stampaPreventivo(o: {
         <td class="n">${x.prezzo == null ? '' : euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'unaTantum': return html`
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
-      <table class="ut">${x.voci.map(v => html`<tr><td>${v.nome}</td><td class="n">${euro(v.prezzo)}</td></tr>`)}</table></td>
+      ${x.voci.length ? html`<table class="ut">${x.voci.map(v => html`<tr><td>${v.nome}</td><td class="n">${euro(v.prezzo)}</td></tr>`)}</table>` : ''}</td>
       <td class="n">1</td><td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'aggiunta': return html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
       <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
@@ -134,6 +137,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
   <div class="aggiunte">
     <a href="${link({ condizioni: !opz.condizioni })}" class="${opz.condizioni ? 'si' : ''}">Condizioni generali</a>
     <a href="${link({ firma: !opz.firma })}" class="${opz.firma ? 'si' : ''}">Spazio firma del cliente</a>
+    ${r.unaTantum > 0 && opz.versione !== 'essenziale' ? html`<a href="${link({ ut: !opz.ut })}" class="${opz.ut ? 'si' : ''}" title="Voci sotto i costi una tantum (documentazione, programmazione, lamina…)">Dettaglio dei costi una tantum</a>` : ''}
   </div>
   <form class="ritocchi" method="post" action="/preventivi/${p.id}/stampa">
     <h2>Ritocchi per il cliente</h2>
@@ -173,13 +177,13 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
       { segna: `/preventivi/${p.id}/segna-inviato`, torna: `/preventivi/${p.id}/stampa${link({})}`, cosa: 'preventivo' })}
     ${o.email.stato === 'da_validare' ? html`<p class="aiuto"><b>Preventivo da validare</b>: controllalo e salvalo, poi si può mandare.</p>` : html`
     <form method="post" action="/preventivi/${p.id}/email" data-conferma="Mandare il preventivo per email con il PDF allegato (${VERSIONI_STAMPA.find(v => v.codice === opz.versione)?.nome ?? ''})?">
-      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}">
+      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}">
       ${o.email.richiesta ? html`<p class="aiuto">Risposta alla richiesta "${o.email.richiesta.oggetto}" di ${o.email.richiesta.mittente}.</p>` : ''}
       <label>A <input name="a" value="${o.email.a}" placeholder="indirizzo@cliente.it (più indirizzi con la virgola)"></label>
       <label>Cc <input name="cc" value=""></label>
       <label>Oggetto <input name="oggetto" value="${o.email.oggetto}"></label>
       <label>Testo <textarea name="testo" rows="8">${o.email.testo}</textarea></label>
-      <p class="aiuto">Allegato: il <a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a> come questa stampa (versione, condizioni, firma e ritocchi salvati).
+      <p class="aiuto">Allegato: il <a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a> come questa stampa (versione, condizioni, firma, dettaglio una tantum e ritocchi salvati).
         ${o.email.attivo ? html`Parte da <b>${o.email.mittente}</b>.` : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il PDF e mandalo dalla posta.`}</p>
       ${consegna ? '' : html`<p class="aiuto manca"><b>Mancano i tempi di consegna</b>: sceglili qui sopra e premi "Aggiorna la stampa".</p>`}
       <button type="submit" ${o.email.attivo && consegna ? '' : raw('disabled')}>${o.email.email_inviata_il ? 'Manda di nuovo' : 'Invia con Gmail'}</button>

@@ -193,7 +193,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `views/stampa-preventivo.ts`, `engine/stampa-preventivo.ts`, `public/stampa-preventivo.css`): impaginata come i preventivi FIC, pannello
    "Cosa stampare" a sinistra: `?vista=essenziale` (solo prezzo a scheda, niente sotto la descrizione: con una tantum le comprende e lo dice),
    `dettaglio` (predefinita: componenti, PCB, SMD, THT, consumo, spedizione; gestione materiale e imballaggio su SMD/THT 70/30 pesato sul valore,
-   `quotaSmd`), `macro`, `fasi`; condizioni generali (`CONDIZIONI_GENERALI`) in seconda pagina con la firma del cliente, tolte con `condizioni=0` / `firma=0`.
+   `quotaSmd`), `macro`, `fasi`; condizioni generali (`CONDIZIONI_GENERALI`) in seconda pagina con la firma del cliente, tolte con `condizioni=0` / `firma=0`; dettaglio delle voci una tantum tolto con `ut=0`
+   (Adriano 4/11/2026, spunta "Dettaglio dei costi una tantum", vale anche per il PDF dell'email: `parametriStampa`, `contenutoStampa({ dettaglioUnaTantum })`).
    Ritocchi per il cliente (Adriano 29/10/2026; migrazione 046, `preventivi.stampa`, `leggiRitocchi`/`contiStampa`, POST `/preventivi/:id/stampa`): note per il cliente,
    sconto (% su tutto o € sul lotto), righe in più; solo nella stampa, il calcolo non cambia. Le note del preventivo sono interne (stampate solo con la spunta).
    Riquadro verde (Adriano 4/11/2026, `prezziRiquadro`): sotto le righe e sopra il totale, SOLO prezzo a scheda senza e con le una tantum. I due prezzi a scheda si riscrivono a mano nei ritocchi
