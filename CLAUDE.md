@@ -321,7 +321,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    distributore (si riprova; stop solo chiavi, limite, 3 errori di fila). P/N non trovato → `alternativaProposta` = compatibile "al 100% in teoria" che dà il prezzo
    (variante dello stesso P/N > stesso codice di produzione > sostituto DigiKey diretto > pin-to-pin dell'IA venduto da un distributore; mai "simile"/"upgrade"),
    reperibilità "attenzione", sezione "Codici compatibili da verificare" in cima alla BOM, "Confermo" = `alternativaScelta`. Arrow (`engine/arrow.ts`,
-   ARROW_LOGIN + ARROW_API_KEY da developers.arrow.com, USD → EUR cambio BCE): lettura da confermare con la prima Prova.
+   ARROW_LOGIN + ARROW_API_KEY da developers.arrow.com, USD → EUR cambio BCE; chiave arrivata il 4/11/2026): risposte MAI in fornitori_cache (`siCache`, condizioni d'uso di Arrow).
    Würth Elektronik (Adriano 4/11/2026; `engine/wurth.ts`, test in `tests/wurth.test.ts`): Customer API (WURTH_CLIENT_ID + WURTH_CLIENT_SECRET da profile.we-online.com → API Keys,
    scadono il 5/6/2027), prezzi NOSTRI (listino per i codici mai comprati) + disponibilità, chiesti solo per i codici WE (`codiceWurth`: numerici); si ordina dal commerciale WE.
    Codifica, regole aggiunte (registro `REGISTRO_AGGIUNTE` in `engine/codifica/aggiunte.ts`, visibile in Impostazioni → Componenti; ogni aggiunta nuova va lì):

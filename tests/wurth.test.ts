@@ -51,3 +51,10 @@ test('Würth Elektronik nell\'anagrafica fornitori, non Würth S.r.l.', () => {
   assert.equal(fornitorePerDistributore('wurth', [{ id: 3, ragione_sociale: 'WURTH ELEKTRONIK EISOS GMBH & CO. KG' }])?.id, 3);
   assert.equal(fornitorePerDistributore('wurth', [f[0]]), null);
 });
+
+test('Arrow: le risposte non si conservano nella cache (condizioni d\'uso della chiave)', async () => {
+  const { siCache } = await import('../src/engine/arrow.js');
+  assert.equal(siCache('arrow'), false);
+  assert.equal(siCache('wurth'), true);
+  assert.equal(siCache('digikey'), true);
+});

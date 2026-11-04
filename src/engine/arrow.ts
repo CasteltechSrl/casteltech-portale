@@ -11,6 +11,12 @@
 import { leggiPrezzo, type Offerta } from './acquisti.js';
 import { pnKey } from './codifica/bom.js';
 
+/**
+ * Arrow vieta di conservare i dati delle sue API (condizioni della chiave, email del 4/11/2026: "You will not maintain any cached data"):
+ * le sue risposte non vanno in fornitori_cache (server/fornitori.ts), si chiedono ogni volta.
+ */
+export const siCache = (fornitore: string) => fornitore !== 'arrow';
+
 const lista = (x: any): any[] => Array.isArray(x) ? x : x == null ? [] : [x];
 
 /** Le parti della risposta, ovunque siano (data[].PartList[]). */

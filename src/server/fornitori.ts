@@ -18,7 +18,7 @@ import { leggiPrezzo, type Fornitore, type Offerta } from '../engine/acquisti.js
 import { pnKey } from '../engine/codifica/bom.js';
 import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
 import { elementiTme, offerteTme } from '../engine/tme.js';
-import { offerteArrow } from '../engine/arrow.js';
+import { offerteArrow, siCache } from '../engine/arrow.js';
 import { codiceWurth, corpoWurth, offerteWurth } from '../engine/wurth.js';
 import { cambioBce } from './autofatture-servizio.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
@@ -70,6 +70,7 @@ async function http(url: string, opz: RequestInit & { nome: string }): Promise<a
 
 // ───────────────────────────── cache ─────────────────────────────
 async function daCache(fornitore: string, chiave: string, ore = ORE_CACHE): Promise<RisultatoFornitore | null> {
+  if (!siCache(fornitore)) return null;
   const r = await q1<{ dati: RisultatoFornitore }>(`SELECT dati FROM fornitori_cache WHERE fornitore = $1 AND chiave = $2
     AND aggiornato_il > now() - make_interval(hours => $3)`, [fornitore, chiave, ore]);
   return r?.dati ?? null;
@@ -77,6 +78,7 @@ async function daCache(fornitore: string, chiave: string, ore = ORE_CACHE): Prom
 /** Salva in cache un risultato già ottenuto (es. dalla ricerca per parametri), così non si richiede di nuovo. */
 export const memorizza = (fornitore: Fornitore, pn: string, dati: RisultatoFornitore) => inCache(fornitore, pnKey(pn)!, dati);
 async function inCache(fornitore: string, chiave: string, dati: RisultatoFornitore) {
+  if (!siCache(fornitore)) return;
   await q(`INSERT INTO fornitori_cache (fornitore, chiave, dati, aggiornato_il) VALUES ($1,$2,$3, now())
     ON CONFLICT (fornitore, chiave) DO UPDATE SET dati = $3, aggiornato_il = now()`, [fornitore, chiave, JSON.stringify(dati)]);
 }
