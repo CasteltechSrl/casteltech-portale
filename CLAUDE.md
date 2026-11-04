@@ -117,6 +117,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   obbligatori prima di stampare o mandare (fieldset "Tempi di consegna" nei ritocchi, settimane 1–26, sempre "circa"): conto lavoro = "circa N settimane dall'arrivo
   del materiale"; materiale comprato da noi (proposto dalla spunta Componenti) = "circa N settimane per l'arrivo del materiale e circa M per il montaggio".
   Stampati sopra il pagamento, anche nel PDF; senza, "Stampa" non parte (`public/stampa.js`) e `inviaPreventivoEmail` rifiuta.
+  Fattura e nota di credito di cortesia per email (Adriano 4/11/2026, "come per i preventivi"; `fattura-email-servizio.ts`, PDF con pdf-lib in `pdf-fattura.ts`,
+  regole in `engine/fattura-email.ts`, test in `tests/fattura-email.test.ts`): riquadro `#invia-email` nella pagina del documento emesso dal portale (non bozza, annullato,
+  scartato, FIC), "✉ Invia per email" in alto e nella stampa (anche DDT), stesse rotte del DDT (GET `/documenti/:id/pdf`, POST `/documenti/:id/email`); indirizzo =
+  `email_amministrazione` > ultima fattura mandata > CRM (mai la PEC); da `mittentePer(tipo)` = amministrazione@; la stampa usa `datiStampaFattura`, come il PDF.
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).
