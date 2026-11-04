@@ -38,3 +38,17 @@ test('il formato aggiunto vale nella codifica, toglierlo lo riporta "non in tabe
   impostaCaseDalPortale([]);
   assert.equal(caseLookup('2SMD')[0], null);
 });
+
+test('tabella completa dei case: tutti i case accettati, con codice, tecnologia e stato', async () => {
+  const { tabellaCase } = await import('../src/engine/codifica/valori-tabella.js');
+  impostaCaseDalPortale([{ chiave: '2SMD', scritto: '2SMD', codice: '2SMD', tecnologia: 'S', nota: 'pulsante', creato_da: 'Adriano' }]);
+  const t = tabellaCase();
+  const trova = (c: string) => t.find(v => v.case === c);
+  assert.equal(trova('0603')?.codice, '0603');
+  assert.equal(trova('2SMD')?.origine, 'aggiunto dalla riga BOM da Adriano');
+  assert.equal(trova('SOIC + piedini')?.codice, 'SOnn');
+  assert.ok(t.some(v => v.tecnologia === 'THT') && t.some(v => v.stato === 'da verificare'));
+  // ogni case scritto per intero è davvero accettato dalla tabella con lo stesso codice
+  for (const v of t.filter(x => !x.case.includes('+'))) assert.equal(caseLookup(v.case)[0], v.codice, v.case);
+  impostaCaseDalPortale([]);
+});
