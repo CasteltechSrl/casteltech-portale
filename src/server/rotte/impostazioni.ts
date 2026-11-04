@@ -174,6 +174,8 @@ export function rotteImpostazioni() {
       tme: html`<code>TME_APP_TOKEN</code> e <code>TME_APP_SECRET</code>: developers.tme.eu → Sign up → nuova applicazione (API v2). Gratuita.`,
       arrow: html`<code>ARROW_LOGIN</code> e <code>ARROW_API_KEY</code>: developers.arrow.com → "Request API Key" (gratuita per i clienti Arrow; arrow.com e Verical
         hanno la stessa chiave). Prezzi in dollari convertiti in euro al cambio BCE. Aggiunto l'1/11/2026: lettura da confermare con la prima "Prova".`,
+      wurth: html`<code>WURTH_CLIENT_ID</code> e <code>WURTH_CLIENT_SECRET</code>: profile.we-online.com → API Keys (account WEID di info@, approvato dal commerciale WE;
+        scade il 5/6/2027: lì "Renew" e nuovo secret su Render). Prezzi nostri (listino per i codici mai comprati), si chiede solo per i codici Würth (numerici).`,
     };
     res.send(pag(req, 'Componenti', html`
       <section class="blocco stretto-form">

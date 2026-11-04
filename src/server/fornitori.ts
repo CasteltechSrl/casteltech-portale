@@ -6,6 +6,7 @@
  *   FARNELL_API_KEY (FARNELL_STORE, default it.farnell.com)   partner.element14.com
  *   TME_APP_TOKEN, TME_APP_SECRET              developers.tme.eu (API v2, OAuth client credentials)
  *   ARROW_LOGIN, ARROW_API_KEY                 developers.arrow.com → Request API Key (aggiunto 1/11/2026, da verificare con le prime chiavi)
+ *   WURTH_CLIENT_ID, WURTH_CLIENT_SECRET       profile.we-online.com → API Keys (Customer API Würth Elektronik, 4/11/2026; solo codici WE)
  * Ogni P/N si cerca presso TUTTI i distributori collegati, in parallelo; un errore su un P/N non ferma gli altri
  * (si riprova una volta; ci si ferma solo se le chiavi sono sbagliate, se il limite è finito o dopo 3 errori di fila).
  * Ogni risposta resta in fornitori_cache per 24 ore (stesso P/N = nessuna nuova chiamata).
@@ -18,6 +19,7 @@ import { pnKey } from '../engine/codifica/bom.js';
 import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
 import { elementiTme, offerteTme } from '../engine/tme.js';
 import { offerteArrow } from '../engine/arrow.js';
+import { codiceWurth, corpoWurth, offerteWurth } from '../engine/wurth.js';
 import { cambioBce } from './autofatture-servizio.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
@@ -33,6 +35,7 @@ export function fornitoriConfigurati(): Record<Fornitore, boolean> {
   return {
     digikey: !!(e.DIGIKEY_CLIENT_ID && e.DIGIKEY_CLIENT_SECRET), mouser: !!e.MOUSER_API_KEY,
     farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET), arrow: !!(e.ARROW_LOGIN && e.ARROW_API_KEY),
+    wurth: !!(e.WURTH_CLIENT_ID && e.WURTH_CLIENT_SECRET),
   };
 }
 
@@ -257,6 +260,50 @@ async function arrowCerca(pn: string, varianti = false): Promise<Offerta[]> {
 }
 async function arrowPn(pn: string): Promise<RisultatoFornitore> { return { offerte: await arrowCerca(pn) }; }
 
+// ───────────────────────────── Würth Elektronik (Customer API) ─────────────────────────────
+let tokenWe: { valore: string; scade: number } | null = null;
+async function tokenWurth(): Promise<string> {
+  if (tokenWe && Date.now() < tokenWe.scade) return tokenWe.valore;
+  const id = process.env.WURTH_CLIENT_ID!.trim(), segreto = process.env.WURTH_CLIENT_SECRET!.trim();
+  const url = 'https://login.witglobal.net/as/token.oauth2';
+  const intestazioni = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' };
+  let r: any;
+  try {
+    // prima con le credenziali nell'intestazione (Basic), come chiede OAuth 2.0
+    r = await http(url, { nome: 'Wurth', method: 'POST', headers: { ...intestazioni, Authorization: `Basic ${Buffer.from(`${id}:${segreto}`).toString('base64')}` },
+      body: new URLSearchParams({ grant_type: 'client_credentials', wuerth_resource: 'customer_api' }) });
+  } catch (e: any) {
+    if (e?.tipo === 'limite' || e?.tipo === 'rete') throw e;
+    // altrimenti nel corpo della richiesta
+    r = await http(url, { nome: 'Wurth', method: 'POST', headers: intestazioni,
+      body: new URLSearchParams({ grant_type: 'client_credentials', wuerth_resource: 'customer_api', client_id: id, client_secret: segreto }) });
+  }
+  if (!r?.access_token) throw new ErroreFornitore('Würth: token non ricevuto, controlla WURTH_CLIENT_ID e WURTH_CLIENT_SECRET su Render', 'chiave');
+  tokenWe = { valore: r.access_token, scade: Date.now() + (Number(r.expires_in ?? 3600) - 120) * 1000 };
+  return tokenWe.valore;
+}
+async function wurthPost(servizio: 'pricing' | 'availability', pns: string[]): Promise<any> {
+  return http(`https://api.witglobal.net/rest/api-services/${servizio}`, { nome: 'Wurth', method: 'POST',
+    headers: { Authorization: `Bearer ${await tokenWurth()}`, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(corpoWurth(pns)) });
+}
+/** Prezzi e disponibilità WE: solo per i codici Würth (gli altri P/N tornano senza offerte, senza chiamate). */
+async function wurthPn(pns: string[]): Promise<Map<string, RisultatoFornitore>> {
+  const nostri = pns.filter(codiceWurth);
+  const esito = new Map<string, RisultatoFornitore>(pns.map(pn => [pn, { offerte: [] }]));
+  if (!nostri.length) return esito;
+  const leggi = async (gruppo: string[]) => {
+    const [prezzi, disp] = await Promise.all([wurthPost('pricing', gruppo), wurthPost('availability', gruppo).catch(() => null)]);
+    for (const [pn, offerte] of offerteWurth(gruppo, prezzi, disp)) esito.set(pn, { offerte });
+  };
+  try { await leggi(nostri); }
+  catch (e: any) {
+    // un codice che WE non conosce può far rifiutare tutto il gruppo: si riprova un codice alla volta
+    if (e?.tipo === 'chiave' || e?.tipo === 'limite' || nostri.length === 1) throw e;
+    for (const pn of nostri) await leggi([pn]).catch(() => undefined);
+  }
+  return esito;
+}
+
 // ───────────────────────────── varianti e sostituti (P/N non trovato esatto) ─────────────────────────────
 /**
  * Varianti dello stesso P/N (confezione o suffisso diverso: -TR, /R7, #PBF…) presso TUTTI i distributori che hanno la ricerca per parola
@@ -323,10 +370,11 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
   let fatti = 0;
   const segna = (k: string, f: Fornitore, r: RisultatoFornitore) => { perPn.get(k)![f] = r; };
   // prima la cache
-  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [], arrow: [] };
+  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [], arrow: [], wurth: [] };
   for (const f of Object.keys(daCercare) as Fornitore[]) {
     if (!attivi[f]) continue;
     for (const [k, pn] of unici) {
+      if (f === 'wurth' && !codiceWurth(pn)) continue; // a Würth si chiedono solo i suoi codici
       const c = opz.forza ? null : await daCache(f, k);
       if (c) segna(k, f, c); else daCercare[f].push([k, pn]);
     }
@@ -365,12 +413,13 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
   unoAllaVolta('farnell', 2, farnellPn); // il ritmo lo dà turno()
   aGruppi('tme', 50, tmePn);
   unoAllaVolta('arrow', 2, arrowPn);
+  aGruppi('wurth', 50, wurthPn);
   await Promise.all(lavori);
   return { perPn, errori };
 }
 
 /** Prova di collegamento (Impostazioni → Componenti). */
-export async function provaFornitore(f: Fornitore, pn = 'RC0603FR-072K2L'): Promise<string> {
+export async function provaFornitore(f: Fornitore, pn = f === 'wurth' ? '885012206071' : 'RC0603FR-072K2L'): Promise<string> {
   if (!fornitoriConfigurati()[f]) return 'chiavi non impostate su Render';
   try {
     let offerte: Offerta[] = [];
@@ -379,8 +428,11 @@ export async function provaFornitore(f: Fornitore, pn = 'RC0603FR-072K2L'): Prom
     if (f === 'farnell') offerte = (await farnellPn(pn)).offerte;
     if (f === 'tme') offerte = (await tmePn([pn])).get(pn)?.offerte ?? [];
     if (f === 'arrow') offerte = (await arrowPn(pn)).offerte;
+    if (f === 'wurth') offerte = (await wurthPn([pn])).get(pn)?.offerte ?? [];
     if (!offerte.length) return `collegato, ma ${pn} non trovato`;
     const o = offerte[0];
+    if (f === 'wurth') return `OK: ${o.mpn}, ${o.stock} pz a magazzino, prezzi ${o.scaglioni.map(s => `${s.qta} pz ${s.prezzo} ${o.valuta}`).join(' · ')}`
+      + `${o.ciclo ? ` (${o.ciclo})` : ''}${o.consegnaSettimane ? `, consegna ${o.consegnaSettimane}` : ''}`;
     return `OK: ${o.mpn} ${o.codiceFornitore}, ${o.stock} pz, da ${o.scaglioni[0]?.prezzo} ${o.valuta}`;
   } catch (e: any) { return e.message; }
 }
