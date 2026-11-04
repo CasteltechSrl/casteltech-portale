@@ -2,7 +2,7 @@
  * Invio delle fatture allo SdI e ritorno degli esiti tramite Invoicetronic (Adriano, 28/10/2026; regole in engine/sdi.ts).
  * Chiave: INVOICETRONIC_API_KEY (solo su Render). ik_test_ = prova (sandbox, niente arriva allo SdI), ik_live_ = reale.
  *
- * - Invio: POST /send con l'XML del documento emesso (con la chiave di prova anche dalla bozza, numero 0, per provare).
+ * - Invio: POST /send con l'XML del documento emesso (con la chiave di prova anche dalla bozza, numero PROVA-<id>-<n>, per provare).
  *   Il nome del file lo dà Invoicetronic (sempre nuovo, così un nuovo invio dopo uno scarto non è un doppione).
  * - Esiti: Invoicetronic chiama il webhook /sdi/webhook quando arriva un esito (niente controlli periodici: il database
  *   Neon si sveglia solo quando c'è qualcosa); il pulsante "Aggiorna esito" li rilegge a mano (gratis in Invoicetronic).
@@ -16,7 +16,8 @@ import { caricaAzienda } from './amministrazione-servizio.js';
 import { preparaFornitore } from '../engine/anagrafica-fornitori.js';
 import { datiFattureRicevute, eNostraAutofattura, xmlDaFile } from '../engine/fattura-ricevuta.js';
 import {
-  STATI_SDI, ambienteDaChiave, firmaWebhookValida, messaggioErroreApi, statoPiuAvanti, testoErrori, type Ambiente, type StatoSdi,
+  STATI_SDI, ambienteDaChiave, conNumero, firmaWebhookValida, messaggioErroreApi, numeroDiProva, numeroNellXml, numeroNonValido, statoPiuAvanti, testoErrori,
+  type Ambiente, type StatoSdi,
 } from '../engine/sdi.js';
 
 const URL_API = () => (process.env.INVOICETRONIC_URL ?? 'https://api.invoicetronic.com/v1').replace(/\/$/, '');
@@ -87,7 +88,8 @@ export async function collegaWebhook(urlPortale: string): Promise<void> {
 
 /**
  * Manda il documento allo SdI. Con la chiave reale solo i documenti emessi (una volta: un nuovo invio solo dopo uno scarto);
- * con la chiave di prova anche le bozze (XML con numero 0), per provare tutto senza consumare la numerazione.
+ * con la chiave di prova anche le bozze, con un numero di prova sempre nuovo (PROVA-<id>-<n>, Adriano 4/11/2026: con numero 0 lo SdI
+ * le scartava come doppioni), per provare tutto senza consumare la numerazione. Numero vuoto o 0 non parte mai.
  */
 export async function inviaDocumento(id: number, utenteId: number | null): Promise<{ invioId: number; messaggio: string }> {
   const ambiente = ambienteAttuale();
@@ -97,19 +99,21 @@ export async function inviaDocumento(id: number, utenteId: number | null): Promi
   if (!TIPI_SDI.includes(d.tipo)) throw new ErroreSdi('Allo SdI vanno solo fatture, note di credito e autofatture.');
   if (d.origine !== 'portale') throw new ErroreSdi('Documento di Fatture in Cloud: è già stato inviato da lì.');
   let xml: string = d.xml;
+  const nInvii = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM sdi_invii WHERE documento_id = $1 AND ambiente = $2`, [id, ambiente]))!.n;
   if (d.stato === 'bozza') {
     if (ambiente === 'reale') throw new ErroreSdi('Prima emetti il documento: allo SdI va solo con il suo numero.');
     const { esito, erroriExtra } = await anteprimaDocumento(id);
     const errori = [...esito.errori, ...erroriExtra];
     if (errori.length) throw new ErroreSdi(`La bozza ha errori: ${errori.join(' ')}`);
-    xml = esito.xml;
+    // la bozza non ha numero: per la prova uno riconoscibile e sempre nuovo, altrimenti lo SdI la scarta come doppione (numero 0)
+    xml = conNumero(esito.xml, numeroDiProva(id, nInvii + 1));
   } else if (ambiente === 'reale') {
     if (!['emesso', 'scartato'].includes(d.stato)) throw new ErroreSdi('Il documento è già stato inviato allo SdI.');
     const inCorso = await q1(`SELECT id FROM sdi_invii WHERE documento_id = $1 AND ambiente = 'reale' AND stato NOT IN ('Scartato', 'errore')`, [id]);
     if (inCorso) throw new ErroreSdi('Il documento è già stato inviato allo SdI: aspetta l\'esito.');
   }
   if (!xml) throw new ErroreSdi('Manca l\'XML del documento.');
-  const nInvii = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM sdi_invii WHERE documento_id = $1 AND ambiente = $2`, [id, ambiente]))!.n;
+  if (numeroNonValido(numeroNellXml(xml))) throw new ErroreSdi('Il documento non ha un numero valido (vuoto o 0): allo SdI va solo con il suo numero progressivo. Emettilo prima di inviarlo.');
   try {
     const s = await chiama<{ id: number; file_name: string }>('POST', '/send?validate=true',
       { payload: xml, meta_data: { documento_id: String(id), portale: 'casteltech' } },
@@ -137,7 +141,9 @@ export async function applicaEsito(ambiente: Ambiente, u: any): Promise<string> 
     if (!inv) return `invio ${u.send_id} non del portale`;
     if (!statoPiuAvanti(inv.stato, stato)) return `esito ${stato} più vecchio di ${inv.stato}: ignorato`;
     const dettagli = [u.description, testoErrori(u.errors)].filter(Boolean).join(' · ');
-    const messaggio = [regola.testo, dettagli].filter(Boolean).join(' ');
+    // in prova il documento non cambia: niente "correggi e rimandala", solo l'esito simulato
+    const testo = ambiente === 'prova' && stato === 'Scartato' ? 'PROVA scartata (il documento non cambia).' : regola.testo;
+    const messaggio = [testo, dettagli].filter(Boolean).join(' ');
     const identificativo = u.identifier ?? u.send?.identifier ?? inv.identificativo;
     await c.query(`UPDATE sdi_invii SET stato = $2, messaggio = $3, errori = $4, identificativo = $5, aggiornato_il = now() WHERE id = $1`,
       [inv.id, stato, messaggio, u.errors?.length ? JSON.stringify(u.errors) : null, identificativo]);

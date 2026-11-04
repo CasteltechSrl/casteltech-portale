@@ -513,7 +513,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    🟡 Invio allo SdI con Invoicetronic (Adriano 28/10/2026: passaggio dal portale lunedì 2/11; `server/invoicetronic.ts`, `engine/sdi.ts`, migrazione 040):
    chiave `INVOICETRONIC_API_KEY` (ik_test_ = prova/sandbox, ik_live_ = reale; `INVOICETRONIC_URL` solo per le prove in locale). Documento emesso →
    "Invia allo SdI" (POST /send?validate=true, nome file dato da Invoicetronic, Idempotency-Key); con la chiave di prova "Prova l'invio" anche dalle bozze
-   (numero 0, non tocca lo stato). Ogni invio in `sdi_invii`; esiti dal webhook `/sdi/webhook` (prima di sessione e json, firma HMAC, doppioni in
+   (numero di prova PROVA-<id>-<n> sempre nuovo: con numero 0 lo SdI scartava come doppione, Adriano 4/11/2026; non tocca lo stato; numero vuoto o 0 non parte mai, `numeroNonValido` in `engine/sdi.ts`). Ogni invio in `sdi_invii`; esiti dal webhook `/sdi/webhook` (prima di sessione e json, firma HMAC, doppioni in
    `sdi_eventi`, segreto in impostazioni 'invoicetronic' per ambiente; si collega da Impostazioni → Amministrazione → Invio allo SdI) o con "Aggiorna esito"
    (/update, gratis); niente controlli periodici. Stati: Inviato → inviato, Consegnato → consegnato, ImpossibilitaDiRecapito → non_consegnato (valida, avvisare
    il cliente), Scartato → scartato: "Correggi" la riporta a bozza con stesso numero e data (data bloccata, niente Elimina), si riemette e si rimanda.
