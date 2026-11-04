@@ -128,6 +128,12 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Alla fine un riepilogo in italiano di cosa cambia per chi usa il portale (pagine, pulsanti, cosa fare di diverso), non l'elenco dei file.
   Quando Adriano corregge un modo di lavorare, la correzione si scrive qui (o nella memoria del progetto, se vale solo per un caso).
 - Struttura database: mai modificare un file già esistente in `db/migrazioni/`; aggiungerne uno nuovo (`002_...sql`).
+- Controllo notturno del 4/11/2026 (PR del controllo, test in `tests/controllo-notte.test.ts`, `tests/link-profilo.test.ts`, `tests/excel-celle.test.ts`):
+  contabilità/esterno/produzione non vedono link a pagine che non possono aprire (`engine/link-profilo.ts`, middleware in `index.ts`: pulsanti tolti, link come testo);
+  BOM: `avviaElaborazione(id, { mancanti: true })` per riga a mano / riga aggiunta / colonne = solo i P/N mai cercati vanno ai distributori (`cercaPn` `cacheLunga`);
+  correzioni di "Ricalcola" salvate in `righe_file[].mano.codifica` e rimesse a ogni rielaborazione; `nonControllati` senza Würth (codici non WE) e senza Arrow se un altro ha risposto;
+  una tantum riscritte a mano divise in proporzione (`pareggiaSulPiuGrande`, mai negative), ordine dal preventivo con lo sconto della stampa; `stampa.riferimento` = prezzo
+  calcolato e schede quando si scrivono i prezzi a mano (avviso se il preventivo cambia); "Emetti e invia" con le spunte non emette senza chiave né con la chiave di prova.
 - Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
   nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.

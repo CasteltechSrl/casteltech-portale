@@ -121,6 +121,9 @@ tr.cliccabile:hover td { background: #f7faf9; }
 
 /* preventivo */
 .griglia-preventivo { display: grid; grid-template-columns: minmax(340px, 5fr) 7fr; gap: 1.5rem; align-items: start; }
+/* pagina della riga BOM: la colonna di destra (offerte, alternative) non allarga la pagina, la tabella scorre (controllo del 4/11/2026) */
+.griglia-riga-bom { grid-template-columns: minmax(280px, 3fr) minmax(0, 9fr); }
+.griglia-riga-bom > :last-child { min-width: 0; overflow-x: auto; }
 .colonna-risultati { position: sticky; top: 4.2rem; max-height: calc(100vh - 5rem); overflow-y: auto; padding-right: .2rem; }
 .blocco { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: 1rem; margin: 0 0 1rem; }
 fieldset.blocco { display: grid; gap: .7rem; }
@@ -332,7 +335,8 @@ table.bom td.taglia { max-width: 16rem; }
 .filtri button { font-size: .85rem; padding: .3rem .8rem; }
 .filtri button.attivo { background: var(--accento-chiaro); border-color: var(--accento); color: var(--accento); }
 .codici { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: .8rem 0; }
-.codici > div { background: var(--sfondo); border-radius: var(--raggio); padding: .6rem .8rem; display: grid; }
+.codici > div { background: var(--sfondo); border-radius: var(--raggio); padding: .6rem .8rem; display: grid; min-width: 0; }
+.codici b.codice { overflow-wrap: anywhere; min-width: 0; }
 .codici span { font-size: .75rem; color: var(--tenue); }
 .codici b.codice { font-size: 1rem; }
 .campi-attributi { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; margin: .8rem 0; }
@@ -966,3 +970,6 @@ table.bom tr.da-prezzare td:first-child { box-shadow: inset 4px 0 0 var(--negati
 .suggerimenti-riga { background: #fff8e1; border: 1px solid #f0d58a; border-radius: 6px; padding: .6rem .9rem; margin: .6rem 0; }
 .suggerimenti-riga ul { margin: .3rem 0 0; padding-left: 1.2rem; }
 .suggerimenti-riga li { margin: .2rem 0; }
+
+/* link a pagine che il profilo non può aprire (engine/link-profilo.ts): testo semplice */
+.link-spento { color: inherit; }

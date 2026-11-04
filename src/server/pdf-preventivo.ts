@@ -157,7 +157,7 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     } else {
       fondo = true;
       descr = [{ t: r.descrizione, f: grassetto, dim: DIM }];
-      valori = ['', '', `− ${euro(r.importo)}`];
+      valori = ['', '', `- ${euro(r.importo)}`]; // il segno − non c'è nel carattere del PDF (usciva "?")
     }
     const alto = Math.max(codice.length * INTER, descr.reduce((s, x) => s + x.dim + 2, 0)) + 6;
     if (y - alto < PIEDE + 10) altraPagina();
@@ -179,7 +179,8 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     y -= 12;
     scrivi(p, 'NOTE', M, y, { dim: 6.5, colore: GRIGIO });
     y -= 11;
-    for (const r of righeNote) { scrivi(p, r, M, y, { dim: 8.5 }); y -= 10.5; }
+    // note lunghe: si va a capo di pagina (controllo del 4/11/2026: oltre ~70 righe finivano fuori dal foglio)
+    for (const r of righeNote) { if (y < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; } scrivi(p, r, M, y, { dim: 8.5 }); y -= 10.5; }
   }
 
   // ── riquadro verde con i prezzi a scheda, poi pagamento e totale ──

@@ -47,7 +47,7 @@ export function destinatarioFattura(c: { amministrazione?: string | null; ultima
 
 /** Oggetto e testo proposti; con le scadenze ancora da incassare, l'elenco e l'IBAN per il bonifico. */
 export function emailFattura(o: { tipo: string; tipoSdi?: string | null; numero: number | string; sezionale?: string | null; data: string | Date; azienda: string;
-  totale: number; scadenze?: { data: string | Date; importo: number }[]; iban?: string | null }) {
+  totale: number; scadenze?: { data: string | Date; importo: number }[]; iban?: string | null; nettoDaPagare?: number | null }) {
   const nome = nomeDocumento(o.tipo, o.tipoSdi);
   const n = numeroCompleto(Number(o.numero), o.sezionale ?? '');
   const Nome = nome.charAt(0).toUpperCase() + nome.slice(1);
@@ -57,7 +57,9 @@ export function emailFattura(o: { tipo: string; tipoSdi?: string | null; numero:
     : '';
   return {
     oggetto: `${Nome} n. ${n} del ${dataIt(o.data)} - ${o.azienda}`,
-    testo: `Buongiorno,\n\nin allegato la copia di cortesia della nostra ${nome} n. ${n} del ${dataIt(o.data)}, totale ${euroIt(Number(o.totale) || 0)}.\n`
+    testo: `Buongiorno,\n\nin allegato la copia di cortesia della nostra ${nome} n. ${n} del ${dataIt(o.data)}, totale ${euroIt(Number(o.totale) || 0)}`
+      // split payment: il cliente paga solo imponibile e bollo, come nel PDF e nelle scadenze (controllo del 4/11/2026)
+      + (o.nettoDaPagare != null && Math.abs(o.nettoDaPagare - Number(o.totale)) > 0.005 ? `, netto da pagare ${euroIt(o.nettoDaPagare)} (split payment: l'IVA la versate voi)` : '') + `.\n`
       + `Il documento fiscale è il file XML trasmesso al Sistema di Interscambio.\n${pagamento}\nCordiali saluti\n\n${o.azienda}`,
   };
 }

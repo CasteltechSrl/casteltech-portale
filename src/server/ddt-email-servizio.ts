@@ -38,7 +38,8 @@ export async function propostaEmailDdt(id: number) {
   if (!x || x.d.numero == null) return null;
   const c = x.d.cliente_id ? await q1<any>(`SELECT c.email_amministrazione, c.pec,
       (SELECT z.email FROM crm_aziende z WHERE z.cliente_id = c.id AND z.email IS NOT NULL ORDER BY z.id LIMIT 1) AS crm,
-      (SELECT d.email_a FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = c.id AND d.email_a IS NOT NULL AND d.id <> $2
+      (SELECT d.email_a FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = c.id AND d.email_a IS NOT NULL
+        AND NOT coalesce(d.inviato_a_mano, false) AND d.id <> $2
         ORDER BY d.email_inviata_il DESC NULLS LAST LIMIT 1) AS ultimo
     FROM clienti c WHERE c.id = $1`, [x.d.cliente_id, id]).catch(() => null) : null;
   const a = destinatarioDdt({ ultimoDdt: c?.ultimo, amministrazione: indirizzoEmail(c?.email_amministrazione), crm: indirizzoEmail(c?.crm), pec: indirizzoEmail(c?.pec) });

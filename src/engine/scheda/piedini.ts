@@ -20,7 +20,8 @@ export const DIAMETRO_FISSAGGIO = 3.0;
 /** THT di cui non si sa niente: si contano 2 piedini (resistenze, condensatori, diodi: il caso più comune). */
 export const PIEDINI_STIMATI = 2;
 
-const TO_3 = /\bTO[-_ ]?(220|247|218|126|251|262|264|92|39|18|5|3P|3PF|202|225)(?:[-_ ]?([2-9]|1[0-5])(?![0-9]))?\b/;
+// dopo il numero niente \b: nei nomi KiCad segue "_" (TO-92_Inline, TO-220_Vertical) o una lettera (TO-220AB), controllo del 4/11/2026
+const TO_3 = /\bTO[-_ ]?(220|247|218|126|251|262|264|92|39|18|5|3P|3PF|202|225)(?:[-_ ]?([2-9]|1[0-5])(?![0-9]))?(?![0-9])/;
 const CONNETTORE = /CONN|HEADER|HDR|PIN ?HEAD|PINHEAD|STRIP|MORSETT|TERMINAL|TERM\b|MOLEX|JST|PHOENIX|WAGO|SOCKET|ZOCCOL|PIN|POLI|WAY|POS\b|BOX/;
 
 /**
@@ -31,7 +32,7 @@ export function piediniDaTesto(...testi: (string | null | undefined)[]): number 
   for (const grezzo of testi) {
     const t = String(grezzo ?? '').toUpperCase();
     if (!t.trim()) continue;
-    let m = t.match(/\b(?:P|C)?(?:DIP|DIL|SIP|SIL|PDIP)[-_ ]?(\d{1,2})\b/);
+    let m = t.match(/\b(?:P|C)?(?:DIP|DIL|SIP|SIL|PDIP)[-_ ]?(\d{1,2})(?![0-9])/); // anche DIP-8_W7.62mm di KiCad
     if (m && +m[1] >= 2) return +m[1];
     m = t.match(TO_3);
     if (m) return m[2] ? +m[2] : 3;
@@ -44,7 +45,7 @@ export function piediniDaTesto(...testi: (string | null | undefined)[]): number 
     if (m && CONNETTORE.test(t) && +m[1] > 0) return +m[1];
     m = t.match(/\bB(\d{1,2})B-/); // JST B4B-XH-A
     if (m) return +m[1];
-    if (/AXIAL|RADIAL|ASSIALE|RADIALE|\bDO[-_ ]?(?:15|35|41|201|204)|\bCP_?RADIAL|C_?DISC|HC[-_ ]?49|ELETTROLITIC|\bLED[-_ ]?(?:3|5)\s?MM/.test(t)) return 2;
+    if (/AXIAL|RADIAL|ASSIALE|RADIALE|(?:^|[^A-Z])DO[-_ ]?(?:15|35|41|201|204)(?![0-9])|\bCP_?RADIAL|C_?DISC|HC[-_ ]?49|ELETTROLITIC|\bLED[-_ ]?D?(?:3|5)(?:\.0)?\s?MM/.test(t)) return 2;
   }
   return null;
 }

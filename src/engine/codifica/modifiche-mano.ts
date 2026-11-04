@@ -22,6 +22,11 @@ export interface ManoRiga {
   /** P/N e quantità com'erano nella BOM prima della correzione (per ricordarlo nelle note) */
   pnBom?: string | null;
   qtaBom?: string | null;
+  /**
+   * Famiglia e campi corretti con "Ricalcola" nella pagina della riga (controllo del 4/11/2026): prima si perdevano a ogni Rielabora,
+   * cambio di schede o riga aggiunta. Valgono finché il P/N della riga è lo stesso.
+   */
+  codifica?: { pn: string | null; famiglia: string | null; attributi: Record<string, string | null | undefined> } | null;
 }
 
 export interface RigaFile { n: number; celle: string[]; mano?: ManoRiga }
