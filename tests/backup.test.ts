@@ -44,3 +44,17 @@ test('backup: oltre lo spazio massimo si tolgono le copie più vecchie, almeno 5
   assert.deepEqual(copieDaTogliere(copie, 550), ['casteltech-backup-2026-10-20-20-30.json.gz', 'casteltech-backup-2026-10-21-20-30.json.gz', 'casteltech-backup-2026-10-22-20-30.json.gz']);
   assert.equal(copieDaTogliere(copie, 10).length, 3, 'le 5 più recenti restano sempre');
 });
+
+test('backup serale: le copie "prima di eliminare" del giorno non la sostituiscono (3/11/2026 era saltata)', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { backupSeraleDaFare } = await import('../src/server/backup.js');
+  const g = '2026-11-03';
+  assert.equal(backupSeraleDaFare([
+    'casteltech-backup-2026-11-03-09-59-prima-di-eliminare-ordini.json.gz',
+    'casteltech-backup-2026-11-03-14-26-prima-di-eliminare-preventivi.json.gz',
+    'casteltech-backup-2026-11-02-17-06.json.gz',
+  ], g), true);
+  assert.equal(backupSeraleDaFare(['casteltech-backup-2026-11-03-17-00.json.gz'], g), false, 'la copia serale di oggi c\'è già');
+  assert.equal(backupSeraleDaFare(['casteltech-backup-2026-11-03-08-00.json.gz'], g), true, 'una copia del mattino non è quella serale');
+  assert.equal(backupSeraleDaFare([], g), true);
+});

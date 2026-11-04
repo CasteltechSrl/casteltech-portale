@@ -94,6 +94,12 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   si cambia il ruolo, resta sempre un amministratore attivo). Primo amministratore all'avvio: l'utente di ADMIN_EMAIL se non ce n'è nessuno (`catalogo-db.ts`).
   Stipendi, buste paga e previsione di cassa (da cui si ricavano gli stipendi) SOLO a chi `vedePaghe`: amministratore, contabilità, ufficio con `utenti.paghe`;
   ruolo e permesso letti dal database. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
+- Registro "chi ha cambiato cosa e quando" e accessi (Adriano, lista del 4/11/2026; migrazione 075 `registro_attivita`, regole in `engine/registro.ts`, scrittura in
+  `registro-servizio.ts` = middleware `registraAttivita` in `index.ts`, pagina Impostazioni → Registro, test in `tests/registro.test.ts`): una riga per ogni POST riuscito
+  (sezione dal percorso, azione = `azione` del modulo o ultima parola, righe = id nel percorso + `ids` spuntati; elimina/annulla/scarta = 'eliminazione'), accessi e
+  accessi sbagliati; MAI i valori dei moduli; autosalva una volta ogni 10 minuti. Utente disattivato / ruolo o password cambiati = sessioni chiuse subito
+  (`chiudereSessioni`, `chiudiSessioniUtente`); password con `problemaPassword` (10 caratteri, non facili); login: 8 tentativi per indirizzo+email, 20 per email.
+  Una rotta nuova che modifica dati è già nel registro; un'eliminazione deve avere "elimina/annulla/scarta" nell'indirizzo o nel valore di `azione`.
 - Email dagli indirizzi per funzione (Adriano 2/11/2026; `engine/mittenti-email.ts` `FUNZIONI_EMAIL`, `mittentePer(tipo)` in `server/gmail.ts`, test in `tests/mittenti-email.test.ts`):
   alias di info@ = amministrazione@ (DDT, fatture, NC, autofatture, solleciti), ordini@ (conferme d'ordine), preventivi@, acquisti@ (ordini a fornitore), produzione@.
   La delega resta su GMAIL_MITTENTE (info@); l'alias si usa nel From solo se è tra gli "Invia messaggio come" del Gmail di info@ (letti con gmail.readonly,
@@ -156,6 +162,9 @@ Copia su Google Drive (Adriano 1/11/2026; `engine/backup-pc.ts`, `rotte/api-back
 "Installa sul PC" scarica un .bat con la chiave (impostazioni 'backup_pc'); sul PC dell'ufficio crea l'attività pianificata delle 18:30 (alla prima accensione se
 spento) che chiede POST `/api/backup/piano` e scarica con GET `/api/backup/file/:nome` le copie nuove in `G:\Il mio Drive\01_LAVORO\CASTELTECH\16_Backup\Portale_Render`;
 sul PC 60 giorni + la prima copia di ogni mese. Il portale non tocca Google (niente account di servizio: senza spazio su "Il mio Drive").
+Copia serale: contano solo le copie senza motivo nel nome (`backupSeraleDaFare`; il 3/11/2026 le copie "prima-di-eliminare" l'avevano fatta saltare), fatta tra le 18 e le 22.
+Ripristino provato il 4/11/2026 con la copia del 3/11 in un PostgreSQL vuoto (`tools/ripristina-backup.ts`): 63 tabelle, tutte le righe uguali, 20 secondi.
+Neon gratuito: si torna indietro nel tempo solo di 6 ore; oltre servono i backup del portale.
 Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in streaming, una sola transazione in lettura): mai tutto il
 database in memoria (30/10/2026 il backup costruito in un colpo solo faceva uscire il portale con stato 134).
 Nel backup TUTTE le tabelle (Adriano 31/10/2026) tranne `TABELLE_ESCLUSE` (sessioni, cache prezzi), in ordine di dipendenza

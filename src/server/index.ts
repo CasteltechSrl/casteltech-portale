@@ -40,6 +40,7 @@ import { rotteCalendario } from './rotte/calendario.js';
 import { rotteCerca } from './rotte/cerca.js';
 import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
+import { registraAccesso, registraAttivita } from './registro-servizio.js';
 import { contabilitaPuo, eUfficio, esternoPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
@@ -94,6 +95,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// registro delle attività: chi ha cambiato cosa e quando (engine/registro.ts), una riga dopo ogni salvataggio riuscito
+app.use(registraAttivita);
+
 export function soloUfficio(req: Request, res: Response, next: NextFunction) {
   if (!req.session.utente) return res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl));
   // profilo Esterno (Adriano 2/11/2026): vede tutto in sola lettura, niente Impostazioni né buste paga (engine/ruoli.ts)
@@ -142,14 +146,21 @@ app.post('/login', async (req, res) => {
   for (const [k, v] of tentativi) if (v.fino <= Date.now()) tentativi.delete(k);
   const ip = `${req.ip ?? ''}|${String(req.body.email ?? '').trim().toLowerCase()}`;
   const t = tentativi.get(ip);
-  if (t && t.n >= 8 && t.fino > Date.now()) return res.status(429).send(paginaLogin('Troppi tentativi: riprova tra qualche minuto.'));
-  const u = await q1(`SELECT * FROM utenti WHERE email = lower($1) AND attivo`, [String(req.body.email ?? '').trim()]);
+  // oltre agli 8 tentativi per indirizzo + email, 20 tentativi sulla stessa email da indirizzi diversi bloccano l'email per 15 minuti
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const te = tentativi.get('email|' + email);
+  if ((t && t.n >= 8 && t.fino > Date.now()) || (te && te.n >= 20 && te.fino > Date.now()))
+    return res.status(429).send(paginaLogin('Troppi tentativi: riprova tra qualche minuto.'));
+  const u = await q1(`SELECT * FROM utenti WHERE email = lower($1) AND attivo`, [email]);
   const ok = u?.password_hash && await bcrypt.compare(String(req.body.password ?? ''), u.password_hash);
   if (!ok) {
     tentativi.set(ip, { n: (t && t.fino > Date.now() ? t.n : 0) + 1, fino: Date.now() + 10 * 60_000 });
+    tentativi.set('email|' + email, { n: (te && te.fino > Date.now() ? te.n : 0) + 1, fino: Date.now() + 15 * 60_000 });
+    registraAccesso(false, null, email, req.ip);
     return res.status(401).send(paginaLogin('Email o password non corretti.'));
   }
   tentativi.delete(ip);
+  registraAccesso(true, { id: u.id, nome: u.nome }, email, req.ip);
   if (Date.now() - ultimaPuliziaSessioni > 24 * 3600_000) { ultimaPuliziaSessioni = Date.now(); archivioSessioni.pruneSessions(e => { if (e) console.error('Pulizia sessioni:', e); }); }
   req.session.regenerate(() => {
     req.session.utente = { id: u.id, nome: u.nome, ruolo: u.ruolo };

@@ -198,3 +198,8 @@ test('guida: fattura estera caricata due volte e spunte delle autofatture', () =
 test('guida: "componente da verificare nella BOM" porta alla codifica della BOM', () => {
   assert.ok(primi('come verifico un componente da verificare nella bom', 3).includes('codifica-bom'));
 });
+
+test('guida: il registro delle modifiche si trova', () => {
+  assert.ok(cercaGuida('chi ha cambiato cosa').slice(0, 3).some(r => r.argomento.id === 'registro'));
+  assert.ok(cercaGuida('registro eliminazioni').slice(0, 3).some(r => r.argomento.id === 'registro'));
+});

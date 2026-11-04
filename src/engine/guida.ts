@@ -1191,8 +1191,16 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'utenti nuovo utente password accesso ufficio produzione ruolo ruoli disattivare amministratore admin permessi cambiare profilo',
     testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo. Ruoli: Amministratore (tutto, più è l\'unico che sceglie i ruoli e vede stipendi, buste paga e previsione di cassa), Ufficio (tutto il resto), Produzione (solo tempi e note), Contabilità (sola lettura dell\'Amministrazione e delle buste paga), Esterno (vede tutto, non modifica nulla).',
       'Solo l\'amministratore sceglie o cambia il ruolo degli utenti e modifica gli utenti amministratori. Chi è nell\'ufficio può aggiungere utenti della produzione e correggere nome, email e password degli altri. Nessuno può cambiarsi il ruolo da solo e resta sempre almeno un amministratore attivo. Un ruolo cambiato vale dal prossimo accesso di quella persona.',
-      'Chi ha già lavorato non si elimina: si toglie la spunta "Attivo".'],
+      'Chi ha già lavorato non si elimina: si toglie la spunta "Attivo". Togliendo "Attivo", cambiando il ruolo o la password, la persona esce subito da tutti i telefoni e computer dove era entrata (chi lascia l\'azienda non può più entrare, nemmeno con una pagina già aperta).',
+      'Password: almeno 10 caratteri e non facili da indovinare (niente soli numeri, sequenze di tasti, "password", "casteltech", il proprio nome o l\'email). Dopo 8 tentativi sbagliati dallo stesso posto, o 20 sulla stessa email, l\'accesso si blocca per qualche minuto.'],
     pagine: [['/impostazioni/utenti', 'Impostazioni → Utenti']],
+  },
+  {
+    id: 'registro', area: 'impostazioni', titolo: 'Registro: chi ha cambiato cosa e quando',
+    parole: 'registro modifiche chi ha cambiato cosa quando storico attività eliminazioni eliminato cancellato accessi entrato log controllo',
+    testo: ['In Impostazioni → Registro c\'è l\'elenco di tutto quello che è stato salvato, eliminato, annullato o scartato nel portale, con chi e quando, più gli accessi e gli accessi non riusciti (email o password sbagliate).',
+      'Si filtra per tipo (modifiche, eliminazioni, accessi), persona, date e testo; il clic sulle righe toccate apre la pagina. Non contiene i valori scritti (password, importi, stipendi): solo sezione, azione e numero della riga. Le bozze che si salvano da sole compaiono una volta ogni 10 minuti. Si scrive da solo dal 4/11/2026.'],
+    pagine: [['/impostazioni/registro', 'Impostazioni → Registro']],
   },
   {
     id: 'backup', area: 'impostazioni', titolo: 'Copie di sicurezza (backup)',
