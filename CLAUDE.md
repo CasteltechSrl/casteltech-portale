@@ -104,8 +104,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   ("Segna come inviato", POST `/amministrazione/documenti/:id/segna-inviato` o `/preventivi/:id/segna-inviato`) o "Da FIC"; fatture: segno SdI a parte con l'esito.
   Un invio email nuovo scrive `email_a`/`email_inviata_il` e `inviato_a_mano = false`. Preventivo per email dalla stampa (`preventivo-email-servizio.ts`, PDF in
   `pdf-preventivo.ts` con le righe di `contenutoStampa`, uguali alla pagina; da `mittentePer('preventivo')` = preventivi@).
-  Email del cliente per documento (migrazione 074, Dati fiscali del cliente): `email_amministrazione` = fatture, `email_preventivi`, `email_ddt` (più indirizzi con la virgola),
-  proposte per prime (`destinatarioPreventivo` dopo il mittente della richiesta Gmail, `destinatarioDdt`).
+  Email del cliente per documento (migrazione 074, Dati fiscali del cliente): `email_amministrazione` = fatture E DDT (Adriano: "è lo stesso"),
+  `email_preventivi` (più indirizzi con la virgola), proposte per prime (`destinatarioPreventivo` dopo il mittente della richiesta Gmail, `destinatarioDdt`);
+  la colonna `email_ddt` della 074 non si usa.
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).

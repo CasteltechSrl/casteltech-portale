@@ -101,10 +101,11 @@ test('guida: invio del preventivo e documenti inviati si trovano', () => {
   assert.ok(primi('segna come inviato', 3).includes('documenti-inviati'));
 });
 
-test('email per i preventivi e per i DDT dall\'anagrafica del cliente (Adriano 4/11/2026): proposte per prime', async () => {
+test('email per i preventivi dall\'anagrafica, DDT con l\'email delle fatture del cliente (Adriano 4/11/2026): proposte per prime', async () => {
   const { destinatarioDdt } = await import('../src/engine/ddt.js');
   assert.equal(destinatarioPreventivo({ anagrafica: 'acquisti@cliente.it, tecnico@cliente.it', ultimoPreventivo: 'vecchio@cliente.it' }), 'acquisti@cliente.it, tecnico@cliente.it');
   assert.equal(destinatarioPreventivo({ richiesta: 'rdo@cliente.it', anagrafica: 'acquisti@cliente.it' }), 'rdo@cliente.it');   // risposta a chi ha chiesto
-  assert.equal(destinatarioDdt({ anagrafica: 'magazzino@cliente.it', ultimoDdt: 'vecchio@cliente.it', amministrazione: 'amm@cliente.it' }), 'magazzino@cliente.it');
+  // per i DDT vale l'email delle fatture (Adriano 4/11/2026)
+  assert.equal(destinatarioDdt({ ultimoDdt: 'vecchio@cliente.it', amministrazione: 'amm@cliente.it' }), 'amm@cliente.it');
   assert.equal(destinatarioDdt({ ultimoDdt: 'vecchio@cliente.it' }), 'vecchio@cliente.it');
 });

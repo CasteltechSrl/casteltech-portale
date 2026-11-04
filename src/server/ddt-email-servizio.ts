@@ -36,12 +36,12 @@ export async function pdfDelDdt(id: number): Promise<{ nome: string; dati: Buffe
 export async function propostaEmailDdt(id: number) {
   const x = await datiStampaDdt(id);
   if (!x || x.d.numero == null) return null;
-  const c = x.d.cliente_id ? await q1<any>(`SELECT c.email_amministrazione, c.pec, c.email_ddt,
+  const c = x.d.cliente_id ? await q1<any>(`SELECT c.email_amministrazione, c.pec,
       (SELECT z.email FROM crm_aziende z WHERE z.cliente_id = c.id AND z.email IS NOT NULL ORDER BY z.id LIMIT 1) AS crm,
       (SELECT d.email_a FROM documenti d WHERE d.tipo = 'ddt' AND d.cliente_id = c.id AND d.email_a IS NOT NULL AND d.id <> $2
         ORDER BY d.email_inviata_il DESC NULLS LAST LIMIT 1) AS ultimo
     FROM clienti c WHERE c.id = $1`, [x.d.cliente_id, id]).catch(() => null) : null;
-  const a = destinatarioDdt({ anagrafica: c?.email_ddt, ultimoDdt: c?.ultimo, amministrazione: indirizzoEmail(c?.email_amministrazione), crm: indirizzoEmail(c?.crm), pec: indirizzoEmail(c?.pec) });
+  const a = destinatarioDdt({ ultimoDdt: c?.ultimo, amministrazione: indirizzoEmail(c?.email_amministrazione), crm: indirizzoEmail(c?.crm), pec: indirizzoEmail(c?.pec) });
   const azienda = x.azienda.ragione_sociale || 'Casteltech S.r.l.';
   const t = x.d.dati_trasporto ?? {};
   const testo = emailDdt({ numero: `${numeroCompleto(x.d.numero, x.d.sezionale)}`, data: x.d.data, azienda, riferimento: x.d.riferimento_esterno,

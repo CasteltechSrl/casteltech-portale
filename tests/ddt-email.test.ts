@@ -13,8 +13,9 @@ test('DDT per email: oggetto e testo proposti con numero, data, riferimento e pa
   assert.doesNotMatch(emailDdt({ numero: '1', data: '2026-11-02', azienda: 'X' }).testo, /parte/);
 });
 
-test('DDT per email: destinatario proposto = ultimo indirizzo usato per il cliente, poi amministrazione, CRM, PEC', () => {
-  assert.equal(destinatarioDdt({ ultimoDdt: 'magazzino@cliente.it', amministrazione: 'amm@cliente.it' }), 'magazzino@cliente.it');
+test('DDT per email: destinatario proposto = email per fatture e DDT del cliente (Adriano 4/11/2026), poi ultimo indirizzo usato, CRM, PEC', () => {
+  assert.equal(destinatarioDdt({ ultimoDdt: 'magazzino@cliente.it', amministrazione: 'amm@cliente.it' }), 'amm@cliente.it');
+  assert.equal(destinatarioDdt({ ultimoDdt: 'magazzino@cliente.it', amministrazione: '' }), 'magazzino@cliente.it');
   assert.equal(destinatarioDdt({ ultimoDdt: null, amministrazione: '', crm: 'info@cliente.it', pec: 'cliente@pec.it' }), 'info@cliente.it');
   assert.equal(destinatarioDdt({ pec: 'cliente@pec.it' }), 'cliente@pec.it');
   assert.equal(destinatarioDdt({}), '');
