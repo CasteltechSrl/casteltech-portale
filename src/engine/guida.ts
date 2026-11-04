@@ -288,6 +288,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/clienti', 'Anagrafiche → Clienti'], ['/impostazioni/amministrazione', 'Dati fiscali dei clienti']],
   },
   {
+    id: 'sede-operativa', area: 'anagrafiche', titolo: 'Sede operativa diversa dalla sede legale (indirizzo di spedizione)',
+    parole: 'sede operativa legale spedizione indirizzo di spedizione consegna destinazione magazzino stabilimento seconda sede ddt luogo',
+    testo: [
+      'Alcuni clienti hanno la sede legale in un posto e la sede operativa (dove si consegna la merce) in un altro, per esempio ELEXES: legale a Vertova, operativa a Stezzano.',
+      'L\'indirizzo dei dati fiscali è la sede legale: va in fattura e nell\'intestazione del DDT. Con la spunta "Sede operativa diversa dalla sede legale" compaiono i campi della seconda sede (presso, indirizzo, CAP, comune, provincia, nazione, note per la consegna).',
+      'La sede operativa diventa il luogo di destinazione proposto nei DDT nuovi di quel cliente; si può sempre cambiare nel singolo DDT. Senza spunta il cliente ha una sola sede.',
+      'In Fatture in Cloud era il campo "Indirizzo di spedizione": le sedi di FIC si caricano una volta da Impostazioni → Amministrazione → Sedi operative dei clienti.',
+    ],
+    passi: ['Anagrafiche → Clienti → Dati fiscali del cliente.', 'Spunta "Sede operativa diversa dalla sede legale".', 'Scrivi indirizzo, CAP, comune e provincia della sede operativa → Salva.'],
+    pagine: [['/anagrafiche/clienti', 'Anagrafiche → Clienti']],
+  },
+  {
     id: 'prodotti', area: 'anagrafiche', titolo: 'Aggiungere un prodotto (codice della scheda)',
     parole: 'prodotto prodotti codice scheda articolo descrizione revisione nuovo senza cliente non assegnato assegnare',
     testo: [
@@ -616,6 +628,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
       'Causale del trasporto: clic sulla casella (o freccia giù) = elenco di tutte le causali, anche se una è già scritta; scrivendo l\'elenco si filtra; si può anche scrivere una causale che non c\'è. Lo stesso vale per tutte le caselle del portale con un elenco (banca o conto, operatori, unità di misura, destinazioni…).',
       'Nella stampa del DDT (e nel PDF mandato per email) il riquadro con aspetto dei beni, colli, peso, inizio del trasporto, vettore e firme sta sempre in fondo alla pagina, come nei DDT di Fatture in Cloud; se le righe sono tante, in fondo all\'ultima pagina.',
+      'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Se il cliente ha una sede operativa diversa dalla sede legale (Anagrafiche → Clienti → Dati fiscali), il luogo di destinazione proposto è la sede operativa; nell\'intestazione resta la sede legale. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
       'Con "Emetti" il DDT prende il numero successivo. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
       'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
       'Un DDT emesso si corregge con "Modifica DDT" (righe, quantità, trasporto, destinazione): numero e data restano gli stessi. Non si modifica più quando è in una fattura già mandata allo SdI (o fatta in Fatture in Cloud). Se il DDT è in una fattura non ancora mandata, correggi anche la fattura. Se lo avevi già mandato per email, rimandalo.',

@@ -10,6 +10,7 @@ import { annoLetteraIntento, controllaDataNumerazione, preparaAzienda, preparaCl
 import { transazione } from './db.js';
 import { Anteprima } from './anagrafiche-servizio.js';
 import { INIZIO_DDT_DA_FATTURARE } from '../engine/ddt.js';
+import { controllaSede, pulisciSede, testoSede } from '../engine/sede-operativa.js';
 
 export async function caricaAzienda(): Promise<DatiAzienda> {
   const r = await q1<{ valore: Partial<DatiAzienda> }>(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`);
@@ -111,6 +112,48 @@ export async function caricaClientiFiscali(righe: unknown[], opz: { anteprima?: 
     });
   } catch (e) {
     if (e instanceof Anteprima) return { ...e.esito, anteprima: true };
+    throw e;
+  }
+}
+
+// ── Sedi operative dei clienti da Fatture in Cloud (campo "Indirizzo di spedizione"; Adriano 4/11/2026) ──
+
+export interface EsitoSedi { aggiornati: string[]; giaNelPortale: string[]; nonInAnagrafica: string[]; errori: string[]; anteprima: boolean }
+
+/**
+ * Carica la sede operativa dei clienti GIÀ in anagrafica (stessa P.IVA, nome o alias) dal file sedi_operative_fic.json.gz
+ * preparato da Claude leggendo l'indirizzo di spedizione di FIC. Una sede operativa già spuntata nel portale non si tocca
+ * (vale quella scritta a mano); gli altri dati del cliente non cambiano.
+ */
+export async function caricaSediOperative(righe: unknown[], opz: { anteprima?: boolean } = {}): Promise<EsitoSedi> {
+  try {
+    return await transazione(async c => {
+      const esito: EsitoSedi = { aggiornati: [], giaNelPortale: [], nonInAnagrafica: [], errori: [], anteprima: false };
+      for (const r of righe as any[]) {
+        const nome = String(r?.ragione_sociale ?? '').trim().toUpperCase();
+        if (!nome || !r?.sede) continue;
+        const piva = String(r.partita_iva ?? '').toUpperCase().replace(/[\s.\-]/g, '').replace(/^IT(?=\d{11}$)/, '') || null;
+        const sede = pulisciSede(r.sede);
+        const errori = controllaSede(sede);
+        if (errori.length) { esito.errori.push(`${nome}: ${errori.join(' ')}`); continue; }
+        const trovato = (await c.query(
+          `SELECT id, 1 AS ordine FROM clienti WHERE $1::text IS NOT NULL AND regexp_replace(upper(coalesce(partita_iva, '')), '^IT|[^A-Z0-9]', '', 'g') = $1
+           UNION ALL SELECT id, 2 FROM clienti WHERE upper(ragione_sociale) = $2
+           UNION ALL SELECT cliente_id, 3 FROM alias_clienti WHERE nome = $2
+           ORDER BY ordine LIMIT 1`, [piva, nome])).rows[0];
+        if (!trovato) { esito.nonInAnagrafica.push(nome); continue; }
+        const prima = (await c.query(`SELECT ragione_sociale, sede_operativa_diversa FROM clienti WHERE id = $1`, [trovato.id])).rows[0];
+        if (prima.sede_operativa_diversa) { esito.giaNelPortale.push(prima.ragione_sociale); continue; }
+        await c.query(`UPDATE clienti SET sede_operativa_diversa = true, sede_op_presso = $2, sede_op_indirizzo = $3, sede_op_cap = $4, sede_op_comune = $5,
+          sede_op_provincia = $6, sede_op_nazione = $7, sede_op_note = $8, aggiornato_il = now() WHERE id = $1`,
+          [trovato.id, sede.presso, sede.indirizzo, sede.cap, sede.comune, sede.provincia, sede.nazione, sede.note]);
+        esito.aggiornati.push(`${prima.ragione_sociale} → ${testoSede(sede).replace(/\n/g, ', ')}`);
+      }
+      if (opz.anteprima) throw new Anteprima(esito);
+      return esito;
+    });
+  } catch (e) {
+    if (e instanceof Anteprima) return { ...(e.esito as EsitoSedi), anteprima: true };
     throw e;
   }
 }
