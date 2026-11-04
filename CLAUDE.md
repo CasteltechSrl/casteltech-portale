@@ -323,6 +323,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    note CODICE DA VALIDARE tolte, componente subito in archivio con stato OK (solo quella riga). Il punto finale nel codice di produzione = P/N accorciato a 30 caratteri (`PROD_MAX`).
    Campi per famiglia (Adriano 4/11/2026; `engine/codifica/campi-famiglia.ts` + `public/campi-famiglia.js`, test in `tests/modifiche-mano.test.ts`): nella pagina della riga
    si vedono solo i campi di `FAMIGLIE[fam].prod` + case (tranne CN/TI/BT/AN), con l'esempio nella casella (case THT se Tecnologia T); "Mostra tutti i campi" li riapre.
+   Connettori in MI/IC/senza famiglia (Adriano 4/11/2026, RJ45 HR911105A; `famigliaProposta` in `engine/codifica/famiglia-proposta.ts`, applicata in `ricalcola` alle righe
+   da completare non corrette a mano): parole da connettore → CN con tipo/passo/poli da impronta e descrizione (RJ45/RJ11 standard 1,02 mm, 8/6 poli), solo se il gestionale si calcola; nota CODICE DA VALIDARE.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
