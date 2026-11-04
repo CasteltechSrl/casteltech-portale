@@ -10,7 +10,7 @@ import { pool, q, q1, transazione } from './db.js';
 import { maiuscolo, risolvi } from './anagrafiche-servizio.js';
 import { chiaveCodice } from '../engine/componenti-clienti.js';
 import { leggiFatturaEsteraConIa, leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
-import { collegaFatturaEstera } from './autofatture-servizio.js';
+import { collegaFatturaEstera, descriviCaricata, fatturaEsteraGiaCaricata } from './autofatture-servizio.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
 import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
@@ -99,6 +99,13 @@ export async function elabora(id: number): Promise<void> {
     // fattura di un fornitore estero: caricata da Amministrazione → Autofatture (già si sa cos'è) o riconosciuta alla prima lettura
     const fattura = async () => {
       const f = await collegaFatturaEstera(await leggiFatturaEsteraConIa(parti));
+      // la stessa fattura già arrivata prima (anche come file diverso: PDF e poi la mail .eml): questa si scarta (Adriano 4/11/2026)
+      const prima = await fatturaEsteraGiaCaricata(id, f, true);
+      if (prima) {
+        await q(`UPDATE acquisizioni SET tipo = 'fattura_estera', stato = 'scartato', contenuto = NULL, proposta = $2, elaborato_il = now(),
+            errore = $3 WHERE id = $1`, [id, JSON.stringify(f), `doppione: la fattura n. ${f.numero} del ${f.data!.split('-').reverse().join('/')} è già stata caricata ${descriviCaricata(prima)}`]);
+        return;
+      }
       await q(`UPDATE acquisizioni SET tipo = 'fattura_estera', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
         [id, JSON.stringify(f)]);
     };

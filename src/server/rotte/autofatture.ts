@@ -8,11 +8,15 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { ELENCO_NAZIONI } from '../../engine/amministrazione.js';
 import {
-  TIPI_AUTOFATTURA, controllaFatturaEstera, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe, type FatturaEstera,
+  TIPI_AUTOFATTURA, controllaFatturaEstera, motivoNonScartabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe, stessaFatturaEstera,
+  type FatturaEstera,
 } from '../../engine/autofatture.js';
 import { aggiungiFile, elabora, scarta } from '../acquisizioni-servizio.js';
 import { iaConfigurata } from '../lettura-ordini-ia.js';
-import { autofatturaGiaFatta, confermaFatturaEstera, salvaFatturaEstera, type FatturaEsteraDb } from '../autofatture-servizio.js';
+import {
+  autofatturaGiaFatta, confermaFatturaEstera, descriviCaricata, fatturaEsteraGiaCaricata, salvaFatturaEstera, type FatturaEsteraDb,
+} from '../autofatture-servizio.js';
+import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 
 const STATI: Record<string, string> = { nuovo: 'in lettura', da_confermare: 'da controllare', confermato: 'autofattura preparata', scartato: 'scartata', errore: 'errore' };
 const RIGHE_VUOTE = 2;
@@ -21,10 +25,22 @@ const oraRoma = (d: Date | string | null) => (d ? new Date(d).toLocaleString('it
 const numeroModulo = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','));
 
 /** Fatture estere ancora da controllare, per l'elenco Autofatture (Documenti emessi → Autofatture). */
-export async function riquadroFattureEstere(): Promise<Raw> {
+export async function riquadroFattureEstere(spunte = true): Promise<Raw> {
   const elenco = await q(`SELECT id, nome_file, stato, errore, creato_il, origine, proposta->'fornitore'->>'ragione_sociale' AS fornitore,
       proposta->>'numero' AS numero, proposta->>'data' AS data
     FROM acquisizioni WHERE tipo = 'fattura_estera' AND stato IN ('nuovo', 'da_confermare', 'errore') ORDER BY creato_il`);
+  // la stessa fattura due volte (stesso fornitore, numero e data): la seconda si segna in rosso
+  const doppioni = new Set<number>();
+  elenco.forEach((a, i) => {
+    const x = { fornitore: { ragione_sociale: a.fornitore }, numero: a.numero, data: a.data };
+    if (elenco.slice(0, i).some(b => stessaFatturaEstera({ fornitore: { ragione_sociale: b.fornitore }, numero: b.numero, data: b.data }, x))) doppioni.add(a.id);
+  });
+  const modulo = spunte ? moduloAzioni({
+    azione: '/amministrazione/fatture-estere/azioni', nome: { singolare: 'fattura', plurale: 'fatture', femminile: true },
+    pulsanti: [{ azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+      titolo: "Toglie le fatture estere spuntate (caricate per errore o doppie): non si prepara l'autofattura e il file non si conserva",
+      chiedi: "Eliminare {n} fattur{a|e} ester{a|e}? Non si prepara l'autofattura e il file non si conserva." }],
+  }) : { apri: html``, chiudi: html`` };
   return html`<section class="blocco">
     <h2>Fatture dei fornitori esteri</h2>
     <p class="nota">Carica qui il PDF della fattura estera (Mouser, DigiKey, Amazon, abbonamenti…), oppure mettila nella cartella Google Drive degli ordini:
@@ -33,13 +49,14 @@ export async function riquadroFattureEstere(): Promise<Raw> {
     <label>File <input type="file" id="file-acquisizioni" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.eml"></label>
     <button id="avvia-acquisizioni" class="primario" data-url="/amministrazione/fatture-estere/carica">Carica e leggi</button>
     <output id="esito-acquisizioni" class="nota"></output>
-    ${elenco.length ? html`<div class="tabella-scorre"><table class="elenco">
-      <thead><tr><th>Arrivata</th><th>File</th><th>Fornitore letto</th><th>Fattura</th><th>Stato</th></tr></thead>
+    ${elenco.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
+      <thead><tr>${spunte ? casellaTutti() : ''}<th>Arrivata</th><th>File</th><th>Fornitore letto</th><th>Fattura</th><th>Stato</th></tr></thead>
       <tbody>${elenco.map(a => html`<tr class="cliccabile" data-href="/amministrazione/fatture-estere/${a.id}">
-        <td class="nowrap">${oraRoma(a.creato_il)}</td><td class="taglia"><a href="/amministrazione/fatture-estere/${a.id}">${a.nome_file}</a></td>
+        ${spunte ? casella(a.id, a.nome_file) : ''}<td class="nowrap">${oraRoma(a.creato_il)}</td><td class="taglia"><a href="/amministrazione/fatture-estere/${a.id}">${a.nome_file}</a></td>
         <td>${a.fornitore ?? ''}</td><td>${a.numero ? html`n. ${a.numero}${a.data ? html` del ${data(a.data)}` : ''}` : ''}</td>
-        <td><span class="stato acq-${a.stato}">${STATI[a.stato]}</span>${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody>
-    </table></div>` : html`<p class="nota">Nessuna fattura estera da controllare.</p>`}
+        <td><span class="stato acq-${a.stato}">${STATI[a.stato]}</span>${doppioni.has(a.id) ? html` <span class="stato acq-errore">doppione</span>` : ''}
+          ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody>
+    </table></div>${modulo.chiudi}` : html`<p class="nota">Nessuna fattura estera da controllare.</p>`}
   </section>`;
 }
 
@@ -73,7 +90,23 @@ export function rotteAutofatture() {
     await q(`UPDATE acquisizioni SET tipo = 'fattura_estera' WHERE id = $1`, [id]);
     await elabora(id);
     const a = await q1(`SELECT stato, errore FROM acquisizioni WHERE id = $1`, [id]);
-    res.json({ id, stato: STATI[a.stato], errore: a.errore });
+    // doppione di una fattura già caricata: scartata da sola in `elabora`
+    res.json({ id, stato: a.stato === 'scartato' ? 'NON caricata' : STATI[a.stato], errore: a.errore });
+  });
+
+  // spunte dell'elenco "Fatture dei fornitori esteri" (Adriano 4/11/2026): Elimina = scarta, solo quelle senza autofattura preparata
+  r.post('/azioni', async (req, res) => {
+    const torna = (t: string) => res.redirect(conMessaggio('/amministrazione/documenti?tipo=autofattura', t));
+    if (req.body?.azione !== 'elimina') return torna('Azione non riconosciuta.');
+    const ids = idsSpuntati(req.body);
+    if (!ids.length) return torna('Seleziona almeno una fattura.');
+    const righe = await q<{ id: number; nome_file: string; stato: string }>(`SELECT id, nome_file, stato FROM acquisizioni
+      WHERE id = ANY($1) AND tipo = 'fattura_estera'`, [ids]);
+    const no = righe.map(x => ({ x, motivo: motivoNonScartabile(x.stato) })).filter(y => y.motivo);
+    const si = righe.filter(x => !motivoNonScartabile(x.stato));
+    for (const x of si) await scarta(x.id);
+    const esclusi = no.length ? ` Non toccate: ${no.map(y => `${y.x.nome_file} ${y.motivo}`).join('; ')}.` : '';
+    torna(`${si.length === 1 ? '1 fattura estera eliminata' : `${si.length} fatture estere eliminate`}.${esclusi}`);
   });
 
   r.get('/:id', async (req, res) => {
@@ -84,9 +117,12 @@ export function rotteAutofatture() {
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!f;
     const dis = modificabile ? '' : raw('disabled');
     const fornitori = modificabile ? await q(`SELECT id, ragione_sociale, partita_iva FROM fornitori_anagrafica ORDER BY ragione_sociale`) : [];
-    const controlli = f ? controllaFatturaEstera(f) : { errori: [] as string[], avvisi: [] as string[] };
+    const controlli: { errori: (string | Raw)[]; avvisi: string[] } = f ? controllaFatturaEstera(f) : { errori: [], avvisi: [] };
     const doppione = modificabile && f ? await autofatturaGiaFatta(f.numero) : null;
     if (doppione) controlli.errori.unshift(`${doppione} Se è un doppione, scarta questo file.`);
+    const caricata = modificabile && f ? await fatturaEsteraGiaCaricata(a.id, f) : null;
+    if (caricata) controlli.errori.unshift(html`La stessa fattura (fornitore, numero e data) è già stata caricata ${descriviCaricata(caricata)}:
+      <a href="/amministrazione/fatture-estere/${caricata.id}">apri l'altra</a>. Tienine una sola: scarta il doppione.`);
     if (modificabile && f?.partitaIvaDa) controlli.avvisi.unshift(f.partitaIvaDa);
     const autofattura = f?.autofatturaId ? await q1(`SELECT id, numero, sezionale, stato FROM documenti WHERE id = $1`, [f.autofatturaId]) : null;
     const somma = f ? sommaRighe(f.righe) : 0;
@@ -178,6 +214,11 @@ export function rotteAutofatture() {
     if (f.valuta !== a.proposta?.valuta) f.cambio = null;
     const fornitoreId = Number(req.body.fornitore_id) || null;
     if (req.body.azione === 'conferma') {
+      const caricata = await fatturaEsteraGiaCaricata(id, f);
+      if (caricata) {
+        await salvaFatturaEstera(id, f, fornitoreId);
+        return res.redirect(`/amministrazione/fatture-estere/${id}?msg=${encodeURIComponent(`Non preparata: la stessa fattura è già stata caricata ${descriviCaricata(caricata)}.`)}`);
+      }
       try {
         const autofatturaId = await confermaFatturaEstera(id, f, fornitoreId, req.session.utente?.id ?? null);
         return res.redirect(`/amministrazione/documenti/${autofatturaId}?msg=${encodeURIComponent('Bozza dell\'autofattura preparata: controlla ed emetti.')}`);

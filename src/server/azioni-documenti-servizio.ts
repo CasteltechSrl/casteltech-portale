@@ -17,7 +17,7 @@ export interface DocumentoSpuntato extends DocumentoElenco {
 /** I documenti spuntati (solo del tipo dell'elenco, così da un elenco non si tocca altro). */
 export async function documentiSpuntati(ids: number[], tipo: string): Promise<DocumentoSpuntato[]> {
   if (!ids.length) return [];
-  const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.anno, d.data, d.stato, d.origine, d.cliente_id, d.fattura_id, d.fatturato_altrove,
+  const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.anno, d.data, d.stato, d.origine, d.cliente_id, d.fattura_id, d.fatturato_altrove, d.sdi_stato,
       d.imponibile::float AS imponibile, d.totale::float AS totale, d.xml IS NOT NULL AS ha_xml,
       coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
     FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id

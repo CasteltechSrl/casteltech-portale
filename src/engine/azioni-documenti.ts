@@ -33,13 +33,14 @@ export interface DocumentoElenco {
   fattura_id?: number | null;
   ha_xml?: boolean;
   fatturato_altrove?: string | null;
+  sdi_stato?: string | null;
 }
 
 export interface PulsanteDocumenti {
   azione: AzioneDocumenti; testo: string; serve: '1' | '1+'; titolo?: string; pericolo?: boolean; chiedi?: string; nuovaScheda?: boolean;
 }
 
-export type AzioneDocumenti = 'stampa' | 'xml' | 'excel' | 'incassa' | 'duplica' | 'nota_credito' | 'fattura_ddt' | 'gia_fatturato' | 'annulla' | 'elimina';
+export type AzioneDocumenti = 'stampa' | 'xml' | 'excel' | 'incassa' | 'duplica' | 'nota_credito' | 'fattura_ddt' | 'gia_fatturato' | 'annulla' | 'elimina' | 'invia';
 
 const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
   stampa: { azione: 'stampa', testo: 'Stampa / PDF', serve: '1', nuovaScheda: true, titolo: 'Apre la stampa del documento spuntato (da salvare in PDF)' },
@@ -54,15 +55,17 @@ const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
     chiedi: 'Segnare {n} DDT come già fatturat{o|i}? Escono dai DDT da fatturare (si rimettono dalla pagina del DDT).' },
   annulla: { azione: 'annulla', testo: 'Annulla DDT', serve: '1+', pericolo: true, titolo: 'Per i DDT emessi la cui merce non è partita: il numero resta usato',
     chiedi: 'Annullare {n} DDT? Il numero resta usato e il DDT resta nell\'elenco come annullato.' },
+  invia: { azione: 'invia', testo: 'Invia allo SdI', serve: '1+', titolo: 'Manda allo SdI i documenti emessi spuntati non ancora inviati (le bozze prima si emettono)',
+    chiedi: 'Inviare allo SdI {n} document{o|i}? Si mandano solo quelli emessi e non ancora inviati.' },
   elimina: { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Si eliminano solo le bozze: i documenti emessi restano (si stornano o si annullano)',
     chiedi: 'Eliminare {n} document{o|i}? Si eliminano solo le bozze: quelli già emessi restano come sono.' },
 };
 
 /** Pulsanti in alto a destra secondo il tipo di documento dell'elenco. */
 export function pulsantiDocumenti(tipo: string): PulsanteDocumenti[] {
-  const a: AzioneDocumenti[] = tipo === 'fattura' ? ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'elimina']
-    : tipo === 'nota_credito' ? ['stampa', 'xml', 'excel', 'elimina']
-    : tipo === 'autofattura' ? ['xml', 'excel', 'elimina']
+  const a: AzioneDocumenti[] = tipo === 'fattura' ? ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'invia', 'elimina']
+    : tipo === 'nota_credito' ? ['stampa', 'xml', 'excel', 'invia', 'elimina']
+    : tipo === 'autofattura' ? ['xml', 'excel', 'invia', 'elimina']
     : tipo === 'ddt' ? ['stampa', 'excel', 'fattura_ddt', 'gia_fatturato', 'annulla', 'elimina']
     : ['excel'];
   return a.map(x => P[x]);
@@ -86,6 +89,12 @@ export function motivoEscluso(azione: AzioneDocumenti, d: DocumentoElenco): stri
     case 'elimina': return motivoNonEliminabile(d);
     case 'stampa': return ['fattura', 'nota_credito', 'ddt'].includes(d.tipo) ? null : 'non ha la stampa';
     case 'excel': return null;
+    case 'invia':
+      if (d.origine === 'fic') return 'viene da Fatture in Cloud (inviato da lì)';
+      if (d.numero == null || d.stato === 'bozza') return "è una bozza: prima si emette (si apre e si preme Emetti)";
+      if (d.stato === 'annullato') return 'è annullato';
+      if (d.stato !== 'emesso' || d.sdi_stato) return "è già stato inviato allo SdI";
+      return null;
     case 'xml': return d.ha_xml ? null : d.stato === 'bozza' ? 'è una bozza (l\'XML nasce con Emetti)' : 'non ha il file XML';
     case 'incassa': return d.tipo === 'fattura' && emesso(d) ? null : 'non è una fattura emessa';
     case 'duplica': return d.tipo === 'fattura' && d.cliente_id ? null : 'si duplicano solo le fatture con il cliente in anagrafica';

@@ -186,3 +186,8 @@ test('guida: servizi una tantum (Adriano 3/11/2026)', () => {
   assert.equal(primi('costi una tantum')[0], 'servizi-una-tantum');
   assert.equal(primi('codice programmazione attrezzature')[0], 'servizi-una-tantum');
 });
+
+test('guida: fattura estera caricata due volte e spunte delle autofatture', () => {
+  assert.equal(primi('fattura estera caricata due volte')[0], 'autofatture-estere');
+  assert.equal(primi('eliminare autofattura doppione')[0], 'autofatture-estere');
+});
