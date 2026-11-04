@@ -119,6 +119,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   importi all'italiana per valore, vuoti in fondo, scelta ricordata nel browser. Escluse da sole: intestazioni unite, righe di gruppo, caselle di un modulo che contiene
   la tabella (righe dei documenti, rientro, fasi del preventivo); `data-ordina` / `data-non-ordinare` per forzare, `data-valore` sulla cella per il valore da usare.
   Elenchi a pagine: il clic ordina la pagina; "Mostra tutte" (`?pagina=tutte` in `paginata`) mette tutto in una pagina. Una tabella nuova con `<thead>` è già ordinabile.
+- Caselle con elenco di scelte (Adriano 4/11/2026, causale del trasporto del DDT; `public/elenchi-scelta.js` in ogni pagina, test in `tests/elenchi-scelta.test.ts`):
+  niente menu del browser (il datalist mostrava solo le voci che cominciano come il testo già scritto): ogni `<input list="…">` apre il suo elenco con tutte le voci al clic
+  o con freccia giù, scrivendo filtra, testo libero sempre possibile. Una casella nuova con `list=` + `<datalist>` è già a posto.
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Sito casteltech.net (Adriano 2/11/2026): pagine statiche in `sito/pubblico` (Static Site `casteltech-sito` su Render, gratis; prima WordPress su Noamweb),
   vedi `sito/LEGGIMI.md`. Moduli Contatti/Preventivo → portale (`rotte/sito.ts`, `engine/sito.ts`, test in `tests/sito.test.ts`): email a info@ e pacchetto "SITO – AZIENDA"

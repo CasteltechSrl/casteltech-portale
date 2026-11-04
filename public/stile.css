@@ -924,3 +924,8 @@ details.attributi-avanzati > summary { cursor: pointer; font-weight: 600; }
 .albero-attributi .liv-0 { padding-left: .4rem; } .albero-attributi .liv-1 { padding-left: 1.2rem; } .albero-attributi .liv-2 { padding-left: 2rem; }
 .albero-attributi .liv-3 { padding-left: 2.8rem; } .albero-attributi .liv-4 { padding-left: 3.6rem; } .albero-attributi .liv-5 { padding-left: 4.4rem; }
 .albero-attributi .liv-6 { padding-left: 5.2rem; } .albero-attributi .liv-7 { padding-left: 6rem; } .albero-attributi .liv-8 { padding-left: 6.8rem; }
+/* Caselle con elenco di scelte (public/elenchi-scelta.js, Adriano 4/11/2026): freccia a destra, si può anche scrivere */
+input.con-elenco { padding-right: 1.6rem; cursor: pointer;
+  background: var(--carta, #fff) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23555'/%3E%3C/svg%3E") no-repeat right .55rem center; }
+input.con-elenco:focus { cursor: text; }
+ul.elenco-scelta li .nota { color: #777; }

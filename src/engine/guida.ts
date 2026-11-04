@@ -614,6 +614,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Il DDT si fa dal portale: dalla pagina dell\'ordine con "Crea DDT" (righe con le schede ancora da spedire, quantità e riferimento all\'ordine del cliente già scritti) oppure da Amministrazione → DDT → "+ Nuovo DDT".',
       'Causale, trasporto a cura, vettore e destinazione sono proposti dall\'ultimo DDT dello stesso cliente. Il prezzo delle righe non si stampa: serve quando si fattura il DDT.',
+      'Causale del trasporto: clic sulla casella (o freccia giù) = elenco di tutte le causali, anche se una è già scritta; scrivendo l\'elenco si filtra; si può anche scrivere una causale che non c\'è. Lo stesso vale per tutte le caselle del portale con un elenco (banca o conto, operatori, unità di misura, destinazioni…).',
       'Con "Emetti" il DDT prende il numero successivo. Si stampa con "Stampa / PDF" (due copie: una viaggia con la merce). Le righe venute dall\'ordine lo evadono da sole.',
       'Non si può emettere senza causale, "trasporto a cura del", righe con quantità e, se il trasporto è a cura del vettore, il nome del corriere.',
       'Un DDT emesso si corregge con "Modifica DDT" (righe, quantità, trasporto, destinazione): numero e data restano gli stessi. Non si modifica più quando è in una fattura già mandata allo SdI (o fatta in Fatture in Cloud). Se il DDT è in una fattura non ancora mandata, correggi anche la fattura. Se lo avevi già mandato per email, rimandalo.',
