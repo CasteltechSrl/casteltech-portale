@@ -55,8 +55,9 @@ const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
     chiedi: 'Segnare {n} DDT come già fatturat{o|i}? Escono dai DDT da fatturare (si rimettono dalla pagina del DDT).' },
   annulla: { azione: 'annulla', testo: 'Annulla DDT', serve: '1+', pericolo: true, titolo: 'Per i DDT emessi la cui merce non è partita: il numero resta usato',
     chiedi: 'Annullare {n} DDT? Il numero resta usato e il DDT resta nell\'elenco come annullato.' },
-  invia: { azione: 'invia', testo: 'Invia allo SdI', serve: '1+', titolo: 'Manda allo SdI i documenti emessi spuntati non ancora inviati (le bozze prima si emettono)',
-    chiedi: 'Inviare allo SdI {n} document{o|i}? Si mandano solo quelli emessi e non ancora inviati.' },
+  invia: { azione: 'invia', testo: 'Emetti e invia allo SdI', serve: '1+',
+    titolo: 'Le bozze spuntate si emettono (prendono il numero) e partono per lo SdI; quelle già emesse e non ancora inviate partono e basta',
+    chiedi: 'Emettere e inviare allo SdI {n} document{o|i}? Le bozze prendono il numero definitivo: dopo non si eliminano più.' },
   elimina: { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true, titolo: 'Si eliminano solo le bozze: i documenti emessi restano (si stornano o si annullano)',
     chiedi: 'Eliminare {n} document{o|i}? Si eliminano solo le bozze: quelli già emessi restano come sono.' },
 };
@@ -91,7 +92,8 @@ export function motivoEscluso(azione: AzioneDocumenti, d: DocumentoElenco): stri
     case 'excel': return null;
     case 'invia':
       if (d.origine === 'fic') return 'viene da Fatture in Cloud (inviato da lì)';
-      if (d.numero == null || d.stato === 'bozza') return "è una bozza: prima si emette (si apre e si preme Emetti)";
+      // bozza: si emette (prende il numero) e subito dopo parte (Adriano 4/11/2026: le autofatture preparate restano in bozza)
+      if (d.stato === 'bozza') return null;
       if (d.stato === 'annullato') return 'è annullato';
       if (d.stato !== 'emesso' || d.sdi_stato) return "è già stato inviato allo SdI";
       return null;
