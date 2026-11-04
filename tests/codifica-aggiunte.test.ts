@@ -176,4 +176,13 @@ test('righe da completare del 4/11/2026: categorie DigiKey, SOT-23-THIN, indutta
     Category: { Name: 'Connectors, Interconnects', ChildCategories: [{ Name: 'USB, DVI, HDMI Connectors' }] },
     Parameters: [{ ParameterText: 'Connector Type', ValueText: 'USB-B' }, { ParameterText: 'Mounting Type', ValueText: 'Through Hole' }] } as any);
   assert.equal(dk.attributi.tipo, 'USBB');
+  // tipo B scritto solo nella descrizione: prima diventava HDMI dalla categoria "USB, DVI, HDMI Connectors"
+  const dk2 = daDigikey({ ManufacturerProductNumber: '5787834-1', Description: { ProductDescription: 'CONN RCPT USB2.0 TYPE B 4POS R/A' },
+    Category: { Name: 'Connectors, Interconnects', ChildCategories: [{ Name: 'USB, DVI, HDMI Connectors' }] },
+    Parameters: [{ ParameterText: 'Number of Positions', ValueText: '4' }] } as any);
+  assert.equal(dk2.attributi.tipo, 'USBB');
+  const dk3 = daDigikey({ ManufacturerProductNumber: 'X', Description: { ProductDescription: 'CONN RCPT USB-C 24POS' },
+    Category: { Name: 'Connectors, Interconnects', ChildCategories: [{ Name: 'USB, DVI, HDMI Connectors' }] },
+    Parameters: [{ ParameterText: 'Connector Type', ValueText: 'USB - C' }] } as any);
+  assert.equal(dk3.attributi.tipo, 'USBC');
 });

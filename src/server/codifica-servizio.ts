@@ -313,8 +313,19 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
         if (famDec) { const c = calcola(famDec, aDec, r.pn); if (c.root && !h.codice_gestionale!.startsWith(c.root + '-')) r.note.push(`VERIFICA: dal P/N risulta ${c.root} (${c.descr})`); }
       } else {
         r.esito = ESITI.DB_INC; if (h.note) r.note.push(h.note);
-        r.attributi = { ...aBom, ...aDec, ...(h.attributi ?? {}) };
-        r.famiglia = h.famiglia || famDec || famBom;
+        const aArch = Object.fromEntries(Object.entries(h.attributi ?? {}).filter(([, v]) => v != null && v !== '')) as Attributi;
+        // la decodifica del P/N è sicura: vale anche sulla famiglia di un componente in archivio ancora senza codice gestionale
+        // (4/11/2026: quarzi ABM8G in archivio come OS con case "4SMD")
+        r.famiglia = famDec || h.famiglia || famBom;
+        // in archivio ma incompleto (4/11/2026): i dati che mancano si prendono anche da DigiKey (prima restava com'era)
+        let aDkArch: Attributi = {};
+        const dkArch = dist(r.pn).digikey;
+        if (dkArch?.prodotto && !completo(r.famiglia, { ...aBom, ...aArch, ...aDec })) {
+          const d = daDigikey(dkArch.prodotto);
+          if (!r.famiglia) r.famiglia = d.famiglia;
+          if (d.famiglia === r.famiglia) { aDkArch = d.attributi; r.fonti.push('DigiKey'); }
+        }
+        r.attributi = { ...aBom, ...aDkArch, ...aArch, ...aDec };
       }
       continue;
     }
