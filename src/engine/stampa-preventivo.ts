@@ -193,3 +193,18 @@ export function contiStampa(base: { prezzoScheda: number; lotto: number; unaTant
     totale: r2(lordo - sconto),
   };
 }
+
+/**
+ * Riquadro verde della stampa (Adriano, 4/11/2026): solo il prezzo a scheda SENZA le una tantum e, se ce ne sono,
+ * il prezzo a scheda CON le una tantum (una tantum divise sulle schede del lotto). Con lo sconto valgono i prezzi scontati;
+ * le righe in più scritte nella stampa non entrano (vanno solo nel totale).
+ */
+export function prezziRiquadro(
+  base: { prezzoScheda: number; lotto: number; unaTantum: number; nSchede: number; prezzoSchedaConUnaTantum: number }, rit: Ritocchi,
+): { senza: number; con: number | null } {
+  const c = contiStampa({ prezzoScheda: base.prezzoScheda, lotto: base.lotto, unaTantum: base.unaTantum, nSchede: base.nSchede }, rit);
+  if (!(base.unaTantum > 0)) return { senza: c.prezzoScheda, con: null };
+  const con = !rit.sconto ? base.prezzoSchedaConUnaTantum
+    : base.nSchede ? r2((c.lotto + c.unaTantum) / base.nSchede) : r2(c.prezzoScheda + c.unaTantum);
+  return { senza: c.prezzoScheda, con };
+}

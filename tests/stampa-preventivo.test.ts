@@ -87,3 +87,13 @@ test('stampa: sconto in % su tutto, sconto in € sul lotto, righe in più nel t
   assert.equal(nulla.totale, 1182.29);
   assert.equal(nulla.prezzoScheda, 3.25);
 });
+
+test('stampa: riquadro verde = prezzo a scheda senza e con le una tantum (Adriano 4/11/2026)', async () => {
+  const { prezziRiquadro } = await import('../src/engine/stampa-preventivo.js');
+  const base = { prezzoScheda: 10, lotto: 1000, unaTantum: 250, nSchede: 100, prezzoSchedaConUnaTantum: 12.5 };
+  assert.deepEqual(prezziRiquadro(base, leggiRitocchi(null)), { senza: 10, con: 12.5 });
+  // senza una tantum un solo prezzo
+  assert.deepEqual(prezziRiquadro({ ...base, unaTantum: 0, prezzoSchedaConUnaTantum: 10 }, leggiRitocchi(null)), { senza: 10, con: null });
+  // sconto 10 %: tutti e due scontati; le righe in più non entrano nel prezzo a scheda
+  assert.deepEqual(prezziRiquadro(base, leggiRitocchi({ scontoValore: '10', rigaDescrizione: ['Collaudo'], rigaQuantita: ['1'], rigaPrezzo: ['50'] })), { senza: 9, con: 11.25 });
+});
