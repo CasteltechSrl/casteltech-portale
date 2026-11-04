@@ -388,8 +388,10 @@ export function normAttr(chiave: Attr, raw: unknown, fam: string): string | null
   if (chiave === 'dielettrico') return ({ NP0: 'C0G', COG: 'C0G', NPO: 'C0G', C0GNP0: 'C0G' } as Record<string, string>)[up] ?? up;
   if (chiave === 'case') {
     const c = up.replace(/[\s\-_]/g, '');
-    const m = c.match(/^([A-Z]+)(\d+)$/);
-    if (m && m[1] in IC_FAM && m[1] !== 'SO') return `${m[2]}${m[1]}`; // stile archivio: 14TSSOP, 16VQFN
+    // nome + piedini (Adriano Croci 4/11/2026: SOIC8 e non 8SOIC; prima si scriveva come l'archivio, 14TSSOP): vale per i codici nuovi,
+    // quelli in archivio non cambiano. Il codice gestionale non cambia (la tabella dei case legge tutte e due le forme).
+    const m = c.match(/^(\d+)([A-Z]+)$/);
+    if (m && (m[2] in IC_FAM || m[2] in IC_FAM_AGGIUNTE || DIP_THT.includes(m[2]) || m[2] === 'SIP')) return `${m[2]}${m[1]}`;
     return c;
   }
   if (chiave === 'passo') { const p = passoCentesimi(up); return p ? zfill(String(p), 3) : up; }
@@ -420,11 +422,24 @@ export function codiceRidotto(pn: unknown): string | null {
 }
 
 // ───────────────────────────── codice di produzione ─────────────────────────────
-export function codiceProduzione(fam: string, a: Attributi, pn: unknown): [string | null, string[]] {
+/**
+ * Ordine dei campi nel codice di produzione. Terminali e morsetti (Adriano Croci 4/11/2026): TI-THT-MORSETTO-poli-passo-P/N,
+ * cioè numero di piedini prima della spaziatura.
+ */
+const ORDINE_PROD: Record<string, (Attr | 'RID' | 'PN')[]> = { TI: ['tipo', 'poli', 'passo', 'RID'] };
+
+/** "THT" nel codice di produzione dopo la famiglia (Adriano Croci 4/11/2026: "per i THT vorrei famiglia-THT-…"), salvo se il case scritto nel codice è già "THT". */
+export function conTht(fam: string, a: Attributi, tht: boolean): boolean {
+  if (!tht) return false;
+  return !(FAMIGLIE[fam]?.prod.includes('case') && String(a.case ?? '').toUpperCase() === 'THT');
+}
+
+export function codiceProduzione(fam: string, a: Attributi, pn: unknown, tht = false, ordineDiPrima = false): [string | null, string[]] {
   const spec = FAMIGLIE[fam];
   if (!spec) return [null, [`famiglia ${fam} non prevista`]];
-  const parti = [fam], mancanti: string[] = [];
-  for (const k of spec.prod) {
+  const parti = conTht(fam, a, tht) ? [fam, 'THT'] : [fam], mancanti: string[] = [];
+  const campi = (ordineDiPrima ? null : ORDINE_PROD[fam]) ?? spec.prod;
+  for (const k of campi) {
     let v: string | null | undefined;
     if (k === 'RID') v = codiceRidotto(pn);
     else if (k === 'PN') v = pn ? String(pn).replace(/\s/g, '').toUpperCase() : null;
@@ -434,7 +449,7 @@ export function codiceProduzione(fam: string, a: Attributi, pn: unknown): [strin
   }
   let codice = parti.join('-');
   if (codice.length > PROD_MAX) {
-    const ultimo = spec.prod[spec.prod.length - 1];
+    const ultimo = campi[campi.length - 1];
     if (ultimo === 'RID' || ultimo === 'PN') codice = codice.slice(0, PROD_MAX - 1) + '.';
     else mancanti.push(`codice oltre ${PROD_MAX} caratteri`);
   }
@@ -468,7 +483,8 @@ function caseGest(fam: string, a: Attributi): Case {
     if (m) return [`E${zfill(String(parseInt(m[1], 10)), 2)}${m[2] || 0}`, 'S', OK, ''];
   }
   if (fam === 'ID') {
-    const m = cr.match(/^(\d+)X(\d+)$/);
+    // anche con i decimali di DigiKey (5.7X5.2 → 0505, 4/11/2026 SRP5030T): mm interi come prima
+    const m = cr.match(/^(\d+)(?:[.,]\d+)?X(\d+)(?:[.,]\d+)?$/);
     if (m) return [`${zfill(String(parseInt(m[1], 10)), 2)}${zfill(String(parseInt(m[2], 10)), 2)}`, 'S', VER, 'induttanza in mm (LLWW)'];
   }
   if (fam === 'DL') {
@@ -575,26 +591,35 @@ export function descrizione(fam: string, a: Attributi, pn: unknown): string {
 }
 
 export interface Calcolo {
-  prod: string | null; prodBozza?: string | null; root: string | null; stato: Stato; note: string[]; descr: string | null;
+  prod: string | null; prodBozza?: string | null; root: string | null;
+  /** codice di produzione nella forma di prima del 4/11/2026 (senza THT, terminali passo-poli), se diverso; famiglia usata (CN morsetto → TI) */
+  prodPrima?: string | null; famiglia?: string; stato: Stato; note: string[]; descr: string | null;
   attrs?: Attributi; T?: string; C?: string | null; V?: string | null;
 }
 
 /** Calcola i due codici (radice per il gestionale: il progressivo lo dà il database). */
 export function calcola(famiglia: string | null | undefined, attributi: Attributi, pn: unknown): Calcolo {
-  const fam = String(famiglia ?? '').toUpperCase().trim();
+  let fam = String(famiglia ?? '').toUpperCase().trim();
   if (!(fam in FAMIGLIE)) return { prod: null, root: null, stato: MAN, note: ['scegliere la famiglia'], descr: null };
   const a: Attributi = {};
   for (const k of ATTR) a[k] = normAttr(k, attributi[k], fam);
   a.tecnologia = String(attributi.tecnologia ?? '').trim().toUpperCase() || null;
-  const [prod, manc] = codiceProduzione(fam, a, pn);
+  const notePrima: string[] = [];
+  // i morsetti sono terminali THT (Adriano Croci 4/11/2026: famiglia TI-THT-MORSETTO-…)
+  if (fam === 'CN' && String(a.tipo ?? '').replace(/\s/g, '') === 'MORSETTO') { fam = 'TI'; notePrima.push('morsetto: famiglia TI (terminali THT)'); }
   let g: Radice;
   try { g = codiceGestionaleRadice(fam, a, pn); }
   catch (e) { if (!(e instanceof ErroreValore)) throw e; g = { T: a.tecnologia || 'S', C: null, V: null, stato: MAN, note: [`valore non leggibile: ${e.message}`] }; }
+  const tht = (a.tecnologia || g.T) === 'T' || fam === 'TI';
+  const [prod, manc] = codiceProduzione(fam, a, pn, tht);
+  // forma di prima (senza THT, case 8SOIC): serve a ritrovare in archivio i componenti già codificati senza P/N
+  const prodPrima = prod && (tht || fam === 'TI') ? codiceProduzione(fam, a, pn, false, true)[0] : null;
+  g = { ...g, note: [...notePrima, ...g.note] };
   const root = g.C && g.V ? `${g.T}${fam}-${g.C}-${g.V}` : null;
   let stato = g.stato; const note = [...g.note];
   if (manc.length) { note.unshift('produzione: manca ' + manc.join(', ')); stato = MAN; }
   if (!root && stato !== MAN) stato = MAN;
-  return { prod: manc.length ? null : prod, prodBozza: prod, root, stato, note, descr: descrizione(fam, a, pn), attrs: a, T: g.T, C: g.C, V: g.V };
+  return { prod: manc.length ? null : prod, prodBozza: prod, prodPrima: manc.length ? null : prodPrima, famiglia: fam, root, stato, note, descr: descrizione(fam, a, pn), attrs: a, T: g.T, C: g.C, V: g.V };
 }
 
 // ───────────────────────────── progressivo (3 caratteri, senza I e O) ─────────────────────────────

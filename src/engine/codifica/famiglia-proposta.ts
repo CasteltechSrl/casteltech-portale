@@ -12,7 +12,20 @@ import { daColonneBom } from './decoder.js';
 const DA_CORREGGERE = new Set(['', 'MI', 'IC']);
 const PAROLE_CONNETTORE = /CONNECTOR|\bCONN\b|\bCONN[._\s]|RJ45|RJ11|ETHERNET|\bUSB|PIN\s?HEADER|\bHEADER\b|TERMINAL\s?BLOCK|MORSETT|\bSOCKET\b|RECEPTACLE|\bHDMI\b|MICRO\s?SD/;
 /** Valori standard dei connettori modulari quando impronta e descrizione non li dicono (8P8C e 6P6C: passo 1,02 mm). */
-const STANDARD: Record<string, { passo: string; poli: string }> = { RJ45: { passo: '1.02', poli: '8' }, RJ11: { passo: '1.02', poli: '6' } };
+/** USB-A e USB-B (4/11/2026, presa 5787834-1): 4 contatti a passo 2,5 mm. */
+export const STANDARD: Record<string, { passo: string; poli: string }> = {
+  RJ45: { passo: '1.02', poli: '8' }, RJ11: { passo: '1.02', poli: '6' }, USBA: { passo: '2.5', poli: '4' }, USBB: { passo: '2.5', poli: '4' } };
+
+/** Connettore già in CN a cui mancano passo o poli: valori standard del tipo (solo quelli che mancano), con il motivo per la nota. */
+export function connettoreStandard(fam: string | null, a: Attributi): { attributi: Attributi; motivo: string } | null {
+  if (String(fam ?? '').toUpperCase() !== 'CN') return null;
+  const tipo = String(a.tipo ?? '').replace(/\s/g, '').toUpperCase(), std = STANDARD[tipo];
+  if (!std || (a.passo && a.poli)) return null;
+  const nuovi: Attributi = { ...a }, detti: string[] = [];
+  if (!a.passo) { nuovi.passo = std.passo; detti.push(`passo ${std.passo} mm`); }
+  if (!a.poli) { nuovi.poli = std.poli; detti.push(`${std.poli} poli`); }
+  return { attributi: nuovi, motivo: `valori standard ${tipo}: ${detti.join(', ')}: controlla sul datasheet` };
+}
 
 export interface DatiRiga {
   famiglia: string | null; attributi: Attributi; pn: string | null;

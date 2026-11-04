@@ -23,7 +23,7 @@ import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnit
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
-import { famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
+import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
 export const ESITI = {
@@ -396,6 +396,8 @@ export async function ricalcola(righe: RigaBom[]) {
   // connettori finiti in MI / IC / senza famiglia: si prova CN se così il codice gestionale si calcola (Adriano 4/11/2026)
   for (const r of righe) {
     if (![ESITI.INC, ESITI.DB_INC].includes(r.esito as any) || r.fonti.includes('modifica a mano')) continue;
+    const std = connettoreStandard(r.famiglia, r.attributi);
+    if (std) { r.attributi = std.attributi; r.note = unico([...r.note, `${NOTA_DA_VALIDARE}: ${std.motivo}`]); continue; }
     const p = famigliaProposta(r);
     if (!p) continue;
     r.famiglia = p.famiglia; r.attributi = { ...r.attributi, ...p.attributi };
@@ -403,7 +405,7 @@ export async function ricalcola(righe: RigaBom[]) {
   }
   for (const r of righe) if ([ESITI.INC, ESITI.NUOVO, ESITI.NUOVO_VER, ESITI.DB_INC, ESITI.DB_FATTO, ESITI.DB_PROD].includes(r.esito as any)) calcoli.set(r.n, calcola(r.famiglia, r.attributi, r.pn));
   const perProd = new Map<string, Componente[]>();
-  for (const c of await perProduzione(unico([...calcoli.values()].map(c => c.prod).filter((x): x is string => !!x)))) {
+  for (const c of await perProduzione(unico([...calcoli.values()].flatMap(c => [c.prod, c.prodPrima]).filter((x): x is string => !!x)))) {
     const k = c.codice_produzione!.toUpperCase(); perProd.set(k, [...(perProd.get(k) ?? []), c]);
   }
   for (const r of righe) {
@@ -422,7 +424,9 @@ export async function ricalcola(righe: RigaBom[]) {
     const inArchivio = r.esito === ESITI.DB_INC || r.esito === ESITI.DB_FATTO;
     const prod = inArchivio ? r.prodDb ?? null : c.prod ?? c.prodBozza ?? null;
     // senza P/N: se il codice di produzione è già in archivio si usano i suoi codici
-    const stessi = !inArchivio && c.prod ? (perProd.get(c.prod.toUpperCase()) ?? []).filter(x => x.codice_gestionale) : [];
+    // anche nella forma di prima del 4/11/2026 (senza THT): i componenti già in archivio non cambiano codice
+    const stessi = !inArchivio && c.prod ? [...(perProd.get(c.prod.toUpperCase()) ?? []), ...(c.prodPrima ? perProd.get(c.prodPrima.toUpperCase()) ?? [] : [])].filter(x => x.codice_gestionale) : [];
+    if (c.famiglia && c.famiglia !== r.famiglia && !inArchivio) r.famiglia = c.famiglia;
     if (!inArchivio && !r.pn && stessi.length) {
       const h = stessi.find(x => x.pn) ?? stessi[0];
       Object.assign(r, { esito: ESITI.DB_PROD, codiceProduzione: h.codice_produzione, codiceGestionale: h.codice_gestionale, descrizione: h.descrizione ?? c.descr,

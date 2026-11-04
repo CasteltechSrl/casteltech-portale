@@ -243,8 +243,16 @@ function murataBlm(pn: string): Risultato {
   return ['FR', { case: size, valore: `${z}R`, tolleranza: '25' }];
 }
 
+/** Quarzi Abracon ABM (4/11/2026, ABM8G-12.000MHZ-D2Y-T): case dalla serie, frequenza dal P/N; la tolleranza arriva dai distributori. */
+const ABRACON_CASE: Record<string, string> = { 3: '5032', 7: '6035', 8: '3225', 10: '2520', 11: '2016', 12: '1612', 13: '1210' };
+function abraconAbm(pn: string): Risultato {
+  const m = tutto(/ABM(\d+)[A-Z]*-(\d+(?:\.\d+)?)MHZ(?:-[A-Z0-9-]*)?/, pn);
+  if (!m || !ABRACON_CASE[m[1]]) return null;
+  return ['QZ', { case: ABRACON_CASE[m[1]], valore: `${Number(m[2])}MHz`, tipo: 'CRYST.', tecnologia: 'S' }];
+}
+
 const DECODERS = [yageoRc, vishayCrcw, panasonicErj, uniohm, samsungCl, murata, tdk, kemet, yageoCc, walsinStyle, avx,
-  stackpole, walsinWr, teCrg, bournsCr, vishayWsl, yageoArray, taiyo, vishayVj, tdkCga, tantalio, murataBlm];
+  stackpole, walsinWr, teCrg, bournsCr, vishayWsl, yageoArray, taiyo, vishayVj, tdkCga, tantalio, murataBlm, abraconAbm];
 
 /** Pulisce il P/N da spazi e prefissi da barcode/catalogo (1P, 30P, Mouser 71-, 279-…). */
 export function pulisciPn(pn: unknown): string {

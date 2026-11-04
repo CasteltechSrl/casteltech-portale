@@ -325,6 +325,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    si vedono solo i campi di `FAMIGLIE[fam].prod` + case (tranne CN/TI/BT/AN), con l'esempio nella casella (case THT se Tecnologia T); "Mostra tutti i campi" li riapre.
    Connettori in MI/IC/senza famiglia (Adriano 4/11/2026, RJ45 HR911105A; `famigliaProposta` in `engine/codifica/famiglia-proposta.ts`, applicata in `ricalcola` alle righe
    da completare non corrette a mano): parole da connettore → CN con tipo/passo/poli da impronta e descrizione (RJ45/RJ11 standard 1,02 mm, 8/6 poli), solo se il gestionale si calcola; nota CODICE DA VALIDARE.
+   Codice di produzione di Croci (suggerimento 4/11/2026; `conTht`, `ORDINE_PROD`, `calcola().prodPrima` in `engine/codifica/regole.ts`, test in `tests/codifica-aggiunte.test.ts`): THT = famiglia-THT-…,
+   case IC nome+piedini (SOIC8), CN tipo MORSETTO → TI con poli prima del passo; solo codici nuovi: in `ricalcola` l'archivio si cerca anche con `prodPrima` (codice alla vecchia maniera).
+   Righe da completare del 4/11/2026 (registro in `aggiunte.ts`): categorie DigiKey con switch/driver → IC, SOT-23-THIN, induttanze con decimali, quarzi Abracon ABM (`abraconAbm` in `decoder.ts`),
+   USB-A/B standard (`connettoreStandard` in `famiglia-proposta.ts`), pulsanti senza case = misura LLWW.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
