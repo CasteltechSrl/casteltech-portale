@@ -303,6 +303,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (variante dello stesso P/N > stesso codice di produzione > sostituto DigiKey diretto > pin-to-pin dell'IA venduto da un distributore; mai "simile"/"upgrade"),
    reperibilità "attenzione", sezione "Codici compatibili da verificare" in cima alla BOM, "Confermo" = `alternativaScelta`. Arrow (`engine/arrow.ts`,
    ARROW_LOGIN + ARROW_API_KEY da developers.arrow.com, USD → EUR cambio BCE): lettura da confermare con la prima Prova.
+   Würth Elektronik (Adriano 4/11/2026; `engine/wurth.ts`, test in `tests/wurth.test.ts`): Customer API (WURTH_CLIENT_ID + WURTH_CLIENT_SECRET da profile.we-online.com → API Keys,
+   scadono il 5/6/2027), prezzi NOSTRI (listino per i codici mai comprati) + disponibilità, chiesti solo per i codici WE (`codiceWurth`: numerici); si ordina dal commerciale WE.
    Codifica, regole aggiunte (registro `REGISTRO_AGGIUNTE` in `engine/codifica/aggiunte.ts`, visibile in Impostazioni → Componenti; ogni aggiunta nuova va lì):
    famiglie CF film, NT termistori, BT batterie, AN antenne; case nuovi/sinonimi (`CASE_AGGIUNTI`, `IC_FAM_AGGIUNTE`, DIP); categorie DigiKey dalla più specifica.
    I componenti in archivio non cambiano codice; le aggiunte toccano solo casi che il Python lasciava "da completare" (`tools/verifica-codifica.ts` da rifare con i dati veri).

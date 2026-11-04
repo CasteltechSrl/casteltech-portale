@@ -107,6 +107,8 @@ export function righeOrdineDaBom(righe: RigaBomPerOrdine[], schede: number): { g
 /** Parole con cui si riconosce il distributore nell'anagrafica fornitori (ragione sociale). */
 export const NOMI_DISTRIBUTORE: Record<string, string[]> = {
   digikey: ['DIGI-KEY', 'DIGIKEY', 'DIGI KEY'], mouser: ['MOUSER'], farnell: ['FARNELL', 'PREMIER FARNELL'], tme: ['TME', 'TRANSFER MULTISORT'], arrow: ['ARROW'],
+  // "WÜRTH" da solo no: Würth S.r.l. (viteria, marketplace@wuerth.it) è un'altra azienda
+  wurth: ['WURTH ELEKTRONIK', 'WUERTH ELEKTRONIK', 'W RTH ELEKTRONIK' /* Ü diventa spazio in nome() */],
 };
 
 /**
