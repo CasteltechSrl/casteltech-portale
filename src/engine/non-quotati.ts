@@ -56,3 +56,18 @@ export function righeDaPrezzare(righe: RigaPerPrezzo[], nonMontato = 'NON MONTAT
   }
   return uscita;
 }
+
+/** Righe dei non quotati già scritte nelle note del preventivo. */
+export const righeNonQuotateNelleNote = (note: string) =>
+  String(note ?? '').split('\n').map(r => r.trim()).filter(r => r.toLowerCase().endsWith(FRASE_NON_QUOTATO.toLowerCase()));
+
+/**
+ * Note della stampa e del PDF per il cliente (Adriano 4/11/2026: "nella stampa non compare la nota"): note per il cliente,
+ * note interne solo con la spunta, e SEMPRE i componenti non quotati perché non disponibili (senza ripeterli).
+ */
+export function noteDaStampare(noteCliente: string, noteInterne: boolean, note: string, nonQuotati: string[]): string {
+  const interne = noteInterne ? aggiornaNoteNonQuotati(note, []) : '';
+  const cliente = String(noteCliente ?? '');
+  const mancanti = nonQuotati.filter(r => !cliente.includes(r));
+  return [cliente, interne, mancanti.join('\n')].map(x => x.trim()).filter(Boolean).join('\n\n');
+}

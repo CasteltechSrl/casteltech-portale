@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FRASE_NON_QUOTATO, aggiornaNoteNonQuotati, righeDaPrezzare, righeNonQuotate } from '../src/engine/non-quotati.js';
+import { FRASE_NON_QUOTATO, aggiornaNoteNonQuotati, noteDaStampare, righeDaPrezzare, righeNonQuotate, righeNonQuotateNelleNote } from '../src/engine/non-quotati.js';
 
 const riga = (x: any) => ({ pn: null, designatori: null, valore: null, ...x });
 
@@ -52,4 +52,15 @@ test('BOM quotata: righe senza prezzo o non disponibili in evidenza, escluse que
     { n: 3, nome: 'BAV99', rif: '', qtaScheda: 0, motivo: 'non disponibile' },
     { n: 6, nome: '10uF', rif: '', qtaScheda: 0, motivo: 'senza prezzo' },
   ]);
+});
+
+test('stampa: i componenti non quotati si stampano sempre, le note interne solo con la spunta, senza ripetizioni', () => {
+  const nq = [`STM32 (U3): ${FRASE_NON_QUOTATO}`];
+  const note = `Cliente urgente.\n${nq[0]}`;
+  assert.deepEqual(righeNonQuotateNelleNote(note), nq);
+  assert.equal(noteDaStampare('', false, note, nq), nq[0]);
+  assert.equal(noteDaStampare('Prezzi validi 30 giorni.', false, note, nq), `Prezzi validi 30 giorni.\n\n${nq[0]}`);
+  assert.equal(noteDaStampare('', true, note, nq), `Cliente urgente.\n\n${nq[0]}`);
+  assert.equal(noteDaStampare(nq[0], false, note, nq), nq[0]);
+  assert.equal(noteDaStampare('', false, note, []), '');
 });
