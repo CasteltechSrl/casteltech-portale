@@ -40,7 +40,7 @@ test('BOM quotata: righe senza prezzo o non disponibili in evidenza, escluse que
   const ok = { scelta: { disponibile: true } }, nd = { scelta: { disponibile: false } };
   const x = righeDaPrezzare([
     riga({ n: 1, pn: 'LM358', acquisti: [ok, ok] }),
-    riga({ n: 2, pn: 'STM32', designatori: 'U3', acquisti: [ok, {}] }),
+    riga({ n: 2, pn: 'STM32', designatori: 'U3', qtaScheda: 2, acquisti: [ok, {}] }),
     riga({ n: 3, pn: 'BAV99', acquisti: [nd] }),
     riga({ n: 4, pn: 'DNP', esito: 'NON MONTATO', acquisti: [{}] }),
     riga({ n: 5, pn: 'CLI', clienteFornisce: true, acquisti: [{}] }),
@@ -48,8 +48,8 @@ test('BOM quotata: righe senza prezzo o non disponibili in evidenza, escluse que
     riga({ n: 7, pn: 'SOLO', acquisti: [] }),
   ] as any);
   assert.deepEqual(x, [
-    { n: 2, nome: 'STM32', rif: 'U3', motivo: 'senza prezzo' },
-    { n: 3, nome: 'BAV99', rif: '', motivo: 'non disponibile' },
-    { n: 6, nome: '10uF', rif: '', motivo: 'senza prezzo' },
+    { n: 2, nome: 'STM32', rif: 'U3', qtaScheda: 2, motivo: 'senza prezzo' },
+    { n: 3, nome: 'BAV99', rif: '', qtaScheda: 0, motivo: 'non disponibile' },
+    { n: 6, nome: '10uF', rif: '', qtaScheda: 0, motivo: 'senza prezzo' },
   ]);
 });
