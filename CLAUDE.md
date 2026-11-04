@@ -98,7 +98,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   `registro-servizio.ts` = middleware `registraAttivita` in `index.ts`, pagina Impostazioni → Registro, test in `tests/registro.test.ts`): una riga per ogni POST riuscito
   (sezione dal percorso, azione = `azione` del modulo o ultima parola, righe = id nel percorso + `ids` spuntati; elimina/annulla/scarta = 'eliminazione'), accessi e
   accessi sbagliati; MAI i valori dei moduli; autosalva una volta ogni 10 minuti. Utente disattivato / ruolo o password cambiati = sessioni chiuse subito
-  (`chiudereSessioni`, `chiudiSessioniUtente`); password con `problemaPassword` (10 caratteri, non facili); login: 8 tentativi per indirizzo+email, 20 per email.
+  (`chiudereSessioni`, `chiudiSessioniUtente`; reparto: PIN cambiato/tolto o operatore tolto = `chiudiSessioniOperatori`); password con `problemaPassword` (10 caratteri, non facili); login: 8 tentativi per indirizzo+email, 20 per email.
   Una rotta nuova che modifica dati è già nel registro; un'eliminazione deve avere "elimina/annulla/scarta" nell'indirizzo o nel valore di `azione`.
 - Email dagli indirizzi per funzione (Adriano 2/11/2026; `engine/mittenti-email.ts` `FUNZIONI_EMAIL`, `mittentePer(tipo)` in `server/gmail.ts`, test in `tests/mittenti-email.test.ts`):
   alias di info@ = amministrazione@ (DDT, fatture, NC, autofatture, solleciti), ordini@ (conferme d'ordine), preventivi@, acquisti@ (ordini a fornitore), produzione@.

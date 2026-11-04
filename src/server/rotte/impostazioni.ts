@@ -32,7 +32,7 @@ import { motivoCatalogoNonEliminabile, type TabellaCatalogo } from '../../engine
 import { rotteImpostazioniAmministrazione } from './impostazioni-amministrazione.js';
 import { rotteServizi } from './servizi.js';
 import { chiudereSessioni, ETICHETTE_TIPO, problemaPassword, type TipoRegistro } from '../../engine/registro.js';
-import { chiudiSessioniUtente } from '../registro-servizio.js';
+import { chiudiSessioniOperatori, chiudiSessioniUtente } from '../registro-servizio.js';
 import { paginata } from '../views/paginazione.js';
 import { controlloEliminaUtente, controlloUtente, DESCRIZIONI_RUOLI, NOMI_RUOLI, RUOLI, ruoloDaModulo, type Ruolo } from '../../engine/ruoli.js';
 
@@ -159,6 +159,8 @@ export function rotteImpostazioni() {
       pin[sigla] = await bcrypt.hash(nuovo, 10);
     }
     await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('pin_operatori', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(pin)]);
+    // PIN cambiato o tolto: il telefono che lo ricordava deve rientrare con il PIN nuovo (chi lascia l'azienda esce subito)
+    await chiudiSessioniOperatori([sigla]);
     res.redirect('/impostazioni/operatori?pin=' + encodeURIComponent(req.body.togli ? `PIN di ${sigla} tolto` : `PIN di ${sigla} salvato`));
   });
 
@@ -386,6 +388,8 @@ export function rotteImpostazioni() {
   });
   r.post('/operatori', async (req, res) => {
     const op = leggiOperatori(String(req.body.operatori ?? ''));
+    const tolti = (await caricaOperatori()).map(o => o.sigla).filter(sg => !op.some(o => o.sigla === sg));
+    await chiudiSessioniOperatori(tolti);
     await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('operatori', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(op)]);
     res.redirect('/impostazioni/operatori?ok=1');
   });

@@ -44,3 +44,10 @@ export async function chiudiSessioniUtente(utenteId: number, tranneSid?: string)
   const righe = await q(`DELETE FROM sessioni WHERE (sess::jsonb -> 'utente' ->> 'id')::int = $1 AND sid <> coalesce($2, '') RETURNING sid`, [utenteId, tranneSid ?? null]);
   return righe.length;
 }
+
+/** Chiude le sessioni del reparto (telefono, ricordate 120 giorni) degli operatori indicati: PIN cambiato o tolto, operatore tolto dall'elenco. */
+export async function chiudiSessioniOperatori(sigle: string[]): Promise<number> {
+  if (!sigle.length) return 0;
+  const righe = await q(`DELETE FROM sessioni WHERE (sess::jsonb -> 'operatore' ->> 'sigla') = ANY($1) RETURNING sid`, [sigle]);
+  return righe.length;
+}
