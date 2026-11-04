@@ -21,10 +21,10 @@ import {
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const CAMPI_CLIENTE = `c.ragione_sociale, c.partita_iva, c.codice_fiscale, c.indirizzo, c.cap, c.comune, c.provincia, c.nazione, c.codice_sdi, c.pec`;
 
-export interface ConfermaElenco { id: number; numero: number | null; anno: number; data: string; stato: string; totale: number; email_a: string | null; email_inviata_il: Date | null }
+export interface ConfermaElenco { id: number; numero: number | null; anno: number; data: string; stato: string; totale: number; email_a: string | null; email_inviata_il: Date | null; inviato_a_mano: boolean; origine: string | null }
 
 export const confermeDellOrdine = (ordineId: number) => q<ConfermaElenco>(
-  `SELECT id, numero, anno, data, stato, imponibile AS totale, email_a, email_inviata_il FROM documenti
+  `SELECT id, numero, anno, data, stato, imponibile AS totale, email_a, email_inviata_il, inviato_a_mano, origine FROM documenti
    WHERE tipo = 'conferma_ordine' AND ordine_id = $1 ORDER BY creato_il DESC`, [ordineId]);
 
 /**
@@ -244,7 +244,7 @@ export async function inviaConferma(id: number, b: { a?: string; cc?: string; og
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati }, inRispostaA: origine?.messaggioId, riferimenti: origine?.riferimenti,
   });
   const inviato = await inviaGmail(messaggio, origine?.messaggioId);
-  await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, aggiornato_il = now() WHERE id = $1`,
+  await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, inviato_a_mano = false, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
   return a.indirizzi.join(', ');
 }

@@ -8,6 +8,7 @@
  *  - Macro aree e Dettaglio per fasi: come prima.
  */
 import { r2, type Risultato, type RigaFase, type RigaVoce } from './calcolo.js';
+import { riepilogo } from './riepilogo.js';
 
 export type VersioneStampa = 'essenziale' | 'dettaglio' | 'macro' | 'fasi';
 
@@ -249,4 +250,69 @@ export function prezziComeInStampa(
   if (!ut.length && b.unaTantum > 0) ut.push({ nome: 'Costi una tantum', prezzo: b.unaTantum });
   pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
   return { prezzoScheda: b.prezzoScheda, unaTantum: ut.filter(x => x.prezzo > 0) };
+}
+
+/**
+ * Righe e importi della stampa del preventivo, uguali per la pagina (views/stampa-preventivo.ts) e per il PDF che si manda
+ * per email (server/pdf-preventivo.ts, Adriano 4/11/2026): così il cliente riceve esattamente quello che si vede a schermo.
+ */
+export type RigaDocumentoPreventivo =
+  | { tipo: 'prodotto'; descrizione: string; sotto?: string; quantita: number; prezzo: number; importo: number; codice: boolean }
+  /** riga sotto il prodotto: stile '' = dettaglio/macro area, 'area' = titolo d'area della versione per fasi, 'fase' = fase (solo importo) */
+  | { tipo: 'voce'; descrizione: string; sotto?: string; prezzo: number | null; importo: number; stile: '' | 'area' | 'fase' }
+  | { tipo: 'unaTantum'; voci: { nome: string; prezzo: number }[]; prezzo: number; importo: number }
+  | { tipo: 'aggiunta'; descrizione: string; quantita: number; prezzo: number; importo: number }
+  | { tipo: 'sconto'; descrizione: string; importo: number };
+
+const SIGLE_AREE: Record<string, string> = { 'COSTI UNA TANTUM': 'Acquisti (lamine, attrezzature)' };
+const nomeGruppoStampa = (g: string) => SIGLE_AREE[g] ?? nomeArea(g);
+
+export function contenutoStampa(o: { ris: Risultato; nSchede: number; doppia: boolean; nLamine: number; versione: VersioneStampa; rit: Ritocchi; descrizione: string }) {
+  const { ris, rit } = o;
+  const r = riepilogo(ris);
+  const nSchede = o.nSchede;
+  const b = basePrezzi({ prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum, unaTantum: r.unaTantum, nSchede, lotto: r.prezzoLotto }, rit.prezzi);
+  const conUt = nSchede ? (b.lotto + b.unaTantum) / nSchede : b.prezzoScheda + b.unaTantum;
+  const ut = righeUnaTantum(ris, { doppia: o.doppia, nLamine: o.nLamine });
+  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
+  const essenziale = o.versione === 'essenziale';
+  // Essenziale: un solo prezzo; con la prima produzione comprende le una tantum (Adriano, 28/10/2026)
+  const prezzoUnico = essenziale && b.unaTantum > 0;
+  const totaleLotto = b.lotto + b.unaTantum;
+  const conti = contiStampa(prezzoUnico ? { prezzoScheda: conUt, lotto: totaleLotto, unaTantum: 0, nSchede } : b, rit);
+  const riquadro = prezziRiquadro({ prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede,
+    prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum }, rit);
+  const prodotto = (prezzo: number, importo: number, sotto?: string): RigaDocumentoPreventivo =>
+    ({ tipo: 'prodotto', descrizione: o.descrizione, sotto, quantita: nSchede, prezzo, importo, codice: true });
+  const n = nSchede || 1;
+  const righe: RigaDocumentoPreventivo[] = [];
+  if (essenziale) {
+    // sotto la descrizione solo la nota delle una tantum (Adriano, 28/10/2026: o il dettaglio con i prezzi o niente)
+    righe.push(prodotto(prezzoUnico ? conUt : b.prezzoScheda, prezzoUnico ? totaleLotto : b.lotto,
+      prezzoUnico ? 'Comprensivo dei costi una tantum (programmazione e attrezzaggio)' : undefined));
+  } else if (o.versione === 'dettaglio') {
+    const dett = righeDettaglio(ris);
+    pareggiaSulPiuGrande(dett, x => x.lotto, (x, v) => { x.lotto = v; }, b.lotto);
+    pareggiaSulPiuGrande(dett, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
+    righe.push(prodotto(b.prezzoScheda, b.lotto), ...dett.map(x => ({ tipo: 'voce' as const, descrizione: x.nome, sotto: x.sotto, prezzo: x.scheda, importo: x.lotto, stile: '' as const })));
+  } else {
+    const fasi = ris.fasi.filter(f => !f.unaTantum && f.prezzo > 0).map(f => ({ ...f }));
+    // energia insieme al materiale di consumo
+    const voci = ris.voci.filter(x => !x.unaTantum && x.prezzo > 0).map(x => ({ ...x, gruppo: x.gruppo === 'ENERGIA' ? 'MATERIALE DI CONSUMO' : x.gruppo }));
+    pareggiaSulPiuGrande<{ prezzo: number }>([...fasi, ...voci], x => x.prezzo, (x, v) => { x.prezzo = v; }, b.lotto);
+    const sommaEsatta = (xs: { prezzo: number }[]) => xs.reduce((a, x) => a + x.prezzo, 0);
+    const gruppiDi = <T extends { gruppo: string; prezzo: number; nome: string }>(xs: T[]) =>
+      [...new Set(xs.map(x => x.gruppo))].map(g => ({ g, righe: xs.filter(x => x.gruppo === g) as { nome: string; prezzo: number }[] }));
+    const gruppi = [...gruppiDi(fasi), ...gruppiDi(voci)].map(x => ({ ...x, lotto: sommaEsatta(x.righe), scheda: Math.round(sommaEsatta(x.righe) / n * 100) / 100 }));
+    pareggiaSulPiuGrande(gruppi, x => x.scheda, (x, v) => { x.scheda = v; }, b.prezzoScheda);
+    righe.push(prodotto(b.prezzoScheda, b.lotto));
+    for (const g of gruppi) {
+      righe.push({ tipo: 'voce', descrizione: nomeGruppoStampa(g.g), prezzo: g.scheda, importo: g.lotto, stile: o.versione === 'fasi' ? 'area' : '' });
+      if (o.versione === 'fasi') righe.push(...g.righe.map(x => ({ tipo: 'voce' as const, descrizione: x.nome, prezzo: null, importo: x.prezzo, stile: 'fase' as const })));
+    }
+  }
+  if (!prezzoUnico && b.unaTantum > 0) righe.push({ tipo: 'unaTantum', voci: ut, prezzo: b.unaTantum, importo: b.unaTantum });
+  righe.push(...conti.righe.map(x => ({ tipo: 'aggiunta' as const, descrizione: x.descrizione, quantita: x.quantita, prezzo: x.prezzo, importo: x.importo })));
+  if (conti.sconto > 0) righe.push({ tipo: 'sconto', descrizione: conti.etichettaSconto, importo: conti.sconto });
+  return { righe, riquadro, totale: conti.totale, scontato: conti.sconto > 0, primoLotto: r.unaTantum > 0, prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum };
 }

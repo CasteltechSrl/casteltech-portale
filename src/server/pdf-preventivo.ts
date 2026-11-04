@@ -1,0 +1,254 @@
+/**
+ * PDF del preventivo da mandare per email (Adriano 4/11/2026): stesso contenuto della stampa per il cliente
+ * (views/stampa-preventivo.ts: righe, riquadro verde, totale e condizioni da engine/stampa-preventivo.ts `contenutoStampa`),
+ * impaginato come il PDF della conferma d'ordine (pdf-lib, niente browser sul server).
+ */
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
+import { euro, num } from './views/html.js';
+import { CONDIZIONI_GENERALI, type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
+
+export interface DatiPdfPreventivo {
+  numero: string; data: string;
+  azienda: { nome: string; indirizzo: string; piva: string; rea: string; tel: string; email: string; pec: string; iban?: string; banca?: string };
+  cliente: { ragione_sociale: string; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; nazione?: string | null;
+    partita_iva?: string | null; codice_fiscale?: string | null; codice_sdi?: string | null; pec?: string | null };
+  codice: string; revisione?: string | null; nSchede: number;
+  righe: RigaDocumentoPreventivo[];
+  riquadro: { senza: number; con: number | null }; scontato: boolean; primoLotto: boolean; totale: number;
+  note?: string; pagamento?: string | null; condizioni: boolean; firma: boolean;
+}
+
+const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
+const VERDE_CHIARO = rgb(0xe8 / 255, 0xf3 / 255, 0xf0 / 255);
+const VERDE_BORDO = rgb(0x9c / 255, 0xc5 / 255, 0xba / 255);
+const NERO = rgb(0.07, 0.07, 0.07), GRIGIO = rgb(0.44, 0.44, 0.44), LINEA = rgb(0.8, 0.8, 0.8), RIGA = rgb(0.9, 0.9, 0.9), FONDO = rgb(0.95, 0.95, 0.95);
+const L = 595.28, H = 841.89, M = 40;
+const dataIt = (d: string) => { const s = String(d ?? '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : s; };
+
+let logo: Buffer | null | undefined;
+async function caricaLogo(): Promise<Buffer | null> {
+  if (logo === undefined) logo = await readFile(join(process.cwd(), 'public', 'logo-casteltech.png')).catch(() => null);
+  return logo;
+}
+
+/** Nome del file: Preventivo_P2026-0123_CODICE.pdf */
+export const nomeFilePdfPreventivo = (numero: string, codice: string) =>
+  `Preventivo_${[numero, codice].map(x => String(x ?? '').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '')).filter(Boolean).join('_')}.pdf`;
+
+export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  doc.setTitle(`Preventivo ${d.numero}`);
+  doc.setAuthor(d.azienda.nome);
+  doc.setCreator('Portale Casteltech');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const grassetto = await doc.embedFont(StandardFonts.HelveticaBold);
+  const corsivo = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const datiLogo = await caricaLogo();
+  const immagine: PDFImage | null = datiLogo ? await doc.embedPng(datiLogo).catch(() => null) : null;
+
+  const pulisci = (f: PDFFont, s: string) => [...String(s ?? '')].map(c => { try { f.widthOfTextAtSize(c, 10); return c; } catch { return '?'; } }).join('');
+  const larghezza = (s: string, f: PDFFont, dim: number) => f.widthOfTextAtSize(pulisci(f, s), dim);
+  const scrivi = (p: PDFPage, s: string, x: number, y: number, o: { f?: PDFFont; dim?: number; colore?: typeof NERO; destra?: boolean } = {}) => {
+    const f = o.f ?? font, dim = o.dim ?? 9, t = pulisci(f, s);
+    p.drawText(t, { x: o.destra ? x - f.widthOfTextAtSize(t, dim) : x, y, size: dim, font: f, color: o.colore ?? NERO });
+  };
+  const aCapo = (s: string, max: number, f: PDFFont, dim: number): string[] => {
+    const out: string[] = [];
+    for (const paragrafo of String(s ?? '').split(/\r?\n/)) {
+      let riga = '';
+      for (let parola of paragrafo.split(/\s+/).filter(Boolean)) {
+        while (larghezza(parola, f, dim) > max) {
+          let i = parola.length;
+          while (i > 1 && larghezza(parola.slice(0, i), f, dim) > max) i--;
+          if (riga) { out.push(riga); riga = ''; }
+          out.push(parola.slice(0, i)); parola = parola.slice(i);
+        }
+        const prova = riga ? `${riga} ${parola}` : parola;
+        if (larghezza(prova, f, dim) <= max) riga = prova; else { out.push(riga); riga = parola; }
+      }
+      out.push(riga);
+    }
+    return out;
+  };
+  const linea = (p: PDFPage, x1: number, y: number, x2: number, colore = LINEA, spessore = 0.7) =>
+    p.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness: spessore, color: colore });
+
+  const pagine: PDFPage[] = [];
+  const nuovaPagina = () => { const p = doc.addPage([L, H]); pagine.push(p); return p; };
+  const testata = (p: PDFPage, y: number) => {
+    if (immagine) {
+      const alto = 46, largo = immagine.width * (alto / immagine.height);
+      p.drawImage(immagine, { x: M, y: y - alto, width: Math.min(largo, 200), height: alto });
+    } else scrivi(p, d.azienda.nome, M, y - 20, { f: grassetto, dim: 16, colore: VERDE });
+    scrivi(p, d.azienda.nome, L - M, y - 10, { f: grassetto, dim: 12, destra: true });
+    [d.azienda.indirizzo, `P.IVA e C.F. ${d.azienda.piva} · REA ${d.azienda.rea}`, `Tel. ${d.azienda.tel} · ${d.azienda.email} · PEC ${d.azienda.pec}`]
+      .forEach((t, i) => scrivi(p, t, L - M, y - 23 - i * 10, { dim: 7.5, colore: GRIGIO, destra: true }));
+  };
+
+  // ── testata, titolo, destinatario ──
+  let p = nuovaPagina();
+  let y = H - M;
+  testata(p, y);
+  y -= 72;
+  const pezzi: [string, boolean][] = [['PREVENTIVO', true], [' nr. ', false], [d.numero, true], [' del ', false], [dataIt(d.data), true]];
+  let xt = L - M - pezzi.reduce((s, [t, g]) => s + larghezza(t, g ? grassetto : font, 12), 0);
+  for (const [t, g] of pezzi) { scrivi(p, t, xt, y, { f: g ? grassetto : font, dim: 12, colore: g ? NERO : GRIGIO }); xt += larghezza(t, g ? grassetto : font, 12); }
+  y -= 12;
+  linea(p, M, y, L - M);
+  y -= 12;
+  const c = d.cliente, meta = (L - 2 * M) / 2;
+  scrivi(p, 'DESTINATARIO', M, y, { dim: 6.5, colore: GRIGIO });
+  const destinatario = [c.indirizzo ?? '', [c.cap, c.comune].filter(Boolean).join(' ') + (c.provincia ? ` (${c.provincia})` : '') + (c.nazione && c.nazione !== 'IT' ? ` · ${c.nazione}` : '')].filter(x => x.trim());
+  let yd = y - 12;
+  for (const r of aCapo(c.ragione_sociale, meta - 10, grassetto, 10)) { scrivi(p, r, M, yd, { f: grassetto, dim: 10 }); yd -= 12; }
+  for (const r of destinatario) { scrivi(p, r, M, yd, { dim: 9 }); yd -= 11; }
+  const fiscali = ([['P.IVA', c.partita_iva], ['C.F.', c.codice_fiscale !== c.partita_iva ? c.codice_fiscale : null], ['Codice SDI', c.codice_sdi], ['PEC', c.pec]] as [string, string | null | undefined][])
+    .filter((x): x is [string, string] => !!x[1]);
+  let yf = y - 12;
+  if (fiscali.length) scrivi(p, 'DATI FISCALI', M + meta, y, { dim: 6.5, colore: GRIGIO });
+  for (const [k, v] of fiscali) { scrivi(p, k, M + meta, yf, { f: grassetto, dim: 9 }); scrivi(p, v, M + meta + larghezza(k, grassetto, 9) + 4, yf, { dim: 9 }); yf -= 11; }
+  y = Math.min(yd, yf) - 14;
+
+  // ── tabella: Codice / Descrizione / Quantità / Prezzo unitario / Importo ──
+  const colonne = [{ t: 'CODICE', l: 86 }, { t: 'DESCRIZIONE', l: 0 }, { t: 'QUANTITÀ', l: 56, n: true }, { t: 'PREZZO UNITARIO', l: 76, n: true }, { t: 'IMPORTO', l: 76, n: true }];
+  colonne[1].l = L - 2 * M - colonne.reduce((s, x) => s + x.l, 0);
+  const xs = colonne.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + colonne[i - 1].l : M], []);
+  const PAD = 4, DIM = 8.5, INTER = 10.5, PIEDE = M + 26;
+  const testataTabella = () => {
+    linea(p, M, y + 4, L - M);
+    colonne.forEach((k, i) => scrivi(p, k.t, k.n ? xs[i] + k.l - PAD : xs[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
+    y -= 12;
+    linea(p, M, y, L - M);
+    y -= 4;
+  };
+  const altraPagina = () => { p = nuovaPagina(); y = H - M - 10; testataTabella(); };
+  testataTabella();
+  const largoDescr = colonne[1].l - 2 * PAD;
+  for (const r of d.righe) {
+    // testo di ogni colonna (righe a capo) e stile
+    let codice: string[] = [], descr: { t: string; f: PDFFont; dim: number; colore?: typeof NERO }[] = [];
+    let valori: [string, string, string] = ['', '', ''];
+    let fondo = false, rientro = 0;
+    if (r.tipo === 'prodotto') {
+      fondo = true;
+      codice = [...aCapo(d.codice, colonne[0].l - 2 * PAD, grassetto, DIM), ...(d.revisione ? [`rev. ${d.revisione}`] : [])];
+      descr = aCapo(r.descrizione, largoDescr, grassetto, DIM).map(t => ({ t, f: grassetto, dim: DIM }));
+      if (r.sotto) descr.push(...aCapo(r.sotto, largoDescr, corsivo, 7.5).map(t => ({ t, f: corsivo, dim: 7.5, colore: GRIGIO })));
+      valori = [`${num(d.nSchede, 0)} pz`, euro(r.prezzo), euro(r.importo)];
+    } else if (r.tipo === 'voce') {
+      rientro = r.stile === 'fase' ? 10 : 0;
+      const f = r.stile === 'area' ? grassetto : font, dim = r.stile === 'fase' ? 7.8 : DIM;
+      descr = aCapo(r.descrizione, largoDescr - rientro, f, dim).map(t => ({ t, f, dim, colore: r.stile === 'fase' ? GRIGIO : NERO }));
+      if (r.sotto) descr.push(...aCapo(r.sotto, largoDescr - rientro, corsivo, 7.5).map(t => ({ t, f: corsivo, dim: 7.5, colore: GRIGIO })));
+      valori = ['', r.prezzo == null ? '' : euro(r.prezzo), euro(r.importo)];
+    } else if (r.tipo === 'unaTantum') {
+      fondo = true;
+      descr = [{ t: 'COSTI UNA TANTUM (solo primo lotto)', f: grassetto, dim: DIM }];
+      for (const v of r.voci) descr.push({ t: `${v.nome}  ·  ${euro(v.prezzo)}`, f: font, dim: 7.8, colore: GRIGIO });
+      valori = ['1', euro(r.prezzo), euro(r.importo)];
+    } else if (r.tipo === 'aggiunta') {
+      fondo = true;
+      descr = aCapo(r.descrizione, largoDescr, grassetto, DIM).map(t => ({ t, f: grassetto, dim: DIM }));
+      valori = [num(r.quantita, r.quantita % 1 ? 2 : 0), euro(r.prezzo), euro(r.importo)];
+    } else {
+      fondo = true;
+      descr = [{ t: r.descrizione, f: grassetto, dim: DIM }];
+      valori = ['', '', `− ${euro(r.importo)}`];
+    }
+    const alto = Math.max(codice.length * INTER, descr.reduce((s, x) => s + x.dim + 2, 0)) + 6;
+    if (y - alto < PIEDE + 10) altraPagina();
+    if (fondo) p.drawRectangle({ x: M, y: y - alto, width: L - 2 * M, height: alto, color: FONDO });
+    const yt = y - 3 - DIM;
+    codice.forEach((t, i) => scrivi(p, t, xs[0] + PAD, yt - i * INTER, { f: i ? font : grassetto, dim: i ? 7.5 : DIM, colore: i ? GRIGIO : NERO }));
+    let yy = y - 3;
+    for (const x of descr) { yy -= x.dim; scrivi(p, x.t, xs[1] + PAD + rientro, yy, { f: x.f, dim: x.dim, colore: x.colore }); yy -= 2; }
+    valori.forEach((v, i) => { if (v) scrivi(p, v, xs[i + 2] + colonne[i + 2].l - PAD, yt, { dim: DIM, f: fondo && i === 2 ? grassetto : font, destra: true }); });
+    y -= alto;
+    linea(p, M, y, L - M, RIGA, 0.5);
+    y -= 1.5;
+  }
+
+  // ── note per il cliente ──
+  if (d.note?.trim()) {
+    const righeNote = aCapo(d.note, L - 2 * M, font, 8.5);
+    if (y - 20 - righeNote.length * 10.5 < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; }
+    y -= 12;
+    scrivi(p, 'NOTE', M, y, { dim: 6.5, colore: GRIGIO });
+    y -= 11;
+    for (const r of righeNote) { scrivi(p, r, M, y, { dim: 8.5 }); y -= 10.5; }
+  }
+
+  // ── riquadro verde con i prezzi a scheda, poi pagamento e totale ──
+  const altoRiq = 40, altoFondo = 46, altoFirme = d.firma && !d.condizioni ? 50 : 0;
+  if (y - altoRiq - altoFondo - altoFirme - 40 < PIEDE) { p = nuovaPagina(); y = H - M - 10; }
+  y -= 14;
+  const sc = d.scontato ? ' scontato' : '';
+  const caselle: [string, string][] = [[`PREZZO A SCHEDA${sc.toUpperCase()}${d.riquadro.con != null ? ' SENZA COSTI UNA TANTUM' : ''}`, euro(d.riquadro.senza)]];
+  if (d.riquadro.con != null) caselle.push([`PREZZO A SCHEDA${sc.toUpperCase()} CON I COSTI UNA TANTUM (PRIMO LOTTO, ${num(d.nSchede, 0)} SCHEDE)`, euro(d.riquadro.con)]);
+  const largoCas = (L - 2 * M) / caselle.length;
+  p.drawRectangle({ x: M, y: y - altoRiq, width: L - 2 * M, height: altoRiq, color: VERDE_CHIARO, borderColor: VERDE_BORDO, borderWidth: 0.7 });
+  caselle.forEach(([e, v], i) => {
+    const x = M + i * largoCas;
+    if (i) p.drawLine({ start: { x, y }, end: { x, y: y - altoRiq }, thickness: 0.7, color: VERDE_BORDO });
+    let de = 6.5; while (de > 5 && larghezza(e, font, de) > largoCas - 16) de -= 0.25;
+    scrivi(p, e, x + 8, y - 12, { dim: de, colore: GRIGIO });
+    scrivi(p, v, x + 8, y - 31, { f: grassetto, dim: 14, colore: VERDE });
+  });
+  y -= altoRiq + 12;
+  const xTot = L - M - 175;
+  linea(p, M, y, L - M); linea(p, M, y - altoFondo, L - M);
+  p.drawLine({ start: { x: xTot, y }, end: { x: xTot, y: y - altoFondo }, thickness: 0.7, color: LINEA });
+  scrivi(p, 'MODALITÀ DI PAGAMENTO', M + 6, y - 11, { dim: 6.5, colore: GRIGIO });
+  scrivi(p, d.pagamento || 'Da concordare', M + 6, y - 24, { f: grassetto, dim: 9 });
+  if (d.azienda.iban) scrivi(p, `IBAN ${d.azienda.iban}${d.azienda.banca ? ` · ${d.azienda.banca}` : ''}`, M + 6, y - 36, { dim: 7.5, colore: GRIGIO });
+  scrivi(p, `TOTALE PREVENTIVO${d.primoLotto ? ' (PRIMO LOTTO)' : ''}`, L - M - 6, y - 11, { dim: 6.5, colore: GRIGIO, destra: true });
+  scrivi(p, euro(d.totale), L - M - 6, y - 30, { f: grassetto, dim: 16, destra: true });
+  scrivi(p, 'IVA esclusa', L - M - 6, y - 41, { dim: 7, colore: GRIGIO, destra: true });
+  y -= altoFondo;
+
+  const firme = (pg: PDFPage, yy: number) => {
+    const largoFirma = (L - 2 * M - 30) / 2;
+    [[d.azienda.nome, ''], ['Per accettazione del cliente', 'Data, timbro e firma']].forEach(([t, s], i) => {
+      const x = M + i * (largoFirma + 30);
+      linea(pg, x, yy, x + largoFirma, NERO, 0.7);
+      scrivi(pg, t, x, yy - 10, { f: grassetto, dim: 8 });
+      if (s) scrivi(pg, s, x, yy - 20, { dim: 7.5, colore: GRIGIO });
+    });
+  };
+  if (d.firma && !d.condizioni) firme(p, y - 34);
+
+  // ── seconda pagina: condizioni generali (e firma) ──
+  if (d.condizioni) {
+    p = nuovaPagina();
+    y = H - M;
+    testata(p, y);
+    y -= 72;
+    scrivi(p, 'CONDIZIONI GENERALI DI FORNITURA', M, y, { f: grassetto, dim: 12 });
+    y -= 12;
+    scrivi(p, `allegate al preventivo nr. ${d.numero} del ${dataIt(d.data)}`, M, y, { dim: 8, colore: GRIGIO });
+    y -= 10;
+    linea(p, M, y, L - M);
+    y -= 16;
+    CONDIZIONI_GENERALI.forEach((t, i) => {
+      const righe = aCapo(t, L - 2 * M - 18, font, 9);
+      scrivi(p, `${i + 1}.`, M, y, { f: grassetto, dim: 9 });
+      for (const r of righe) { scrivi(p, r, M + 18, y, { dim: 9 }); y -= 12; }
+      y -= 5;
+    });
+    if (d.firma) {
+      y -= 8;
+      for (const r of aCapo('Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.', L - 2 * M, corsivo, 9)) { scrivi(p, r, M, y, { f: corsivo, dim: 9 }); y -= 12; }
+      firme(p, y - 40);
+    }
+  }
+
+  // ── piede su ogni pagina ──
+  pagine.forEach((pg, i) => {
+    scrivi(pg, `Preventivo nr. ${d.numero} del ${dataIt(d.data)}`, M, M - 8, { dim: 7, colore: GRIGIO });
+    scrivi(pg, `${d.azienda.nome} · ${d.azienda.email} · ${d.azienda.tel}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
+      L - M, M - 8, { dim: 7, colore: GRIGIO, destra: true });
+  });
+  return Buffer.from(await doc.save());
+}

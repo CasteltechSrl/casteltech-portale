@@ -349,15 +349,15 @@
 
   // Stampa (Adriano 4/11/2026, P2026-2388): con modifiche non salvate prima si salva, poi si apre la stampa,
   // così la stampa è sempre il preventivo che si vede a schermo
-  const apriStampa = document.getElementById('apri-stampa');
-  if (apriStampa) apriStampa.addEventListener('click', async e => {
+  // anche "Invia per email", che apre la stessa stampa sul riquadro dell'email
+  document.querySelectorAll('#apri-stampa, #apri-email').forEach(apriStampa => apriStampa.addEventListener('click', async e => {
     if (!modificato) return;
     e.preventDefault();
     const finestra = window.open('', '_blank');   // aperta subito, se no il browser la blocca come popup
     if (await salva()) {
       if (finestra) finestra.location.href = apriStampa.href; else location.href = apriStampa.href;
     } else if (finestra) finestra.close();
-  });
+  }));
 
   window.addEventListener('beforeunload', e => { if (modificato) e.preventDefault(); });
   aggiornaTarget(null);

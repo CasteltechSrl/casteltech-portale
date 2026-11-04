@@ -45,6 +45,9 @@ import { marginePreventivo } from '../../engine/analisi.js';
 import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
+import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
+import { segnaDocumentoInviato } from '../invii-servizio.js';
+import { INVIATO_TITOLO, SQL_SDI_INVIATO_IL } from '../../engine/invii.js';
 import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, motivoEscluso, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
 import { compensaNoteCredito, documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, rimettiDaFatturare, scriviXml, segnaGiaFatturati, segnaIncassate } from '../azioni-documenti-servizio.js';
 
@@ -399,6 +402,7 @@ export function rotteAmministrazione() {
     const cerca = String(req.query.q ?? '').trim();
     // le bozze hanno gli importi solo all'emissione: nell'elenco si calcolano dalle righe (IVA dall'aliquota della riga)
     const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.fattura_id, d.sdi_stato,
+        d.email_a, d.email_inviata_il, d.inviato_a_mano, ${SQL_SDI_INVIATO_IL} AS sdi_inviato_il,
         CASE WHEN d.stato = 'bozza' THEN coalesce(b.imponibile, 0) ELSE d.imponibile END AS imponibile,
         CASE WHEN d.stato = 'bozza' THEN coalesce(b.totale, 0) ELSE d.totale END AS totale,
         coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
@@ -438,7 +442,7 @@ export function rotteAmministrazione() {
       ${tipo === 'autofattura' ? await riquadroFattureEstere(spunte) : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
-        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th></tr></thead>
+        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th><th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
         <tbody>${pag.righe.map(d => html`<tr>
           ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
@@ -447,6 +451,7 @@ export function rotteAmministrazione() {
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
+          <td data-valore="${d.email_inviata_il ? new Date(d.email_inviata_il).toISOString() : d.sdi_inviato_il ? new Date(d.sdi_inviato_il).toISOString() : ''}">${d.stato === 'bozza' ? '' : segnoInvioElenco(d)}</td>
         </tr>`)}</tbody></table></div>${pag.barra}${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
       [...(tipo === 'autofattura' ? ['acquisizioni.js'] : []), ...(spunte ? ['elenco.js'] : [])]));
   });
@@ -690,9 +695,20 @@ export function rotteAmministrazione() {
     res.redirect(`/amministrazione/documenti/${fattura}?msg=${encodeURIComponent('Fattura preparata con le righe del DDT: controlla prezzi e pagamento (in fondo puoi aggiungere altri DDT del cliente), poi Emetti.')}`);
   });
 
+  // "Segna come inviato" per un documento mandato da fuori del portale (posta, PEC, a mano) o "Togli il segno" (Adriano 4/11/2026)
+  r.post('/documenti/:id/segna-inviato', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const togli = req.body?.togli === '1';
+    await segnaDocumentoInviato(id, String(req.body?.a ?? ''), togli);
+    const torna = String(req.body?.torna ?? '');
+    const indirizzo = /^\/[a-z]/.test(torna) && !torna.includes('//') ? torna : `/amministrazione/documenti/${id}`;
+    res.redirect(conMessaggio(indirizzo, togli ? 'Segno "inviato" tolto.' : 'Documento segnato come inviato.'));
+  });
+
   r.get('/documenti/:id', async (req, res) => {
     const id = Number(req.params.id);
-    const d = await q1(`SELECT d.*, coalesce(c.ragione_sociale, fa.ragione_sociale) AS ragione_sociale, o.numero AS origine_numero, o.sezionale AS origine_sezionale,
+    const d = await q1(`SELECT d.*, ${SQL_SDI_INVIATO_IL} AS sdi_inviato_il, coalesce(c.ragione_sociale, fa.ragione_sociale) AS ragione_sociale, o.numero AS origine_numero, o.sezionale AS origine_sezionale,
         o.data AS origine_data, f.numero AS fattura_numero, f.data AS fattura_data, ri.numero AS ricevuto_numero, ri.data AS ricevuto_data
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       LEFT JOIN documenti o ON o.id = d.documento_origine_id LEFT JOIN documenti f ON f.id = d.fattura_id
@@ -710,7 +726,9 @@ export function rotteAmministrazione() {
         ${d.origine_numero ? html` · ${d.tipo_sdi === 'TD05' ? 'aumenta' : 'storna'} la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>` : ''}
         ${d.ricevuto_id ? html` · ${TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi} sulla <a href="/amministrazione/ricevuti/${d.ricevuto_id}">fattura del fornitore n. ${d.ricevuto_numero} del ${data(d.ricevuto_data)}</a>` : ''}
         ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>`
-          : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>`;
+          : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>
+      ${!['bozza', 'annullato'].includes(d.stato) ? riquadroInvio(d, { segna: d.tipo === 'autofattura' ? undefined : `/amministrazione/documenti/${id}/segna-inviato`,
+        cosa: NOMI[d.tipo]?.uno ?? 'documento' }) : ''}`;
 
     // DDT emesso: "Modifica" finché non è in una fattura già allo SdI (Adriano 2/11/2026)
     const bloccoModifica = d.tipo === 'ddt' && d.stato !== 'bozza' ? await bloccoDdt(id) : null;

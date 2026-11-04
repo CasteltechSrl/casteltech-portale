@@ -2,6 +2,8 @@
  * Ordini dei clienti: elenco delle righe (da evadere / evase), scheda dell'ordine con le date del foglio
  * "Schedulazione produzione", cruscotto (fatturato e previsione), Gantt della produzione, fatture senza ordine.
  */
+import { segnoInvioElenco } from '../views/invio.js';
+import { INVIATO_TITOLO } from '../../engine/invii.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { paginata } from '../views/paginazione.js';
 import { Router } from 'express';
@@ -210,7 +212,7 @@ export function rotteOrdini() {
   r.get('/conferme', async (req, res) => {
     const anno = Number(req.query.anno) || Number(oggiRoma().slice(0, 4));
     const conferme = await q(`
-      SELECT d.id, d.numero, d.anno, d.data, d.stato, d.email_inviata_il, d.ordine_id,
+      SELECT d.id, d.tipo, d.numero, d.anno, d.data, d.stato, d.origine, d.email_a, d.email_inviata_il, d.inviato_a_mano, d.ordine_id,
         coalesce(nullif(d.imponibile, 0), (SELECT round(sum(r.quantita * r.prezzo), 2) FROM documenti_righe r WHERE r.documento_id = d.id), 0)::float AS imponibile,
         o.numero AS ordine_numero, o.anno AS ordine_anno, o.rif_cliente, c.ragione_sociale
       FROM documenti d LEFT JOIN ordini o ON o.id = d.ordine_id LEFT JOIN clienti c ON c.id = d.cliente_id
@@ -230,13 +232,13 @@ export function rotteOrdini() {
         Le bozze stanno in cima. Il numero continua la serie "Ordini" di Fatture in Cloud.</p>
       ${anni.length > 1 ? html`<p>${anni.map(a => html`<a href="/ordini/conferme?anno=${a.anno}" class="${a.anno === anno ? 'attiva' : ''}">${a.anno}</a> `)}</p>` : ''}
       ${modulo.apri}
-      <div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Ordine</th><th>Stato</th><th>Inviata</th><th class="n">Imponibile</th></tr></thead>
+      <div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Ordine</th><th>Stato</th><th title="${INVIATO_TITOLO}">Inviata</th><th class="n">Imponibile</th></tr></thead>
         <tbody>${conferme.length ? conferme.map(k => html`<tr>
           ${casella(k.id, k.numero ? `conferma ${k.numero}/${k.anno}` : 'bozza')}
           <td><a href="/ordini/${k.ordine_id}/conferme/${k.id}">${k.numero ? `${k.numero}/${k.anno}` : 'bozza'}</a></td>
           <td>${data(k.data)}</td><td>${k.ragione_sociale ?? ''}</td>
           <td>${k.ordine_id ? html`<a href="/ordini/${k.ordine_id}">${k.ordine_numero}/${k.ordine_anno}</a>${k.rif_cliente ? html` <span class="nota">${k.rif_cliente}</span>` : ''}` : ''}</td>
-          <td>${statoConferma(k.stato)}</td><td>${k.email_inviata_il ? data(k.email_inviata_il) : ''}</td>
+          <td>${statoConferma(k.stato)}</td><td data-valore="${k.email_inviata_il ? new Date(k.email_inviata_il).toISOString() : ''}">${k.numero ? segnoInvioElenco(k) : ''}</td>
           <td class="n">${k.imponibile != null ? euro(k.imponibile) : ''}</td></tr>`)
           : html`<tr><td colspan="8" class="nota">Nessuna conferma d'ordine nel ${anno}.</td></tr>`}</tbody></table></div>
       ${modulo.chiudi}`));
@@ -323,7 +325,7 @@ export function rotteOrdini() {
         <dt>Origine</dt><dd>${({ fic: 'Fatture in Cloud', ordine_cliente: 'ordine del cliente (non in Fatture in Cloud)', foglio: 'foglio Schedulazione', manuale: 'inserito a mano', email: 'email' } as Record<string, string>)[o.origine] ?? o.origine}</dd>
         ${o.note ? html`<dt>Note</dt><dd>${o.note}</dd>` : ''}
         ${conferme.length ? html`<dt>Conferme d'ordine</dt><dd>${conferme.map((k, i) => html`${i ? ' · ' : ''}<a href="/ordini/${o.id}/conferme/${k.id}">${k.numero ? `n. ${k.numero}/${k.anno}` : 'bozza'}</a>
-          del ${data(k.data)} ${statoConferma(k.stato)}${k.email_inviata_il ? html` <small class="nota">a ${k.email_a}</small>` : ''}`)}</dd>` : ''}
+          del ${data(k.data)} ${statoConferma(k.stato)} ${k.numero ? segnoInvioElenco({ ...k, tipo: 'conferma_ordine' }) : ''}`)}</dd>` : ''}
       </dl>
       <form method="post" action="/ordini/${o.id}">
       <div class="tabella-scorre"><table class="elenco righe-ordine">

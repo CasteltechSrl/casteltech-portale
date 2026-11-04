@@ -98,3 +98,24 @@ table.ut td { padding: .3mm 0; }
   .foglio.seconda { break-before: page; }
   thead { display: table-header-group; }
 }
+
+/* Invio per email dalla stampa (Adriano 4/11/2026) */
+/* il pannello è più alto dello schermo: scorre da solo, così l'email in fondo si raggiunge anche con una pagina sola */
+@media (min-width: 1001px) { .pannello-stampa { max-height: calc(100vh - 78px); overflow-y: auto; } }
+.barra-stampa .bottone-email { background: #fff; color: #1b5e52; font-weight: 600; padding: 6px 14px; border-radius: 4px; text-decoration: none; }
+.barra-stampa .inviato { background: #ddf3e5; color: #1d7a46; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+.messaggio-stampa { margin: 10px 16px 0; padding: 8px 12px; background: #fff8dc; border: 1px solid #e6cf7a; border-radius: 6px; font-size: 10pt; }
+.pannello-stampa .invia-email { border-top: 1px solid #ddd; margin-top: 10px; padding-top: 8px; scroll-margin-top: 70px; }
+.pannello-stampa .invia-email label { display: block; font-size: 9pt; margin-bottom: 6px; }
+.pannello-stampa .invia-email input:not([type=hidden]), .pannello-stampa .invia-email textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 9pt; margin-top: 2px; }
+.pannello-stampa .invia-email .aiuto { color: #555; font-size: 8.5pt; margin: 0 0 6px; }
+.pannello-stampa .invia-email button[type=submit] { width: 100%; padding: 6px; background: #1b5e52; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.pannello-stampa .invia-email button[disabled] { background: #9aa8a4; cursor: not-allowed; }
+.pannello-stampa .riquadro-invio { border: 1px solid #b9dcc6; background: #f1faf4; border-radius: 6px; padding: 6px 8px; margin: 0 0 8px; font-size: 9pt; }
+.pannello-stampa .riquadro-invio.da-inviare { border-color: #ddd; background: #fafafa; }
+.pannello-stampa .riquadro-invio p { margin: 2px 0; }
+.pannello-stampa .riquadro-invio .invio-ok { color: #1d7a46; font-weight: 600; }
+.pannello-stampa .riquadro-invio form { display: block; margin-top: 4px; }
+.pannello-stampa .riquadro-invio form input { width: 100%; box-sizing: border-box; font: inherit; font-size: 8.5pt; margin-bottom: 3px; }
+.pannello-stampa .riquadro-invio button { font: inherit; font-size: 8.5pt; padding: 3px 8px; cursor: pointer; }
+@media print { .messaggio-stampa { display: none; } }

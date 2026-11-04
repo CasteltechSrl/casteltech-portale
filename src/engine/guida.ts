@@ -467,7 +467,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'stampa-preventivo', area: 'preventivi', titolo: 'Stampare o mandare il preventivo al cliente',
-    parole: 'stampa pdf mandare inviare cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali sconto note riga aggiungere ritocchi modificare vecchia versione aggiornata riquadro verde una tantum',
+    parole: 'stampa pdf mandare inviare email mail preventivi@ invia per email inviato cliente offerta salvare pdf versione essenziale dettaglio macro aree fasi firma accettazione condizioni generali sconto note riga aggiungere ritocchi modificare vecchia versione aggiornata riquadro verde una tantum',
     testo: [
       'Dal preventivo salvato, "Stampa" apre la pagina per il cliente con i soli prezzi, impaginata come i preventivi di Fatture in Cloud: dati di Casteltech, destinatario con i dati fiscali, tabella, riquadro verde con i prezzi, pagamento e totale.',
       'Il riquadro verde sta sotto le righe e sopra il totale: mostra solo il prezzo a scheda senza i costi una tantum e il prezzo a scheda con i costi una tantum (una tantum divise sulle schede del primo lotto). Senza costi una tantum c\'è un solo prezzo. Nel riquadro "Ritocchi per il cliente" i due prezzi a scheda si possono riscrivere a mano (es. 174,63 → 174 per le cifre alte): premi "Aggiorna la stampa" e righe, costi una tantum e totale cambiano di conseguenza (5 schede a 174 € e 201 € con le una tantum = 1.005 €). Vuoto = prezzo calcolato. Il calcolo del preventivo non cambia; "Crea ordine" usa i prezzi della stampa.',
@@ -477,10 +477,24 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Le condizioni generali di fornitura sono sulla seconda pagina, con lo spazio per la firma del cliente per accettazione (senza condizioni la firma va in fondo alla prima pagina): si tolgono con le spunte del riquadro. Il modo di pagamento è quello del cliente in anagrafica.',
       'Le note del preventivo sono interne (mail del cliente, cose da controllare, appunti dell\'ufficio): non si stampano, salvo la spunta "Stampa anche le note interne".',
       'Sotto, nel riquadro "Ritocchi per il cliente", puoi scrivere le note per il cliente, uno sconto (in % su tutto, oppure in € tolto dal totale del lotto) e righe in più con descrizione, quantità e prezzo (es. collaudo, trasporto). Premi "Aggiorna la stampa": restano salvati sul preventivo. Valgono solo nella stampa, il calcolo del preventivo non cambia. Per togliere una riga cancella la descrizione.',
-      'Premi "Stampa / salva PDF" e nella finestra di stampa scegli "Salva come PDF" per mandarlo via email.',
+      'Per mandarlo al cliente dal portale: nella stampa premi "Invia per email" (in alto) oppure, dal preventivo, il pulsante "Invia per email". In fondo al riquadro a sinistra c\'è l\'email già pronta: indirizzo (chi ha mandato la richiesta da Gmail, altrimenti l\'ultimo indirizzo usato per lo stesso cliente, il CRM o l\'email amministrativa), oggetto e testo, tutti modificabili. Parte da preventivi@casteltech.net (se in Gmail di info@ non è ancora attivo come "Invia messaggio come", parte da info@) con allegato il PDF uguale alla stampa: stessa versione, condizioni, firma e ritocchi salvati. Il link "PDF" fa vedere prima l\'allegato.',
+      'Dopo l\'invio il preventivo resta segnato "Inviato" con data e indirizzo (nella stampa, nel preventivo e nella colonna "Inviato" dell\'elenco) e, se era in bozza, passa a "inviato". Si può mandare di nuovo. Se l\'hai mandato da fuori del portale (posta, a mano), "Segna come inviato" lo segna lo stesso. Nessun segno = ancora da inviare.',
+      'Senza email: "Stampa / salva PDF" e nella finestra di stampa scegli "Salva come PDF".',
     ],
-    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Se serve: note per il cliente, sconto, righe in più → Aggiorna la stampa.', 'Stampa / salva PDF.'],
+    passi: ['Salva il preventivo e premi Stampa.', 'A sinistra scegli la versione (Essenziale, con dettaglio, macro aree, fasi).', 'Se serve: note per il cliente, sconto, righe in più → Aggiorna la stampa.', 'In fondo a sinistra controlla indirizzo, oggetto e testo e premi "Invia con Gmail" (oppure Stampa / salva PDF).'],
     pagine: [['/preventivi', 'Elenco preventivi']],
+  },
+  {
+    id: 'documenti-inviati', area: 'amministrazione', titolo: 'Quali documenti sono già stati inviati (segno "Inviato")',
+    parole: 'inviato inviata inviati spedito mandato email mail da inviare non inviato segno icona busta segna come inviato preventivi conferme ddt fatture note di credito autofatture ordini fornitore',
+    testo: [
+      'Preventivi, conferme d\'ordine, DDT, fatture, note di credito, autofatture e ordini a fornitore hanno negli elenchi la colonna "Inviato" e nella pagina del documento un riquadro con l\'invio. Nessun segno = ancora da inviare.',
+      '✉ verde "Inviato 04/11/2026" = mandato per email dal portale (passando il mouse: a chi e a che ora). ✓ = segnato inviato a mano (mandato da fuori del portale) oppure "Da FIC" per i documenti fatti in Fatture in Cloud, inviati da lì.',
+      'Fatture, note di credito e autofatture hanno un segno a parte per lo SdI (⇪): blu "SdI consegnata" o "SdI accettata", giallo "SdI in coda" o "non recapitata", rosso "SdI scartata". L\'email al cliente (copia di cortesia) e l\'invio allo SdI sono due cose diverse: la fattura vale solo con lo SdI. Nella pagina della fattura emessa e non ancora partita c\'è scritto "Non ancora inviata allo SdI".',
+      'Documento mandato da fuori del portale (posta normale, PEC, consegnato a mano): nella sua pagina scrivi, se vuoi, a chi o come e premi "Segna come inviato". Il segno messo a mano si toglie con "Togli il segno"; quello di un\'email partita dal portale resta.',
+    ],
+    passi: ['Apri l\'elenco (Preventivi, Conferme d\'ordine, DDT, Fatture, Ordini a fornitore): guarda la colonna "Inviato".', 'Senza segno: apri il documento e mandalo per email, oppure "Segna come inviato" se è già partito da fuori.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/ordini/conferme', 'Conferme d\'ordine'], ['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/amministrazione/documenti?tipo=fattura', 'Fatture'], ['/ordini/fornitori', 'Ordini a fornitore']],
   },
   {
     id: 'data-consegna', area: 'preventivi', titolo: 'Data di consegna da dare al cliente',
