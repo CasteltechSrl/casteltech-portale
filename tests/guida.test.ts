@@ -77,6 +77,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('sconto sul preventivo', 2).includes('stampa-preventivo'));
   assert.ok(primi('firma del cliente sul preventivo', 2).includes('stampa-preventivo'));
   assert.ok(primi('tempi di consegna del preventivo', 2).includes('stampa-preventivo'));
+  assert.ok(primi('mandare la fattura per email al cliente', 3).includes('nuova-fattura'));
   assert.deepEqual(primi('tempi dal cellulare'), ['telefono']);
   assert.deepEqual(primi('gerber'), ['documenti-cliente']);
   assert.ok(primi('due codici diversi nella bom', 2).includes('alternative-componenti'));

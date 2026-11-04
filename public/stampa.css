@@ -141,3 +141,4 @@ table.righe-fattura .cod { width: 26mm; } table.righe-fattura .q { width: 21mm; 
 .somme { min-width: 62mm; } .somme td { padding: .8mm 1.5mm; font-size: 9pt; border-bottom: 1px solid #ccc; }
 .somme tr.totale td { font-weight: 700; font-size: 11pt; border-top: 2px solid #000; border-bottom: 0; }
 .nota-stampa { font-size: 8.5pt; margin: 2mm 0 0; }
+.barra-stampa .bottone-email { background: #fff; color: #1b5e52; font-weight: 600; padding: 4px 12px; border-radius: 4px; text-decoration: none; }

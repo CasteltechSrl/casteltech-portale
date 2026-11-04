@@ -23,6 +23,7 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
 <body>
 <div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
+  ${inviabile(d) ? html`<a class="bottone-email" href="/amministrazione/documenti/${d.id}#invia-email">✉ Invia per email</a>` : ''}
   <a href="/amministrazione/documenti/${d.id}">← torna al DDT</a></div>
 <section class="pagina ddt-stampa">
   ${timbro ? html`<div class="timbro-stampa">${timbro}</div>` : ''}
@@ -65,7 +66,10 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
 </body></html>`;
 }
 
-const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP12: 'RiBa' };
+/** Emesso dal portale e non annullato/scartato: dalla stampa si va al riquadro "Invia per email" della pagina (Adriano 4/11/2026). */
+const inviabile = (d: any) => d.numero != null && d.origine !== 'fic' && !['bozza', 'annullato', 'scartato'].includes(d.stato);
+
+export const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP12: 'RiBa' };
 
 /**
  * Copia di cortesia di fattura o nota di credito (Adriano, 31/10/2026: PDF da mandare al cliente, dal browser con "Stampa / salva PDF").
@@ -84,6 +88,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
 <body>
 <div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
+  ${inviabile(d) ? html`<a class="bottone-email" href="/amministrazione/documenti/${d.id}#invia-email">✉ Invia per email</a>` : ''}
   <a href="/amministrazione/documenti/${d.id}">← torna al documento</a></div>
 <section class="pagina ddt-stampa fattura-stampa">
   ${timbro ? html`<div class="timbro-stampa">${timbro}</div>` : ''}

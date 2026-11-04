@@ -40,6 +40,8 @@ import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
+import { datiStampaFattura, inviaFatturaEmail, pdfDellaFattura, propostaEmailFattura } from '../fattura-email-servizio.js';
+import { TIPI_CORTESIA, nomeDocumento } from '../../engine/fattura-email.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
 import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
 import { marginePreventivo } from '../../engine/analisi.js';
@@ -634,38 +636,32 @@ export function rotteAmministrazione() {
     const righe = await q(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
     const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
     if (d.tipo !== 'ddt') {
-      // copia di cortesia: cliente come all'emissione (fotografia), in bozza i dati attuali; totali dalle righe con l'IVA predefinita del cliente
-      const attuale = d.cliente_id ? await q1(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
-      const cliente = d.intestatario && d.numero != null ? d.intestatario : attuale ?? {};
-      const conIva = righe.map(r => ({ ...r, aliquota_iva: r.solo_descrizione ? null : r.aliquota_iva || attuale?.aliquota_iva || 'IVA22' }));
-      const totali = calcolaTotali(conIva, await caricaAliquote());
-      const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
-      const pagamento = d.condizione_pagamento ? await q1(`SELECT * FROM condizioni_pagamento WHERE codice = $1`, [d.condizione_pagamento]) : null;
-      const intento = totali.riepilogo.some(g => g.natura === 'N3.5') ? await q1(d.dichiarazione_intento_id
-        ? `SELECT * FROM dichiarazioni_intento WHERE id = $1` : `SELECT * FROM dichiarazioni_intento WHERE cliente_id = $1 ORDER BY data_protocollo DESC LIMIT 1`,
-        [d.dichiarazione_intento_id ?? d.cliente_id]) : null;
-      const conSplit = { ...cliente, split_payment: cliente.split_payment ?? attuale?.split_payment ?? false };
-      return res.send(String(stampaFattura(d, conIva, azienda, conSplit, totali, scadenze, intento, pagamento)));
+      // copia di cortesia: stessi dati del PDF che parte per email (fattura-email-servizio.ts)
+      const x = (await datiStampaFattura(id))!;
+      return res.send(String(stampaFattura(x.d, x.righe, x.azienda, x.cliente, x.totali, x.scadenze, x.intento, x.pagamento)));
     }
     // destinatario: la fotografia fatta all'emissione; in bozza i dati attuali dell'anagrafica
     const dest = d.intestatario && d.numero != null ? d.intestatario : Object.fromEntries(Object.entries(d).filter(([k]) => k.startsWith('c_')).map(([k, v]) => [k.slice(2), v]));
     res.send(String(stampaDdt(d, righe, azienda, dest)));
   });
 
-  // PDF del DDT (lo stesso che parte allegato all'email)
+  // PDF del DDT o della fattura / nota di credito di cortesia (lo stesso che parte allegato all'email)
   r.get('/documenti/:id/pdf', async (req, res) => {
-    const pdf = await pdfDelDdt(Number(req.params.id));
-    if (!pdf) return res.status(404).send('DDT non trovato');
+    const id = Number(req.params.id);
+    const pdf = (await pdfDelDdt(id)) ?? (await pdfDellaFattura(id));
+    if (!pdf) return res.status(404).send('PDF disponibile per DDT, fatture e note di credito');
     res.type('application/pdf').setHeader('Content-Disposition', `inline; filename="${pdf.nome}"`);
     res.send(pdf.dati);
   });
 
-  // invio del DDT per email con Gmail (Adriano 2/11/2026)
+  // invio per email con Gmail: DDT (Adriano 2/11/2026), fattura e nota di credito di cortesia (Adriano 4/11/2026)
   r.post('/documenti/:id/email', async (req, res) => {
     const id = Number(req.params.id);
     try {
-      const a = await inviaDdtEmail(id, req.body);
-      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`DDT mandato a ${a} con il PDF allegato.`)}`);
+      const tipo = (await q1<{ tipo: string }>(`SELECT tipo FROM documenti WHERE id = $1`, [id]))?.tipo;
+      const a = tipo === 'ddt' ? await inviaDdtEmail(id, req.body) : await inviaFatturaEmail(id, req.body);
+      const cosa = tipo === 'ddt' ? 'DDT mandato' : tipo === 'nota_credito' ? 'Nota di credito mandata' : 'Fattura mandata';
+      res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`${cosa} a ${a} con il PDF allegato.`)}`);
     } catch (e: any) {
       res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(`Email non inviata: ${e?.message ?? e}`)}`);
     }
@@ -741,7 +737,11 @@ export function rotteAmministrazione() {
     if (d.stato !== 'bozza') {
       const scadenze = await q(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
       const trasporto = d.dati_trasporto ?? {};
-      const email = d.tipo === 'ddt' && d.stato !== 'annullato' && d.numero != null ? await propostaEmailDdt(id) : null;
+      const email = d.tipo === 'ddt' && d.stato !== 'annullato' && d.numero != null ? await propostaEmailDdt(id)
+        : TIPI_CORTESIA.includes(d.tipo) ? await propostaEmailFattura(id) : null;
+      // "DDT", "fattura", "nota di credito": per i testi del riquadro email
+      const cosaEmail = d.tipo === 'ddt' ? 'DDT' : nomeDocumento(d.tipo, d.tipo_sdi);
+      const pdfEmail = d.tipo === 'ddt' ? 'PDF del DDT' : `PDF di cortesia`;
       return res.send(pagina(req, titolo, html`${testa}
         ${d.causale ? html`<p class="nota">${d.causale}</p>` : ''}
         ${d.tipo === 'ddt' && Object.keys(trasporto).length ? html`<p class="nota">${Object.entries(ETICHETTE_TRASPORTO).filter(([k]) => trasporto[k])
@@ -761,7 +761,8 @@ export function rotteAmministrazione() {
         ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
-          ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
+          ${email ? html`<a class="bottone primario" href="#invia-email">✉ Invia per email</a>` : ''}
+          ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' && !email ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
             title="${d.tipo === 'ddt' ? '' : 'Copia di cortesia per il cliente (il documento fiscale è l\'XML)'}">${d.tipo === 'ddt' ? 'Stampa / PDF' : 'PDF di cortesia'}</a>` : ''}
           ${d.tipo === 'ddt' && d.stato !== 'annullato' && d.origine === 'portale' ? (bloccoModifica
             ? html`<span class="nota" title="${bloccoModifica}">Non modificabile: fattura già allo SdI</span>`
@@ -781,19 +782,20 @@ export function rotteAmministrazione() {
             ${d.tipo_sdi !== 'TD05' ? html`<form method="post" action="/amministrazione/documenti/${id}/nota-debito" class="inline"
             data-conferma="Creare una nota di debito (bozza) che aumenta l'importo di questa fattura?"><button title="Per aggiungere importi a questa fattura (costi dimenticati, adeguamenti)">Crea nota di debito</button></form>` : ''}` : ''}
         </div>
-        ${email ? html`<form method="post" action="/amministrazione/documenti/${id}/email" class="blocco" data-conferma="Mandare il DDT n. ${d.numero} per email con il PDF allegato?">
-          <h2>Invia il DDT per email</h2>
-          ${d.email_inviata_il ? html`<p class="nota">Già mandato a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}.</p>` : ''}
+        ${email ? html`<form method="post" action="/amministrazione/documenti/${id}/email" class="blocco" id="invia-email" data-conferma="Mandare ${d.tipo === 'ddt' ? 'il DDT' : `la ${cosaEmail}`} n. ${d.numero} per email con il PDF allegato?">
+          <h2>Invia ${d.tipo === 'ddt' ? 'il DDT' : `la ${cosaEmail} di cortesia`} per email</h2>
+          ${d.tipo !== 'ddt' ? html`<p class="nota">Copia di cortesia per il cliente: la ${cosaEmail} vera è l'XML che arriva al cliente dallo SdI.</p>` : ''}
+          ${d.email_inviata_il ? html`<p class="nota">Già inviato a ${d.email_a} il ${new Date(d.email_inviata_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}.</p>` : ''}
           <div class="riga-campi">
-            <label class="largo">A <input name="a" value="${email.a}" placeholder="magazzino@cliente.it (più indirizzi separati da virgola)"></label>
+            <label class="largo">A <input name="a" value="${email.a}" placeholder="${d.tipo === 'ddt' ? 'magazzino' : 'amministrazione'}@cliente.it (più indirizzi separati da virgola)"></label>
             <label>Cc <input name="cc" value=""></label>
           </div>
           <label>Oggetto <input name="oggetto" value="${email.oggetto}"></label>
           <label>Testo <textarea name="testo" rows="7">${email.testo}</textarea></label>
           <div class="barra-azioni">
-            <span class="nota">${email.attivo ? html`Parte da ${email.mittente} con allegato il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">PDF del DDT</a>.`
-              : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">PDF del DDT</a> e mandalo dalla posta.`}</span>
-            <button class="primario" ${email.attivo ? '' : raw('disabled')}>Invia con Gmail</button>
+            <span class="nota">${email.attivo ? html`Parte da ${email.mittente} con allegato il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">${pdfEmail}</a>.`
+              : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il <a href="/amministrazione/documenti/${id}/pdf" target="_blank" rel="noopener">${pdfEmail}</a> e mandalo dalla posta.`}</span>
+            <button class="primario" ${email.attivo ? '' : raw('disabled')}>${d.email_inviata_il && !d.inviato_a_mano ? 'Manda di nuovo' : 'Invia con Gmail'}</button>
           </div>
         </form>` : ''}`, msg(req)));
     }
