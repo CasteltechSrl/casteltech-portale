@@ -10,7 +10,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, baseArrotondata, pareggiaSulPiuGrande, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contiStampa, prezziRiquadro, basePrezzi, pareggiaSulPiuGrande, righeDettaglio, righeUnaTantum, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -50,8 +50,8 @@ export function stampaPreventivo(o: {
   const numero = `${p.numero} del ${data(p.creato_il)}`;
   const salvatoIl = p.aggiornato_il ? new Date(p.aggiornato_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' alle') : '';
   const qta = `${num(d.nSchede, 0)} pz`;
-  // prezzi a scheda per difetto all'euro intero (Adriano 4/11/2026): righe, una tantum e totale tornano con le cifre arrotondate
-  const b = baseArrotondata({ prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum, unaTantum: r.unaTantum, nSchede: d.nSchede });
+  // prezzi a scheda calcolati o scritti a mano nella stampa (Adriano 4/11/2026): righe, una tantum e totale cambiano di conseguenza
+  const b = basePrezzi({ prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum, unaTantum: r.unaTantum, nSchede: d.nSchede, lotto: r.prezzoLotto }, o.rit.prezzi);
   const conUt = d.nSchede ? (b.lotto + b.unaTantum) / d.nSchede : b.prezzoScheda + b.unaTantum;
   const ut = righeUnaTantum(ris, { doppia: o.doppia, nLamine: o.nLamine });
   pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
@@ -61,7 +61,7 @@ export function stampaPreventivo(o: {
   const totale = b.lotto + b.unaTantum;
   // ritocchi scritti dall'ufficio nel pannello (sconto, righe in più): cambiano solo gli importi stampati
   const rit = o.rit;
-  const conti = contiStampa(prezzoUnico ? { prezzoScheda: conUt, lotto: totale, unaTantum: 0, nSchede: d.nSchede } : b, rit, true);
+  const conti = contiStampa(prezzoUnico ? { prezzoScheda: conUt, lotto: totale, unaTantum: 0, nSchede: d.nSchede } : b, rit);
   const scontato = conti.sconto > 0 ? ' scontato' : '';
   // riquadro verde sotto le righe e sopra il totale: prezzo a scheda senza e con le una tantum (Adriano, 4/11/2026)
   const riquadro = prezziRiquadro({ prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede: d.nSchede,
@@ -148,6 +148,11 @@ export function stampaPreventivo(o: {
     <h2>Ritocchi per il cliente</h2>
     <p class="aiuto">Valgono solo in questa stampa: il preventivo non cambia.</p>
     <input type="hidden" name="torna" value="${link({})}">
+    <fieldset><legend>Prezzi a scheda</legend>
+      <label>Senza una tantum <input name="prezzoSenza" inputmode="decimal" value="${rit.prezzi.senza != null ? String(rit.prezzi.senza).replace('.', ',') : ''}" placeholder="${num(r.prezzoScheda, 2)}"></label>
+      ${r.unaTantum > 0 || rit.prezzi.con != null ? html`<label>Con le una tantum <input name="prezzoCon" inputmode="decimal" value="${rit.prezzi.con != null ? String(rit.prezzi.con).replace('.', ',') : ''}" placeholder="${num(r.prezzoSchedaConUnaTantum, 2)}"></label>` : ''}
+      <small>Vuoto = prezzo calcolato (in grigio). Scrivi una cifra diversa (es. 174) e premi "Aggiorna la stampa": righe e totale cambiano di conseguenza.</small>
+    </fieldset>
     <label>Note per il cliente<textarea name="noteCliente" rows="4">${rit.noteCliente}</textarea></label>
     <label class="spunta"><input type="checkbox" name="noteInterne" value="si"${rit.noteInterne ? html` checked` : ''}> Stampa anche le note interne del preventivo</label>
     <fieldset><legend>Sconto</legend>

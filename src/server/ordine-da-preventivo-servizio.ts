@@ -9,7 +9,7 @@ import { haCommessePrecedenti } from './commesse-servizio.js';
 import { pianificaProduzione } from './ordini-servizio.js';
 import { caricoGiornaliero } from '../engine/ordini.js';
 import { riepilogo } from '../engine/riepilogo.js';
-import { prezziComeInStampa, righeUnaTantum } from '../engine/stampa-preventivo.js';
+import { leggiRitocchi, prezziComeInStampa, righeUnaTantum } from '../engine/stampa-preventivo.js';
 import { stimaConsegna } from '../engine/consegna-preventivo.js';
 import { PRIMO_NUMERO_EMAIL, numeroOrdineEmail } from '../engine/acquisizioni.js';
 import { controlliOrdineDaPreventivo, controlliPiuPreventivi, notaPreventivi, righeDaModuloOrdine, righeOrdineDaPreventivo, type RigaOrdineProposta } from '../engine/ordine-da-preventivo.js';
@@ -47,8 +47,8 @@ export async function propostaOrdineDaPreventivo(preventivoId: number, oggi: str
   const nLamine = Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1);
   const r = riepilogo(ris);
   const primoLotto = p.parametri?.primaProduzione !== 0 && (p.prodotto_id ? !(await haCommessePrecedenti(p.prodotto_id)) : true);
-  // stessi prezzi della stampa per il cliente: a scheda per difetto all'euro, una tantum pareggiate (Adriano 4/11/2026)
-  const prezzi = prezziComeInStampa(r, p.n_schede, righeUnaTantum(ris, { doppia, nLamine }));
+  // stessi prezzi della stampa per il cliente: quelli scritti a mano nella stampa, se ci sono (Adriano 4/11/2026)
+  const prezzi = prezziComeInStampa(r, p.n_schede, righeUnaTantum(ris, { doppia, nLamine }), leggiRitocchi(p.stampa).prezzi);
   const righe = righeOrdineDaPreventivo({
     codice: p.intestazione?.codice ?? null, descrizione: p.intestazione?.descrizione ?? null, nSchede: p.n_schede,
     prezzoScheda: prezzi.prezzoScheda, unaTantum: prezzi.unaTantum,

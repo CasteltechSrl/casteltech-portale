@@ -56,7 +56,7 @@ export async function datiControlli(oggi: string): Promise<DatiControlli> {
 export async function riferimentiPreventivi(clienteId: number) {
   return q<{ codice: string; numero: string; id: number; prezzo_scheda: number | null; guadagno: number | null; totale: number | null }>(`
     SELECT DISTINCT ON (upper(p.intestazione->>'codice')) upper(p.intestazione->>'codice') AS codice, p.numero, p.id,
-      floor(round((p.risultato->'totali'->>'prezzoSchedaSecondoLotto')::numeric, 2))::float AS prezzo_scheda,  -- come nella stampa: per difetto all'euro (Adriano 4/11/2026)
+      coalesce((p.stampa->'prezzi'->>'senza')::float, (p.risultato->'totali'->>'prezzoSchedaSecondoLotto')::float) AS prezzo_scheda,  -- prezzo scritto a mano nella stampa, se c'è (Adriano 4/11/2026)
       (p.risultato->'totali'->>'guadagnoLotto')::float AS guadagno, p.totale_secondo_lotto::float AS totale
     FROM preventivi p
     WHERE p.cliente_id = $1 AND p.stato NOT IN ('da_validare', 'rifiutato', 'scartato') AND p.intestazione->>'codice' IS NOT NULL
