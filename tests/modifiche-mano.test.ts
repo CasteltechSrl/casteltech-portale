@@ -79,3 +79,22 @@ test('BOM: "Verificato" conferma un codice da verificare e toglie la nota CODICE
   const senzaCodice = confermaVerifica({ ...riga, codiceGestionale: null }, E, 'CODICE DA VALIDARE', 'A', 'oggi');
   assert.ok(!senzaCodice.ok && /Ricalcola/.test(senzaCodice.errore));
 });
+
+test('BOM: per ogni famiglia si vedono solo i campi che servono, con un esempio', async () => {
+  const { campiFamiglia, esempioCampo, mappaCampiFamiglie } = await import('../src/engine/codifica/campi-famiglia.js');
+  const { ATTR, calcola } = await import('../src/engine/codifica/regole.js');
+  assert.deepEqual(campiFamiglia('DL'), ['case', 'tensione', 'corrente', 'colore']);
+  assert.deepEqual(campiFamiglia('TB'), ['case', 'tensione', 'corrente', 'tipo']);
+  assert.deepEqual(campiFamiglia('CN'), ['tipo', 'passo', 'poli']);
+  assert.deepEqual(campiFamiglia(''), [...ATTR]);
+  assert.equal(esempioCampo('DL', 'corrente'), '20MA');
+  assert.equal(esempioCampo('TB', 'case', 'T'), 'TO-92');
+  assert.equal(esempioCampo('TB', 'case', 'S'), 'SOT-23');
+  // con i soli campi mostrati (riempiti con gli esempi) il codice di produzione si calcola per tutte le famiglie che hanno un esempio per ogni campo
+  const m = mappaCampiFamiglie();
+  for (const fam of ['RS', 'CC', 'DL', 'TB', 'ID', 'FS']) {
+    const attr = Object.fromEntries(m[fam].campi.map(k => [k, m[fam].esempi[k].split(',')[0]]));
+    const c = calcola(fam, attr, 'ABC123');
+    assert.ok(c.prod, `${fam}: ${c.note.join('; ')}`);
+  }
+});

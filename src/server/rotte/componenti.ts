@@ -13,6 +13,7 @@ import {
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
+import { campiFamiglia, esempioCampo, mappaCampiFamiglie } from '../../engine/codifica/campi-famiglia.js';
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
@@ -31,7 +32,7 @@ const SOLO_CODIFICA = 'solo-codifica';
 export const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+/).map(s => parseInt(s, 10)).filter(n => n > 0 && n < 1e7))].slice(0, 4);
 
 const paginaProduzione = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
-  String(layout({ titolo, utente: req.session.utente, attiva: 'produzione', largo: true, avviso, script: ['componenti.js', 'elenco.js'], contenuto: html`
+  String(layout({ titolo, utente: req.session.utente, attiva: 'produzione', largo: true, avviso, script: ['componenti.js', 'elenco.js', 'campi-famiglia.js'], contenuto: html`
     <nav class="schede"><a href="${PAGINA_SOLO_CODIFICA}" class="attiva">Codifica componenti</a>
       <a href="/anagrafiche/componenti" title="Archivio dei componenti codificati">Archivio componenti ↗</a></nav>${contenuto}` }));
 
@@ -75,7 +76,7 @@ export function rotteComponenti() {
     attiva === SOLO_CODIFICA
       // BOM codificata senza prezzi: sta in Produzione → Codifica componenti (Adriano 4/11/2026)
       ? paginaProduzione(req, titolo, contenuto, avviso)
-      : String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js'], contenuto: html`
+      : String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js', 'campi-famiglia.js'], contenuto: html`
       <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N'], ['comuni', 'Componenti in comune']]
         .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
@@ -636,7 +637,9 @@ function paginaRiga(a: any, r: RigaBom): Raw {
       <div class="riga-campi"><label>Famiglia<select name="famiglia"><option value="">—</option>
         ${Object.entries(FAMIGLIE).map(([k, f]) => html`<option value="${k}" ${r.famiglia === k ? raw('selected') : ''}>${k} · ${f.nome}</option>`)}</select></label>
         <label class="stretto">Tecnologia<select name="tecnologia"><option value=""></option>${['S', 'T'].map(t => html`<option ${r.attributi.tecnologia === t ? raw('selected') : ''}>${t}</option>`)}</select></label></div>
-      <div class="campi-attributi">${ATTR.map(k => html`<label>${ETICHETTE[k]}<input name="${k}" value="${r.attributi[k] ?? ''}" autocomplete="off"></label>`)}</div>`}
+      <p class="nota campi-spiegazione"></p>
+      <div class="campi-attributi" data-campi="${JSON.stringify(mappaCampiFamiglie())}">${ATTR.map(k => html`<label data-campo="${k}" data-nome="${ETICHETTE[k]}" ${r.famiglia && !campiFamiglia(r.famiglia).includes(k) ? raw('hidden') : ''}>${ETICHETTE[k]}<input name="${k}" value="${r.attributi[k] ?? ''}" placeholder="${esempioCampo(r.famiglia, k, r.attributi.tecnologia) ? `es. ${esempioCampo(r.famiglia, k, r.attributi.tecnologia)}` : ''}" autocomplete="off"></label>`)}</div>
+      <p><a href="#" class="campi-tutti nota" hidden>Mostra tutti i campi</a></p>`}
       <label class="spunta"><input type="checkbox" name="cliente" ${r.clienteFornisce ? raw('checked') : ''}> Fornito dal cliente (non si acquista)</label>
       <button class="primario">Ricalcola</button>
     </form>
