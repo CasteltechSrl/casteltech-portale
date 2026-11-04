@@ -15,6 +15,7 @@ test('Würth: si chiede solo per i codici WE', () => {
   const c = corpoWurth(['WE-744227']);
   assert.equal(c.articles[0].articleNumber, '744227');
   assert.deepEqual(c.articles[0].quantities, QUANTITA_WURTH);
+  assert.ok(QUANTITA_WURTH.length <= 5, 'WE accetta al massimo 5 quantità per articolo');
   assert.equal(NOMI_FORNITORI.wurth, 'Würth Elektronik');
 });
 
