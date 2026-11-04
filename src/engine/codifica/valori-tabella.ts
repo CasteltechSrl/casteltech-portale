@@ -6,8 +6,8 @@
  *   della tabella e quelli già usati nell'archivio per la stessa famiglia.
  * Qui solo regole, senza database: i valori dell'archivio li passa chi chiama.
  */
-import { CASE_FIX, CASE_VER, CNT, COLORI, COLORI_NUOVI, ETICHETTE, IC_FAM, THT_CASE, TOL, type Attr, type Attributi } from './regole.js';
-import { CASE_AGGIUNTI, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
+import { CASE_FIX, CASE_VER, CNT, caseLookup, COLORI, COLORI_NUOVI, ETICHETTE, IC_FAM, THT_CASE, TOL, type Attr, type Attributi } from './regole.js';
+import { CASE_AGGIUNTI, CASE_DAL_PORTALE, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
 import { esempioCampo } from './campi-famiglia.js';
 
 /** Valori dell'archivio per campo: valore → quante volte (i più usati prima). */
@@ -18,7 +18,7 @@ const unici = (xs: string[]) => [...new Set(xs.filter(Boolean))];
 /** Tutti i case che il codice gestionale conosce (scritti senza spazi e trattini, come li confronta la tabella). */
 export function caseInTabella(): string[] {
   const ic = [...Object.keys(IC_FAM), ...Object.keys(IC_FAM_AGGIUNTE)].filter(f => !/\d/.test(f)).map(f => `${f}8`); // es. SOIC8 (i piedini veri al posto di 8)
-  return unici([...Object.keys(CASE_FIX), ...Object.keys(CASE_VER), ...Object.keys(THT_CASE), ...Object.keys(CASE_AGGIUNTI), ...ic, ...DIP_THT.map(f => `${f}8`)])
+  return unici([...Object.keys(CASE_FIX), ...Object.keys(CASE_VER), ...Object.keys(THT_CASE), ...Object.keys(CASE_AGGIUNTI), ...CASE_DAL_PORTALE.keys(), ...ic, ...DIP_THT.map(f => `${f}8`)])
     .sort((a, b) => a.localeCompare(b, 'it', { numeric: true }));
 }
 
@@ -73,7 +73,7 @@ export function suggerimentiRiga(r: { famiglia: string | null; attributi: Attrib
     if (vicini.length) parti.push(`Simili: ${elenca(vicini)}.`);
     if (usati.length) parti.push(`Già usati in archivio per ${fam}: ${elenca(usati)}.`);
     parti.push('Se il componente non ha un case standard (pulsanti, moduli, induttanze grandi) scrivi le misure in mm come LLWW, es. 6035 per 6×3,5 mm: resta "da verificare".');
-    parti.push('Apri la casella per vedere tutti i case della tabella.');
+    parti.push('Apri la casella per vedere tutti i case della tabella. Se il formato è davvero nuovo, aggiungilo con il riquadro "Aggiungi il formato alla tabella" in alto.');
     out.push(parti.join(' '));
   };
   for (const n of r.note) {
@@ -104,4 +104,52 @@ export function suggerimentiRiga(r: { famiglia: string | null; attributi: Attrib
     }
   }
   return unici(out);
+}
+
+// ───────────────────── formato nuovo dalla pagina della riga (Adriano 4/11/2026) ─────────────────────
+
+/** Case scritto come lo confronta la tabella: senza spazi e trattini, in maiuscolo. */
+export const chiaveCase = (scritto: unknown) => String(scritto ?? '').replace(/[\s\-]/g, '').toUpperCase();
+
+/** Tutti i codici a 4 caratteri già usati dalla tabella, con un case che li usa (per dire "stesso codice di …"). */
+function codiciInTabella(): Map<string, string> {
+  const m = new Map<string, string>();
+  const metti = (cod: string, k: string) => { if (!m.has(cod)) m.set(cod, k); };
+  for (const [k, v] of Object.entries(CASE_FIX)) metti(v, k);
+  for (const [k, v] of Object.entries(THT_CASE)) metti(v, k);
+  for (const [k, v] of Object.entries(CASE_VER)) metti(v[0], k);
+  for (const [k, v] of Object.entries(CASE_AGGIUNTI)) metti(v[0], k);
+  for (const [k, v] of CASE_DAL_PORTALE) metti(v.codice, v.scritto || k);
+  return m;
+}
+
+/** Il case della riga se la tabella non lo conosce (nota "case … non in tabella"), altrimenti null. */
+export function caseDaAggiungere(r: { famiglia: string | null; attributi: Attributi; note: string[] }): string | null {
+  if (['CN', 'TI', 'BT', 'AN'].includes(String(r.famiglia ?? '').toUpperCase())) return null;
+  const scritto = String(r.attributi.case ?? '').trim();
+  if (!scritto || caseLookup(scritto)[0] != null) return null;
+  return r.note.some(n => /case "[^"]*" non in tabella/i.test(n)) ? scritto : null;
+}
+
+/** Codice proposto per un formato nuovo: le misure LLWW così come sono, altrimenti le prime 4 lettere/cifre (completate con 0). */
+export function codiceProposto(scritto: string): string {
+  const x = chiaveCase(scritto).replace(/[^A-Z0-9]/g, '');
+  return (x.slice(0, 4) + '0000').slice(0, 4);
+}
+
+export type EsitoNuovoCase = { errore: string } | { chiave: string; scritto: string; codice: string; tecnologia: 'S' | 'T'; sinonimoDi: string | null };
+
+/** Controlli prima di aggiungere un formato: case non già in tabella, codice di 4 lettere/cifre, tecnologia S o T. */
+export function controllaNuovoCase(dati: { case: string; codice: string; tecnologia: string }): EsitoNuovoCase {
+  const scritto = String(dati.case ?? '').trim().toUpperCase().slice(0, 40);
+  const chiave = chiaveCase(scritto);
+  if (!chiave) return { errore: 'Scrivi il formato (case) da aggiungere.' };
+  if (!/^[A-Z0-9.,X()/]+$/.test(chiave)) return { errore: `Il formato "${scritto}" contiene caratteri non ammessi: usa lettere e cifre.` };
+  const gia = caseLookup(scritto);
+  if (gia[0] != null) return { errore: `Il formato "${scritto}" è già in tabella con il codice ${gia[0]}.` };
+  const codice = String(dati.codice ?? '').replace(/\s/g, '').toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(codice)) return { errore: 'Il codice del formato deve avere 4 lettere o cifre, come 0603, T236, DPAK.' };
+  const tecnologia = String(dati.tecnologia ?? '').toUpperCase();
+  if (tecnologia !== 'S' && tecnologia !== 'T') return { errore: 'Scegli la tecnologia: S (SMD) o T (THT).' };
+  return { chiave, scritto, codice, tecnologia, sinonimoDi: codiciInTabella().get(codice) ?? null };
 }

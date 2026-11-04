@@ -39,6 +39,17 @@ export const CASE_AGGIUNTI: Record<string, [string, 'S' | 'T', 'OK' | 'VER', str
 };
 
 /**
+ * Formati aggiunti dall'ufficio dalla pagina della riga BOM (Adriano 4/11/2026; tabella `codifica_case`, migrazione 076).
+ * Il servizio li carica dal database (`caricaCaseDalPortale` in codifica-servizio.ts); qui restano in memoria per `caseLookup`.
+ */
+export interface CasePortale { chiave: string; scritto: string; codice: string; tecnologia: 'S' | 'T'; nota: string | null; creato_da: string | null; creato_il?: string | Date }
+export const CASE_DAL_PORTALE = new Map<string, CasePortale>();
+export function impostaCaseDalPortale(righe: CasePortale[]) {
+  CASE_DAL_PORTALE.clear();
+  for (const r of righe) CASE_DAL_PORTALE.set(r.chiave, r);
+}
+
+/**
  * Famiglie di package di integrati aggiunte (nnFAMIGLIA, es. 8WSON): codice = sigla + numero di piedini come le altre (QN32, SO08).
  * Tutte "DA VERIFICARE" perché accorpate a una famiglia di forma simile.
  */
@@ -62,6 +73,8 @@ export const TIPI_ANTENNE: Record<string, string> = { CHIP: 'ANTC', PCB: 'ANTP',
 
 /** Tutto quello che è stato aggiunto, con la data e il motivo (pagina Impostazioni → Componenti). */
 export const REGISTRO_AGGIUNTE: VoceRegistro[] = [
+  { data: '04/11/2026', tipo: 'case', cosa: 'Formati aggiunti dall\'ufficio dalla pagina della riga BOM (tabella codifica_case)',
+    perche: 'Adriano: "vorrei poter aggiungere un formato nuovo da qui" (pulsante 2SMD); elenco e "Togli" sopra, i componenti in archivio non cambiano codice' },
   { data: '01/11/2026', tipo: 'famiglia', cosa: 'CF Condensatori film (MKP/MKT, poliestere, polipropilene)',
     perche: 'prima restavano senza famiglia; codici come i ceramici: CF-case-valore-tolleranza-tensione, case THT = passo (P150 = 15 mm)' },
   { data: '01/11/2026', tipo: 'famiglia', cosa: 'NT Termistori NTC/PTC',

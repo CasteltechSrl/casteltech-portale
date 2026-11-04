@@ -7,7 +7,7 @@
  * Nessun accesso al database: il progressivo finale lo assegna il database (src/server/codifica-servizio.ts).
  */
 
-import { CASE_AGGIUNTI, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
+import { CASE_AGGIUNTI, CASE_DAL_PORTALE, DIP_THT, IC_FAM_AGGIUNTE, TIPI_ANTENNE, TIPI_BATTERIE } from './aggiunte.js';
 
 export const OK = 'OK', VER = 'DA VERIFICARE', MAN = 'MANUALE';
 export type Stato = typeof OK | typeof VER | typeof MAN;
@@ -127,6 +127,9 @@ export function caseLookup(raw: unknown): Case {
   if (c in CASE_VER) return [CASE_VER[c][0], 'S', VER, CASE_VER[c][1]];
   // regole aggiunte dopo il programma Python (registro in aggiunte.ts, 1/11/2026)
   if (c in CASE_AGGIUNTI) { const [cod, t, st, nota] = CASE_AGGIUNTI[c]; return [cod, t, st === 'OK' ? OK : VER, nota]; }
+  // formati aggiunti dall'ufficio dalla pagina della riga (Adriano 4/11/2026)
+  const p = CASE_DAL_PORTALE.get(c);
+  if (p) return [p.codice, p.tecnologia, OK, ''];
   const m = c.match(/^(\d+)([A-Z]+)$/) ?? c.match(/^([A-Z]+)(\d+)$/);
   if (m) {
     const [a, b] = [m[1], m[2]];
