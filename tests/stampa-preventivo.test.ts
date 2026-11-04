@@ -91,41 +91,38 @@ test('stampa: sconto in % su tutto, sconto in € sul lotto, righe in più nel t
 test('stampa: riquadro verde = prezzo a scheda senza e con le una tantum (Adriano 4/11/2026)', async () => {
   const { prezziRiquadro } = await import('../src/engine/stampa-preventivo.js');
   const base = { prezzoScheda: 10, lotto: 1000, unaTantum: 250, nSchede: 100, prezzoSchedaConUnaTantum: 12.5 };
-  assert.deepEqual(prezziRiquadro(base, leggiRitocchi(null)), { senza: 10, con: 12 });   // per difetto all'euro
+  assert.deepEqual(prezziRiquadro(base, leggiRitocchi(null)), { senza: 10, con: 12.5 });
   // senza una tantum un solo prezzo
   assert.deepEqual(prezziRiquadro({ ...base, unaTantum: 0, prezzoSchedaConUnaTantum: 10 }, leggiRitocchi(null)), { senza: 10, con: null });
   // sconto 10 %: tutti e due scontati; le righe in più non entrano nel prezzo a scheda
-  assert.deepEqual(prezziRiquadro(base, leggiRitocchi({ scontoValore: '10', rigaDescrizione: ['Collaudo'], rigaQuantita: ['1'], rigaPrezzo: ['50'] })), { senza: 9, con: 10 });
+  assert.deepEqual(prezziRiquadro(base, leggiRitocchi({ scontoValore: '10', rigaDescrizione: ['Collaudo'], rigaQuantita: ['1'], rigaPrezzo: ['50'] })), { senza: 9, con: 11.25 });
 });
 
-test('stampa: prezzi a scheda per difetto all\'euro e totale con le cifre arrotondate (Adriano 4/11/2026, P2026-2388)', async () => {
-  const { baseArrotondata, contiStampa: conti, perDifetto, prezziRiquadro, pareggiaSulPiuGrande } = await import('../src/engine/stampa-preventivo.js');
-  const b = baseArrotondata({ prezzoScheda: 174.63, prezzoSchedaConUnaTantum: 201.75, unaTantum: 135.6, nSchede: 5 });
+test('stampa: prezzi a scheda scritti a mano, totale di conseguenza (Adriano 4/11/2026, P2026-2388)', async () => {
+  const { basePrezzi, contiStampa: conti, prezziRiquadro, pareggiaSulPiuGrande, prezziComeInStampa } = await import('../src/engine/stampa-preventivo.js');
+  const calcolati = { prezzoScheda: 174.63, prezzoSchedaConUnaTantum: 201.75, unaTantum: 135.6, nSchede: 5, lotto: 873.15 };
+  // senza ritocchi restano i prezzi del preventivo
+  assert.deepEqual(basePrezzi(calcolati, leggiRitocchi(null).prezzi), { prezzoScheda: 174.63, lotto: 873.15, unaTantum: 135.6, nSchede: 5 });
+  assert.deepEqual(prezziRiquadro(calcolati, leggiRitocchi(null)), { senza: 174.63, con: 201.75 });
+  // scritti a mano 174 e 201: lotto 870, una tantum 135, totale 1.005
+  const rit = leggiRitocchi({ prezzoSenza: '174', prezzoCon: '201' });
+  assert.deepEqual(rit.prezzi, { senza: 174, con: 201 });
+  assert.deepEqual(leggiRitocchi(rit), rit);   // quello salvato si rilegge uguale
+  const b = basePrezzi(calcolati, rit.prezzi);
   assert.deepEqual(b, { prezzoScheda: 174, lotto: 870, unaTantum: 135, nSchede: 5 });
-  assert.equal(conti(b, leggiRitocchi(null), true).totale, 1005);
-  assert.deepEqual(prezziRiquadro({ prezzoScheda: 174.63, lotto: 873.15, unaTantum: 135.6, nSchede: 5, prezzoSchedaConUnaTantum: 201.75 }, leggiRitocchi(null)), { senza: 174, con: 201 });
-  assert.equal(perDifetto(174.99999999), 175);   // errori di virgola mobile non tolgono un euro
-  assert.equal(perDifetto(3.25), 3);
-  // senza una tantum: un solo prezzo
-  assert.deepEqual(baseArrotondata({ prezzoScheda: 9.9, prezzoSchedaConUnaTantum: 9.9, unaTantum: 0, nSchede: 10 }), { prezzoScheda: 9, lotto: 90, unaTantum: 0, nSchede: 10 });
-  // sconto 10 %: prezzi scontati di nuovo per difetto, lo sconto stampato fa tornare il totale
-  const s = conti(b, leggiRitocchi({ scontoValore: '10' }), true);
-  assert.equal(s.prezzoScheda, 156);           // 174 − 10 % = 156,60
-  assert.equal(s.lotto, 780);
-  assert.equal(s.unaTantum, 120);              // (870 + 135) × 0,9 / 5 = 180,90 → 180; (180 − 156) × 5
-  assert.equal(s.totale, 900);
-  assert.equal(s.sconto, 105);                 // 1.005 − 900
-  // le righe stampate (dettaglio, una tantum) tornano con il totale arrotondato
+  assert.equal(conti(b, rit).totale, 1005);
+  assert.deepEqual(prezziRiquadro(calcolati, rit), { senza: 174, con: 201 });
+  // solo "senza": le una tantum restano quelle calcolate
+  assert.deepEqual(basePrezzi(calcolati, leggiRitocchi({ prezzoSenza: '170' }).prezzi), { prezzoScheda: 170, lotto: 850, unaTantum: 135.6, nSchede: 5 });
+  // vuoto o zero = prezzo calcolato
+  assert.deepEqual(leggiRitocchi({ prezzoSenza: '', prezzoCon: '0' }).prezzi, { senza: null, con: null });
+  // "Crea ordine" usa gli stessi prezzi della stampa
+  const o = prezziComeInStampa(calcolati, 5, [{ nome: 'Programmazione', prezzo: 100.6 }, { nome: 'Lamina', prezzo: 35 }, { nome: 'Niente', prezzo: 0 }], rit.prezzi);
+  assert.equal(o.prezzoScheda, 174);
+  assert.deepEqual(o.unaTantum, [{ nome: 'Programmazione', prezzo: 100 }, { nome: 'Lamina', prezzo: 35 }]);
+  assert.equal(prezziComeInStampa(calcolati, 5, [{ nome: 'Lamina', prezzo: 135.6 }], leggiRitocchi(null).prezzi).prezzoScheda, 174.63);
+  // le righe stampate (dettaglio, una tantum) tornano con il totale
   const righe = [{ v: 100.4 }, { v: 35.2 }];
   pareggiaSulPiuGrande(righe, x => x.v, (x, n) => { x.v = n; }, 135);
   assert.deepEqual(righe.map(x => x.v), [99.8, 35.2]);
-});
-
-test('ordine dal preventivo con gli stessi prezzi della stampa (Adriano 4/11/2026)', async () => {
-  const { prezziComeInStampa } = await import('../src/engine/stampa-preventivo.js');
-  const x = prezziComeInStampa({ prezzoScheda: 174.63, prezzoSchedaConUnaTantum: 201.75, unaTantum: 135.6 }, 5,
-    [{ nome: 'Programmazione', prezzo: 100.6 }, { nome: 'Lamina', prezzo: 35 }, { nome: 'Niente', prezzo: 0 }]);
-  assert.equal(x.prezzoScheda, 174);
-  assert.deepEqual(x.unaTantum, [{ nome: 'Programmazione', prezzo: 100 }, { nome: 'Lamina', prezzo: 35 }]);
-  assert.equal(x.prezzoScheda * 5 + x.unaTantum.reduce((a, u) => a + u.prezzo, 0), 1005);
 });
