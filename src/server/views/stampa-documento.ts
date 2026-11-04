@@ -61,6 +61,7 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
   </table>
 </section>
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
+<script src="/static/piede-ddt.js?v=${VERSIONE}" defer></script>
 </body></html>`;
 }
 
