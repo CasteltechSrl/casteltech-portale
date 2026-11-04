@@ -472,7 +472,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Nel preventivo, sezione THT, il pulsante "Conta i punti dai componenti" conta i piedini dei componenti THT montati: dai documenti del cliente (file CAD, poi impronta e descrizione: DIP8 = 8, TO-220 = 3, PinHeader 2x05 = 10, morsetto 3 poli = 3, assiali e radiali = 2) o, se non ci sono, dalla BOM collegata (righe THT × quantità).',
       'I piedini si confrontano con i fori metallizzati del Gerber: i fori senza componente (non montati, fissaggi da 3 mm in su, test point) non sono punti di saldatura e il portale lo scrive. Se di un THT non si capiscono i piedini si usano i fori che restano; senza fori si contano 2 piedini a pezzo, scritto in rosso da controllare.',
-      'Con la spunta "THT a mano" compila "Punti di saldatura a mano" e "Stagno in filo" (0,125 g a punto); con "THT onda" compila lo stagno della saldatrice in grammi (0,016 g a foro, le scorie le aggiunge il calcolo). Senza spunte usa quella proposta dai documenti.',
+      'Con la spunta "THT a mano" compila "Punti di saldatura a mano" e "Stagno in filo" (0,125 g a punto); con "THT onda" scrive i punti nello stagno della saldatrice a reofori: i grammi a reoforo (0,02 g) sono in Impostazioni → materiale "Stagno saldatrice (a reoforo)", le scorie le aggiunge il calcolo. Senza spunte usa quella proposta dai documenti.',
       'Se scrivi i punti di saldatura a mano, lo stagno in filo si aggiorna da solo (se era vuoto o calcolato dal portale).',
       'Nel preventivo "da validare" creato dai documenti questi valori sono già scritti.',
     ],

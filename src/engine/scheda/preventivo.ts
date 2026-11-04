@@ -2,7 +2,7 @@
  * Dai documenti del cliente al preventivo (Adriano 27–28/10/2026): i numeri dell'incrocio diventano parametri del preventivo,
  * che resta "da validare" finché l'ufficio non lo controlla e lo salva. Nessun accesso al database.
  *  - SMD su un lato solo (anche se il cliente lo chiama BOTTOM): per noi è "solo TOP".
- *  - THT a onda: componenti in giostra e stagno della saldatrice a grammi (le scorie le aggiunge la formula del costo).
+ *  - THT a onda: componenti in giostra e punti nello stagno della saldatrice a reofori (grammi a reoforo e scorie dal calcolo).
  *  - THT a mano: punti di saldatura = piedini dei THT montati (controllati con i fori del Gerber), filo 0,125 g a piedino.
  */
 import { CONSUMI, type AnalisiScheda } from './analisi.js';
@@ -60,8 +60,8 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
     if (l.saldaturaTht === 'onda') {
       metti('qntCompMontaggio', c.tht, 'THT montati in giostra prima dell\'onda');
       const x = campiStagno(punti, 'onda');
-      metti('stagnoPerSaldature', x.stagnoPerSaldature, `${punti} ${da} × ${CONSUMI.ondaGrammiForo} g (le scorie le aggiunge il calcolo)`);
-      metti('stagno', 0, 'stagno scritto in grammi');
+      metti('stagno', x.stagno, `${punti} ${da}: i grammi a reoforo (Impostazioni) e le scorie li aggiunge il calcolo`);
+      metti('stagnoPerSaldature', 0, 'stagno contato a reofori');
       if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info' && !s.accettata)) daControllare.push('segnalazioni sulla saldatura a onda');
     } else if (l.saldaturaTht === 'mano') {
       const x = campiStagno(punti, 'mano');

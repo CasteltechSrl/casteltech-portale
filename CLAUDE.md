@@ -263,7 +263,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    punti = piedini dei THT montati (CAD > impronta/descrizione: DIP8, TO-220, 2x05, poli, assiale/radiale = 2), confrontati con i fori metallizzati del Gerber
    (fissaggio da 3 mm in su, fori dei non montati e fori senza componente NON contano); THT senza piedini = fori che restano, senza fori 2 a pezzo ("stima", da controllare).
    Nel preventivo "Conta i punti dai componenti" (sezione THT; documenti del cliente, altrimenti BOM collegata con tecnologia T): THT a mano → punti a mano + filo 0,125 g,
-   onda → `stagnoPerSaldature` 0,016 g a punto (scorie nel calcolo); punti scritti a mano → filo segue da solo (`public/preventivo.js`).
+   onda → punti in `stagno` (reofori; g a reoforo = materiale stagnoLF di Impostazioni, 0,02 g, Adriano 4/11/2026), `stagnoPerSaldature` 0; punti scritti a mano → filo segue da solo (`public/preventivo.js`).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

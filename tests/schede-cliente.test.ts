@@ -256,7 +256,7 @@ test('preventivo dai documenti: lato unico, onda, item con il PCB', () => {
   assert.equal(parametri.nLamine, 1);
   assert.equal(parametri.usaOnda, 1); assert.equal(parametri.presenteTht, 0);
   assert.equal(parametri.qntCompMontaggio, 1);
-  assert.equal(parametri.stagnoPerSaldature, 2 * CONSUMI.ondaGrammiForo);
+  assert.equal(parametri.stagno, 2, 'punti nello stagno a reofori (g a reoforo da Impostazioni)'); assert.equal(parametri.stagnoPerSaldature, 0);
   assert.equal(parametri.nItemMateriale, a.conteggi.item);
   assert.ok(daControllare.some(d => /lamine/.test(d)));
 });

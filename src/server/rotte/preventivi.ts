@@ -594,10 +594,11 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
       ${salvato?.pacchetto?.bom_file && !d.bomId ? html`<small class="nota">BOM dei documenti del cliente: spuntando <b>Componenti</b> si quota da sola.</small>` : ''}
       <small class="nota"><a href="/quotazioni/bom" target="_blank" rel="noopener">Carica una BOM</a><span id="apri-bom" ${d.bomId && bom.some(b => b.id === d.bomId) ? '' : raw('hidden')}> · <a href="/quotazioni/bom/${d.bomId ?? ''}" target="_blank" rel="noopener">apri la BOM collegata</a></span></small></label>`;
   // punti di saldatura THT contati dai componenti (Adriano 4/11/2026): il pulsante compila punti a mano e stagno (filo o saldatrice)
+  const gReoforo = Number(cat.materiali.find(m => m.codice === 'stagnoLF')?.quantita ?? STAGNO_A_PUNTO.saldatrice);
   const riquadroPunti = () => html`
-    <div class="largo punti-saldatura" id="punti-saldatura" data-filo="${STAGNO_A_PUNTO.filo}" data-saldatrice="${STAGNO_A_PUNTO.saldatrice}">
+    <div class="largo punti-saldatura" id="punti-saldatura" data-filo="${STAGNO_A_PUNTO.filo}" data-saldatrice="${gReoforo}">
       <button type="button" id="conta-punti" title="Conta i piedini dei THT (documenti del cliente o BOM collegata), controlla i fori del Gerber e compila punti di saldatura e stagno">Conta i punti dai componenti</button>
-      <output id="esito-punti" class="nota">Con THT a mano: punti × ${num(STAGNO_A_PUNTO.filo, 3)} g di filo. Con la saldatrice: punti × ${num(STAGNO_A_PUNTO.saldatrice, 3)} g (+ scorie).</output>
+      <output id="esito-punti" class="nota">Con THT a mano: punti × ${num(STAGNO_A_PUNTO.filo, 3)} g di filo. Con la saldatrice: punti nello stagno a reofori, × ${num(gReoforo, 3)} g (Impostazioni) + scorie.</output>
     </div>`;
   const campoParametro = (p: Catalogo['parametri'][0]) => p.codice === 'costoComponentiScheda' ? html`${sceltaBom()}${campoBase(p)}`
     : p.codice === 'qntPuntiSaldaturaMano' ? html`${riquadroPunti()}${campoBase(p)}` : campoBase(p);

@@ -10,8 +10,11 @@
  */
 import type { Componente } from './analisi.js';
 
-/** Grammi di stagno a punto (Adriano 27/10/2026): saldatrice 0,016 g a foro (+ scorie nel calcolo), filo 0,125 g a piedino. */
-export const STAGNO_A_PUNTO = { saldatrice: 0.016, filo: 0.125 } as const;
+/**
+ * Grammi di stagno a punto: filo 0,125 g a piedino (Adriano 27/10/2026); saldatrice 0,02 g a reoforo (Adriano 4/11/2026, "tieni 0.02":
+ * è il valore di Impostazioni → materiale "Stagno saldatrice (a reoforo)", che nel preventivo vale al posto di questo).
+ */
+export const STAGNO_A_PUNTO = { saldatrice: 0.02, filo: 0.125 } as const;
 /** Fori metallizzati da qui in su: fissaggio (viti, distanziali), non piedini. */
 export const DIAMETRO_FISSAGGIO = 3.0;
 /** THT di cui non si sa niente: si contano 2 piedini (resistenze, condensatori, diodi: il caso più comune). */
@@ -144,10 +147,13 @@ export function puntiDaBom(righe: RigaPerPiedini[]): PuntiSaldatura {
   return { punti, fonte, thtMontati: pezzi, senzaPiedini, nonMontati: { refs: [], piedini: 0 }, fori: null, testo };
 }
 
-/** Campi del preventivo da compilare con i punti: a mano = punti + filo; saldatrice = stagno in grammi (le scorie le aggiunge il calcolo). */
+/**
+ * Campi del preventivo da compilare con i punti: a mano = punti + filo; saldatrice = punti nel campo "Stagno saldatrice (reofori)",
+ * i grammi a reoforo li prende il calcolo da Impostazioni (con le scorie), lo stagno in grammi si azzera.
+ */
 export function campiStagno(punti: number, saldatura: 'mano' | 'onda'): Record<string, number> {
   const g = (n: number) => Math.round(n * 1000) / 1000;
   return saldatura === 'mano'
     ? { qntPuntiSaldaturaMano: punti, stagnoInFilo: g(punti * STAGNO_A_PUNTO.filo) }
-    : { stagnoPerSaldature: g(punti * STAGNO_A_PUNTO.saldatrice), stagno: 0 };
+    : { stagno: punti, stagnoPerSaldature: 0 };
 }
