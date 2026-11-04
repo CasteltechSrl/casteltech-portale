@@ -74,3 +74,27 @@ export function firmaWebhookValida(intestazione: string | undefined, corpo: stri
   const a = Buffer.from(atteso), b = Buffer.from(v1);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/*
+ * Numero del documento nell'XML (Adriano 4/11/2026: la prova da bozza era scartata con "Fattura duplicata numero 0" [00404],
+ * perché ogni prova usciva con Numero = 0 e lo SdI controlla che il numero sia unico per tipo e anno).
+ * - prova da una bozza: numero di prova riconoscibile e sempre diverso (PROVA-<id documento>-<n. invio>);
+ * - invio reale: solo con il numero vero; Numero vuoto o 0 (anche "0/AF") non parte mai.
+ */
+const RE_NUMERO_DOC = /(<DatiGeneraliDocumento>[\s\S]*?<Numero>)([^<]*)(<\/Numero>)/;
+
+/** Numero scritto in DatiGeneraliDocumento (null se manca). */
+export const numeroNellXml = (xml: string): string | null => RE_NUMERO_DOC.exec(xml)?.[2] ?? null;
+
+/** Numero vuoto o zero ("", "0", "00", "0/AF"): non è un numero da mandare allo SdI. */
+export const numeroNonValido = (numero: string | null | undefined): boolean =>
+  !numero || /^0+(\/.*)?$/.test(numero.trim());
+
+/** Numero per una prova da bozza: diverso a ogni invio, al massimo 20 caratteri (limite FatturaPA). */
+export const numeroDiProva = (documentoId: number, invio: number): string => `PROVA-${documentoId}-${invio}`.slice(0, 20);
+
+/** Mette il numero nell'XML (solo in DatiGeneraliDocumento: NumeroDDT, NumeroREA… restano). */
+export function conNumero(xml: string, numero: string): string {
+  if (!RE_NUMERO_DOC.test(xml)) throw new Error('Nell\'XML manca il numero del documento.');
+  return xml.replace(RE_NUMERO_DOC, (_t, a: string, _n: string, c: string) => a + numero + c);
+}
