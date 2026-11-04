@@ -44,7 +44,7 @@ import { marginePreventivo } from '../../engine/analisi.js';
 import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
+import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, motivoEscluso, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
 import { compensaNoteCredito, documentiSpuntati, duplicaFattura, eliminaBozze, excelDocumenti, rateAperte, rimettiDaFatturare, scriviXml, segnaGiaFatturati, segnaIncassate } from '../azioni-documenti-servizio.js';
 
 // schede nell'ordine scelto da Adriano (1/11/2026): DDT, Fatture, Autofatture, Note di credito
@@ -396,7 +396,7 @@ export function rotteAmministrazione() {
     const tipo = String(req.query.tipo ?? SCHEDE_DOCUMENTI[0].tipo);
     const anno = Number(req.query.anno) || new Date().getFullYear();
     const cerca = String(req.query.q ?? '').trim();
-    const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.imponibile, d.totale, d.fattura_id,
+    const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.imponibile, d.totale, d.fattura_id, d.sdi_stato,
         coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
@@ -409,7 +409,9 @@ export function rotteAmministrazione() {
     // spunte e pulsanti in alto a destra (Adriano 31/10/2026); il profilo Contabilità (sola lettura) vede l'elenco senza
     const spunte = req.session.utente?.ruolo !== 'contabilita' && req.session.utente?.ruolo !== 'esterno' && tipo in NOMI;
     const modulo = spunte ? moduloAzioni({
-      azione: '/amministrazione/documenti/azioni', nome: { singolare: 'documento', plurale: 'documenti' }, pulsanti: pulsantiDocumenti(tipo),
+      azione: '/amministrazione/documenti/azioni', nome: { singolare: 'documento', plurale: 'documenti' }, pulsanti: pulsantiDocumenti(tipo)
+        // "Invia allo SdI" solo se nell'elenco c'è qualcosa da mandare (quelli di FIC sono già partiti da lì; Adriano 4/11/2026)
+        .filter(p => p.azione !== 'invia' || righe.some(d => !motivoEscluso('invia', d))),
       extra: html`<input type="hidden" name="tipo" value="${tipo}"><input type="hidden" name="torna" value="${req.originalUrl}">`,
     }) : { apri: html``, chiudi: html`` };
     res.send(pagina(req, NOMI[tipo]?.tanti ?? 'Documenti', html`

@@ -37,7 +37,10 @@ export async function riquadroFattureEstere(spunte = true): Promise<Raw> {
   });
   const modulo = spunte ? moduloAzioni({
     azione: '/amministrazione/fatture-estere/azioni', nome: { singolare: 'fattura', plurale: 'fatture', femminile: true },
-    pulsanti: [{ azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+    pulsanti: [{ azione: 'prepara', testo: "Prepara l'autofattura", serve: '1+',
+      titolo: "Per le fatture spuntate già controllate: fornitore in anagrafica, fattura tra le fatture fornitori e bozza dell'autofattura da emettere",
+      chiedi: "Preparare l'autofattura per {n} fattur{a|e} ester{a|e}? Nasce una bozza per ognuna (si controlla e si emette dall'elenco Autofatture)." },
+    { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
       titolo: "Toglie le fatture estere spuntate (caricate per errore o doppie): non si prepara l'autofattura e il file non si conserva",
       chiedi: "Eliminare {n} fattur{a|e} ester{a|e}? Non si prepara l'autofattura e il file non si conserva." }],
   }) : { apri: html``, chiudi: html`` };
@@ -97,9 +100,27 @@ export function rotteAutofatture() {
   // spunte dell'elenco "Fatture dei fornitori esteri" (Adriano 4/11/2026): Elimina = scarta, solo quelle senza autofattura preparata
   r.post('/azioni', async (req, res) => {
     const torna = (t: string) => res.redirect(conMessaggio('/amministrazione/documenti?tipo=autofattura', t));
-    if (req.body?.azione !== 'elimina') return torna('Azione non riconosciuta.');
+    const azione = String(req.body?.azione ?? '');
+    if (!['elimina', 'prepara'].includes(azione)) return torna('Azione non riconosciuta.');
     const ids = idsSpuntati(req.body);
     if (!ids.length) return torna('Seleziona almeno una fattura.');
+    if (azione === 'prepara') {
+      // come "Prepara l'autofattura" nella pagina di ogni fattura, con gli stessi controlli: chi ha errori resta da sistemare
+      const daFare = await q<{ id: number; nome_file: string; stato: string; proposta: FatturaEsteraDb | null }>(`SELECT id, nome_file, stato, proposta
+        FROM acquisizioni WHERE id = ANY($1) AND tipo = 'fattura_estera' ORDER BY id`, [ids]);
+      let fatte = 0; const problemi: string[] = [];
+      for (const a of daFare) {
+        const nome = a.proposta?.numero ? `n. ${a.proposta.numero}` : a.nome_file;
+        if (a.stato === 'confermato') { problemi.push(`${nome}: autofattura già preparata`); continue; }
+        if (a.stato !== 'da_confermare' || !a.proposta) { problemi.push(`${nome}: non ancora letta (apri e controlla)`); continue; }
+        const caricata = await fatturaEsteraGiaCaricata(a.id, a.proposta);
+        if (caricata) { problemi.push(`${nome}: doppione di quella caricata ${descriviCaricata(caricata)}`); continue; }
+        try { await confermaFatturaEstera(a.id, a.proposta, a.proposta.fornitoreId ?? null, req.session.utente?.id ?? null); fatte++; }
+        catch (e: any) { problemi.push(`${nome}: ${e?.message ?? e}`); }
+      }
+      return torna(`${fatte === 1 ? "1 autofattura preparata" : `${fatte} autofatture preparate`} in bozza: controllale ed emettile dall'elenco qui sotto.`
+        + (problemi.length ? ` Da sistemare aprendo la fattura: ${problemi.join('; ')}.` : ''));
+    }
     const righe = await q<{ id: number; nome_file: string; stato: string }>(`SELECT id, nome_file, stato FROM acquisizioni
       WHERE id = ANY($1) AND tipo = 'fattura_estera'`, [ids]);
     const no = righe.map(x => ({ x, motivo: motivoNonScartabile(x.stato) })).filter(y => y.motivo);
