@@ -77,13 +77,13 @@ export async function propostaEmailPreventivo(id: number) {
   const p = await leggiPreventivo(id);
   if (!p) return null;
   const richiesta = await richiestaDelPreventivo(id);
-  const c = p.cliente_id ? await q1<any>(`SELECT c.email_amministrazione,
+  const c = p.cliente_id ? await q1<any>(`SELECT c.email_amministrazione, c.email_preventivi,
       (SELECT coalesce(k.email, z.email) FROM crm_aziende z LEFT JOIN crm_contatti k ON k.azienda_id = z.id AND k.email IS NOT NULL
         WHERE z.cliente_id = c.id AND coalesce(k.email, z.email) IS NOT NULL ORDER BY k.id NULLS LAST, z.id LIMIT 1) AS crm,
       (SELECT x.email_a FROM preventivi x WHERE x.cliente_id = c.id AND x.email_a IS NOT NULL AND NOT x.inviato_a_mano AND x.id <> $2
         ORDER BY x.email_inviata_il DESC NULLS LAST LIMIT 1) AS ultimo
     FROM clienti c WHERE c.id = $1`, [p.cliente_id, id]).catch(() => null) : null;
-  const a = destinatarioPreventivo({ richiesta: indirizzoEmail(richiesta?.mittente), ultimoPreventivo: c?.ultimo,
+  const a = destinatarioPreventivo({ richiesta: indirizzoEmail(richiesta?.mittente), anagrafica: c?.email_preventivi, ultimoPreventivo: c?.ultimo,
     crm: indirizzoEmail(c?.crm), amministrazione: indirizzoEmail(c?.email_amministrazione) });
   const azienda = (await caricaAzienda()).ragione_sociale || 'Casteltech S.r.l.';
   const i = p.intestazione ?? {};

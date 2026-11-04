@@ -154,8 +154,9 @@ export function nomeFilePdfDdt(numero: string | number | null, anno: number, cli
  * A chi proporre l'email del DDT: l'indirizzo a cui è stato mandato l'ultimo DDT dello stesso cliente
  * (così il portale "impara" il magazzino o l'ufficio acquisti del cliente), poi l'email amministrativa, poi quella del CRM, poi la PEC.
  */
-export function destinatarioDdt(c: { ultimoDdt?: string | null; amministrazione?: string | null; crm?: string | null; pec?: string | null }): string {
-  for (const x of [c.ultimoDdt, c.amministrazione, c.crm, c.pec]) if (x && /@/.test(x)) return x.trim();
+export function destinatarioDdt(c: { anagrafica?: string | null; ultimoDdt?: string | null; amministrazione?: string | null; crm?: string | null; pec?: string | null }): string {
+  // prima l'email per i DDT scritta nell'anagrafica del cliente (Adriano 4/11/2026)
+  for (const x of [c.anagrafica, c.ultimoDdt, c.amministrazione, c.crm, c.pec]) if (x && /@/.test(x)) return x.trim();
   return '';
 }
 

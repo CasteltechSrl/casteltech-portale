@@ -3,6 +3,7 @@
  * In alto i tasti Clienti / Fornitori / Prodotti / Componenti, sotto l'elenco con la ricerca veloce (public/ricerca.js).
  * Nei preventivi cliente e codice si scelgono SOLO da qui. Tutto in maiuscolo.
  */
+import { elencoIndirizzi } from '../../engine/conferme-ordine.js';
 import express, { Router, type Request } from 'express';
 import { maiuscoloPulito } from '../../engine/componenti-clienti.js';
 import { conCampo } from '../../engine/errori-campo.js';
@@ -466,6 +467,8 @@ export function rotteAnagrafiche() {
     ['cap', 'CAP'], ['comune', 'Comune'], ['provincia', 'Provincia (sigla)'], ['nazione', 'Nazione (sigla, IT)'],
     ['codice_sdi', 'Codice destinatario SDI', '7 caratteri; per la pubblica amministrazione il codice ufficio di 6'], ['pec', 'PEC'],
     ['email_amministrazione', 'Email per le fatture']];
+  // email per tipo di documento (Adriano 4/11/2026): proposte per prime quando si manda il preventivo o il DDT; più indirizzi con la virgola
+  const CAMPI_EMAIL: [string, string][] = [['email_preventivi', 'Email per i preventivi'], ['email_ddt', 'Email per i DDT']];
   // sede operativa (Adriano 4/11/2026): campi visibili solo con la spunta (stile.css, :has)
   const CAMPI_SEDE: [string, string, string?][] = [['sede_op_presso', 'Presso (facoltativo)', 'es. C/O MAIL BOXES ETC'], ['sede_op_indirizzo', 'Indirizzo'],
     ['sede_op_cap', 'CAP'], ['sede_op_comune', 'Comune'], ['sede_op_provincia', 'Provincia (sigla)'], ['sede_op_nazione', 'Nazione (sigla, IT)'],
@@ -494,6 +497,8 @@ export function rotteAnagrafiche() {
             html`<option value="${a.codice}" ${c.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></label>
           <label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(p =>
             html`<option value="${p.codice}" ${c.condizione_pagamento === p.codice ? raw('selected') : ''}>${p.descrizione}</option>`)}</select></label>
+          ${CAMPI_EMAIL.map(([k, t]) => html`<label>${t}
+            <input name="${k}" value="${c[k] ?? ''}" placeholder="ufficio@cliente.it (più indirizzi con la virgola)" title="Proposta per prima quando mandi questo documento per email dal portale"></label>`)}
         </div>
         <label class="spunta"><input type="checkbox" name="pubblica_amministrazione" ${c.pubblica_amministrazione ? raw('checked') : ''}>
           Pubblica amministrazione (fattura FPA12 al codice ufficio, con numero d'ordine e CIG)</label>
@@ -515,13 +520,18 @@ export function rotteAnagrafiche() {
     const id = Number(req.params.id);
     const { dati, errori: erroriFiscali } = datiFiscaliDaModulo(req.body ?? {});
     const sede = sedeDaModulo(req.body ?? {});
-    const errori = [...erroriFiscali, ...sede.errori];
+    // email per i preventivi e per i DDT: minuscolo, indirizzi validi separati da virgola
+    const emailDoc = Object.fromEntries(CAMPI_EMAIL.map(([k]) => [k, elencoIndirizzi(String(req.body?.[k] ?? '').toLowerCase())]));
+    const erroriEmail = CAMPI_EMAIL.filter(([k]) => emailDoc[k].errati.length).map(([k, t]) => `${t}: indirizzo non valido (${emailDoc[k].errati.join(', ')}).`);
+    const errori = [...erroriFiscali, ...sede.errori, ...erroriEmail];
     if (errori.length) return res.redirect(`/anagrafiche/clienti/${id}/fiscali?msg=${encodeURIComponent(`Non salvato: ${errori.join(' ')}`)}`);
     await q(`UPDATE clienti SET partita_iva = $2, codice_fiscale = $3, indirizzo = $4, cap = $5, comune = $6, provincia = $7, nazione = $8,
       codice_sdi = $9, pec = $10, email_amministrazione = $11, pubblica_amministrazione = $12, split_payment = $13,
       aliquota_iva = (SELECT codice FROM aliquote_iva WHERE codice = $14), condizione_pagamento = (SELECT codice FROM condizioni_pagamento WHERE codice = $15),
       aggiornato_il = now() WHERE id = $1`, [id, dati.partita_iva, dati.codice_fiscale, dati.indirizzo, dati.cap, dati.comune, dati.provincia, dati.nazione,
       dati.codice_sdi, dati.pec, dati.email_amministrazione, dati.pubblica_amministrazione, dati.split_payment, dati.aliquota_iva, dati.condizione_pagamento]);
+    await q(`UPDATE clienti SET email_preventivi = $2, email_ddt = $3 WHERE id = $1`,
+      [id, emailDoc.email_preventivi.indirizzi.join(', ') || null, emailDoc.email_ddt.indirizzi.join(', ') || null]);
     // senza spunta i campi della sede operativa restano com'erano (si ritrovano rimettendo la spunta)
     const s = sede.sede;
     await q(`UPDATE clienti SET sede_operativa_diversa = $2${sede.diversa ? `, sede_op_presso = $3, sede_op_indirizzo = $4, sede_op_cap = $5, sede_op_comune = $6,
@@ -667,7 +677,7 @@ function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
       <div><h1>${c.ragione_sociale}</h1>
         <p class="nota">${[c.partita_iva ? `P.IVA ${c.partita_iva}` : '', (sedeDelCliente(c) ? 'sede legale ' : '') + [c.indirizzo, c.cap, c.comune, c.provincia ? `(${c.provincia})` : ''].filter(Boolean).join(' '),
           sedeDelCliente(c) ? `sede operativa ${testoSede(sedeDelCliente(c)!).replace(/\n/g, ', ')}` : '',
-          c.pec ? `PEC ${c.pec}` : '', c.email_amministrazione ? c.email_amministrazione : '', c.condizione_pagamento ? `pagamento ${c.condizione_pagamento}` : '',
+          c.pec ? `PEC ${c.pec}` : '', c.email_amministrazione ? c.email_amministrazione : '', c.email_preventivi ? `preventivi a ${c.email_preventivi}` : '', c.email_ddt ? `DDT a ${c.email_ddt}` : '', c.condizione_pagamento ? `pagamento ${c.condizione_pagamento}` : '',
           c.pubblica_amministrazione ? 'pubblica amministrazione' : '', c.split_payment ? 'split payment' : ''].filter(Boolean).join(' · ')}
           ${d.storico && d.storico.media > 0 ? html` · <span class="etichetta cliente" title="fatturato medio annuo dagli export di Fatture in Cloud">fascia ${d.storico.fascia}</span>` : ''}</p></div>
       <div class="azioni">

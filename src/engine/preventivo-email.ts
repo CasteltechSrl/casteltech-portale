@@ -10,11 +10,12 @@ const dataIt = (d: string | Date | null | undefined) => {
 };
 
 /**
- * Indirizzo proposto, nell'ordine: chi ha mandato la richiesta (email letta dal pulsante in Gmail), l'ultimo preventivo
+ * Indirizzo proposto, nell'ordine: chi ha mandato la richiesta (email letta dal pulsante in Gmail), l'email per i preventivi
+ * dell'anagrafica del cliente (Adriano 4/11/2026, anche più indirizzi), l'ultimo preventivo
  * mandato allo stesso cliente, l'email del CRM (referente o azienda), l'email amministrativa del cliente. Vuoto = da scrivere.
  */
-export function destinatarioPreventivo(c: { richiesta?: string | null; ultimoPreventivo?: string | null; crm?: string | null; amministrazione?: string | null }): string {
-  for (const x of [c.richiesta, c.ultimoPreventivo, c.crm, c.amministrazione]) if (x && /@/.test(x)) return x.trim();
+export function destinatarioPreventivo(c: { richiesta?: string | null; anagrafica?: string | null; ultimoPreventivo?: string | null; crm?: string | null; amministrazione?: string | null }): string {
+  for (const x of [c.richiesta, c.anagrafica, c.ultimoPreventivo, c.crm, c.amministrazione]) if (x && /@/.test(x)) return x.trim();
   return '';
 }
 
