@@ -451,7 +451,7 @@ async function duplica(id: number, utenteId: number): Promise<number | null> {
 
 /** BOM elaborate che si possono collegare a un preventivo (più quella già collegata, anche se in elaborazione). */
 const elencoBom = (collegata?: number | null) => q<{ id: number; nome: string; creato_il: string }>(`SELECT id, nome, creato_il FROM bom_analisi
-  WHERE file_nome IS DISTINCT FROM $1 AND (stato = 'pronta' OR id = $2) ORDER BY creato_il DESC LIMIT 200`, [FILE_SINGOLA, collegata ?? null]);
+  WHERE file_nome IS DISTINCT FROM $1 AND NOT solo_codifica AND (stato = 'pronta' OR id = $2) ORDER BY creato_il DESC LIMIT 200`, [FILE_SINGOLA, collegata ?? null]);
 type VoceBom = Awaited<ReturnType<typeof elencoBom>>[number];
 
 const elencoClienti = () => q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);

@@ -18,9 +18,9 @@ import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, typ
 import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/decoder.js';
 import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandidato, type CandidatoPn, type ColonnaPn } from '../engine/codifica/candidati-pn.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
-import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
+import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
-import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type RisultatoFornitore } from './fornitori.js';
+import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
 import { leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 
@@ -84,7 +84,9 @@ export async function leggiFileBom(nome: string, contenuto: Buffer): Promise<str
   if (n.endsWith('.xls')) throw new Error('File .xls (Excel 97-2003): salvalo come .xlsx o .csv e ricaricalo.');
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(contenuto as any);
-  const ws = wb.worksheets.find(w => w.actualRowCount > 0) ?? wb.worksheets[0];
+  // più fogli: si codifica quello che si chiama "BOM" (Adriano 4/11/2026), altrimenti il primo con dati
+  const iBom = foglioBom(wb.worksheets.map(w => w.name));
+  const ws = (iBom >= 0 && wb.worksheets[iBom].actualRowCount > 0 ? wb.worksheets[iBom] : null) ?? wb.worksheets.find(w => w.actualRowCount > 0) ?? wb.worksheets[0];
   if (!ws) return [];
   const out: string[][] = [];
   ws.eachRow({ includeEmpty: true }, (row, i) => {
@@ -105,15 +107,16 @@ function testoCella(v: any): string {
   return String(v).trim();
 }
 /** Nuova analisi: intestazione e colonne riconosciute da sole (correggibili dalla pagina). */
-export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: string[][]; quantita: number[]; utenteId: number }): Promise<number> {
+export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: string[][]; quantita: number[]; utenteId: number; soloCodifica?: boolean }): Promise<number> {
   const h = rigaIntestazione(opz.righe);
   const colonne = nomiColonne(opz.righe[h] ?? []);
   const tutte = opz.righe.slice(h + 1).map((r, i) => ({ n: h + 2 + i, celle: r })).filter(r => r.celle.some(c => String(c ?? '').trim()));
   // intestazioni ripetute e righe di solo testo non sono componenti (Adriano Croci, 27/10/2026)
   const { tenute: dati } = pulisciRigheBom(opz.righe[h] ?? [], tutte);
   const mappatura = rilevaColonne(colonne, dati.map(r => r.celle.map(c => String(c ?? ''))));
-  const r = await q1<{ id: number }>(`INSERT INTO bom_analisi (nome, file_nome, quantita, colonne, mappatura, righe_file, creato_da)
-    VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [opz.nome, opz.fileNome, opz.quantita, JSON.stringify(colonne), JSON.stringify(mappatura), JSON.stringify(dati), opz.utenteId]);
+  // solo codifica (Anagrafiche → Componenti → Codifica una BOM, Adriano 4/11/2026): niente quantità, niente distributori
+  const r = await q1<{ id: number }>(`INSERT INTO bom_analisi (nome, file_nome, quantita, colonne, mappatura, righe_file, creato_da, solo_codifica)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [opz.nome, opz.fileNome, opz.soloCodifica ? [] : opz.quantita, JSON.stringify(colonne), JSON.stringify(mappatura), JSON.stringify(dati), opz.utenteId, !!opz.soloCodifica]);
   return r!.id;
 }
 
@@ -251,11 +254,13 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   av.fase = 'archivio componenti';
   const inArchivio = new Map<string, Componente[]>();
   for (const c of await perPn(unico(righe.map(r => pnKey(r.pn)).filter((k): k is string => !!k)))) inArchivio.set(c.pn_key!, [...(inArchivio.get(c.pn_key!) ?? []), c]);
-  // 3. distributori (servono anche i dati tecnici DigiKey per la codifica)
-  av.fase = 'prezzi e disponibilità dai distributori'; av.fatti = 0;
+  // 3. distributori (servono anche i dati tecnici DigiKey per la codifica); nella BOM "solo codifica" non si chiamano (Adriano 4/11/2026)
+  const solo = !!a.solo_codifica;
+  av.fase = solo ? 'codifica senza prezzi' : 'prezzi e disponibilità dai distributori'; av.fatti = 0;
   const daCercare = righe.filter(r => !(r as any)._escluso && !rigaPcb(r) && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
     .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
-  const ricerca = await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+  const ricerca: EsitoRicerca = solo ? { perPn: new Map(), errori: {} }
+    : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
   // codici trovati in Valore / Descrizione: si compra quello che i distributori hanno (anche se costa di più)
   const maxSchede = Math.max(1, ...(a.quantita ?? []));
@@ -266,7 +271,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     r.pn = s.scelto.pn;
     r.fonti.push(`P/N dalla colonna ${s.scelto.da === 'valore' ? 'Valore' : 'Descrizione'}`);
     const nota = notaDueCodici(cand, s.scelto, s);
-    if (nota) r.note.push(nota);
+    if (nota) r.note.push(solo ? nota.replace('nessuno si trova dai distributori', 'il primo: prezzi non cercati') : nota);
   }
   // 4. codifica
   av.fase = 'codifica'; av.fatti = 0;
@@ -366,6 +371,7 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   }
   // 6. codici
   await ricalcola(righe);
+  if (solo) { await salvaRighe(id, righe); return notaIa; } // solo codifica: niente prezzi, acquisti né alternative
   // 7. prezzi dei componenti senza P/N (passivi): il più economico con gli stessi dati
   av.fase = 'ricerca dei passivi senza P/N';
   await prezziGenerici(righe, ricerca.perPn);
@@ -759,6 +765,7 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
       r.nonControllati = attivi.filter(f => !trovati[f]);
     }
     r.acquisti = []; r.reperibilita = undefined;
+    if (!quantita.length) continue; // BOM "solo codifica": nessuna quantità, niente acquisti né giudizio di reperibilità
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.qtaScheda > 0)) continue;
     for (const schede of quantita) {
       const netta = Math.ceil(r.qtaScheda * schede);
@@ -843,7 +850,7 @@ export function problemiBom(righe: RigaBom[], costo: { senzaPrezzo: number; nonD
 
 /** BOM collegata a un preventivo: costo dei componenti a scheda per le schede del preventivo, con i problemi da risolvere. */
 export async function costoBomPerPreventivo(id: number, schede: number) {
-  const a = await q1<any>(`SELECT id, nome, righe, stato, aggiornato_il FROM bom_analisi WHERE id = $1 AND file_nome IS DISTINCT FROM $2`, [id, FILE_SINGOLA]);
+  const a = await q1<any>(`SELECT id, nome, righe, stato, aggiornato_il FROM bom_analisi WHERE id = $1 AND file_nome IS DISTINCT FROM $2 AND NOT solo_codifica`, [id, FILE_SINGOLA]);
   if (!a) return null;
   const x = costoMaterialiPer(a.righe ?? [], Math.max(1, schede), await caricaRegoleScarto());
   return { id: a.id, nome: a.nome, stato: a.stato, prezziDel: a.aggiornato_il, ...x, problemi: problemiBom(a.righe ?? [], x) };
@@ -1043,7 +1050,8 @@ export async function excelAnalisi(id: number): Promise<{ nome: string; dati: Bu
     for (const c of [9 + ATTR.length, 10 + ATTR.length]) row.getCell(c).font = { name: 'Consolas', bold: true, size: 10 };
   }
   ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } };
-  // acquisti
+  // acquisti (non nella codifica senza prezzi: lì il file ha solo la BOM codificata)
+  if (!a.solo_codifica) {
   const wa = wb.addWorksheet('Acquisti');
   intest(wa, [{ titolo: 'Riga', larghezza: 6 }, { titolo: 'P/N', larghezza: 24 }, { titolo: 'Codice gestionale', larghezza: 22 }, { titolo: 'Qtà a scheda', larghezza: 8 },
     { titolo: 'Reperibilità', larghezza: 12 }, { titolo: 'Motivi', larghezza: 40 },
@@ -1060,6 +1068,7 @@ export async function excelAnalisi(id: number): Promise<{ nome: string; dati: Bu
   const rp = riepilogo(righe, quantita);
   wa.addRow([]);
   for (const x of rp.perQuantita) wa.addRow(['', `Totale ${x.schede} schede`, `${x.totale.toFixed(2)} €`, `a scheda ${x.aScheda.toFixed(2)} €`, x.senzaPrezzo ? `${x.senzaPrezzo} righe senza prezzo` : '']).font = { bold: true };
+  }
   const buf = Buffer.from(await wb.xlsx.writeBuffer());
   return { nome: `${String(a.nome).replace(/[^\w.-]+/g, '_')}_codificata.xlsx`, dati: buf };
 }
