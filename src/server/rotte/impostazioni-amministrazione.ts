@@ -9,7 +9,7 @@ import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoAzienda } from '../../engine/amministrazione.js';
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
-import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
+import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaSediOperative, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
 
@@ -163,6 +163,20 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
         </div>
       </details>
 
+      <h2 id="sedi-fic">Sedi operative dei clienti da Fatture in Cloud</h2>
+      <details class="blocco">
+        <summary>Carica il file sedi_operative_fic.json.gz (preparato da Claude)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">In Fatture in Cloud era il campo "Indirizzo di spedizione". Nei clienti GIÀ in anagrafica spunta "Sede operativa diversa
+            dalla sede legale" e ne scrive l'indirizzo (Anagrafiche → Clienti → Dati fiscali); diventa il luogo di destinazione proposto nei DDT.
+            Non tocca gli altri dati e non cambia le sedi operative già scritte nel portale. Prima mostra un riepilogo e chiede conferma.</p>
+          <label>File <input type="file" id="file-sedi-fic" accept=".gz,.json"></label>
+          <button class="primario" type="button" id="carica-sedi-fic">Controlla il file</button>
+          <output id="esito-sedi-fic"></output>
+          <button class="primario" type="button" id="conferma-sedi-fic" hidden>Conferma e carica</button>
+        </div>
+      </details>
+
       <h2 id="storico-fic">Storico dei documenti da Fatture in Cloud</h2>
       <details class="blocco">
         <summary>Carica il file storico_fic.json.gz (preparato da Claude)</summary>
@@ -194,6 +208,16 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
       if (!Array.isArray(righe)) throw new Error();
     } catch { return res.status(400).json({ errore: 'File non valido: serve clienti_fiscali_fic.json.gz' }); }
     res.json(await caricaClientiFiscali(righe, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/sedi-fic', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
+    let righe: unknown[];
+    try {
+      const f = leggiFile(req.body);
+      righe = f.clienti;
+      if (f.tipo !== 'sedi_operative' || !Array.isArray(righe)) throw new Error();
+    } catch { return res.status(400).json({ errore: 'File non valido: serve sedi_operative_fic.json.gz' }); }
+    res.json(await caricaSediOperative(righe, { anteprima: req.query.conferma !== '1' }));
   });
 
   r.post('/storico-fic', express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {

@@ -945,3 +945,6 @@ ul.elenco-scelta li .nota { color: #777; }
 .riquadro-invio .invio-frase.invio-errore { color: var(--negativo); font-weight: 550; }
 .riquadro-invio form.segna-inviato input { padding: .2rem .4rem; font-size: .85rem; }
 button.piccolo { font-size: .8rem; padding: .2rem .6rem; }
+/* Sede operativa del cliente (Adriano 4/11/2026): i campi si vedono solo con la spunta "Sede operativa diversa dalla sede legale" */
+fieldset.campi-sede-operativa { display: none; border: 1px solid #d0d7de; border-radius: 6px; padding: .5rem .8rem; margin: .4rem 0 .8rem; }
+form:has(#sede-operativa-diversa:checked) fieldset.campi-sede-operativa { display: block; }

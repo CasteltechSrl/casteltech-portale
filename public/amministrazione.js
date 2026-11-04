@@ -33,6 +33,12 @@ caricamento('clienti-fic', j => `${j.aggiornati} clienti aggiornati, ${j.uguali}
   + elenco('Da controllare', j.avvisi.map(a => `${a.nome}: ${a.avviso}`))
   + elenco('Non in anagrafica (non aggiunti)', j.nonInAnagrafica));
 
+caricamento('sedi-fic', j => `${j.aggiornati.length} clienti con la sede operativa.`
+  + elenco('Sede operativa', j.aggiornati)
+  + elenco('Già scritta nel portale (non toccata)', j.giaNelPortale)
+  + elenco('Da controllare', j.errori)
+  + elenco('Non in anagrafica (non aggiunti)', j.nonInAnagrafica));
+
 caricamento('storico-fic', j => Object.entries(j.documenti).map(([tipo, n]) => `${tipo}: ${n.nuovi} nuovi, ${n.aggiornati} aggiornati`).join('; ')
   + `; documenti ricevuti: ${j.ricevuti.nuovi} nuovi, ${j.ricevuti.aggiornati} aggiornati.`
   + `\nDa incassare: ${j.daIncassare.numero} scadenze per ${euro(j.daIncassare.importo)}. Da pagare: ${j.daPagare.numero} scadenze per ${euro(j.daPagare.importo)}.`

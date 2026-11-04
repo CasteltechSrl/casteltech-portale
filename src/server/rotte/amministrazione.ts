@@ -4,6 +4,7 @@
  * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
  * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
+import { sedeDelCliente, testoSede } from '../../engine/sede-operativa.js';
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
@@ -128,8 +129,9 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const emesso = d.stato !== 'bozza';
   const t = d.dati_trasporto ?? {};
   const { errori, avvisi } = await controllaDdt(d.id);
-  const cliente = d.cliente_id ? await q1(`SELECT indirizzo, cap, comune, provincia, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
+  const cliente = d.cliente_id ? await q1(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
   const sede = cliente ? indirizzoSu(cliente) : '';
+  const operativa = sedeDelCliente(cliente);
   const scelta = (nome: string, valori: readonly string[], attuale: string | undefined, vuota = true) => html`<select name="${nome}">
     ${vuota ? html`<option value=""></option>` : ''}${[...new Set([...valori, ...(attuale ? [attuale] : [])])].map(v =>
       html`<option ${v === attuale ? raw('selected') : ''}>${v}</option>`)}</select>`;
@@ -166,8 +168,10 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
         <label>Aspetto dei beni <input name="aspetto" value="${t.aspetto ?? ''}" class="maiuscolo" placeholder="es. SCATOLA"></label>
         <label>Inizio trasporto <input type="datetime-local" name="inizio" value="${t.inizio ?? ''}"></label>
       </div>
-      <label>Luogo di destinazione (vuoto = sede del cliente${sede ? `: ${sede.replace(/\n/g, ', ')}` : ''})
+      <label>Luogo di destinazione (vuoto = sede legale del cliente${sede ? `: ${sede.replace(/\n/g, ', ')}` : ''})
         <textarea name="destinazione" rows="3" class="maiuscolo">${t.destinazione ?? ''}</textarea></label>
+      ${operativa ? html`<p class="nota">Sede operativa del cliente (Anagrafiche → Clienti → Dati fiscali): ${testoSede(operativa).replace(/\n/g, ', ')}.
+        ${(t.destinazione ?? '').trim() === testoSede(operativa) ? '' : html`<b>Il luogo di destinazione qui sopra è diverso: controllalo.</b>`}</p>` : ''}
       <label>Note interne (non vanno sul DDT) <input name="note" value="${d.note ?? ''}"></label>
       <div class="tabella-scorre"><table class="editor" id="righe-documento" data-cliente="${d.cliente_id ?? ''}">
         <thead><tr><th title="Da quale anagrafica viene il codice (non si stampa)">Tipo</th><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>U.m.</th><th title="Non si stampa sul DDT: serve quando si fattura">Prezzo € (per la fattura)</th><th title="Solo testo">Testo</th><th></th></tr></thead>
