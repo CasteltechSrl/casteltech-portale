@@ -25,12 +25,57 @@ const euro4 = (x: number | null | undefined) => x == null ? '' : new Intl.Number
 const euro2 = (x: number | null | undefined) => x == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x) + ' €';
 const CLASSE_ESITO: Record<string, string> = { [ESITI.DB]: 'archivio', [ESITI.DB_PROD]: 'archivio', [ESITI.DB_INC]: 'manca', [ESITI.DB_FATTO]: 'nuovo',
   [ESITI.NUOVO]: 'nuovo', [ESITI.NUOVO_VER]: 'verifica', [ESITI.INC]: 'manca', [ESITI.NON_MONTATO]: 'escluso', [ESITI.CLIENTE]: 'escluso' };
-const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+/).map(s => parseInt(s, 10)).filter(n => n > 0 && n < 1e7))].slice(0, 4);
+/** Pagina della codifica BOM senza prezzi (Produzione → Codifica componenti, Adriano 4/11/2026) e chiave di `pag` per le sue BOM. */
+export const PAGINA_SOLO_CODIFICA = '/produzione/codifica-componenti';
+const SOLO_CODIFICA = 'solo-codifica';
+export const leggiQuantita = (x: unknown) => [...new Set(String(x ?? '').split(/[;,\s]+/).map(s => parseInt(s, 10)).filter(n => n > 0 && n < 1e7))].slice(0, 4);
+
+const paginaProduzione = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
+  String(layout({ titolo, utente: req.session.utente, attiva: 'produzione', largo: true, avviso, script: ['componenti.js', 'elenco.js'], contenuto: html`
+    <nav class="schede"><a href="${PAGINA_SOLO_CODIFICA}" class="attiva">Codifica componenti</a>
+      <a href="/anagrafiche/componenti" title="Archivio dei componenti codificati">Archivio componenti ↗</a></nav>${contenuto}` }));
+
+/**
+ * Produzione → Codifica componenti (Adriano 4/11/2026): si carica una BOM (Excel: il foglio "BOM") e si danno i codici di produzione e gestionale
+ * con la stessa codifica di Quotazioni, ma senza chiedere prezzi ai distributori. Il risultato si scarica in Excel (si apre anche in Google Sheets).
+ */
+export function rotteCodificaComponenti() {
+  const r = Router();
+  r.get('/', async (req, res) => {
+    const elenco = await q<any>(`SELECT id, nome, file_nome, stato, riepilogo, creato_il FROM bom_analisi WHERE solo_codifica ORDER BY creato_il DESC LIMIT 100`);
+    res.send(paginaProduzione(req, 'Codifica componenti', html`
+      <h1>Codifica componenti</h1>
+      <section class="blocco stretto-form" id="carica-bom">
+        <h2>Codifica una BOM</h2>
+        <p class="nota">Excel (.xlsx) o CSV. Se il file Excel ha più fogli si legge quello che si chiama <b>BOM</b>. Per ogni riga il portale dà il
+          <b>codice di produzione</b> (armadio) e il <b>codice gestionale</b> (Moka) come in Quotazioni: prima l'archivio, poi il P/N, le colonne della BOM e l'IA.
+          <b>I prezzi non si cercano</b> (niente distributori): è più veloce. Il risultato si scarica in Excel, che si apre anche in Google Sheets.
+          "Salva … codici nell'archivio" mette i componenti nuovi in Anagrafiche → Componenti.</p>
+        <label>File <input type="file" id="file-bom" accept=".xlsx,.csv,.txt"></label>
+        <label>Nome <input id="nome-bom" placeholder="vuoto = nome del file"></label>
+        <button class="primario" id="invia-bom" data-solo="1">Carica e codifica</button>
+        <output id="esito-bom" class="nota"></output>
+      </section>
+      <h2>BOM codificate</h2>
+      ${elenco.length ? html`<div class="tabella-scorre"><table class="elenco"><thead><tr><th>Nome</th><th>File</th><th>Caricata</th><th class="n">Righe</th>
+        <th class="n">In archivio</th><th class="n">Nuovi</th><th class="n">Da completare</th><th>Stato</th><th></th></tr></thead><tbody>
+        ${elenco.map(b => { const rp = b.riepilogo ?? {}; return html`<tr>
+          <td><a href="/quotazioni/bom/${b.id}">${b.nome}</a></td><td class="taglia">${b.file_nome}</td><td>${new Date(b.creato_il).toLocaleDateString('it-IT')}</td>
+          <td class="n">${rp.righe ?? ''}</td><td class="n">${rp.inArchivio ?? ''}</td><td class="n">${rp.nuovi ?? ''}</td><td class="n">${rp.daCompletare || ''}</td>
+          <td>${b.stato === 'pronta' ? '' : String(b.stato).replace('_', ' ')}</td>
+          <td>${b.stato === 'pronta' ? html`<a href="/quotazioni/bom/${b.id}/excel">Excel</a>` : ''}</td></tr>`; })}
+        </tbody></table></div>` : html`<p class="vuoto">Nessuna BOM codificata.</p>`}`, req.query.msg ? String(req.query.msg) : undefined));
+  });
+  return r;
+}
 
 export function rotteComponenti() {
   const r = Router();
   const pag = (req: Request, titolo: string, attiva: string, contenuto: Raw, avviso?: string, script?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js'], contenuto: html`
+    attiva === SOLO_CODIFICA
+      // BOM codificata senza prezzi: sta in Produzione → Codifica componenti (Adriano 4/11/2026)
+      ? paginaProduzione(req, titolo, contenuto, avviso)
+      : String(layout({ titolo, utente: req.session.utente, attiva: 'quotazioni', largo: true, avviso, script: script ?? ['componenti.js', 'elenco.js'], contenuto: html`
       <nav class="schede">${[['bom', 'BOM e preventivo materiali'], ['prezzo', 'Miglior prezzo di un P/N'], ['codifica', 'Codifica un P/N'], ['comuni', 'Componenti in comune']]
         .map(([s, t]) => html`<a href="/quotazioni/${s}" class="${s === attiva ? 'attiva' : ''}">${t}</a>`)}
         <a href="/anagrafiche/componenti" title="L'archivio sta in Anagrafiche → Componenti">Archivio componenti ↗</a></nav>${contenuto}` }));
@@ -41,7 +86,7 @@ export function rotteComponenti() {
   r.get('/bom', async (req, res) => {
     const elenco = await q<any>(`SELECT b.id, b.nome, b.file_nome, b.quantita, b.stato, b.riepilogo, b.creato_il,
         (SELECT count(*)::int FROM preventivi p WHERE p.bom_id = b.id) AS preventivi FROM bom_analisi b
-      WHERE b.file_nome IS DISTINCT FROM $1 ORDER BY b.creato_il DESC LIMIT 100`, [FILE_SINGOLA]);
+      WHERE b.file_nome IS DISTINCT FROM $1 AND NOT b.solo_codifica ORDER BY b.creato_il DESC LIMIT 100`, [FILE_SINGOLA]);
     const modulo = moduloAzioni({
       azione: '/quotazioni/bom/azioni', nome: { singolare: 'BOM', plurale: 'BOM', femminile: true },
       pulsanti: [
@@ -77,12 +122,13 @@ export function rotteComponenti() {
 
   r.post('/bom', express.raw({ type: 'application/octet-stream', limit: '25mb' }), async (req, res) => {
     const fileNome = String(req.query.file ?? 'bom.xlsx');
+    const soloCodifica = req.query.solo === '1'; // Anagrafiche → Componenti → Codifica una BOM: senza quantità e senza prezzi
     const quantita = leggiQuantita(req.query.quantita);
-    if (!quantita.length) return res.status(400).json({ errore: 'Scrivi quante schede (es. 100 oppure 100, 250).' });
+    if (!quantita.length && !soloCodifica) return res.status(400).json({ errore: 'Scrivi quante schede (es. 100 oppure 100, 250).' });
     try {
       const righe = unisciAlternative(await leggiFileBom(fileNome, req.body as Buffer)); // alternative del cliente in una colonna
       if (righe.length < 2) return res.status(400).json({ errore: 'Il file non contiene righe.' });
-      const id = await creaAnalisi({ nome: String(req.query.nome ?? '').trim() || fileNome.replace(/\.[^.]+$/, ''), fileNome, righe, quantita, utenteId: req.session.utente!.id });
+      const id = await creaAnalisi({ nome: String(req.query.nome ?? '').trim() || fileNome.replace(/\.[^.]+$/, ''), fileNome, righe, quantita, utenteId: req.session.utente!.id, soloCodifica });
       avviaElaborazione(id);
       res.json({ id });
     } catch (e: any) { res.status(400).json({ errore: `File non leggibile: ${e.message}` }); }
@@ -96,7 +142,7 @@ export function rotteComponenti() {
     // BOM quotata per un preventivo (spunta Componenti dai documenti del cliente): da qui si torna al preventivo per la quota
     const chiesto = Number(req.query.preventivo) || 0;
     const prev = await q1<{ id: number; numero: string }>(`SELECT id, numero FROM preventivi WHERE bom_id = $1 ORDER BY (id = $2) DESC, id DESC LIMIT 1`, [a.id, chiesto]);
-    res.send(pag(req, a.nome, a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', html`${prev ? rimandoPreventivo(a, prev) : ''}${paginaAnalisi(a)}`, req.query.msg ? String(req.query.msg) : undefined));
+    res.send(pag(req, a.nome, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', html`${prev ? rimandoPreventivo(a, prev) : ''}${paginaAnalisi(a)}`, req.query.msg ? String(req.query.msg) : undefined));
   });
   r.get('/bom/:id/stato', async (req, res) => {
     const id = Number(req.params.id);
@@ -114,6 +160,14 @@ export function rotteComponenti() {
     const mappa: Partial<Record<Ruolo, string>> = {};
     for (const k of Object.keys(ETICHETTE_RUOLI) as Ruolo[]) { const v = String(req.body[k] ?? ''); if (v && a.colonne.includes(v)) mappa[k] = v; }
     await q(`UPDATE bom_analisi SET mappatura = $2 WHERE id = $1`, [req.params.id, JSON.stringify(mappa)]);
+    avviaElaborazione(Number(req.params.id));
+    res.redirect(`/quotazioni/bom/${req.params.id}`);
+  });
+  // BOM codificata senza prezzi → "Cerca anche i prezzi": diventa una BOM di Quotazioni con le schede scritte e si rielabora con i distributori
+  r.post('/bom/:id/prezzi', async (req, res) => {
+    const quantita = leggiQuantita(req.body.quantita);
+    if (!quantita.length) return res.redirect(`/quotazioni/bom/${req.params.id}?msg=${encodeURIComponent('Scrivi quante schede (es. 100 oppure 100, 250).')}`);
+    await q(`UPDATE bom_analisi SET quantita = $2, solo_codifica = false WHERE id = $1`, [req.params.id, quantita]);
     avviaElaborazione(Number(req.params.id));
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
@@ -141,8 +195,8 @@ export function rotteComponenti() {
     res.redirect('/quotazioni/bom');
   });
   r.post('/bom/:id/elimina', async (req, res) => {
-    await q(`DELETE FROM bom_analisi WHERE id = $1`, [req.params.id]);
-    res.redirect('/quotazioni/bom');
+    const x = await q1<{ solo_codifica: boolean }>(`DELETE FROM bom_analisi WHERE id = $1 RETURNING solo_codifica`, [req.params.id]);
+    res.redirect(x?.solo_codifica ? PAGINA_SOLO_CODIFICA : '/quotazioni/bom');
   });
   r.get('/bom/:id/excel', async (req, res) => {
     const x = await excelAnalisi(Number(req.params.id));
@@ -156,7 +210,7 @@ export function rotteComponenti() {
     const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [req.params.id]);
     const riga: RigaBom | undefined = a?.righe?.find((x: RigaBom) => x.n === Number(req.params.n));
     if (!a || !riga) return res.status(404).send('Riga non trovata');
-    res.send(pag(req, `Riga ${riga.n}`, a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga), req.query.msg ? String(req.query.msg) : undefined));
+    res.send(pag(req, `Riga ${riga.n}`, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga), req.query.msg ? String(req.query.msg) : undefined));
   });
   // prezzo scritto a mano (Adriano 28/10/2026): vale al posto di quello proposto; vuoto = di nuovo quello dei distributori
   r.post('/bom/:id/riga/:n/prezzo', async (req, res) => {
@@ -345,43 +399,51 @@ function paginaAnalisi(a: any): Raw {
   const rp: Riepilogo | undefined = a.riepilogo?.perQuantita ? a.riepilogo : undefined;
   const inCorso = a.stato === 'in_corso' || a.stato === 'da_elaborare' || avanzamenti.has(a.id);
   const singola = a.file_nome === FILE_SINGOLA;
+  const solo = !!a.solo_codifica; // codifica senza prezzi: niente totali, acquisti, reperibilità né compatibili
   const daSalvare = righe.filter(r => r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER || r.esito === ESITI.DB_FATTO).length;
   const mappa: Record<string, string> = a.mappatura ?? {};
   return html`
   <div class="intestazione-pagina"><h1>${a.nome}</h1>
     <div class="azioni">
       ${!inCorso && daSalvare ? html`<form method="post" action="/quotazioni/bom/${a.id}/salva" class="inline"><button class="primario" title="Mette nell'archivio i codici nuovi completi">Salva ${daSalvare} codici nell'archivio</button></form>` : ''}
-      ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel">Scarica Excel</a>` : ''}
+      ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel" title="${solo ? 'File Excel: si apre anche in Google Sheets (caricalo nel Drive e aprilo con Fogli Google)' : 'Codifica e acquisti in Excel'}">Scarica Excel</a>` : ''}
       ${!inCorso && rp?.perQuantita.some(x => x.totale > 0) ? html`<a class="bottone" href="/ordini/fornitori/bom/${a.id}" title="Prepara gli ordini a fornitore, uno per distributore">Ordina i componenti</a>` : ''}
-      ${!inCorso ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>` : ''}
+      ${inCorso ? '' : solo ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica (archivio aggiornato, regole nuove); i prezzi non si cercano">Rielabora</button></form>`
+        : html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>`}
       <form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>
   ${inCorso ? html`<div class="avviso info" id="avanzamento" data-id="${a.id}">Elaborazione in corso…</div>` : ''}
   ${a.stato === 'errore' ? html`<div class="avviso">${a.messaggio}</div>` : a.messaggio ? html`<div class="avviso info">${a.messaggio}</div>` : ''}
-  ${rp ? html`<div class="totali materiali">
+  ${solo ? html`<p class="nota">Codifica senza prezzi: codici di produzione e gestionale dall'archivio, dal P/N, dalle colonne della BOM e dall'IA;
+    i distributori non vengono interpellati. Se un codice non si completa, apri "modifica" sulla riga.</p>
+    ${rp ? html`<div class="totali materiali"><div class="totale principale"><span>Righe</span><strong>${rp.righe}</strong><small>${rp.inArchivio} in archivio · ${rp.nuovi} nuovi · ${rp.daCompletare} da completare</small></div></div>` : ''}`
+  : rp ? html`<div class="totali materiali">
     ${rp.perQuantita.map((x, i) => html`<div class="totale ${i === 0 ? 'principale' : ''}"><span>Materiali per ${num(x.schede, 0)} schede</span>
       ${x.totale > 0 ? html`<strong>${euro2(x.totale)}</strong><small>${euro2(x.aScheda)} a scheda${x.senzaPrezzo ? ` · ${x.senzaPrezzo} righe senza prezzo` : ''}${x.nonDisponibili ? ` · ${x.nonDisponibili} non disponibili` : ''}</small>`
         : html`<strong>—</strong><small>${Object.values(fornitoriConfigurati()).some(Boolean) ? 'nessun prezzo trovato' : 'nessun distributore collegato'}</small>`}</div>`)}
     <div class="totale"><span>Righe</span><strong>${rp.righe}</strong><small>${rp.inArchivio} in archivio · ${rp.nuovi} nuovi · ${rp.daCompletare} da completare</small></div>
     <div class="totale"><span>Reperibilità</span><strong>${rp.critici ? html`<span class="negativo">${rp.critici} critici</span>` : 'nessun critico'}</strong><small>${rp.attenzione} da tenere d'occhio</small></div>
   </div>` : ''}
-  ${!singola ? html`<details class="blocco"><summary>Colonne della BOM e quantità</summary>
+  ${!singola ? html`<details class="blocco"><summary>${solo ? 'Colonne della BOM' : 'Colonne della BOM e quantità'}</summary>
     <form method="post" action="/quotazioni/bom/${a.id}/colonne" class="riga-campi">
       ${(Object.entries(ETICHETTE_RUOLI) as [Ruolo, string][]).map(([k, t]) => html`<label>${t}<select name="${k}"><option value="">—</option>
         ${(a.colonne as string[]).map(c => html`<option ${mappa[k] === c ? raw('selected') : ''}>${c}</option>`)}</select></label>`)}
       <button>Applica e rielabora</button></form>
-    <form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>
+    ${solo ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>`}
   </details>` : ''}
+  ${solo && !inCorso ? html`<details class="blocco"><summary>Cerca anche i prezzi (passa a Quotazioni)</summary>
+    <form method="post" action="/quotazioni/bom/${a.id}/prezzi" class="riga-campi"><label>Schede da produrre <small class="unita">anche più quantità, es. 100, 250</small><input name="quantita" value="100"></label>
+      <button title="La BOM va in Quotazioni e si rielabora con prezzi e disponibilità dai distributori">Cerca i prezzi</button></form></details>` : ''}
   ${righe.length ? html`
   ${avvisoNonMontati(righe)}
-  ${bloccoCompatibili(a, righe)}
+  ${solo ? '' : bloccoCompatibili(a, righe)}
   <div class="filtri" id="filtri"><button data-filtro="" class="attivo">Tutte (${righe.length})</button>
     <button data-filtro="manca">Da completare (${righe.filter(r => CLASSE_ESITO[r.esito] === 'manca').length})</button>
     <button data-filtro="nuovo verifica">Nuovi (${righe.filter(r => ['nuovo', 'verifica'].includes(CLASSE_ESITO[r.esito])).length})</button>
     <button data-filtro="escluso" title="Non montati (DNP), PCB, fiducial, forniti dal cliente">Esclusi (${righe.filter(r => r.esito === ESITI.NON_MONTATO || r.clienteFornisce).length})</button>
-    <button data-filtro="critico attenzione">Reperibilità (${righe.filter(r => r.reperibilita && r.reperibilita.livello !== 'ok').length})</button></div>
+    ${solo ? '' : html`<button data-filtro="critico attenzione">Reperibilità (${righe.filter(r => r.reperibilita && r.reperibilita.livello !== 'ok').length})</button>`}</div>
   <div class="tabella-scorre"><table class="bom"><thead><tr><th>Riga</th><th>P/N</th><th class="n">Qtà</th><th>Esito</th><th>Codice produzione</th><th>Codice gestionale</th>
-    <th>Descrizione</th><th>Reperib.</th>${quantita.map(s => html`<th class="n">${num(s, 0)} schede</th>`)}<th>Note</th><th></th></tr></thead><tbody>
+    <th>Descrizione</th>${solo ? '' : html`<th>Reperib.</th>`}${quantita.map(s => html`<th class="n">${num(s, 0)} schede</th>`)}<th>Note</th><th></th></tr></thead><tbody>
     ${righe.map(r => html`<tr id="riga-${r.n}" data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}">
       <td>${r.n}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
         ${r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
@@ -390,7 +452,7 @@ function paginaAnalisi(a: any): Raw {
         ${!r.pn && (r.valore || r.descrizioneBom) ? html`<br><small class="nota">${[r.valore, r.footprint].filter(Boolean).join(' · ') || r.descrizioneBom}</small>` : ''}</td>
       <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r)}</td>
       <td class="codice">${r.codiceProduzione}</td><td class="codice">${r.codiceGestionale}</td><td class="taglia" title="${r.descrizione ?? ''}">${r.descrizione}</td>
-      <td>${badgeLivello(r)}</td>
+      ${solo ? '' : html`<td>${badgeLivello(r)}</td>`}
       ${quantita.map((_, i) => { const x = r.acquisti[i]; return html`<td class="acquisto">${x?.scelta ? html`<b>${num(x.scelta.qta, 0)}</b> pz · ${nomeFornitore(x.scelta.fornitore)}
         <br><small>${euro4(x.scelta.prezzo)} € → <b>${euro2(x.scelta.totale)}</b>${x.scarto ? ` · +${x.scarto} scarto` : ''}${!x.scelta.disponibile ? ' · NON DISPONIBILE' : ''}</small>`
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
@@ -402,7 +464,7 @@ function paginaAnalisi(a: any): Raw {
   ${!singola && !inCorso ? bloccoAggiungiRiga(a) : ''}
   <p class="nota">Esiti: <span class="esito archivio">in archivio</span> codici esistenti · <span class="esito nuovo">nuovo</span> codici calcolati, da salvare ·
     <span class="esito verifica">da verificare</span> ipotesi da controllare (vedi note) · <span class="esito manca">da completare</span> mancano dati: apri "modifica".
-    Lo scarto: passivi economici +10%, sotto 1 € +5%, 1–3 € +1 pezzo, oltre 3 € nessuno.</p>` : inCorso ? '' : html`<p class="vuoto">Nessuna riga.</p>`}`;
+    ${solo ? '' : 'Lo scarto: passivi economici +10%, sotto 1 € +5%, 1–3 € +1 pezzo, oltre 3 € nessuno.'}</p>` : inCorso ? '' : html`<p class="vuoto">Nessuna riga.</p>`}`;
 }
 
 function tabellaOfferte(offerte: Offerta[], qta: number) {
@@ -553,7 +615,7 @@ function paginaRiga(a: any, r: RigaBom): Raw {
       <label class="spunta"><input type="checkbox" name="cliente" ${r.clienteFornisce ? raw('checked') : ''}> Fornito dal cliente (non si acquista)</label>
       <button class="primario">Ricalcola</button>
     </form>
-    <section>
+    ${a.solo_codifica ? html`<section>${bloccoModificaMano(a, r)}</section>` : html`<section>
       <h2>Acquisto</h2>
       ${r.reperibilita ? html`<p>${badgeLivello(r)} ${r.reperibilita.motivi.join(' · ')}</p>` : ''}
       ${r.esito === ESITI.NON_MONTATO || r.clienteFornisce ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/prezzo" class="riga-campi" id="prezzo-manuale">
@@ -568,6 +630,6 @@ function paginaRiga(a: any, r: RigaBom): Raw {
           <td class="n">${euro4(x.scelta?.prezzo)}</td><td class="n">${euro2(x.scelta?.totale)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessun acquisto (componente escluso o senza quantità).</p>`}
       <h2>Offerte dei distributori</h2>
       ${tabellaOfferte(r.offerte, qta)}
-    </section>
+    </section>`}
   </div>`;
 }

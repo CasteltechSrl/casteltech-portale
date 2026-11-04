@@ -23,7 +23,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   i vecchi codici senza cliente sono in evidenza in Anagrafiche → Prodotti (in cima, gialli, conteggio sul tasto) finché non si assegnano o si eliminano.
 
 - Menu in alto a gruppi (Adriano 31/10/2026, `MENU_GRUPPI` in `views/layout.ts`, test in `tests/menu.test.ts`): Anagrafiche, Commerciale (Adriano 1/11/2026, in quest'ordine:
-  CRM, Quotazioni componenti, Documenti dei clienti, Preventivi, Ordini clienti, Conferme d'ordine = elenco `/ordini/conferme`, poi Ordini da e-mail e PDF = Da acquisire), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt; poi macchine e consumi),
+  CRM, Quotazioni componenti, Documenti dei clienti, Preventivi, Ordini clienti, Conferme d'ordine = elenco `/ordini/conferme`, poi Ordini da e-mail e PDF = Da acquisire), Acquisti (ordini a fornitore, miglior prezzo; poi magazzino), Produzione (commesse, Gantt, Codifica componenti; poi macchine e consumi),
   Amministrazione (Adriano 2/11/2026: DDT, Fatture, Autofatture, Note di credito direttamente nel menu e nei tasti della sezione, niente più "Documenti emessi"; indirizzo `/amministrazione/documenti?tipo=`), Qualità (dal 1/11/2026); ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti:
   Sicurezza e ambiente. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
   Tendine meno sensibili (Adriano 31/10/2026, `public/menu.js`): si chiudono 0,45 s dopo l'uscita del mouse, ponte invisibile tra nome e tendina,
@@ -45,6 +45,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Componenti (Adriano 2/11/2026; `engine/componenti-archivio.ts`, test in `tests/ddt-email.test.ts`): senza ricerca l'elenco di TUTTO l'archivio a pagine da 100 con filtro
   per famiglia; "+ Aggiungi componente" (anche precompilato dalla ricerca vuota) = P/N già presente → lo mostra, altrimenti codifica singola come Quotazioni → Codifica un P/N,
   poi "Salva nell'archivio" riporta qui. Non è un magazzino (giacenze non esistono nel portale).
+  Codifica componenti senza prezzi (Adriano 4/11/2026; menu Produzione → Codifica componenti = `/produzione/codifica-componenti`, `rotteCodificaComponenti` in
+  `rotte/componenti.ts`, migrazione 069 `bom_analisi.solo_codifica`, test in `tests/codifica-senza-prezzi.test.ts`): BOM codificata come in Quotazioni (archivio, P/N,
+  colonne, IA) ma SENZA distributori, quantità, acquisti, reperibilità, alternative; Excel con il solo foglio "BOM codificata" (si apre anche in Google Sheets);
+  non collegabile ai preventivi; "Cerca anche i prezzi" (POST `/quotazioni/bom/:id/prezzi`) la passa a Quotazioni. Excel con più fogli: si legge il foglio "BOM"
+  (`foglioBom` in `engine/codifica/bom.ts`, vale anche per Quotazioni), altrimenti il primo con dati.
   Componenti clienti (Adriano 2/11/2026; migrazione 063 `componenti_clienti`, `engine/componenti-clienti.ts`, `componenti-clienti-servizio.ts`, test in `tests/componenti-clienti.test.ts`):
   materiale in conto lavoro con i codici del cliente (Selea, Idea automazione), ogni codice col suo cliente, MAIUSCOLO; caricamento da Excel/CSV (anteprima → conferma,
   aggiunge e aggiorna, non toglie; CSV in Windows-1252 letto). DDT: ogni riga ha "Da" = prodotto / componente nostro (codice = gestionale, descrizione = "P/N (codice produzione)",

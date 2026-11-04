@@ -322,6 +322,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/componenti', 'Anagrafiche → Componenti'], ['/quotazioni', 'Quotazioni (codifica)']],
   },
   {
+    id: 'codifica-bom-senza-prezzi', area: 'componenti', titolo: 'Codifica componenti: codificare una BOM senza cercare i prezzi',
+    parole: 'codifica codificare componenti bom distinta senza prezzi codice produzione gestionale moka armadio veloce distributori foglio excel google sheets fogli',
+    testo: [
+      'Produzione → Codifica componenti serve quando di una BOM vuoi solo i codici: per ogni riga il codice di produzione (armadio) e il codice gestionale (Moka), senza preventivo dei materiali.',
+      'Se il file Excel ha più fogli, il portale legge quello che si chiama "BOM" (se non c\'è, il primo foglio con dati).',
+      'La codifica è la stessa di Quotazioni (archivio, decodifica del P/N, colonne della BOM, IA), ma il portale non chiede prezzi e disponibilità ai distributori: è più veloce e non consuma le richieste di DigiKey, Mouser e gli altri. Per questo non ci sono totali, acquisti, reperibilità né alternative.',
+      'Il risultato si scarica con "Scarica Excel" (anche dall\'elenco, colonna Excel). Per averlo in Google Sheets: carica il file nel Drive e aprilo con Fogli Google.',
+      '"Salva … codici nell\'archivio" mette i componenti nuovi in Anagrafiche → Componenti. Le righe da completare si sistemano con "modifica", come in Quotazioni.',
+      'Se poi servono anche i prezzi, nella BOM apri "Cerca anche i prezzi", scrivi le schede e premi Cerca i prezzi: la BOM passa a Quotazioni e si rielabora con i distributori. Una BOM solo codificata non si può collegare a un preventivo finché non ha i prezzi.',
+    ],
+    passi: ['Produzione → Codifica componenti.', 'Scegli il file (Excel o CSV) e premi Carica e codifica.', 'Controlla i codici, premi Salva … codici nell\'archivio e Scarica Excel.'],
+    pagine: [['/produzione/codifica-componenti', 'Produzione → Codifica componenti'], ['/anagrafiche/componenti', 'Anagrafiche → Componenti']],
+  },
+  {
     id: 'componenti-clienti', area: 'anagrafiche', titolo: 'Componenti dei clienti (materiale in conto lavoro)',
     parole: 'componenti clienti cliente conto lavoro materiale codici selea idea caricare elenco excel csv restituire reso ddt',
     testo: [

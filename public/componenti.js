@@ -7,7 +7,10 @@
     const esito = document.getElementById('esito-bom');
     if (!f) { esito.textContent = 'Scegli prima il file.'; return; }
     invia.disabled = true; esito.textContent = 'Caricamento…';
-    const par = new URLSearchParams({ file: f.name, nome: document.getElementById('nome-bom').value, quantita: document.getElementById('quantita-bom').value });
+    // Anagrafiche → Componenti → Codifica una BOM: senza quantità e senza prezzi (data-solo="1")
+    const qta = document.getElementById('quantita-bom');
+    const par = new URLSearchParams({ file: f.name, nome: document.getElementById('nome-bom').value, quantita: qta ? qta.value : '' });
+    if (invia.dataset.solo === '1') par.set('solo', '1');
     const res = await fetch('/quotazioni/bom?' + par, { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { esito.textContent = j.errore || 'Errore nel caricamento'; invia.disabled = false; return; }

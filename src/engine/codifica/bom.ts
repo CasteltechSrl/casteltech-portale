@@ -255,3 +255,14 @@ export function leggiBomColonneFisse(testo: string): string[][] | null {
   }
   return out.length > 1 ? out : null;
 }
+
+/**
+ * Foglio da leggere in un Excel con più fogli (Adriano 4/11/2026): quello che si chiama "BOM" (maiuscole e spazi non contano),
+ * altrimenti il primo il cui nome contiene la parola BOM; -1 = nessuno (si legge il primo foglio con dati).
+ */
+export function foglioBom(nomi: string[]): number {
+  const puliti = nomi.map(n => String(n ?? '').trim().toUpperCase());
+  const esatto = puliti.indexOf('BOM');
+  if (esatto >= 0) return esatto;
+  return puliti.findIndex(n => /(^|[^A-Z])BOM([^A-Z]|$)/.test(n));
+}

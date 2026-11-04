@@ -20,7 +20,7 @@ import { rotteReparto } from './rotte/reparto.js';
 import { avviaPromemoria } from './promemoria.js';
 import { avviaControlloDrive } from './drive.js';
 import { avviaConsumiServizi } from './consumi-servizi.js';
-import { rotteComponenti } from './rotte/componenti.js';
+import { rotteComponenti, rotteCodificaComponenti } from './rotte/componenti.js';
 import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
 import { rotteAcquisizioni } from './rotte/acquisizioni.js';
@@ -180,6 +180,7 @@ app.use('/ordini/acquisire', soloUfficio, rotteAcquisizioni());
 app.use('/ordini/fornitori', soloUfficio, rotteOrdiniFornitore());
 app.use('/ordini', soloUfficio, rotteOrdini());
 // Quotazioni (fino al 28/10/2026 "Componenti"): i vecchi indirizzi /componenti/... portano qui (307 = anche i moduli inviati)
+app.use('/produzione/codifica-componenti', soloUfficio, rotteCodificaComponenti()); // Adriano 4/11/2026: codifica BOM senza prezzi
 app.use('/quotazioni', soloUfficio, rotteComponenti());
 app.use('/componenti', (req, res) => res.redirect(307, '/quotazioni' + req.url));
 app.use('/crm', soloUfficio, rotteCrm());
