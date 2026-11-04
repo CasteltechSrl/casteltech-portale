@@ -357,16 +357,18 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
 
   // BOM già codificata: costo componenti a scheda con le offerte lette (la spunta "Componenti" la decide l'ufficio)
   let costo: Record<string, number> = {};
+  let nonQuotati: string[] = [];
   if (p.bom_id) {
     const b = await costoBomPerPreventivo(p.bom_id, nSchede);
     if (b && b.stato === 'pronta' && b.aScheda > 0) costo = { costoComponentiScheda: Math.round(b.aScheda * 10000) / 10000 };
+    if (b && b.stato === 'pronta') nonQuotati = b.nonQuotati;
     daControllare.push('componenti: spuntare "Componenti" se li compriamo noi');
   }
 
   const note = [`Compilato in automatico dai documenti del cliente «${p.nome}».`,
     p.email ? notaRichiesta(p.email) : '',
     `Valori presi dai documenti: ${compilati.map(v => `${v.codice} = ${String(v.valore).replace('.', ',')}`).join(', ')}.`,
-    daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : ''].filter(Boolean).join('\n');
+    daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : '', ...nonQuotati].filter(Boolean).join('\n');
   const dati = normalizza({
     tariffe, nSchede, nSchedeInPCB: 1, parametri: { ...standard, ...parametri, ...costo },
     clienteId: p.cliente_id, prodottoId: prodotto?.id ?? null, bomId: p.bom_id ?? null,
