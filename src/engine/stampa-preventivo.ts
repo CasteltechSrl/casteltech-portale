@@ -241,3 +241,17 @@ export function prezziRiquadro(
   if (!(base.unaTantum > 0)) return { senza: c.prezzoScheda, con: null };
   return { senza: c.prezzoScheda, con: base.nSchede ? r2((c.lotto + c.unaTantum) / base.nSchede) : r2(c.prezzoScheda + c.unaTantum) };
 }
+
+/**
+ * Prezzi del preventivo come li vede il cliente nella stampa (Adriano 4/11/2026): prezzo a scheda per difetto all'euro e
+ * voci una tantum pareggiate sulla differenza arrotondata. Li usa anche "Crea ordine" dal preventivo (scelta di Adriano, 4/11/2026),
+ * così l'ordine ha gli stessi prezzi del preventivo mandato.
+ */
+export function prezziComeInStampa(
+  r: { prezzoScheda: number; prezzoSchedaConUnaTantum: number; unaTantum: number }, nSchede: number, voci: { nome: string; prezzo: number }[],
+): { prezzoScheda: number; unaTantum: { nome: string; prezzo: number }[] } {
+  const b = baseArrotondata({ ...r, nSchede });
+  const ut = voci.filter(x => x.prezzo > 0).map(x => ({ ...x }));
+  pareggiaSulPiuGrande(ut, x => x.prezzo, (x, v) => { x.prezzo = v; }, b.unaTantum);
+  return { prezzoScheda: b.prezzoScheda, unaTantum: ut.filter(x => x.prezzo > 0) };
+}

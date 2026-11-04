@@ -163,7 +163,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    sconto (% su tutto o € sul lotto), righe in più; solo nella stampa, il calcolo non cambia. Le note del preventivo sono interne (stampate solo con la spunta).
    Riquadro verde (Adriano 4/11/2026, `prezziRiquadro`): sotto le righe e sopra il totale, SOLO prezzo a scheda senza e con le una tantum. Nella stampa i due prezzi a scheda sono per difetto
    all'euro (`baseArrotondata`, `perDifetto`; lotto = scheda × schede, una tantum = (con − senza) × schede, righe pareggiate con `pareggiaSulPiuGrande`, con sconto di nuovo
-   per difetto e sconto stampato = differenza); il calcolo e il preventivo salvato non cambiano. La stampa è sempre
+   per difetto e sconto stampato = differenza); il calcolo e il preventivo salvato non cambiano.
+   "Crea ordine" usa gli stessi prezzi (`prezziComeInStampa`, Adriano 4/11/2026) e l'avviso "sotto il preventivo" in fattura confronta con il prezzo per difetto. La stampa è sempre
    l'ultima versione salvata: `Cache-Control: no-store`, "Stampa" con modifiche non salvate prima salva (`public/preventivo.js`), la scheda già aperta si ricarica
    da sola se il preventivo cambia (GET `/preventivi/:id/stampa/versione`, `public/stampa.js`).
 2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):

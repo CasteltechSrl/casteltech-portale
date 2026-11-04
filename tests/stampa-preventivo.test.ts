@@ -120,3 +120,12 @@ test('stampa: prezzi a scheda per difetto all\'euro e totale con le cifre arroto
   pareggiaSulPiuGrande(righe, x => x.v, (x, n) => { x.v = n; }, 135);
   assert.deepEqual(righe.map(x => x.v), [99.8, 35.2]);
 });
+
+test('ordine dal preventivo con gli stessi prezzi della stampa (Adriano 4/11/2026)', async () => {
+  const { prezziComeInStampa } = await import('../src/engine/stampa-preventivo.js');
+  const x = prezziComeInStampa({ prezzoScheda: 174.63, prezzoSchedaConUnaTantum: 201.75, unaTantum: 135.6 }, 5,
+    [{ nome: 'Programmazione', prezzo: 100.6 }, { nome: 'Lamina', prezzo: 35 }, { nome: 'Niente', prezzo: 0 }]);
+  assert.equal(x.prezzoScheda, 174);
+  assert.deepEqual(x.unaTantum, [{ nome: 'Programmazione', prezzo: 100 }, { nome: 'Lamina', prezzo: 35 }]);
+  assert.equal(x.prezzoScheda * 5 + x.unaTantum.reduce((a, u) => a + u.prezzo, 0), 1005);
+});
