@@ -10,11 +10,12 @@ import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azion
 import { html, num, raw, type Raw } from '../views/html.js';
 import {
   ATTR, ESITI, ETICHETTE, ETICHETTE_RUOLI, FAMIGLIE, FILE_SINGOLA, avanzamenti, avviaElaborazione, correggiRiga,
-  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, verificaRiga, togliRiga, type RigaBom, type Riepilogo,
+  aggiungiRigaBom, creaAnalisi, creaCodificaSingola, modificaRigaAMano, excelAnalisi, impostaPrezzoManuale, leggiFileBom, nomeFornitore, problemiBom, salvaInArchivio, scegliAlternativa, verificaRiga, togliRiga, valoriArchivioFamiglia, esitoRicalcolo, type RigaBom, type Riepilogo,
 } from '../codifica-servizio.js';
 import { unisciAlternative } from '../../engine/codifica/alternative-bom.js';
 import { NOTA_DA_VALIDARE } from '../../engine/codifica/bom.js';
 import { campiFamiglia, esempioCampo, mappaCampiFamiglie } from '../../engine/codifica/campi-famiglia.js';
+import { suggerimentiRiga, valoriTabella, type ValoriArchivio } from '../../engine/codifica/valori-tabella.js';
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
@@ -153,7 +154,8 @@ export function rotteComponenti() {
     res.json(av ? { inCorso: true, ...av } : { inCorso: false, stato: a?.stato });
   });
   r.post('/bom/:id/rielabora', async (req, res) => {
-    avviaElaborazione(Number(req.params.id), { forzaPrezzi: !!req.body.prezzi });
+    // "Rielabora" = solo codifica con i prezzi già letti, nessuna richiesta ai distributori; "Aggiorna prezzi" = li rilegge tutti (Adriano 4/11/2026)
+    avviaElaborazione(Number(req.params.id), req.body.prezzi ? { forzaPrezzi: true } : { soloCache: true });
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/colonne', async (req, res) => {
@@ -175,7 +177,7 @@ export function rotteComponenti() {
   });
   r.post('/bom/:id/quantita', async (req, res) => {
     const quantita = leggiQuantita(req.body.quantita);
-    if (quantita.length) { await q(`UPDATE bom_analisi SET quantita = $2 WHERE id = $1`, [req.params.id, quantita]); avviaElaborazione(Number(req.params.id)); }
+    if (quantita.length) { await q(`UPDATE bom_analisi SET quantita = $2 WHERE id = $1`, [req.params.id, quantita]); avviaElaborazione(Number(req.params.id), { soloCache: true }); } // prezzi già letti: cambiano solo le quantità
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/salva', async (req, res) => {
@@ -212,7 +214,8 @@ export function rotteComponenti() {
     const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [req.params.id]);
     const riga: RigaBom | undefined = a?.righe?.find((x: RigaBom) => x.n === Number(req.params.n));
     if (!a || !riga) return res.status(404).send('Riga non trovata');
-    res.send(pag(req, `Riga ${riga.n}`, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga), req.query.msg ? String(req.query.msg) : undefined));
+    const archivio = await valoriArchivioFamiglia(riga.famiglia);
+    res.send(pag(req, `Riga ${riga.n}`, a.solo_codifica ? SOLO_CODIFICA : a.file_nome === FILE_SINGOLA ? 'codifica' : 'bom', paginaRiga(a, riga, archivio), req.query.msg ? String(req.query.msg) : undefined));
   });
   // prezzo scritto a mano (Adriano 28/10/2026): vale al posto di quello proposto; vuoto = di nuovo quello dei distributori
   r.post('/bom/:id/riga/:n/prezzo', async (req, res) => {
@@ -261,8 +264,9 @@ export function rotteComponenti() {
     const attributi: Record<string, string | null> = {};
     for (const k of [...ATTR, 'tecnologia']) attributi[k] = String(req.body[k] ?? '').trim() || null;
     const fam = String(req.body.famiglia ?? '').toUpperCase();
-    await correggiRiga(Number(req.params.id), Number(req.params.n), { famiglia: fam in FAMIGLIE ? fam : null, attributi, clienteFornisce: !!req.body.cliente });
-    res.redirect(`/quotazioni/bom/${req.params.id}#riga-${req.params.n}`);
+    const riga = await correggiRiga(Number(req.params.id), Number(req.params.n), { famiglia: fam in FAMIGLIE ? fam : null, attributi, clienteFornisce: !!req.body.cliente });
+    // si resta sulla pagina della riga con il risultato o l'errore (Adriano 4/11/2026: "in BOM ci ritorno io con il pulsante")
+    res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(esitoRicalcolo(riga))}`);
   });
 
   // ── Miglior prezzo di un P/N: tutti gli shop affiancati (Adriano 28/10/2026) ──
@@ -442,7 +446,8 @@ function paginaAnalisi(a: any, preventivo = 0): Raw {
       ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel" title="${solo ? 'File Excel: si apre anche in Google Sheets (caricalo nel Drive e aprilo con Fogli Google)' : 'Codifica e acquisti in Excel'}">Scarica Excel</a>` : ''}
       ${!inCorso && rp?.perQuantita.some(x => x.totale > 0) ? html`<a class="bottone" href="/ordini/fornitori/bom/${a.id}" title="Prepara gli ordini a fornitore, uno per distributore">Ordina i componenti</a>` : ''}
       ${inCorso ? '' : solo ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica (archivio aggiornato, regole nuove); i prezzi non si cercano">Rielabora</button></form>`
-        : html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button name="prezzi" value="1" title="Rilegge prezzi e disponibilità dai distributori">Aggiorna prezzi</button></form>`}
+        : html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica con le regole nuove e l'archivio aggiornato usando i prezzi già letti: nessuna richiesta ai distributori">Rielabora</button>
+          <button name="prezzi" value="1" title="Rilegge prezzi e disponibilità da tutti i distributori (consuma le richieste del giorno)" data-conferma="Rileggo prezzi e disponibilità di tutte le righe da tutti i distributori? Consuma le richieste del giorno (Farnell: 1.000).">Aggiorna prezzi</button></form>`}
       <form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>
   ${inCorso ? html`<div class="avviso info" id="avanzamento" data-id="${a.id}">Elaborazione in corso…</div>` : ''}
@@ -645,7 +650,24 @@ function riquadroVerifica(a: any, r: RigaBom): Raw {
   </section>`;
 }
 
-function paginaRiga(a: any, r: RigaBom): Raw {
+/** Voci dell'elenco di una casella: prima i valori già usati nell'archivio per la famiglia, poi quelli della tabella. */
+function elencoCampo(k: (typeof ATTR)[number], famiglia: string | null, archivio: ValoriArchivio): { valore: string; etichetta: string }[] {
+  const usati = (archivio[k] ?? []).map(x => ({ valore: x.valore, etichetta: `${x.valore} · in archivio ${x.volte} ${x.volte === 1 ? 'volta' : 'volte'}` }));
+  const giaQui = new Set(usati.map(x => x.valore));
+  const tabella = valoriTabella(k, famiglia).filter(v => !giaQui.has(v)).map(v => ({ valore: v, etichetta: `${v} · in tabella` }));
+  // per i campi liberi (tensione, corrente…) si mostrano solo i valori dell'archivio
+  return [...usati, ...tabella];
+}
+
+/** Suggerimenti quando la riga ha un problema (Adriano 4/11/2026). */
+function riquadroSuggerimenti(r: RigaBom, archivio: ValoriArchivio): Raw {
+  if (r.codiceGestionale && r.codiceProduzione) return html``;
+  const s = suggerimentiRiga(r, archivio);
+  if (!s.length) return html``;
+  return html`<div class="suggerimenti-riga"><b>Suggerimenti</b><ul>${s.map(x => html`<li>${x}</li>`)}</ul></div>`;
+}
+
+function paginaRiga(a: any, r: RigaBom, archivio: ValoriArchivio = {}): Raw {
   const bloccata = r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO;
   const qta = r.acquisti[r.acquisti.length - 1]?.lorda ?? 0;
   return html`
@@ -666,7 +688,11 @@ function paginaRiga(a: any, r: RigaBom): Raw {
         ${Object.entries(FAMIGLIE).map(([k, f]) => html`<option value="${k}" ${r.famiglia === k ? raw('selected') : ''}>${k} · ${f.nome}</option>`)}</select></label>
         <label class="stretto">Tecnologia<select name="tecnologia"><option value=""></option>${['S', 'T'].map(t => html`<option ${r.attributi.tecnologia === t ? raw('selected') : ''}>${t}</option>`)}</select></label></div>
       <p class="nota campi-spiegazione"></p>
-      <div class="campi-attributi" data-campi="${JSON.stringify(mappaCampiFamiglie())}">${ATTR.map(k => html`<label data-campo="${k}" data-nome="${ETICHETTE[k]}" ${r.famiglia && !campiFamiglia(r.famiglia).includes(k) ? raw('hidden') : ''}>${ETICHETTE[k]}<input name="${k}" value="${r.attributi[k] ?? ''}" placeholder="${esempioCampo(r.famiglia, k, r.attributi.tecnologia) ? `es. ${esempioCampo(r.famiglia, k, r.attributi.tecnologia)}` : ''}" autocomplete="off"></label>`)}</div>
+      <div class="campi-attributi" data-campi="${JSON.stringify(mappaCampiFamiglie())}">${ATTR.map(k => {
+        const elenco = elencoCampo(k, r.famiglia, archivio);
+        return html`<label data-campo="${k}" data-nome="${ETICHETTE[k]}" ${r.famiglia && !campiFamiglia(r.famiglia).includes(k) ? raw('hidden') : ''}>${ETICHETTE[k]}<input name="${k}" value="${r.attributi[k] ?? ''}" placeholder="${esempioCampo(r.famiglia, k, r.attributi.tecnologia) ? `es. ${esempioCampo(r.famiglia, k, r.attributi.tecnologia)}` : ''}" autocomplete="off" ${elenco.length ? raw(`list="elenco-${k}"`) : ''}>${elenco.length ? html`<datalist id="elenco-${k}">${elenco.map(x => html`<option value="${x.valore}">${x.etichetta}</option>`)}</datalist>` : ''}</label>`;
+      })}</div>
+      ${riquadroSuggerimenti(r, archivio)}
       <p><a href="#" class="campi-tutti nota" hidden>Mostra tutti i campi</a></p>`}
       <label class="spunta"><input type="checkbox" name="cliente" ${r.clienteFornisce ? raw('checked') : ''}> Fornito dal cliente (non si acquista)</label>
       <button class="primario">Ricalcola</button>

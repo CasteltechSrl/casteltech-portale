@@ -69,9 +69,9 @@ async function http(url: string, opz: RequestInit & { nome: string }): Promise<a
 }
 
 // ───────────────────────────── cache ─────────────────────────────
-async function daCache(fornitore: string, chiave: string): Promise<RisultatoFornitore | null> {
+async function daCache(fornitore: string, chiave: string, ore = ORE_CACHE): Promise<RisultatoFornitore | null> {
   const r = await q1<{ dati: RisultatoFornitore }>(`SELECT dati FROM fornitori_cache WHERE fornitore = $1 AND chiave = $2
-    AND aggiornato_il > now() - make_interval(hours => $3)`, [fornitore, chiave, ORE_CACHE]);
+    AND aggiornato_il > now() - make_interval(hours => $3)`, [fornitore, chiave, ore]);
   return r?.dati ?? null;
 }
 /** Salva in cache un risultato già ottenuto (es. dalla ricerca per parametri), così non si richiede di nuovo. */
@@ -309,7 +309,16 @@ async function wurthPn(pns: string[]): Promise<Map<string, RisultatoFornitore>> 
  * Varianti dello stesso P/N (confezione o suffisso diverso: -TR, /R7, #PBF…) presso TUTTI i distributori che hanno la ricerca per parola
  * (DigiKey, Mouser, Farnell, Arrow; TME v2 cerca solo per codice esatto). Restituisce P/N → offerte trovate (le altre si chiedono dopo).
  */
-export async function cercaVarianti(pn: string): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[] }> {
+/** Varianti di un P/N: tenute in cache 24 ore (4/11/2026: a ogni elaborazione si richiedevano a tutti, Farnell compreso). */
+export async function cercaVarianti(pn: string, forza = false): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[] }> {
+  const k0 = pnKey(pn) ?? '';
+  const salvate = !forza && k0 ? await daCache('varianti', k0) as unknown as { elenco: { mpn: string; produttore: string; descrizione: string }[] } | null : null;
+  if (salvate?.elenco) return { varianti: new Map(salvate.elenco.map(x => [pnKey(x.mpn)!, x])), errori: [] };
+  const esito = await cercaVariantiDistributori(pn);
+  if (k0 && !esito.errori.length) await inCache('varianti', k0, { elenco: [...esito.varianti.values()] } as unknown as RisultatoFornitore);
+  return esito;
+}
+async function cercaVariantiDistributori(pn: string): Promise<{ varianti: Map<string, { mpn: string; produttore: string; descrizione: string }>; errori: string[] }> {
   const attivi = fornitoriConfigurati(); const k = pnKey(pn) ?? '';
   const varianti = new Map<string, { mpn: string; produttore: string; descrizione: string }>(), errori: string[] = [];
   const variante = (mpn: string) => { const x = pnKey(mpn); return !!x && k.length >= 6 && x !== k && (x.startsWith(k) || (x.length >= 6 && k.startsWith(x))); };
@@ -327,8 +336,16 @@ export async function cercaVarianti(pn: string): Promise<{ varianti: Map<string,
 
 /** Sostituto proposto da DigiKey per un P/N (anche obsoleto): tipo come lo scrive DigiKey (Direct, Parametric Equivalent, Similar, Upgrade…). */
 export interface SostitutoDk { mpn: string; produttore: string; descrizione: string; tipo: string }
-export async function digikeySostituti(pn: string): Promise<SostitutoDk[]> {
+export async function digikeySostituti(pn: string, forza = false): Promise<SostitutoDk[]> {
   if (!fornitoriConfigurati().digikey) return [];
+  const k = pnKey(pn);
+  const salvati = !forza && k ? await daCache('sostituti_dk', k) as unknown as { elenco: SostitutoDk[] } | null : null;
+  if (salvati?.elenco) return salvati.elenco;
+  const elenco = await digikeySostitutiChiedi(pn);
+  if (k) await inCache('sostituti_dk', k, { elenco } as unknown as RisultatoFornitore);
+  return elenco;
+}
+async function digikeySostitutiChiedi(pn: string): Promise<SostitutoDk[]> {
   const r = await http(`https://api.digikey.com/products/v4/search/${encodeURIComponent(pn.trim())}/substitutions`, {
     nome: 'DigiKey', headers: { Authorization: `Bearer ${await tokenDigikey()}`, 'X-DIGIKEY-Client-Id': process.env.DIGIKEY_CLIENT_ID!, 'X-DIGIKEY-Locale-Site': 'IT',
       'X-DIGIKEY-Locale-Language': 'en', 'X-DIGIKEY-Locale-Currency': 'EUR', Accept: 'application/json' } });
@@ -362,7 +379,11 @@ async function conRiprova<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Prezzi e disponibilità per una lista di P/N presso TUTTI i distributori configurati (in parallelo, nessuno si ferma al primo). */
-export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
+/**
+ * `soloCache` ("Rielabora", Adriano 4/11/2026: ogni richiesta costa o consuma il limite giornaliero): si usano solo i prezzi già letti,
+ * anche più vecchi di 24 ore, e non si chiama nessun distributore.
+ */
+export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
   const attivi = fornitoriConfigurati();
   const unici = [...new Map(pns.filter(Boolean).map(p => [pnKey(p)!, p.trim()])).entries()].filter(([k]) => k);
   const perPn = new Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>(unici.map(([k]) => [k, {}]));
@@ -375,8 +396,8 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; avanzamento
     if (!attivi[f]) continue;
     for (const [k, pn] of unici) {
       if (f === 'wurth' && !codiceWurth(pn)) continue; // a Würth si chiedono solo i suoi codici
-      const c = opz.forza ? null : await daCache(f, k);
-      if (c) segna(k, f, c); else daCercare[f].push([k, pn]);
+      const c = opz.forza ? null : await daCache(f, k, opz.soloCache ? 24 * 365 : ORE_CACHE);
+      if (c) segna(k, f, c); else if (!opz.soloCache) daCercare[f].push([k, pn]);
     }
   }
   const lavori: Promise<void>[] = [];

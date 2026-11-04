@@ -14,7 +14,7 @@
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
-import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attributi } from '../engine/codifica/regole.js';
+import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attr, type Attributi } from '../engine/codifica/regole.js';
 import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/decoder.js';
 import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandidato, type CandidatoPn, type ColonnaPn } from '../engine/codifica/candidati-pn.js';
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
@@ -25,6 +25,7 @@ import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
+import type { ValoriArchivio } from '../engine/codifica/valori-tabella.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -194,7 +195,7 @@ const CELLA_ESCLUSA = /^(DNP|DNM|DNI|NM|EXCLUDED FROM BOM|NON MONTARE|NON MONTAT
 const unico = <T>(xs: T[]) => [...new Set(xs)];
 
 /** Elabora (o rielabora) una BOM in background. */
-export function avviaElaborazione(id: number, opz: { forzaPrezzi?: boolean } = {}) {
+export function avviaElaborazione(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boolean } = {}) {
   if (avanzamenti.has(id)) return;
   avanzamenti.set(id, { fase: 'avvio', fatti: 0, totale: 0 });
   void (async () => {
@@ -214,7 +215,7 @@ export async function sistemaInterrotte() {
   await q(`UPDATE bom_analisi SET stato = 'errore', messaggio = 'elaborazione interrotta dal riavvio del portale: premi Rielabora' WHERE stato = 'in_corso'`);
 }
 
-async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<string> {
+async function elabora(id: number, opz: { forzaPrezzi?: boolean; soloCache?: boolean }): Promise<string> {
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   if (!a) throw new Error('analisi non trovata');
   const av = avanzamenti.get(id)!;
@@ -241,9 +242,11 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
     const candidati = r.pn ? [] : candidatiPn({ valore: r.valore, descrizione: r.descrizioneBom }, ordinePn);
     const prima = precedenti.get(n);
     if (prima && (pnKey(prima.pn) === pnKey(r.pn) || (!r.pn && candidati.some(c => pnKey(c.pn) === pnKey(prima.pn))))) {
-      r.alternative = (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
+      // "Rielabora" senza distributori: restano tutte le alternative già trovate, il compatibile proposto e il P/N scelto per i passivi
+      r.alternative = opz.soloCache ? (prima.alternative ?? []) : (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
       r.alternativaScelta = prima.alternativaScelta ?? null;
       r.prezzoManuale = prima.prezzoManuale ?? null;
+      if (opz.soloCache) { r.alternativaProposta = prima.alternativaProposta ?? null; (r as any)._primaMpn = prima.mpnAcquisto ?? null; }
     }
     applicaMano(r, mano);
     (r as any)._fam = val(celle, 'famiglia');
@@ -262,7 +265,8 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   const daCercare = righe.filter(r => !(r as any)._escluso && !rigaPcb(r) && !NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''}`))
     .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
   const ricerca: EsitoRicerca = solo ? { perPn: new Map(), errori: {} }
-    : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+    : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, soloCache: opz.soloCache, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+  const maiCercati = opz.soloCache ? unico(daCercare).filter(pn => !Object.keys(ricerca.perPn.get(pnKey(pn)!) ?? {}).length).length : 0;
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
   // codici trovati in Valore / Descrizione: si compra quello che i distributori hanno (anche se costa di più)
   const maxSchede = Math.max(1, ...(a.quantita ?? []));
@@ -387,16 +391,19 @@ async function elabora(id: number, opz: { forzaPrezzi?: boolean }): Promise<stri
   if (solo) { await salvaRighe(id, righe); return notaIa; } // solo codifica: niente prezzi, acquisti né alternative
   // 7. prezzi dei componenti senza P/N (passivi): il più economico con gli stessi dati
   av.fase = 'ricerca dei passivi senza P/N';
-  await prezziGenerici(righe, ricerca.perPn);
+  await prezziGenerici(righe, ricerca.perPn, opz.soloCache);
   // 8. acquisti
   await calcolaAcquisti(righe, a.quantita ?? [], ricerca.perPn);
-  // 9. P/N non trovati da nessuna parte: alternative da proporre all'operatore
-  av.fase = 'ricerca delle alternative';
-  await alternativeRighe(righe, opz.forzaPrezzi);
-  await calcolaAcquisti(righe, a.quantita ?? []);
+  // 9. P/N non trovati da nessuna parte: alternative da proporre all'operatore (con "Rielabora" restano quelle di prima)
+  if (!opz.soloCache) {
+    av.fase = 'ricerca delle alternative';
+    await alternativeRighe(righe, opz.forzaPrezzi);
+    await calcolaAcquisti(righe, a.quantita ?? []);
+  }
   const errori = Object.entries(ricerca.errori).map(([f, m]) => `${NOMI_FORNITORI[f as Fornitore]}: ${m}`);
+  const notaCache = maiCercati ? `Rielaborata con i prezzi già letti: ${maiCercati === 1 ? '1 codice non è mai stato cercato' : `${maiCercati} codici non sono mai stati cercati`} dai distributori, premi "Aggiorna prezzi" per averli` : '';
   await salvaRighe(id, righe);
-  return [notaIa, ...errori].filter(Boolean).join(' · ');
+  return [notaIa, notaCache, ...errori].filter(Boolean).join(' · ');
 }
 
 /** Codici delle righe non in archivio (dopo le modifiche a mano si richiama da sola). */
@@ -474,10 +481,19 @@ function paroleRicerca(r: RigaBom): string | null {
   return null;
 }
 
-export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>) {
+export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>, soloCache = false) {
   const attivi = fornitoriConfigurati();
   for (const r of righe) {
     if (r.pn || r.clienteFornisce || ![ESITI.NUOVO, ESITI.NUOVO_VER, ESITI.DB_PROD].includes(r.esito as any)) continue;
+    // "Rielabora": il P/N trovato l'altra volta con i suoi prezzi già letti, senza nuove ricerche
+    if (soloCache) {
+      const mpn = r.mpnAcquisto ?? (r as any)._primaMpn;
+      if (!mpn) continue;
+      r.mpnAcquisto = mpn;
+      const es = await cercaPn([mpn], { soloCache: true });
+      perPnDist.set(pnKey(mpn)!, es.perPn.get(pnKey(mpn)!) ?? {});
+      continue;
+    }
     // in archivio con un P/N: si prezza quello
     if (r.mpnAcquisto) {
       const es = await cercaPn([r.mpnAcquisto]);
@@ -568,12 +584,12 @@ async function candidateAlternative(r: RigaBom): Promise<Map<string, Candidata>>
   };
   if (pn && k && k.length >= 6) {
     // 1. varianti
-    const v = await cercaVarianti(pn);
+    const v = await cercaVarianti(pn, (r as any)._forza);
     for (const x of v.varianti.values()) aggiungi({ ...x, fonte: FONTI_ALTERNATIVA.VARIANTE, identica: null, nota: 'stesso P/N con confezione o suffisso diverso' });
     if (v.errori.length) r.note.push(`ricerca delle varianti: ${v.errori.join('; ')}`);
     // 2. sostituti DigiKey
     try {
-      for (const x of await digikeySostituti(pn)) {
+      for (const x of await digikeySostituti(pn, (r as any)._forza)) {
         const diretto = SOSTITUTO_DIRETTO.test(x.tipo);
         aggiungi({ mpn: x.mpn, produttore: x.produttore, descrizione: x.descrizione, fonte: FONTI_ALTERNATIVA.SOSTITUTO, identica: null,
           nota: `DigiKey: ${x.tipo || 'sostituto'}${diretto ? '' : ' (simile, non uguale)'}`, diretto });
@@ -666,6 +682,7 @@ async function alternativeRighe(righe: RigaBom[], forza?: boolean) {
     if (r.esito === ESITI.NON_MONTATO || r.clienteFornisce || !(r.pn || r.mpnAcquisto)) continue;
     if (r.alternativaScelta || r.reperibilita?.livello !== 'critico') continue;
     if (cercate++ >= MAX_RIGHE_ALTERNATIVE) { r.note.push('alternative non cercate (troppe righe non trovate): scrivila a mano dalla riga'); continue; }
+    (r as any)._forza = !!forza;
     try { daCercare.push({ r, qta: Math.max(0, ...r.acquisti.map(x => x.lorda)), candidate: await candidateAlternative(r) }); }
     catch (e: any) { r.note.push(`ricerca delle alternative non riuscita: ${e.message}`); }
   }
@@ -985,7 +1002,7 @@ export async function aggiungiRigaBom(id: number, dati: { pn?: string; descrizio
 }
 
 /** Correzione a mano di una riga: famiglia, attributi, fornito dal cliente. Ricalcola codici e acquisti. */
-export async function correggiRiga(id: number, n: number, dati: { famiglia: string | null; attributi: Attributi; clienteFornisce: boolean }) {
+export async function correggiRiga(id: number, n: number, dati: { famiglia: string | null; attributi: Attributi; clienteFornisce: boolean }): Promise<RigaBom | undefined> {
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   const righe: RigaBom[] = a.righe;
   const r = righe.find(x => x.n === n);
@@ -1000,6 +1017,7 @@ export async function correggiRiga(id: number, n: number, dati: { famiglia: stri
   }
   await calcolaAcquisti(righe, a.quantita);
   await salvaRighe(id, righe);
+  return r;
 }
 
 /** Scrive nell'archivio i componenti nuovi completi e completa quelli già presenti. */
@@ -1120,3 +1138,26 @@ export async function excelAnalisi(id: number): Promise<{ nome: string; dati: Bu
 }
 
 export { ETICHETTE_RUOLI, FAMIGLIE, ATTR, ETICHETTE, MAN, VER, OK };
+
+/**
+ * Valori già usati nell'archivio per una famiglia (solo componenti con codice gestionale), per campo, i più usati prima:
+ * servono agli elenchi delle caselle e ai suggerimenti della pagina della riga (Adriano 4/11/2026). Una query, solo all'apertura della pagina.
+ */
+export async function valoriArchivioFamiglia(famiglia: string | null): Promise<ValoriArchivio> {
+  if (!famiglia) return {};
+  const righe = await q<{ campo: Attr; valore: string; volte: number }>(`SELECT x.key AS campo, upper(x.value) AS valore, count(*)::int AS volte
+    FROM componenti, jsonb_each_text(attributi) x
+    WHERE famiglia = $1 AND codice_gestionale IS NOT NULL AND x.value <> '' AND x.key <> 'tecnologia'
+    GROUP BY 1, 2 ORDER BY 3 DESC, 2`, [famiglia]);
+  const out: ValoriArchivio = {};
+  for (const r of righe) { const l = (out[r.campo] ??= []); if (l.length < 40) l.push({ valore: r.valore, volte: r.volte }); }
+  return out;
+}
+
+/** Messaggio dopo "Ricalcola" nella pagina della riga: il risultato o cosa manca ancora. */
+export function esitoRicalcolo(r: RigaBom | undefined): string {
+  if (!r) return 'Riga non trovata.';
+  if (r.codiceGestionale && r.codiceProduzione) return `Ricalcolato: ${r.codiceProduzione} / ${r.codiceGestionale} (${r.esito}).`;
+  const problemi = r.note.filter(n => /non in tabella|mancante|manca|non indicat|indicare/i.test(n));
+  return `Ricalcolato, ma ${r.codiceGestionale ? 'manca il codice di produzione' : 'manca ancora il codice gestionale'}${problemi.length ? `: ${problemi.join('; ')}` : ''}. Guarda i suggerimenti qui sotto.`;
+}
