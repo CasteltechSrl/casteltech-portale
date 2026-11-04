@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { calcolaPreventivo, type FaseDef, type Tariffe, type VoceDef } from '../src/engine/calcolo.js';
-import { contiStampa, leggiRitocchi, quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
+import { consegnaCompleta, contiStampa, leggiRitocchi, testoConsegna, quotaSmd, righeDettaglio, righeUnaTantum, versioneStampa } from '../src/engine/stampa-preventivo.js';
 
 const t: Tariffe = { costoAziendaH: 0, costoOperatoreProduzioneH: 60, costoOperatoreUfficioH: 60, ricarico: 1 };
 // una fase da "euro" € a lotto (60 €/h × 1 persona, ricarico 1: secondi = euro × 60)
@@ -125,4 +125,27 @@ test('stampa: prezzi a scheda scritti a mano, totale di conseguenza (Adriano 4/1
   const righe = [{ v: 100.4 }, { v: 35.2 }];
   pareggiaSulPiuGrande(righe, x => x.v, (x, n) => { x.v = n; }, 135);
   assert.deepEqual(righe.map(x => x.v), [99.8, 35.2]);
+});
+
+test('stampa: tempi di consegna sempre "circa", conto lavoro o materiale comprato da noi (Adriano 4/11/2026)', () => {
+  // conto lavoro: settimane dall'arrivo del materiale
+  const cl = leggiRitocchi({ consegnaAcquisto: 'no', settimaneMontaggio: '3' }).consegna;
+  assert.equal(testoConsegna(cl, true), "Circa 3 settimane dall'arrivo del materiale");
+  assert.equal(testoConsegna({ acquisto: false, materiale: null, montaggio: 1 }, false), "Circa 1 settimana dall'arrivo del materiale");
+  // materiale comprato da noi: arrivo del materiale + montaggio, servono tutti e due
+  const ac = leggiRitocchi({ consegnaAcquisto: 'si', settimaneMateriale: '4', settimaneMontaggio: '2' }).consegna;
+  assert.equal(testoConsegna(ac, false), "Circa 4 settimane per l'arrivo del materiale e circa 2 settimane per il montaggio");
+  assert.equal(consegnaCompleta({ acquisto: true, materiale: null, montaggio: 2 }, false), false);
+  // non scelto: vale la spunta "Componenti" del preventivo
+  const ns = leggiRitocchi({ settimaneMontaggio: '2' }).consegna;
+  assert.equal(ns.acquisto, null);
+  assert.equal(consegnaCompleta(ns, false), true);
+  assert.equal(consegnaCompleta(ns, true), false);
+  // mancano i tempi = niente testo (non si stampa e non si manda); fuori dal menu = da scegliere
+  assert.equal(testoConsegna(leggiRitocchi({}).consegna, false), '');
+  assert.equal(leggiRitocchi({ settimaneMontaggio: '0' }).consegna.montaggio, null);
+  assert.equal(leggiRitocchi({ settimaneMontaggio: '2,5' }).consegna.montaggio, null);
+  // salvato nel preventivo e riletto uguale
+  const r = leggiRitocchi({ consegnaAcquisto: 'si', settimaneMateriale: '6', settimaneMontaggio: '2' });
+  assert.deepEqual(leggiRitocchi(JSON.parse(JSON.stringify(r))), r);
 });

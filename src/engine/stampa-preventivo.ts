@@ -141,8 +141,42 @@ export interface Ritocchi {
   noteInterne: boolean;
   /** prezzi a scheda scritti a mano nella stampa (Adriano 4/11/2026): senza e con le una tantum; null = quelli calcolati */
   prezzi: { senza: number | null; con: number | null };
+  /** tempi di consegna (Adriano 4/11/2026), obbligatori prima di stampare o mandare il preventivo: vedi `testoConsegna` */
+  consegna: Consegna;
 }
-export const RITOCCHI_VUOTI: Ritocchi = { noteCliente: '', sconto: null, righe: [], noteInterne: false, prezzi: { senza: null, con: null } };
+
+/**
+ * Tempi di consegna del preventivo (Adriano 4/11/2026), in settimane e sempre "circa":
+ *  - materiale del cliente (conto lavoro): circa N settimane dall'arrivo del materiale (`montaggio`);
+ *  - materiale comprato da noi (`acquisto`): circa N settimane per l'arrivo del materiale (`materiale`) e circa M per il montaggio.
+ * `acquisto` null = non ancora scelto: vale la spunta "Componenti" del preventivo.
+ */
+export interface Consegna { acquisto: boolean | null; materiale: number | null; montaggio: number | null }
+/** Settimane proposte nel menu dei tempi di consegna (da 1 a N). */
+export const SETTIMANE_MAX = 26;
+export const RITOCCHI_VUOTI: Ritocchi = { noteCliente: '', sconto: null, righe: [], noteInterne: false, prezzi: { senza: null, con: null },
+  consegna: { acquisto: null, materiale: null, montaggio: null } };
+
+const settimane = (n: number) => `circa ${n} ${n === 1 ? 'settimana' : 'settimane'}`;
+/** Settimane scritte: intero da 1 a SETTIMANE_MAX, altrimenti null (= da scegliere). */
+const settimaneScritte = (v: unknown): number | null => {
+  const n = Number(String(v ?? '').trim());
+  return Number.isInteger(n) && n >= 1 && n <= SETTIMANE_MAX ? n : null;
+};
+/** Il materiale lo compriamo noi? Scelta della stampa, altrimenti la spunta "Componenti" del preventivo. */
+export const acquistoMateriale = (c: Consegna, predefinito: boolean) => c.acquisto ?? predefinito;
+/** Tempi di consegna completi (si può stampare e mandare): montaggio sempre, arrivo del materiale se lo compriamo noi. */
+export function consegnaCompleta(c: Consegna, predefinito: boolean): boolean {
+  return c.montaggio != null && (!acquistoMateriale(c, predefinito) || c.materiale != null);
+}
+/** Frase dei tempi di consegna da stampare; vuota se mancano. */
+export function testoConsegna(c: Consegna, predefinito: boolean): string {
+  if (!consegnaCompleta(c, predefinito)) return '';
+  const t = acquistoMateriale(c, predefinito)
+    ? `${settimane(c.materiale!)} per l'arrivo del materiale e ${settimane(c.montaggio!)} per il montaggio`
+    : `${settimane(c.montaggio!)} dall'arrivo del materiale`;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 
 const numeroIt = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -157,7 +191,7 @@ const elenco = (v: unknown): string[] => (Array.isArray(v) ? v : v == null ? [] 
 
 /** Ritocchi dal modulo della stampa (o dal database): righe vuote saltate, sconto solo se > 0 (% al massimo 100). */
 export function leggiRitocchi(x: any): Ritocchi {
-  if (!x || typeof x !== 'object') return { ...RITOCCHI_VUOTI, righe: [], prezzi: { senza: null, con: null } };
+  if (!x || typeof x !== 'object') return { ...RITOCCHI_VUOTI, righe: [], prezzi: { senza: null, con: null }, consegna: { ...RITOCCHI_VUOTI.consegna } };
   const tipo = x.scontoTipo === 'euro' || x.sconto?.tipo === 'euro' ? 'euro' : 'percento';
   const valore = numeroIt(x.sconto?.valore ?? x.scontoValore);
   const descr = Array.isArray(x.righe) ? x.righe.map((r: any) => r?.descrizione) : elenco(x.rigaDescrizione);
@@ -175,6 +209,17 @@ export function leggiRitocchi(x: any): Ritocchi {
     righe,
     noteInterne: x.noteInterne === true || x.noteInterne === 'si' || x.noteInterne === 'on',
     prezzi: { senza: prezzoScritto(x.prezzi?.senza ?? x.prezzoSenza), con: prezzoScritto(x.prezzi?.con ?? x.prezzoCon) },
+    consegna: leggiConsegna(x.consegna ?? x),
+  };
+}
+
+/** Tempi di consegna dal database ({acquisto, materiale, montaggio}) o dal modulo (consegnaAcquisto si/no, settimaneMateriale, settimaneMontaggio). */
+function leggiConsegna(x: any): Consegna {
+  const acq = x.acquisto ?? x.consegnaAcquisto;
+  return {
+    acquisto: acq === true || acq === 'si' ? true : acq === false || acq === 'no' ? false : null,
+    materiale: settimaneScritte(x.materiale ?? x.settimaneMateriale),
+    montaggio: settimaneScritte(x.montaggio ?? x.settimaneMontaggio),
   };
 }
 

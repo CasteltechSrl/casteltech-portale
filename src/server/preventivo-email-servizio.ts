@@ -11,7 +11,7 @@ import { destinatarioPreventivo, emailPreventivo } from '../engine/preventivo-em
 import { calcola, datiDaRiga, leggiPreventivo, nPannelli } from './preventivi-servizio.js';
 import { caricaAzienda } from './amministrazione-servizio.js';
 import type { Catalogo } from './catalogo-db.js';
-import { contenutoStampa, leggiRitocchi, versioneStampa } from '../engine/stampa-preventivo.js';
+import { consegnaCompleta, contenutoStampa, leggiRitocchi, testoConsegna, versioneStampa } from '../engine/stampa-preventivo.js';
 import { AZIENDA_PREDEFINITA, type ClienteStampa, type OpzioniStampa } from './views/stampa-preventivo.js';
 import { nomeFilePdfPreventivo, pdfPreventivo } from './pdf-preventivo.js';
 
@@ -36,6 +36,8 @@ export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
     nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
     nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
     azienda: await caricaAzienda(), cliente: cliente ?? null, opz, rit: leggiRitocchi(p.stampa),
+    /** materiale comprato da noi (spunta "Componenti"): proposta per i tempi di consegna finché non si sceglie nella stampa */
+    acquisto: !!v('acquistoComponenti'),
   };
 }
 
@@ -60,7 +62,7 @@ export async function pdfDelPreventivo(id: number, opz: OpzioniStampa): Promise<
     cliente: x.cliente ?? { ragione_sociale: i.cliente ?? '' },
     codice: i.codice ?? '', revisione: i.revisione, nSchede: x.d.nSchede,
     righe: cont.righe, riquadro: cont.riquadro, scontato: cont.scontato, primoLotto: cont.primoLotto, totale: cont.totale,
-    note, pagamento: x.cliente?.pagamento, condizioni: opz.condizioni, firma: opz.firma,
+    note, pagamento: x.cliente?.pagamento, consegna: testoConsegna(x.rit.consegna, x.acquisto), condizioni: opz.condizioni, firma: opz.firma,
   });
   return { nome: nomeFilePdfPreventivo(x.p.numero, i.codice ?? ''), dati };
 }
@@ -98,6 +100,10 @@ export async function inviaPreventivoEmail(id: number, b: { a?: string; cc?: str
   const p = await leggiPreventivo(id);
   if (!p) throw new Error('Preventivo non trovato.');
   if (p.stato === 'da_validare') throw new Error('Il preventivo è ancora "da validare": controllalo e salvalo prima di mandarlo al cliente.');
+  // tempi di consegna obbligatori prima dell'invio (Adriano 4/11/2026)
+  const st = await datiStampaPreventivo(id, opz);
+  if (st && !consegnaCompleta(st.rit.consegna, st.acquisto))
+    throw new Error('Scegli prima i tempi di consegna (a sinistra, "Tempi di consegna"), premi "Aggiorna la stampa" e poi manda il preventivo.');
   const a = elencoIndirizzi(b.a), cc = elencoIndirizzi(b.cc);
   if (!a.indirizzi.length) throw new Error('Scrivi a chi mandarlo.');
   if (a.errati.length || cc.errati.length) throw new Error(`Indirizzi non validi: ${[...a.errati, ...cc.errati].join(', ')}.`);

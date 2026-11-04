@@ -11,7 +11,7 @@ import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, contenutoStampa, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, testoConsegna, type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 
 export interface ClienteStampa {
@@ -42,6 +42,8 @@ export function stampaPreventivo(o: {
   p: any; d: { nSchede: number; nSchedeInPCB: number; note?: string };
   ris: Risultato; doppia: boolean; nLamine: number; nPannelli: number;
   azienda: Partial<DatiAzienda>; cliente: ClienteStampa | null; opz: OpzioniStampa; rit: Ritocchi;
+  /** spunta "Componenti" del preventivo: proposta "il materiale lo compriamo noi" nei tempi di consegna */
+  acquisto?: boolean;
   /** invio per email da preventivi@ (Adriano 4/11/2026): proposta dell'email; null = niente riquadro */
   email?: EmailStampa | null;
   /** messaggio dopo un'azione (email partita, errore) */
@@ -66,6 +68,12 @@ export function stampaPreventivo(o: {
   const cont = contenutoStampa({ ris, nSchede: d.nSchede, doppia: o.doppia, nLamine: o.nLamine, versione: opz.versione, rit, descrizione: i.descrizione ?? '' });
   const riquadro = cont.riquadro;
   const scontato = cont.scontato ? ' scontato' : '';
+  // tempi di consegna (Adriano 4/11/2026): obbligatori prima di stampare o mandare, sempre "circa"
+  const acquisto = acquistoMateriale(rit.consegna, !!o.acquisto);
+  const consegna = testoConsegna(rit.consegna, !!o.acquisto);
+  const menuSettimane = (nome: string, scelta: number | null, etichetta: string) => html`<select name="${nome}" aria-label="${etichetta}">
+    <option value="">— scegli —</option>${Array.from({ length: SETTIMANE_MAX }, (_, k) => k + 1).map(n =>
+      html`<option value="${n}"${scelta === n ? html` selected` : ''}>circa ${n} ${n === 1 ? 'settimana' : 'settimane'}</option>`)}</select>`;
 
   const link = (cambia: Partial<OpzioniStampa>) => {
     const x = { ...opz, ...cambia };
@@ -107,13 +115,14 @@ export function stampaPreventivo(o: {
 <html lang="it"><head><meta charset="utf-8"><title>Preventivo ${p.numero} · ${i.codice}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa-preventivo.css?v=${VERSIONE}"></head>
-<body data-versione-url="/preventivi/${p.id}/stampa/versione">
+<body data-versione-url="/preventivi/${p.id}/stampa/versione"${consegna ? '' : raw(' data-manca-consegna="1"')}>
 <div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
   ${o.email ? html`<a class="bottone-email" href="#invia-email">✉ Invia per email</a>` : ''}
   ${o.email?.email_inviata_il ? html`<span class="inviato" title="${o.email.email_a ?? ''}">✓ Inviato il ${new Date(o.email.email_inviata_il).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}${o.email.email_a ? ` a ${o.email.email_a}` : ''}</span>` : ''}
   <a href="/preventivi/${p.id}">← torna al preventivo</a>
   ${salvatoIl ? html`<span class="salvato">Versione salvata il ${salvatoIl}: le modifiche non salvate nel preventivo non compaiono</span>` : ''}</div>
 ${o.messaggio ? html`<div class="messaggio-stampa">${o.messaggio}</div>` : ''}
+${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di stampare o mandare il preventivo scegli i <a href="#tempi-consegna">tempi di consegna</a> (a sinistra) e premi "Aggiorna la stampa".</div>`}
 <div class="schermo">
 <nav class="pannello-stampa" aria-label="Cosa stampare">
   <h2>Cosa stampare</h2>
@@ -127,6 +136,13 @@ ${o.messaggio ? html`<div class="messaggio-stampa">${o.messaggio}</div>` : ''}
     <h2>Ritocchi per il cliente</h2>
     <p class="aiuto">Valgono solo in questa stampa: il preventivo non cambia.</p>
     <input type="hidden" name="torna" value="${link({})}">
+    <fieldset id="tempi-consegna" class="${consegna ? '' : 'da-scegliere'}"><legend>Tempi di consegna (obbligatori)</legend>
+      <label class="spunta"><input type="radio" name="consegnaAcquisto" value="no"${acquisto ? '' : html` checked`}> Materiale del cliente (conto lavoro)</label>
+      <label class="spunta"><input type="radio" name="consegnaAcquisto" value="si"${acquisto ? html` checked` : ''}> Il materiale lo compriamo noi</label>
+      <label class="solo-acquisto">Arrivo del materiale ${menuSettimane('settimaneMateriale', rit.consegna.materiale, 'Settimane per l\'arrivo del materiale')}</label>
+      <label><span class="solo-acquisto">Montaggio</span><span class="solo-conto-lavoro">Montaggio dall'arrivo del materiale</span> ${menuSettimane('settimaneMontaggio', rit.consegna.montaggio, 'Settimane per il montaggio')}</label>
+      <small>${consegna ? html`In stampa: <b>${consegna}</b>.` : 'Da scegliere: senza i tempi non si stampa e non si manda.'}</small>
+    </fieldset>
     <fieldset><legend>Prezzi a scheda</legend>
       <label>Senza una tantum <input name="prezzoSenza" inputmode="decimal" value="${rit.prezzi.senza != null ? String(rit.prezzi.senza).replace('.', ',') : ''}" placeholder="${num(r.prezzoScheda, 2)}"></label>
       ${r.unaTantum > 0 || rit.prezzi.con != null ? html`<label>Con le una tantum <input name="prezzoCon" inputmode="decimal" value="${rit.prezzi.con != null ? String(rit.prezzi.con).replace('.', ',') : ''}" placeholder="${num(r.prezzoSchedaConUnaTantum, 2)}"></label>` : ''}
@@ -162,7 +178,8 @@ ${o.messaggio ? html`<div class="messaggio-stampa">${o.messaggio}</div>` : ''}
       <label>Testo <textarea name="testo" rows="8">${o.email.testo}</textarea></label>
       <p class="aiuto">Allegato: il <a href="/preventivi/${p.id}/pdf${link({})}" target="_blank" rel="noopener">PDF</a> come questa stampa (versione, condizioni, firma e ritocchi salvati).
         ${o.email.attivo ? html`Parte da <b>${o.email.mittente}</b>.` : html`<b>Invio con Gmail non attivo</b> (mancano GMAIL_MITTENTE o la chiave Google su Render): scarica il PDF e mandalo dalla posta.`}</p>
-      <button type="submit" ${o.email.attivo ? '' : raw('disabled')}>${o.email.email_inviata_il ? 'Manda di nuovo' : 'Invia con Gmail'}</button>
+      ${consegna ? '' : html`<p class="aiuto manca"><b>Mancano i tempi di consegna</b>: sceglili qui sopra e premi "Aggiorna la stampa".</p>`}
+      <button type="submit" ${o.email.attivo && consegna ? '' : raw('disabled')}>${o.email.email_inviata_il ? 'Manda di nuovo' : 'Invia con Gmail'}</button>
     </form>`}
   </section>` : ''}
 </nav>
@@ -193,6 +210,7 @@ ${o.messaggio ? html`<div class="messaggio-stampa">${o.messaggio}</div>` : ''}
     <div><div class="etic">Prezzo a scheda${scontato}${riquadro.con != null ? ' senza costi una tantum' : ''}</div><strong>${euro(riquadro.senza)}</strong></div>
     ${riquadro.con != null ? html`<div><div class="etic">Prezzo a scheda${scontato} con i costi una tantum (primo lotto, ${num(d.nSchede, 0)} schede)</div><strong>${euro(riquadro.con)}</strong></div>` : ''}
   </div>
+  ${consegna ? html`<div class="consegna-stampa"><div class="etic">Tempi di consegna</div><b>${consegna}</b></div>` : ''}
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>

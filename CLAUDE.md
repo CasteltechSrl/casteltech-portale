@@ -107,6 +107,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Email del cliente per documento (migrazione 074, Dati fiscali del cliente): `email_amministrazione` = fatture E DDT (Adriano: "è lo stesso"),
   `email_preventivi` (più indirizzi con la virgola), proposte per prime (`destinatarioPreventivo` dopo il mittente della richiesta Gmail, `destinatarioDdt`);
   la colonna `email_ddt` della 074 non si usa.
+  Tempi di consegna del preventivo (Adriano 4/11/2026; `Ritocchi.consegna`, `testoConsegna`/`consegnaCompleta` in `engine/stampa-preventivo.ts`, test in `tests/stampa-preventivo.test.ts`):
+  obbligatori prima di stampare o mandare (fieldset "Tempi di consegna" nei ritocchi, settimane 1–26, sempre "circa"): conto lavoro = "circa N settimane dall'arrivo
+  del materiale"; materiale comprato da noi (proposto dalla spunta Componenti) = "circa N settimane per l'arrivo del materiale e circa M per il montaggio".
+  Stampati sopra il pagamento, anche nel PDF; senza, "Stampa" non parte (`public/stampa.js`) e `inviaPreventivoEmail` rifiuta.
 
 ## Come lavorare
 - Ogni richiesta di modifica (Adriano 31/10/2026): prima riscrivi la richiesta in 3 righe semplici (cosa cambia, dove, per chi).

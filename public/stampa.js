@@ -17,3 +17,17 @@ document.getElementById('stampa').addEventListener('click', () => window.print()
     if (v && v !== versione) location.reload();
   });
 })();
+
+// Tempi di consegna obbligatori (Adriano 4/11/2026): senza, "Stampa / salva PDF" porta alla scelta invece di stampare.
+(() => {
+  if (!document.body.dataset.mancaConsegna) return;
+  const bottone = document.getElementById('stampa');
+  bottone.addEventListener('click', e => {
+    e.stopImmediatePropagation();
+    alert('Prima di stampare scegli i tempi di consegna (a sinistra) e premi "Aggiorna la stampa".');
+    const f = document.getElementById('tempi-consegna');
+    if (f) { f.scrollIntoView({ block: 'center' }); f.querySelector('select')?.focus(); }
+  }, true);
+  // anche Ctrl+P: il browser stampa comunque, ma avvisa
+  window.addEventListener('beforeprint', () => alert('Attenzione: mancano i tempi di consegna nel preventivo.'));
+})();
