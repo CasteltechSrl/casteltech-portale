@@ -204,7 +204,11 @@ export function valoreAttributo(n: Nodo, grezzo: string): { valore?: string; err
       return x && Number(m![2]) < 24 ? { valore: `${x}T${m![2].padStart(2, '0')}:${m![3]}:${m![4] ?? '00'}` }
         : { errore: `"${v}" non è data e ora (gg/mm/aaaa hh:mm)` };
     }
-    case 'intero': return new RegExp(`^\\d{1,${n.max ?? 4}}$`).test(v) ? { valore: String(Number(v)) } : { errore: `"${v}" deve essere un numero intero` };
+    case 'intero':
+      if (!new RegExp(`^\\d{1,${n.max ?? 4}}$`).test(v)) return { errore: `"${v}" deve essere un numero intero` };
+      // lo schema FatturaPA vuole da 1 in su (colli, riga, fase); solo i giorni dei termini di pagamento possono essere 0 (controllo del 4/11/2026)
+      if (Number(v) < 1 && n.nome !== 'GiorniTerminiPagamento') return { errore: `"${v}" deve essere almeno 1` };
+      return { valore: String(Number(v)) };
     case 'decimale': {
       const s = /,/.test(v) ? v.replace(/\./g, '').replace(',', '.') : v;
       const num = Number(s);

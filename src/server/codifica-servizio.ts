@@ -11,6 +11,7 @@
  *     dello stesso P/N, più quelle scritte a mano; le sceglie l'operatore (Adriano, 28/10/2026).
  * L'elaborazione gira in background: la pagina segue l'avanzamento.
  */
+import { testoCella } from '../engine/excel-celle.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
@@ -99,16 +100,6 @@ export async function leggiFileBom(nome: string, contenuto: Buffer): Promise<str
     out[i - 1] = celle;
   });
   return Array.from(out, r => r ?? []);
-}
-function testoCella(v: any): string {
-  if (v == null) return '';
-  if (typeof v === 'object') {
-    if ('richText' in v) return v.richText.map((x: any) => x.text).join('');
-    if ('result' in v) return testoCella(v.result);
-    if ('text' in v) return String(v.text);
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
-  }
-  return String(v).trim();
 }
 /** Nuova analisi: intestazione e colonne riconosciute da sole (correggibili dalla pagina). */
 export async function creaAnalisi(opz: { nome: string; fileNome: string; righe: string[][]; quantita: number[]; utenteId: number; soloCodifica?: boolean }): Promise<number> {

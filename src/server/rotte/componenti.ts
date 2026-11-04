@@ -704,7 +704,7 @@ function paginaRiga(a: any, r: RigaBom, archivio: ValoriArchivio = {}): Raw {
     <a class="bottone" href="/quotazioni/bom/${a.id}#riga-${r.n}">← Torna alla BOM</a></div>
   ${riquadroVerifica(a, r)}
   ${riquadroNuovoCase(a, r)}
-  <div class="griglia-preventivo">
+  <div class="griglia-preventivo griglia-riga-bom">
     <form method="post" class="blocco">
       <p class="riepilogo">${r.designatori ? html`<b>Designatori:</b> ${r.designatori}<br>` : ''}
         ${r.valore || r.footprint || r.descrizioneBom ? html`<b>Dalla BOM:</b> ${[r.valore, r.footprint, r.descrizioneBom].filter(Boolean).join(' · ')}<br>` : ''}

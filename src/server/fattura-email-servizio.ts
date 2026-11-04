@@ -3,6 +3,7 @@
  * allegato, parte da amministrazione@ (alias di info@, se attivo in Gmail; altrimenti da info@) con Gmail. Resta scritto a chi e quando
  * (documenti.email_a / email_inviata_il) e si vede il segno "Inviato" (✉) accanto a quello dello SdI. Lo stato del documento non cambia.
  */
+import { importoDaIncassare } from '../engine/tipi-fattura.js';
 import { q, q1 } from './db.js';
 import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
@@ -29,7 +30,9 @@ export async function datiStampaFattura(id: number) {
   const intento = totali.riepilogo.some(g => g.natura === 'N3.5') ? await q1<any>(d.dichiarazione_intento_id
     ? `SELECT * FROM dichiarazioni_intento WHERE id = $1` : `SELECT * FROM dichiarazioni_intento WHERE cliente_id = $1 ORDER BY data_protocollo DESC LIMIT 1`,
     [d.dichiarazione_intento_id ?? d.cliente_id]) : null;
-  const cliente = { ...fotografia, split_payment: fotografia.split_payment ?? attuale?.split_payment ?? false };
+  // documento emesso: split payment come all'emissione (la fotografia non salva i "false": senza la voce non era in split).
+  // Prima si ricadeva sui dati attuali del cliente e una vecchia fattura poteva diventare split payment nella stampa (controllo del 4/11/2026).
+  const cliente = { ...fotografia, split_payment: d.intestatario && d.numero != null ? !!fotografia.split_payment : !!attuale?.split_payment };
   return { d, righe: righeIva, azienda, cliente, totali, scadenze, intento, pagamento };
 }
 
@@ -58,7 +61,8 @@ export async function propostaEmailFattura(id: number) {
   const aperte = x.scadenze.filter((s: any) => !s.pagata_il).map((s: any) => ({ data: s.data, importo: Number(s.importo) }));
   const bonifico = !x.pagamento || x.pagamento.modalita === 'MP05';
   const testo = emailFattura({ tipo: x.d.tipo, tipoSdi: x.d.tipo_sdi, numero: x.d.numero, sezionale: x.d.sezionale, data: x.d.data, azienda,
-    totale: Number(x.d.totale) || x.totali.totale, scadenze: aperte, iban: bonifico ? x.azienda.iban : null });
+    totale: Number(x.d.totale) || x.totali.totale, scadenze: aperte, iban: bonifico ? x.azienda.iban : null,
+    nettoDaPagare: x.cliente.split_payment ? importoDaIncassare(x.totali, true) : null });
   return { a, ...testo, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer(x.d.tipo)) };
 }
 

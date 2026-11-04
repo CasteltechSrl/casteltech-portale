@@ -119,6 +119,8 @@ export async function creaNotaCredito(fatturaId: number, creatoDa: number | null
     await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva)
       SELECT $1, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva
       FROM documenti_righe WHERE documento_id = $2 AND NOT (solo_descrizione AND descrizione ILIKE 'DDT%')`, [id, f.id]);
+    // stessa esigibilità IVA della fattura stornata (es. differita: altrimenti la nota nasceva "immediata", controllo del 4/11/2026)
+    await c.query(`UPDATE documenti SET esigibilita_iva = $2 WHERE id = $1`, [id, f.esigibilita_iva ?? null]);
     return id;
   });
 }
@@ -138,6 +140,7 @@ export async function creaNotaDebito(fatturaId: number, creatoDa: number | null)
     [Number(data.slice(0, 4)), data, f.cliente_id, f.condizione_pagamento, f.id,
      `Nota di debito relativa alla fattura n. ${numeroCompleto(f.numero, f.sezionale)} del ${f.data.split('-').reverse().join('/')}`,
      f.riferimento_esterno, f.cig, f.cup, f.data_ordine, f.ordine_id, creatoDa]);
+  await q(`UPDATE documenti SET esigibilita_iva = $2 WHERE id = $1`, [r!.id, f.esigibilita_iva ?? null]);
   return r!.id;
 }
 
@@ -211,9 +214,10 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
     if (d.tipo === 'fattura' && (TIPI_SCEGLIBILI as readonly string[]).includes(String(b.tipo_sdi ?? '')))
       await c.query(`UPDATE documenti SET tipo_sdi = $2 WHERE id = $1`, [id, b.tipo_sdi]);
     // esigibilità IVA (fattura e note) e attributi avanzati della fattura elettronica (anche autofatture; Adriano 4/11/2026)
-    if (d.tipo === 'fattura' || d.tipo === 'nota_credito')
+    // si aggiornano solo se il modulo li contiene (controllo del 4/11/2026: un salvataggio senza il riquadro li azzerava)
+    if ((d.tipo === 'fattura' || d.tipo === 'nota_credito') && b.esigibilita_iva !== undefined)
       await c.query(`UPDATE documenti SET esigibilita_iva = $2 WHERE id = $1`, [id, ['I', 'D', 'S'].includes(String(b.esigibilita_iva)) ? b.esigibilita_iva : null]);
-    if (['fattura', 'nota_credito', 'autofattura'].includes(d.tipo))
+    if (['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && b.attributi_presenti)
       await c.query(`UPDATE documenti SET attributi_xml = $2 WHERE id = $1`, [id, JSON.stringify(attributiDaModulo(b.attributi))]);
     if (d.tipo !== 'ddt') await c.query(`UPDATE documenti SET cig = $2, cup = $3, data_ordine = $4 WHERE id = $1`, [id,
       String(b.cig ?? '').trim().toUpperCase() || null, String(b.cup ?? '').trim().toUpperCase() || null,
@@ -380,7 +384,7 @@ async function preparaXml(c: pg.PoolClient | null, id: number, numero: number) {
 /** Anteprima: totali ed errori dell'XML (senza numero, che si prende all'emissione). */
 export async function anteprimaDocumento(id: number): Promise<{ esito: EsitoXml; erroriExtra: string[] }> {
   const { esito, erroriExtra } = await preparaXml(null, id, 0);
-  return { esito: { ...esito, errori: esito.errori.filter(e => !/numero/.test(e)) }, erroriExtra };
+  return { esito: { ...esito, errori: esito.errori.filter(e => e !== 'Il documento non ha ancora un numero.') }, erroriExtra };
 }
 
 /**

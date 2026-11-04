@@ -42,6 +42,7 @@ import { sistemaInterrotte } from './codifica-servizio.js';
 import { riceviWebhook } from './invoicetronic.js';
 import { registraAccesso, registraAttivita } from './registro-servizio.js';
 import { contabilitaPuo, eUfficio, esternoPuo, paginaDopoAccesso, paginaIniziale } from '../engine/ruoli.js';
+import { spegniLinkNonPermessi } from '../engine/link-profilo.js';
 
 declare module 'express-session' { interface SessionData { utente?: Utente } }
 
@@ -97,6 +98,16 @@ app.use((req, res, next) => {
 
 // registro delle attività: chi ha cambiato cosa e quando (engine/registro.ts), una riga dopo ogni salvataggio riuscito
 app.use(registraAttivita);
+
+// contabilità, esterno e produzione: i link alle pagine che il profilo non può aprire diventano testo (engine/link-profilo.ts)
+app.use((req, res, next) => {
+  const ruolo = req.session.utente?.ruolo;
+  if (!ruolo || eUfficio(ruolo)) return next();
+  const invia = res.send.bind(res);
+  res.send = ((corpo?: any) => invia(typeof corpo === 'string' && corpo.includes('<a ') && /^\s*<!doctype html/i.test(corpo)
+    ? spegniLinkNonPermessi(corpo, ruolo) : corpo)) as typeof res.send;
+  next();
+});
 
 export function soloUfficio(req: Request, res: Response, next: NextFunction) {
   if (!req.session.utente) return res.redirect('/login?torna=' + encodeURIComponent(req.originalUrl));

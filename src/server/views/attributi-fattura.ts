@@ -27,6 +27,7 @@ export function riquadroAttributi(xmlBase: string | undefined, valori: Record<st
   const automatici = elencoAutomatici(xmlBase);
   return html`<details class="attributi-avanzati" ${impostati ? raw('open') : ''}>
     <summary>Attributi avanzati fattura elettronica${impostati ? ` (${impostati} impostati)` : ''}</summary>
+    <input type="hidden" name="attributi_presenti" value="1">
     <p class="nota">Campi in più della fattura elettronica, per i clienti che li chiedono (contratto, trasporto, periodo di una riga, altri dati gestionali…).
       Spunta il campo e scrivi il valore: va nell'XML al posto giusto e vince su quello automatico (scritto in grigio). Date come gg/mm/aaaa.
       Importi, numero, date e tipo del documento li calcola il portale e non sono qui.</p>
