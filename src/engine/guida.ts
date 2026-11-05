@@ -268,11 +268,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Anagrafiche ──
   {
     id: 'scheda-cliente', area: 'anagrafiche', titolo: 'La scheda unica del cliente',
-    parole: 'scheda cliente tutto in una pagina situazione cliente riepilogo preventivi ordini aperti commesse ddt fatture incassi scaduti crm prezzi prodotti storico',
+    parole: 'scheda cliente tutto in una pagina situazione cliente riepilogo preventivi ordini aperti commesse ddt fatture incassi scaduti crm prezzi prodotti storico codici diversi per anno quanti codici pezzi consegnati',
     testo: [
       'Anagrafiche → Clienti → "Scheda" (o il cliente trovato con la ricerca in alto) apre una pagina con tutto quel che riguarda quel cliente: fatturato dell\'anno e dell\'anno prima, da incassare e scaduto (con i giorni medi di incasso), ordini aperti, commesse in corso, DDT da fatturare, preventivi.',
       'Sotto, un riquadro per argomento con le ultime righe e il collegamento alla pagina completa: ordini da evadere, commesse, DDT da fatturare, incassi scaduti, ultimi documenti, preventivi, prodotti con il prezzo di listino, CRM (prossima azione, referenti, ultime attività).',
       'In alto i pulsanti per partire da lì: Dati fiscali, Prodotti, CRM, + Preventivo (con il cliente già scelto), + Fattura, + DDT.',
+      'In fondo, "Codici prodotti per anno": quanti codici diversi abbiamo fatto per quel cliente in ognuno degli ultimi 3 anni e i pezzi consegnati di ogni codice, una colonna per anno ("Tutti gli anni" allarga la tabella). Contano i DDT di vendita o reso lavorato e le fatture senza DDT; fuori lamine, programmazioni, trasporti, resi di materiale non lavorato e garanzie.',
     ],
     pagine: [['/anagrafiche/clienti', 'Clienti']],
   },

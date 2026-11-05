@@ -32,6 +32,7 @@ import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPre
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
+import { codiciDiversiPerAnno } from '../../engine/scheda-cliente.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteMateriali } from './materiali-consumo.js';
 import { rotteServizi } from './servizi-una-tantum.js';
@@ -478,7 +479,7 @@ export function rotteAnagrafiche() {
   r.get('/clienti/:id', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
-    const d = await datiSchedaCliente(Number(req.params.id), oggi);
+    const d = await datiSchedaCliente(Number(req.params.id), oggi, { tuttiGliAnni: req.query.anni === 'tutti' });
     if (!d) return res.status(404).send('Cliente non trovato');
     res.send(await pag(req, 'clienti', schedaCliente(d, oggi), msg(req)));
   });
@@ -657,6 +658,23 @@ const testoAcquisto = (c: any) => c.prezzo_acquisto == null ? 'Nessun ordine a f
   : `${c.prezzo_fornitore ?? ''}, ${dataIt(c.prezzo_data instanceof Date ? c.prezzo_data.toISOString() : c.prezzo_data)}, ${num(Number(c.prezzo_quantita), 0)} pz. ${c.prezzo_nota ?? ''}`.trim();
 
 // ── Scheda unica del cliente (1/11/2026) ──
+/** Codici prodotto consegnati per anno (Adriano 5/11/2026): una colonna per anno con i pezzi, in testa quanti codici diversi. */
+function tabellaCodiciPerAnno(d: DatiSchedaCliente): Raw {
+  const { anni, codici } = d.codiciPerAnno;
+  const diversi = codiciDiversiPerAnno(d.codiciPerAnno);
+  const c = d.cliente;
+  return html`
+    <section class="area codici-per-anno">
+      <header><h2>Codici prodotti per anno</h2>
+        <a href="/anagrafiche/clienti/${c.id}${d.tuttiGliAnni ? '' : '?anni=tutti'}">${d.tuttiGliAnni ? 'Solo gli ultimi 3 anni' : 'Tutti gli anni'} →</a></header>
+      <p class="nota">Pezzi consegnati con DDT (vendita o reso lavorato) e fatture senza DDT; fuori servizi, lamine, resi di materiale e garanzie.
+        ${anni.map((a, i) => html`${i ? ' · ' : ''}<b>${a}: ${diversi[a]} ${diversi[a] === 1 ? 'codice' : 'codici'}</b>`)}</p>
+      ${codici.length ? html`<table><thead><tr><th>Codice</th><th>Descrizione</th>${anni.map(a => html`<th class="num">${a}</th>`)}</tr></thead>
+        <tbody>${codici.map(x => html`<tr><td>${x.senzaCodice ? html`<span class="nota">(senza codice)</span> ${x.codice}` : x.codice}</td><td>${x.descrizione}</td>
+          ${anni.map(a => html`<td class="num">${x.pezzi[a] ? num(x.pezzi[a], 0) : ''}</td>`)}</tr>`)}</tbody></table>`
+        : html`<p class="nota">Nessuna consegna in questi anni.</p>`}
+    </section>`;
+}
 const STATI_COMMESSA_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
 const NOMI_DOC: Record<string, string> = { fattura: 'Fattura', nota_credito: 'Nota di credito', nota_debito: 'Nota di debito', ddt: 'DDT' };
 function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
@@ -720,5 +738,6 @@ function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
         ${(crm.contatti ?? []).length ? html`<div class="tit">Referenti</div><ul>${(crm.contatti as any[]).slice(0, 5).map(k => riga(`${k.nome}${k.ruolo ? ' · ' + k.ruolo : ''}`, [k.telefono, k.email].filter(Boolean).join(' · ')))}</ul>` : ''}
         <div class="tit">Ultime attività</div>${elenco((crm.attivita as any[] ?? []).map(t => riga(`${t.tipo}: ${String(t.descrizione ?? '').slice(0, 80)}`, data(t.data))), 'Nessuna attività registrata.')}`
         : html`<p class="nota">Il cliente non è ancora collegato a un'azienda del CRM.</p>`)}
-    </div>`;
+    </div>
+    ${tabellaCodiciPerAnno(d)}`;
 }

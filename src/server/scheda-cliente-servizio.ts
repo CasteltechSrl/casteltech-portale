@@ -6,13 +6,13 @@ import { q, q1 } from './db.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { ddtDaFatturare } from './documenti-servizio.js';
 import { fatturatoClienti } from './crm-servizio.js';
-import { fatturatoPerAnno, giorniMediIncasso, situazioneIncassi } from '../engine/scheda-cliente.js';
+import { codiciPerAnno, fatturatoPerAnno, giorniMediIncasso, situazioneIncassi, type RigaConsegna } from '../engine/scheda-cliente.js';
 
-export async function datiSchedaCliente(id: number, oggi: string) {
+export async function datiSchedaCliente(id: number, oggi: string, opz: { tuttiGliAnni?: boolean } = {}) {
   const cliente = await q1(`SELECT c.*, (SELECT count(*)::int FROM prodotti p WHERE p.cliente_id = c.id) AS n_prodotti FROM clienti c WHERE c.id = $1`, [id]);
   if (!cliente) return null;
   const anno = Number(oggi.slice(0, 4));
-  const [prodotti, preventivi, righe, commesse, ddt, documenti, rate, crm, storico] = await Promise.all([
+  const [prodotti, preventivi, righe, commesse, ddt, documenti, rate, crm, storico, consegne] = await Promise.all([
     q(`SELECT p.id, p.codice, p.descrizione, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_data::text AS prezzo_data,
         (SELECT count(*)::int FROM prodotti_scaglioni s WHERE s.prodotto_id = p.id) AS scaglioni,
         (SELECT max(v.creato_il)::text FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS ultimo_preventivo
@@ -35,6 +35,13 @@ export async function datiSchedaCliente(id: number, oggi: string) {
         (SELECT json_agg(json_build_object('data', t.data, 'tipo', t.tipo, 'descrizione', t.descrizione) ORDER BY t.data DESC) FROM (SELECT * FROM crm_attivita WHERE azienda_id = a.id ORDER BY data DESC LIMIT 5) t) AS attivita
       FROM crm_aziende a WHERE a.cliente_id = $1 ORDER BY a.id LIMIT 1`, [id]),
     fatturatoClienti([id]).then(f => f.perCliente.get(id) ?? null),
+    // righe consegnate (DDT e fatture senza DDT) per i codici prodotto per anno; solo_descrizione = righe di testo tipo "DDT n. X del"
+    q<RigaConsegna>(`SELECT d.tipo, d.anno, r.codice, r.descrizione, p.descrizione AS "descrizioneAnagrafica", r.quantita::float AS quantita,
+        r.prodotto_id AS "prodottoId", d.dati_trasporto->>'causale' AS causale, r.ddt_id AS "ddtId",
+        EXISTS (SELECT 1 FROM documenti_righe x WHERE x.documento_id = d.id AND x.solo_descrizione AND x.descrizione ~* '^\\s*DDT') AS "citaDdt"
+      FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN prodotti p ON p.id = r.prodotto_id
+      WHERE d.cliente_id = $1 AND d.tipo IN ('ddt', 'fattura') AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND NOT r.solo_descrizione
+        AND d.anno >= $2 ORDER BY d.data DESC, d.id DESC, r.posizione`, [id, opz.tuttiGliAnni ? 0 : anno - 2]),
   ]);
   const ordiniAperti = righe.filter(r => r.tipo === 'scheda' && r.residuoQuantita > 0 && !['evaso', 'annullato'].includes(r.stato));
   return {
@@ -44,6 +51,7 @@ export async function datiSchedaCliente(id: number, oggi: string) {
     giorniIncasso: giorniMediIncasso(rate.map(r => ({ dataFattura: r.data_fattura, pagataIl: r.pagata_il }))),
     crm, storico,
     valoreOrdiniAperti: ordiniAperti.reduce((t, r) => t + (r.residuoValore || 0), 0),
+    codiciPerAnno: codiciPerAnno(consegne, anno, opz.tuttiGliAnni ? 0 : 3), tuttiGliAnni: !!opz.tuttiGliAnni,
   };
 }
 export type DatiSchedaCliente = NonNullable<Awaited<ReturnType<typeof datiSchedaCliente>>>;
