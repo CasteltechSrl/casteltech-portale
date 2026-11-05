@@ -6,6 +6,7 @@
  *
  *   GET  /api/claude/suggerimenti            → aperti (con ?tutti=1 anche fatti e scartati)
  *   POST /api/claude/suggerimenti/:id        → { stato?, risposta?, nota? }
+ *   GET  /api/claude/storico                 → quanti documenti per tipo, anno e origine (solo numeri)
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -67,6 +68,18 @@ export function rotteApiClaude() {
   r.get('/eventi-render', async (_req, res) => {
     res.json({ eventi: await q(`SELECT il, tipo, messaggio, dati FROM eventi_servizi WHERE servizio = 'render'
       AND il > now() - interval '7 days' ORDER BY il DESC, id DESC LIMIT 60`) });
+  });
+
+  // Quanto storico c'è nel portale (Adriano 5/11/2026, analisi di prodotti e clienti: "verificare che lo storico FIC degli anni passati
+  // sia importato"): documenti emessi per tipo, anno e origine, e righe con codice prodotto. Solo numeri, niente dati dei clienti.
+  r.get('/storico', async (_req, res) => {
+    res.json({
+      documenti: await q(`SELECT tipo, anno, origine, count(*)::int AS n, sum(imponibile)::float AS imponibile FROM documenti
+        WHERE stato NOT IN ('bozza', 'annullato', 'scartato') AND numero IS NOT NULL GROUP BY 1, 2, 3 ORDER BY 2, 1, 3`),
+      righeConCodice: await q(`SELECT d.anno, count(*)::int AS n, count(r.prodotto_id)::int AS "conProdotto" FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
+        WHERE d.tipo IN ('fattura', 'nota_credito', 'ddt') AND NOT r.solo_descrizione AND coalesce(trim(r.codice), '') <> '' GROUP BY 1 ORDER BY 1`),
+      ricevuti: await q(`SELECT extract(year FROM data)::int AS anno, origine, count(*)::int AS n FROM documenti_ricevuti GROUP BY 1, 2 ORDER BY 1, 2`),
+    });
   });
 
   r.post('/suggerimenti/:id', async (req, res) => {
