@@ -488,8 +488,10 @@ function paginaAnalisi(a: any, preventivo = 0): Raw {
       ${(Object.entries(ETICHETTE_RUOLI) as [Ruolo, string][]).map(([k, t]) => html`<label>${t}<select name="${k}"><option value="">—</option>
         ${(a.colonne as string[]).map(c => html`<option ${mappa[k] === c ? raw('selected') : ''}>${c}</option>`)}</select></label>`)}
       <button>Applica e rielabora</button></form>
-    ${solo ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi"><label>Schede da produrre<input name="quantita" value="${quantita.join(', ')}"></label><button>Ricalcola</button></form>`}
   </details>` : ''}
+  ${!singola && !solo && !inCorso ? html`<form method="post" action="/quotazioni/bom/${a.id}/quantita" class="riga-campi schede-bom" title="Per quante schede comprare i componenti: anche più quantità, es. 1, 5">
+    <label>Schede per cui comprare i componenti <small class="unita">anche più quantità, es. 1, 5 (la richiesta può essere per 5 PCB ma 1 scheda da montare)</small><input name="quantita" value="${quantita.join(', ')}" size="12"></label>
+    <button>Ricalcola gli acquisti</button></form>` : ''}
   ${solo && !inCorso ? html`<details class="blocco"><summary>Cerca anche i prezzi (passa a Quotazioni)</summary>
     <form method="post" action="/quotazioni/bom/${a.id}/prezzi" class="riga-campi"><label>Schede da produrre <small class="unita">anche più quantità, es. 100, 250</small><input name="quantita" value="100"></label>
       <button title="La BOM va in Quotazioni e si rielabora con prezzi e disponibilità dai distributori">Cerca i prezzi</button></form></details>` : ''}

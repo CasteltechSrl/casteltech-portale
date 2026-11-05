@@ -88,3 +88,14 @@ test('pagina BOM: riquadro senza prezzo solo con il filtro, "Cerca alternative",
   const s = readFileSync(new URL('../src/server/codifica-servizio.ts', import.meta.url), 'utf8');
   assert.match(s, /righe = unisciPerPn\(righe/);
 });
+
+test('"nm" dei LED (590 nm) non vuol dire "non montare"; NM da solo sì; righe non montate uguali unite tra loro', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { parolaNonMontare } = await import('../src/server/codifica-servizio.js');
+  assert.equal(parolaNonMontare('LED YELLOW 590 nm 0805 APT2012SYCK'), null);
+  assert.equal(parolaNonMontare('LED 590nm'), null);
+  assert.equal(parolaNonMontare('LED rosso NM'), 'NM');
+  assert.equal(parolaNonMontare('RES 10K DNP'), 'DNP');
+  const righe = unisciPerPn([riga(1, 'APT2012SYCK', { esito: 'NON MONTATO' }), riga(2, 'APT2012SYCK', { esito: 'NON MONTATO' }), riga(3, 'APT2012SYCK')]);
+  assert.deepEqual(righe.map(r => [r.n, r.esito, r.qtaScheda]), [[1, 'NON MONTATO', 2], [3, 'NUOVO', 1]]);
+});

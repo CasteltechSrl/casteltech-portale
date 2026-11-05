@@ -43,7 +43,7 @@ export const NOTA_UNITE = 'unisce le righe';
 
 /**
  * Una riga per P/N: le righe da comprare con lo stesso P/N (stesso codice senza spazi e trattini, stesso "fornito dal cliente")
- * si uniscono nella prima. Non si uniscono le righe non montate, quelle senza P/N e quelle aggiunte a mano dall'ufficio.
+ * si uniscono nella prima; le righe non montate con lo stesso P/N si uniscono tra loro. Non si uniscono quelle senza P/N e quelle aggiunte a mano.
  * Quantità a scheda sommate, riferimenti uniti, scelte dell'operatore (prezzo a mano, alternativa, scarto, nota) dalla prima che ne ha una.
  */
 export function unisciPerPn<T extends RigaDaUnire>(righe: T[], nonMontato = 'NON MONTATO'): T[] {
@@ -51,8 +51,9 @@ export function unisciPerPn<T extends RigaDaUnire>(righe: T[], nonMontato = 'NON
   const uscita: T[] = [];
   for (const r of righe) {
     const k = chiave(r.pn);
-    if (!k || r.esito === nonMontato || r.aggiuntaAMano) { uscita.push(r); continue; }
-    const kk = `${k}|${r.clienteFornisce ? 1 : 0}`;
+    if (!k || r.aggiuntaAMano) { uscita.push(r); continue; }
+    // anche le righe non montate con lo stesso P/N stanno in una riga sola (ma non insieme a quelle da comprare)
+    const kk = `${k}|${r.clienteFornisce ? 1 : 0}|${r.esito === nonMontato ? 1 : 0}`;
     const capo = capi.get(kk);
     if (!capo) { capi.set(kk, r); uscita.push(r); continue; }
     capo.righeUnite = [...(capo.righeUnite ?? []), r.n, ...(r.righeUnite ?? [])];
