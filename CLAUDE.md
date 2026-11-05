@@ -663,6 +663,15 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    gli acquisti, peso dei primi clienti; commenti `commentiAnalisi` (critico/attenzione/bene + "Cosa fare": calo e da chi, previsione dai mesi chiusi, acquisti che
    pesano di più, dipendenza, clienti fermi/nuovi, ritardi d'incasso, scaduto > 60 gg, prezzi sotto preventivo, margine < 10 %); tabelle mesi, clienti (margine stimato
    = fatturato × margine dell'ultimo preventivo del codice, giorni di incasso), prodotti, acquisti per categoria FIC e fornitori. Non è il bilancio.
+   ✅ Analisi dei prodotti e dei clienti (Adriano 5/11/2026; tasti Prodotti / Clienti in Analisi; `engine/analisi-prodotti.ts`, letture in `analisi-prodotti-servizio.ts`,
+   pagine in `rotte/analisi-prodotti.ts`, test in `tests/analisi-prodotti.test.ts`): `/amministrazione/analisi/prodotti` = classifica per anno con filtro cliente e ricerca (+ Excel):
+   pezzi e fatturato dalle righe delle fatture (NC in negativo, servizi fuori, stesso codice per due clienti = due prodotti), variazione, peso sul cliente e sul totale, prezzo medio,
+   lotti = consegne (DDT di vendita + fatture senza DDT, come `codiciPerAnno`), lotto medio, ultima consegna, "fermo" oltre 6 mesi (`MESI_FERMO`). `/amministrazione/analisi/prodotto?codice=&cliente=`
+   = scheda anno per anno (anche ordini del portale) + preventivi del prodotto + commesse con consuntivo (`consuntivoLotto`: fasi della scheda contro i tempi registrati, fasi senza tempi
+   al previsto, voci e prezzo del lotto dal preventivo ricalcolato sulla quantità); link dai "Codici prodotti per anno" della scheda cliente e dalla tabella Prodotti dell'Andamento.
+   `/amministrazione/analisi/clienti` = visione d'insieme (`visioneClienti`): classifica con peso, stesso periodo dell'anno prima, segnali (calo forte ≤ −30 % su almeno 2.000 €, in calo,
+   in crescita, nuovo = prima vendita nell'anno, perso = anno prima sì e anno scelto no, fermo = nessuna vendita da 6+ mesi, solo anno in corso), primi 3/5, margine medio dai preventivi,
+   giorni di incasso e ritardo (da `analisiClienti`), scaduto (→ Crediti). GET `/api/claude/storico` = conteggi dei documenti per tipo/anno/origine (controllo dello storico caricato).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

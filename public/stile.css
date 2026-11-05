@@ -1000,3 +1000,10 @@ ul.checklist li small { flex-basis: 100%; }
 pre.testo-note { white-space: pre-wrap; font-family: inherit; font-size: .9rem; background: #fafbfa; border: 1px solid var(--bordo); border-radius: 6px; padding: .6rem .8rem; max-height: 18rem; overflow: auto; }
 .etichetta.critico { background: #fbe2e0; color: var(--negativo); }
 .etichetta.attenzione { background: #fff2cc; color: #8a6100; }
+
+/* Analisi → Clienti (Adriano 5/11/2026): riquadri in calo forte / fermi / nuovi / persi */
+.colonne-analisi { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: 1rem 0; }
+.colonne-analisi section { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .6rem 1rem; }
+.colonne-analisi h2 { font-size: 1rem; margin: .2rem 0 .5rem; }
+.elenco-semplice { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; }
+.elenco-semplice li { display: flex; flex-direction: column; }
