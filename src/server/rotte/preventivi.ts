@@ -31,6 +31,7 @@ import { pianificaProduzione } from '../ordini-servizio.js';
 import { caricoGiornaliero } from '../../engine/ordini.js';
 import { stimaConsegna } from '../../engine/consegna-preventivo.js';
 import { creaOrdineDaPreventivi, creaOrdineDaPreventivo, propostaOrdineDaPreventivi, propostaOrdineDaPreventivo } from '../ordine-da-preventivo-servizio.js';
+import { prezzoSchedaConUnaTantumElenco } from '../../engine/elenco-preventivi.js';
 import { indirizzoOrdine, righeDaModuloOrdine, totaleOrdineProposto, type RigaOrdineProposta } from '../../engine/ordine-da-preventivo.js';
 
 const PROVENIENZE: [number, string, string][] = [
@@ -47,7 +48,9 @@ export function rottePreventivi() {
         (tariffe->>'ricarico')::numeric AS ricarico,
         (risultato->'totali'->>'prezzoOrarioMedio')::numeric AS prezzo_orario,
         (risultato->'totali'->>'prezzoSchedaSecondoLotto')::numeric AS prezzo_scheda,
-        (risultato->'totali'->>'costiUnaTantum')::numeric AS una_tantum
+        (risultato->'totali'->>'costiUnaTantum')::numeric AS una_tantum,
+        (risultato->'totali'->>'prezzoSchedaPrimoLotto')::numeric AS prezzo_scheda_ut,
+        NULLIF(stampa->'prezzi'->>'con', '') AS prezzo_scheda_ut_mano
       FROM preventivi
       WHERE $1 = '' OR (intestazione->>'cliente') ILIKE '%'||$1||'%' OR (intestazione->>'codice') ILIKE '%'||$1||'%'
          OR (intestazione->>'descrizione') ILIKE '%'||$1||'%' OR numero ILIKE '%'||$1||'%'
@@ -60,8 +63,9 @@ export function rottePreventivi() {
       { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
       { header: 'Nr. PCB', key: 'n_schede', formato: 'intero' }, { header: '€/h', key: 'prezzo_orario', formato: 'euro' }, { header: 'Ricarico', key: 'ricarico', formato: 'numero' },
       { header: '€/PCB', key: 'prezzo_scheda', formato: 'euro' }, { header: 'Totale lotti successivi', key: 'totale_secondo_lotto', formato: 'euro' },
-      { header: 'Una tantum', key: 'una_tantum', formato: 'euro' }, { header: 'Stato', key: 'stato', width: 12 },
-    ], righe.map(p => ({ ...p, cliente: p.intestazione?.cliente, codice: p.intestazione?.codice, revisione: p.intestazione?.revisione, descrizione: p.intestazione?.descrizione, stato: String(p.stato).replace(/_/g, ' ') }))));
+      { header: 'Una tantum', key: 'una_tantum', formato: 'euro' }, { header: '€/PCB con una tantum', key: 'prezzo_scheda_ut_elenco', formato: 'euro' },
+      { header: 'Stato', key: 'stato', width: 12 },
+    ], righe.map(p => ({ ...p, prezzo_scheda_ut_elenco: prezzoSchedaConUnaTantumElenco(p).valore, cliente: p.intestazione?.cliente, codice: p.intestazione?.codice, revisione: p.intestazione?.revisione, descrizione: p.intestazione?.descrizione, stato: String(p.stato).replace(/_/g, ' ') }))));
   });
 
   r.get('/', async (req, res) => {
@@ -93,7 +97,8 @@ export function rottePreventivi() {
       <div class="tabella-scorre"><table class="elenco preventivi">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>
           <th class="n" title="Prezzo per ora di ciclo">€/h</th><th class="n">Ricarico</th><th class="n" title="Lotti successivi">€/PCB</th>
-          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th><th title="Nessun segno = ancora da inviare al cliente">Inviato</th></tr></thead>
+          <th class="n" title="Lotti successivi (senza costi una tantum)">Totale</th><th class="n" title="Costi una tantum (solo primo lotto)">Una tantum</th>
+          <th class="n" title="Prezzo a scheda del primo lotto, comprensivo dei costi una tantum: (totale + una tantum) ÷ nr. PCB. Con * è il prezzo scritto a mano nei ritocchi della stampa">€/PCB con u.t.</th><th title="Nessun segno = ancora da inviare al cliente">Inviato</th></tr></thead>
         <tbody>${righe.map(p => html`
           <tr class="cliccabile" data-href="/preventivi/${p.id}">
             ${casella(p.id, p.numero)}
@@ -102,6 +107,7 @@ export function rottePreventivi() {
             <td class="taglia">${p.intestazione?.descrizione}</td><td class="n">${num(p.n_schede, 0)}</td>
             <td class="n">${euro(p.prezzo_orario)}</td><td class="n">${p.ricarico ? num((p.ricarico - 1) * 100, 1) + '%' : ''}</td>
             <td class="n">${euro(p.prezzo_scheda)}</td><td class="n"><strong>${euro(p.totale_secondo_lotto)}</strong></td><td class="n">${euro(p.una_tantum)}</td>
+            ${(() => { const u = prezzoSchedaConUnaTantumElenco(p); return html`<td class="n" data-valore="${u.valore ?? ''}" title="${u.aMano ? 'Prezzo scritto a mano nei ritocchi della stampa' : 'Prezzo a scheda calcolato, una tantum comprese'}">${u.valore == null ? '' : euro(u.valore)}${u.aMano ? '*' : ''}</td>`; })()}
             <td class="nowrap" data-valore="${p.email_inviata_il ? new Date(p.email_inviata_il).toISOString() : ''}">${segnoInvioElenco({ ...p, tipo: 'preventivo', origine: null })}</td>
           </tr>`)}
         </tbody></table></div>${barra}

@@ -198,7 +198,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    e conta il controllo visivo (fase 18V, 60 s a scheda). Montaggio → SMD → A mano (migrazione 044; Adriano 29/10/2026, campionature):
    SMD in giostra a 15 s l'uno (`tempoMontaggioSmdMano`), in SMD solo attrezzaggio serigrafia 45 min (`tempoAttrezSerigrafiaMano`), forno e consumi restano. Pre-produzione: 5 minuti standard a voce (3D 0; acquisti solo con la spunta).
    Riquadro totali: `src/engine/riepilogo.ts` (prezzo a scheda, una tantum interni/acquisti, margini, ore ciclo/uomo).
-   Elenco con azioni multiple (crea commessa, duplica, elimina). Stampa per il cliente `/preventivi/:id/stampa` (Adriano 28/10/2026;
+   Elenco con azioni multiple (crea commessa, duplica, elimina). Colonna "€/PCB con u.t." (Adriano 5/11/2026; `engine/elenco-preventivi.ts`, test in `tests/elenco-preventivi.test.ts`):
+   prezzo a scheda del primo lotto = `totali.prezzoSchedaPrimoLotto`, con * se scritto a mano in `stampa.prezzi.con`; anche nell'Excel. Stampa per il cliente `/preventivi/:id/stampa` (Adriano 28/10/2026;
    `views/stampa-preventivo.ts`, `engine/stampa-preventivo.ts`, `public/stampa-preventivo.css`): impaginata come i preventivi FIC, pannello
    "Cosa stampare" a sinistra: `?vista=essenziale` (solo prezzo a scheda, niente sotto la descrizione: con una tantum le comprende e lo dice),
    `dettaglio` (predefinita: componenti, PCB, SMD, THT, consumo, spedizione; gestione materiale e imballaggio su SMD/THT 70/30 pesato sul valore,
