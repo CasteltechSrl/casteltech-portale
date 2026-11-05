@@ -15,7 +15,7 @@ import {
   VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
   type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
-import { fraseAlternative, type AlternativaDaConfermare } from '../../engine/alternative-cliente.js';
+import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type ComponenteDaVerificare } from '../../engine/alternative-cliente.js';
 
 export interface ClienteStampa {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null;
@@ -30,11 +30,12 @@ export interface EmailStampa {
 }
 
 /** ut = dettaglio dei costi una tantum (Adriano 4/11/2026; `?ut=0` lo toglie) */
-export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean; ut: boolean }
+/** allegato = ultima pagina con alternative da confermare e problemi di acquisto (Adriano 5/11/2026: sempre, `?allegato=0` la toglie) */
+export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean; ut: boolean; allegato?: boolean }
 
 /** Scelte della stampa nell'indirizzo (solo quelle diverse dal solito). */
 export function parametriStampa(x: OpzioniStampa): Record<string, string> {
-  return { vista: x.versione, ...(x.condizioni ? {} : { condizioni: '0' }), ...(x.firma ? {} : { firma: '0' }), ...(x.ut ? {} : { ut: '0' }) };
+  return { vista: x.versione, ...(x.condizioni ? {} : { condizioni: '0' }), ...(x.firma ? {} : { firma: '0' }), ...(x.ut ? {} : { ut: '0' }), ...(x.allegato === false ? { allegato: '0' } : {}) };
 }
 /** Righe vuote del modulo per aggiungere righe alla stampa. */
 const RIGHE_VUOTE = 2;
@@ -72,9 +73,14 @@ export function stampaPreventivo(o: {
   nonQuotati?: string[];
   /** codici alternativi alla BOM da far confermare al cliente (Adriano 5/11/2026): frase sotto le righe + foglio in coda */
   alternative?: AlternativaDaConfermare[];
+  /** componenti non trovati o con problemi di acquisto (Adriano 5/11/2026), nello stesso foglio */
+  problemiAcquisto?: ComponenteDaVerificare[];
 }): Raw {
   const { p, d, ris, opz, nonQuotati } = o;
-  const alternative = o.alternative ?? [];
+  const conAllegato = opz.allegato !== false;
+  const alternative = conAllegato ? o.alternative ?? [] : [];
+  const problemi = conAllegato ? o.problemiAcquisto ?? [] : [];
+  const daComponenti = (o.alternative?.length ?? 0) + (o.problemiAcquisto?.length ?? 0);
   const validita = validitaOfferta(p.creato_il, materialeVenduto(ris));
   const r = riepilogo(ris);
   const i = p.intestazione ?? {};
@@ -155,6 +161,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
     <a href="${link({ condizioni: !opz.condizioni })}" class="${opz.condizioni ? 'si' : ''}">Condizioni generali</a>
     <a href="${link({ firma: !opz.firma })}" class="${opz.firma ? 'si' : ''}">Spazio firma del cliente</a>
     ${r.unaTantum > 0 && opz.versione !== 'essenziale' ? html`<a href="${link({ ut: !opz.ut })}" class="${opz.ut ? 'si' : ''}" title="Voci sotto i costi una tantum (documentazione, programmazione, lamina…)">Dettaglio dei costi una tantum</a>` : ''}
+    ${daComponenti ? html`<a href="${link({ allegato: !conAllegato })}" class="${conAllegato ? 'si' : ''}" title="Ultima pagina: codici alternativi da confermare e componenti non trovati o con problemi di acquisto">Pagina componenti (alternative e problemi di acquisto)</a>` : ''}
   </div>
   <form class="ritocchi" method="post" action="/preventivi/${p.id}/stampa">
     <h2>Ritocchi per il cliente</h2>
@@ -195,7 +202,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
       { segna: `/preventivi/${p.id}/segna-inviato`, torna: `/preventivi/${p.id}/stampa${link({})}`, cosa: 'preventivo' })}
     ${o.email.stato === 'da_validare' ? html`<p class="aiuto"><b>Preventivo da validare</b>: controllalo e salvalo, poi si può mandare.</p>` : html`
     <form method="post" action="/preventivi/${p.id}/email" data-conferma="Mandare il preventivo per email con il PDF allegato (${VERSIONI_STAMPA.find(v => v.codice === opz.versione)?.nome ?? ''})?">
-      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}">
+      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}"><input type="hidden" name="allegato" value="${conAllegato ? '1' : '0'}">
       ${o.email.richiesta ? html`<p class="aiuto">Risposta alla richiesta "${o.email.richiesta.oggetto}" di ${o.email.richiesta.mittente}.</p>` : ''}
       <label>A <input name="a" value="${o.email.a}" placeholder="indirizzo@cliente.it (più indirizzi con la virgola)"></label>
       <label>Cc <input name="cc" value=""></label>
@@ -230,7 +237,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
   </table>
 
   ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
-  ${alternative.length ? html`<p class="avviso-alternative">${fraseAlternative(alternative.length)}</p>` : ''}
+  ${alternative.length || problemi.length ? html`<p class="avviso-alternative">${fraseAlternative(alternative.length, problemi.length)}</p>` : ''}
   <div class="spinta"></div>
   <div class="riquadro-prezzi">
     <div><div class="etic">Prezzo a scheda${scontato}${riquadro.con != null ? ' senza costi una tantum' : ''}</div><strong>${euro(riquadro.senza)}</strong></div>
@@ -256,11 +263,12 @@ ${opz.condizioni ? html`<section class="foglio seconda">
   <div class="spinta"></div>
   ${piede}
 </section>` : ''}
-${alternative.length ? html`<section class="foglio alternative">
+${alternative.length || problemi.length ? html`<section class="foglio alternative">
   <header class="testa"><img src="/static/logo-casteltech.png" alt="Casteltech" class="logo piccolo">
-    <div class="titolo"><b>CODICI ALTERNATIVI DA CONFERMARE</b><br><small>allegati al preventivo nr. ${numero} · ${i.codice ?? ''}${i.revisione ? ` rev. ${i.revisione}` : ''}</small></div></header>
-  <p class="spiega-alternative">Per i componenti qui sotto proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche
-    (non disponibile o più conveniente). Il prezzo del preventivo è calcolato con il codice alternativo. Vi chiediamo di indicare per ogni riga
+    <div class="titolo"><b>${FOGLIO_COMPONENTI.toUpperCase()}</b><br><small>allegato al preventivo nr. ${numero} · ${i.codice ?? ''}${i.revisione ? ` rev. ${i.revisione}` : ''}</small></div></header>
+  ${alternative.length ? html`<h3 class="titolo-sezione">Codici alternativi da confermare</h3>
+  <p class="spiega-alternative">Per questi componenti proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche
+    (non disponibile o più conveniente). Il prezzo del preventivo è calcolato con il codice alternativo. Indicate per ogni riga
     se lo accettate: senza conferma acquistiamo il codice della BOM, se disponibile, e il prezzo può cambiare.</p>
   <table class="righe tabella-alternative">
     <thead><tr><th>Riferimenti</th><th>Codice della BOM</th><th>Codice alternativo proposto</th><th>Descrizione</th><th class="n">Q.tà/scheda</th><th class="conferma">Confermato</th></tr></thead>
@@ -270,7 +278,18 @@ ${alternative.length ? html`<section class="foglio alternative">
       <td><b>${x.alternativa}</b>${x.produttoreAlternativa ? html`<br><small>${x.produttoreAlternativa}</small>` : ''}</td>
       <td><small>${x.descrizione}</small></td><td class="n">${num(x.qtaScheda, x.qtaScheda % 1 ? 2 : 0)}</td>
       <td class="conferma">☐ Sì&nbsp;&nbsp;☐ No</td></tr>`)}</tbody>
-  </table>
+  </table>` : ''}
+  ${problemi.length ? html`<h3 class="titolo-sezione">Componenti non trovati o con problemi di acquisto</h3>
+  <p class="spiega-alternative">Componenti della BOM che non abbiamo trovato o che hanno una disponibilità da verificare al momento dell'offerta.
+    Quelli "non quotati" non sono compresi nel prezzo: potete fornirli voi, indicarci un codice equivalente o chiederci di cercarlo.</p>
+  <table class="righe tabella-alternative">
+    <thead><tr><th>Riferimenti</th><th>Codice della BOM</th><th>Descrizione</th><th class="n">Q.tà/scheda</th><th>Problema</th></tr></thead>
+    <tbody>${problemi.map(x => html`<tr class="${x.quotato ? '' : 'non-quotato'}">
+      <td>${x.riferimenti}</td>
+      <td><b>${x.codice}</b>${x.produttore ? html`<br><small>${x.produttore}</small>` : ''}</td>
+      <td><small>${x.descrizione}</small></td><td class="n">${num(x.qtaScheda, x.qtaScheda % 1 ? 2 : 0)}</td>
+      <td>${x.problema}</td></tr>`)}</tbody>
+  </table>` : ''}
   ${firme}
   <div class="spinta"></div>
   ${piede}

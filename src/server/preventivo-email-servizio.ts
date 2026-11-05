@@ -3,7 +3,7 @@
  * (`datiStampaPreventivo`), l'email parte da preventivi@ (alias di info@, se attivo in Gmail; altrimenti da info@) con Gmail.
  * Resta scritto a chi e quando (preventivi.email_a / email_inviata_il); un preventivo in bozza diventa "inviato".
  */
-import { type AlternativaDaConfermare } from '../engine/alternative-cliente.js';
+import { type AlternativaDaConfermare, type ComponenteDaVerificare } from '../engine/alternative-cliente.js';
 import { q, q1 } from './db.js';
 import { gmailConfigurato, inviaGmail, mittenteGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
@@ -20,7 +20,7 @@ import { noteDaStampare, righeNonQuotateNelleNote } from '../engine/non-quotati.
 
 /** Opzioni della stampa dall'indirizzo (?vista=…&condizioni=0&firma=0&ut=0) o dal modulo dell'email. */
 export const opzioniStampa = (x: Record<string, unknown>): OpzioniStampa =>
-  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0', ut: x.ut !== '0' });
+  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0', ut: x.ut !== '0', allegato: x.allegato !== '0' });
 
 /** Tutto quello che serve alla stampa (pagina e PDF): preventivo, calcolo, azienda, cliente, ritocchi. */
 export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
@@ -39,13 +39,14 @@ export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
   // componenti in conto lavoro (spunta Componenti tolta): niente righe "non quotato" (controllo del 4/11/2026)
   // codici alternativi alla BOM da far confermare al cliente (Adriano 5/11/2026): solo se i componenti li compriamo noi
   let alternative: AlternativaDaConfermare[] = [];
+  let problemiAcquisto: ComponenteDaVerificare[] = [];
   let nonQuotati = v('acquistoComponenti') ? righeNonQuotateNelleNote(dati.note ?? '') : [];
   if (dati.bomId && v('acquistoComponenti')) {
     const b = await costoBomPerPreventivo(dati.bomId, dati.nSchede).catch(() => null);
-    if (b && b.stato === 'pronta') { nonQuotati = b.nonQuotati; alternative = b.alternative ?? []; }
+    if (b && b.stato === 'pronta') { nonQuotati = b.nonQuotati; alternative = b.alternative ?? []; problemiAcquisto = b.problemiAcquisto ?? []; }
   }
   return {
-    p, d: dati, ris: calcola(cat, dati), doppia, nonQuotati, alternative,
+    p, d: dati, ris: calcola(cat, dati), doppia, nonQuotati, alternative, problemiAcquisto,
     nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
     nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
     azienda: await caricaAzienda(), cliente: cliente ?? null, opz, rit: leggiRitocchi(p.stampa),
@@ -75,7 +76,7 @@ export async function pdfDelPreventivo(id: number, opz: OpzioniStampa): Promise<
     cliente: x.cliente ?? { ragione_sociale: i.cliente ?? '' },
     codice: i.codice ?? '', revisione: i.revisione, nSchede: x.d.nSchede,
     righe: cont.righe, riquadro: cont.riquadro, scontato: cont.scontato, primoLotto: cont.primoLotto, totale: cont.totale,
-    note, pagamento: x.cliente?.pagamento, alternative: x.alternative,
+    note, pagamento: x.cliente?.pagamento, alternative: opz.allegato === false ? [] : x.alternative, problemiAcquisto: opz.allegato === false ? [] : x.problemiAcquisto,
     validita: validitaOfferta(x.p.creato_il, materialeVenduto(x.ris)), consegna: testoConsegna(x.rit.consegna, x.acquisto), condizioni: opz.condizioni, firma: opz.firma,
   });
   return { nome: nomeFilePdfPreventivo(x.p.numero, i.codice ?? ''), dati };

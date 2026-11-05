@@ -48,9 +48,74 @@ export function alternativeDaConfermare(righe: RigaPerAlternativa[], nonMontato 
   return [...perCoppia.values()].map(({ rif, ...x }) => ({ ...x, riferimenti: rif.join(', ') }));
 }
 
-/** Frase stampata sotto le righe del preventivo quando ci sono alternative da confermare. */
-export function fraseAlternative(n: number): string {
-  if (!n) return '';
-  return `Rispetto alla BOM ${n === 1 ? 'è stato individuato 1 codice alternativo' : `sono stati individuati ${n} codici alternativi`} da confermare: `
-    + `${n === 1 ? 'è elencato' : 'sono elencati'} nel foglio "Codici alternativi da confermare" in fondo al preventivo. Li acquistiamo solo dopo la vostra conferma.`;
+/**
+ * Componenti con problemi di acquisto da segnalare al cliente nello stesso foglio (Adriano 5/11/2026: "inserisci anche eventuali componenti
+ * non trovati, per codice o disponibilità, e qualsiasi tipo di anomalia lato acquisti"). Righe della BOM da comprare, senza alternativa
+ * (quelle sono già nell'altro elenco) e senza prezzo scritto a mano (= problema risolto dall'ufficio). Testi per il cliente, senza le
+ * istruzioni interne del portale ("premi Aggiorna prezzi").
+ */
+export interface RigaPerProblema extends RigaPerAlternativa {
+  prezzoManuale?: number | null;
+  acquisti?: { scelta?: { disponibile: boolean } }[];
+  reperibilita?: { livello: string; motivi?: string[] };
+}
+export interface ComponenteDaVerificare {
+  codice: string; produttore: string; descrizione: string; riferimenti: string; qtaScheda: number;
+  /** cosa c'è che non va, in parole per il cliente */
+  problema: string;
+  /** false = non compreso nel prezzo del preventivo */
+  quotato: boolean;
+}
+
+const FINE_VITA = /fine vita|obsolet|discontinued|end of life|eol|nrnd|not recommended|last time buy/i;
+
+export function problemaAcquisto(r: RigaPerProblema): { problema: string; quotato: boolean } | null {
+  const acq = r.acquisti ?? [];
+  const senzaPrezzo = !acq.length || acq.some(x => !x.scelta);
+  const motivi = (r.reperibilita?.motivi ?? []).filter(m => !/premi|non ha risposto/i.test(m));
+  if (senzaPrezzo && !pulito(r.pn)) return { problema: 'Codice del componente non indicato nella BOM: non quotato', quotato: false };
+  if (senzaPrezzo) return { problema: 'Codice non trovato presso i distributori: non quotato', quotato: false };
+  if (r.reperibilita?.livello === 'critico' || acq.some(x => x.scelta && !x.scelta.disponibile)) {
+    const dettaglio = motivi.find(m => /pz/.test(m));
+    return { problema: `Non disponibile nella quantità richiesta${dettaglio ? ` (${dettaglio.replace(/^non disponibile da nessuna parte: /, '')})` : ''}: prezzo e consegna da riconfermare`, quotato: true };
+  }
+  if (r.reperibilita?.livello === 'attenzione') {
+    const dettaglio = motivi.find(m => /distributor/i.test(m));
+    return { problema: `Disponibilità da riconfermare al momento dell'ordine${dettaglio ? ` (${dettaglio})` : ''}`, quotato: true };
+  }
+  if (motivi.some(m => FINE_VITA.test(m))) return { problema: 'Componente a fine vita o non consigliato per nuovi progetti: consigliamo di valutare un sostituto', quotato: true };
+  return null;
+}
+
+export function componentiDaVerificare(righe: RigaPerProblema[], nonMontato = 'NON MONTATO'): ComponenteDaVerificare[] {
+  const perCodice = new Map<string, ComponenteDaVerificare & { rif: string[] }>();
+  for (const r of righe ?? []) {
+    if (r.esito === nonMontato || r.clienteFornisce || (r.prezzoManuale != null && r.prezzoManuale >= 0)) continue;
+    if (pulito(r.alternativaScelta || r.alternativaProposta)) continue;
+    const p = problemaAcquisto(r);
+    if (!p) continue;
+    const codice = pulito(r.pn) || pulito(r.valore) || pulito(r.descrizioneBom) || 'senza codice';
+    const k = `${chiave(codice)}|${p.problema}`;
+    const rif = pulito(r.designatori).split(/[\s,;]+/).filter(Boolean);
+    const gia = perCodice.get(k);
+    if (gia) { for (const x of rif) if (!gia.rif.includes(x)) gia.rif.push(x); gia.qtaScheda += Number(r.qtaScheda) || 0; continue; }
+    perCodice.set(k, { codice, produttore: pulito(r.produttore), descrizione: pulito(r.descrizione) || pulito(r.descrizioneBom),
+      riferimenti: '', qtaScheda: Number(r.qtaScheda) || 0, ...p, rif });
+  }
+  // prima i non quotati
+  return [...perCodice.values()].map(({ rif, ...x }) => ({ ...x, riferimenti: rif.join(', ') })).sort((a, b) => Number(a.quotato) - Number(b.quotato));
+}
+
+/** Nome del foglio in coda al preventivo (anche nelle condizioni generali). */
+export const FOGLIO_COMPONENTI = 'Componenti: alternative da confermare e problemi di acquisto';
+
+/** Frase stampata sotto le righe del preventivo quando ci sono alternative da confermare o componenti con problemi di acquisto. */
+export function fraseAlternative(n: number, problemi = 0): string {
+  if (!n && !problemi) return '';
+  const parti = [
+    n ? `${n === 1 ? 'è stato individuato 1 codice alternativo' : `sono stati individuati ${n} codici alternativi`} da confermare` : '',
+    problemi ? `${problemi === 1 ? '1 componente ha' : `${problemi} componenti hanno`} problemi di acquisto (non trovati o con disponibilità da verificare)` : '',
+  ].filter(Boolean);
+  return `Rispetto alla BOM ${parti.join(' e ')}: l'elenco è nel foglio "${FOGLIO_COMPONENTI}" in fondo al preventivo.`
+    + (n ? ' I codici alternativi li acquistiamo solo dopo la vostra conferma.' : '');
 }

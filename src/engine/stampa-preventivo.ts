@@ -163,7 +163,8 @@ export const CONDIZIONI_GENERALI = [
     + 'documentazione dopo l\'ordine, conferme del cliente non ancora arrivate (codici alternativi, dubbi sulla documentazione) spostano la '
     + 'consegna dello stesso tempo. Lo comunichiamo appena lo sappiamo, con la nuova data.',
   'Codici alternativi. Se un componente della BOM non è disponibile o ha un equivalente più conveniente, proponiamo un codice alternativo '
-    + 'con le stesse caratteristiche, elencato nel foglio "Codici alternativi da confermare". Lo acquistiamo solo dopo la conferma scritta del cliente.',
+    + 'con le stesse caratteristiche, elencato nel foglio in fondo al preventivo insieme ai componenti con problemi di acquisto (non trovati o con disponibilità da verificare). '
+    + 'Il codice alternativo lo acquistiamo solo dopo la conferma scritta del cliente; i componenti non quotati restano esclusi dal prezzo.',
   'Materiale fornito dal cliente: completo, identificato e con la scorta per l\'attrezzaggio delle macchine. Non rispondiamo di componenti '
     + 'difettosi o non conformi forniti dal cliente.',
   'Lavorazione eseguita secondo la documentazione del cliente (BOM, file di montaggio, Gerber) e lo standard IPC-A-610 classe 2. Errori o '
