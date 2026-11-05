@@ -15,7 +15,7 @@ import { caricamentoLimitato } from '../memoria.js';
 import { CONSUMI, type AnalisiScheda, type Componente, type Segnalazione } from '../../engine/scheda/analisi.js';
 import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
 import { TITOLI_FOGLIO, type Foglio } from '../../engine/scheda/documentazione.js';
-import { decomprimi, type Disegno } from '../schede-cliente-servizio.js';
+import { decomprimi, fileDelPacchetto, type Disegno } from '../schede-cliente-servizio.js';
 import { paginaStampa, type Protezioni } from '../views/stampa-scheda-cliente.js';
 import { chiaveSegnalazione, conAccettate } from '../../engine/scheda/accettate.js';
 
@@ -278,6 +278,14 @@ export function rotteSchedeCliente() {
     const p = await q1<{ disegno: Buffer | null }>(`SELECT disegno FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
     if (!p?.disegno) return res.status(404).json({ errore: 'Disegno non disponibile.' });
     res.set({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Encoding': 'gzip', 'Cache-Control': 'private, max-age=60' }).send(p.disegno);
+  });
+  // un file conservato nel portale (BOM, pick and place, Gerber, forature, CAD), per la pre-produzione (Adriano 5/11/2026)
+  r.get('/:id/file', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const f = await fileDelPacchetto(Number(req.params.id), String(req.query.nome ?? ''));
+    if (!f) return res.status(404).send('File non conservato nel portale: è rimasto sul Drive del cliente');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(f.nome.split('/').pop() ?? 'file')}"`);
+    res.type('application/octet-stream').send(f.dati);
   });
   r.get('/:id/componenti', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();

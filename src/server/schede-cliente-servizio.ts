@@ -300,6 +300,13 @@ async function emailDallaCartella(id: number, file: FileCaricato[]) {
 }
 
 /** Il file della BOM usata, per mandarla alla codifica (sezione Componenti). */
+/** Un file conservato nel pacchetto (gzip nel database); null se non c'è o è solo in elenco. */
+export async function fileDelPacchetto(id: number, nome: string): Promise<{ nome: string; dati: Buffer } | null> {
+  if (!nome) return null;
+  const f = await q1<{ dati: Buffer }>(`SELECT dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1 AND nome = $2 AND length(dati) > 0`, [id, nome]);
+  return f ? { nome, dati: gunzipSync(f.dati) } : null;
+}
+
 export async function fileBom(id: number): Promise<{ nome: string; dati: Buffer } | null> {
   const p = await q1<{ fonti: any }>(`SELECT fonti FROM pacchetti_scheda WHERE id = $1`, [id]);
   const nome = p?.fonti?.bom;

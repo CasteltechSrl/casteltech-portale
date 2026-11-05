@@ -22,11 +22,14 @@ import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { documentiDellaCommessa } from '../documenti-servizio.js';
+import { datiPreProduzione, salvaPreProduzione } from '../pre-produzione-servizio.js';
+import { paginaPreProduzione } from '../views/pre-produzione.js';
 import { layout, VERSIONE } from '../views/layout.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
 import { partiRoma } from '../../engine/promemoria.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
+import { leggiPreProduzione } from '../../engine/pre-produzione.js';
 
 const STATI_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
 
@@ -151,6 +154,20 @@ export function rotteCommesse() {
       segnalazioni: c.segnalazioni ?? '', scheda: schedaTecnica(c.scheda_tecnica), stato: c.stato,
     };
     res.send(await paginaCommessa(req, prev, dati, c, req.query.msg ? String(req.query.msg) : undefined, req.query.salvata ? 'Commessa salvata' : undefined));
+  });
+
+  // ── Scheda di pre-produzione (Adriano 5/11/2026): tutto in una pagina prima del via libera ──
+  r.get('/:id/pre-produzione', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const d = await datiPreProduzione(Number(req.params.id));
+    if (!d) return res.status(404).send('Commessa non trovata');
+    res.send(paginaPreProduzione(req.session.utente, d, { messaggio: req.query.msg ? String(req.query.msg) : undefined, errore: req.query.errore ? String(req.query.errore) : undefined }));
+  });
+  r.post('/:id/pre-produzione', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const e = await salvaPreProduzione(Number(req.params.id), req.body ?? {}, req.session.utente!);
+    const par = e.errore ? `errore=${encodeURIComponent(e.errore)}` : `msg=${encodeURIComponent(e.messaggio)}`;
+    res.redirect(`/commesse/${req.params.id}/pre-produzione?${par}#checklist`);
   });
 
   // ── Stampa della scheda di produzione ──
@@ -334,6 +351,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const ddt = documenti.filter(x => x.tipo === 'ddt');
   const numeroDoc = (x: { numero: number | null; sezionale: string | null }) => (x.numero == null ? 'bozza' : `n. ${x.numero}${x.sezionale ? '/' + x.sezionale : ''}`);
   const nTempi = salvata ? (await q1(`SELECT count(*)::int AS n FROM rilevazioni WHERE commessa_id = $1`, [salvata.id]))!.n : 0;
+  const preProd = leggiPreProduzione(salvata?.pre_produzione);
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
@@ -344,7 +362,9 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       <div class="azioni">
         ${messaggio ? html`<span class="nota positivo">${messaggio}</span>` : ''}
         ${req.query.tempi ? html`<span class="nota positivo">Tempi aggiunti: ${String(req.query.tempi)}</span>` : ''}
-        ${salvata ? html`<a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
+        ${salvata ? html`<a class="bottone ${preProd.viaLibera ? '' : 'primario'}" href="/commesse/${salvata.id}/pre-produzione"
+            title="${preProd.viaLibera ? `Via libera alla produzione dato da ${preProd.viaLibera.da}` : 'Controllo di tutto il prodotto prima di produrre: documenti, segnalazioni, BOM, materiale, checklist'}">Pre-produzione${preProd.viaLibera ? ' ✓' : ''}</a>
+          <a class="bottone" href="/commesse/${salvata.id}/scheda" target="_blank" rel="noopener">Stampa scheda di produzione</a>
           <a class="bottone" href="/commesse/${salvata.id}/rientro">Rientro scheda</a>
           <button form="ddt-commessa" class="${['rientrata', 'analizzata', 'chiusa'].includes(salvata.stato) && !ddt.length ? 'primario' : ''}"
             title="Prepara il DDT con le schede della commessa (quelle del rientro, o tutte), cliente e ordine già compilati">Crea DDT</button>

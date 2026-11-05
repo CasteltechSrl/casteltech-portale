@@ -584,6 +584,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/acquisire', 'Ordini da e-mail e PDF']],
   },
   {
+    id: 'pre-produzione', area: 'commesse', titolo: 'Pre-produzione della commessa: controllo completo, cosa fare e cosa non fare, checklist e via libera',
+    parole: 'pre-produzione preproduzione scheda pre produzione via libera checklist verifica finale chi conferma data cosa fare cosa non fare materiale in casa magazzino bom offerte gerber documentazione tecnica segnalazioni preanalisi commessa prima di produrre',
+    testo: [
+      'Nella pagina della commessa il pulsante "Pre-produzione" apre una pagina sola con tutto quello che serve prima di produrre: 1) cliente, ordine nel portale e conferma d\'ordine, preventivo con prezzo a scheda e lavorazioni, ore previste, programmi e lamine della scheda tecnica; 2) i file del cliente (pacchetto dei Documenti dei clienti collegato al preventivo: Gerber, BOM, pick and place da scaricare, disegno della scheda, fogli SMD TOP/BOT, THT e protezioni per l\'onda); 3) tutte le segnalazioni: preanalisi dei documenti (con "Va bene" già dato), note del cliente, note del preventivo, storico del prodotto dalle commesse precedenti, note di montaggio.',
+      '4) La BOM quotata collegata al preventivo con le offerte usate (distributore, codice, prezzo, totale per la quantità quotata più vicina alla commessa) e lo stato del materiale riga per riga: "dal cliente" (conto lavoro: riga segnata nella BOM o codice in Anagrafiche → Componenti clienti), "arrivato / in parte / ordinato / da ordinare" dagli ordini a fornitore collegati alla BOM o alla commessa (come in "Cosa manca"), "senza prezzo". Il portale non ha un magazzino: il materiale che c\'è già (scorte, avanzi) lo spunti tu nella colonna "In casa", e resta scritto chi l\'ha spuntato.',
+      '5) "Cosa fare" e "cosa non fare": il portale propone un elenco dalle lavorazioni del preventivo, dalle note del cliente, dallo storico e dalle segnalazioni aperte; l\'ufficio scrive il suo nelle due caselle. 6) Checklist finale: le voci dipendono dalle lavorazioni (onda, saldatura a mano, AOI, lavaggio, componenti o PCB comprati da noi o del cliente…); ogni spunta prende il nome di chi la conferma e la data. "Via libera alla produzione" si dà solo con tutte le voci confermate: resta scritto chi e quando, e la commessa aperta passa "in produzione". Se dopo si toglie una voce, il via libera decade.',
+    ],
+    passi: ['Crea la commessa dal preventivo e premi "Pre-produzione".', 'Leggi le sei sezioni; chiudi le segnalazioni con "Va bene" nei documenti, ordina quello che manca con "Cosa manca".', 'Scrivi cosa fare e cosa non fare, spunta la checklist e premi "Salva".', 'Con tutto confermato premi "Via libera alla produzione", poi stampa la scheda di produzione.'],
+    pagine: [['/commesse', 'Commesse'], ['/preventivi/documenti', 'Documenti dei clienti'], ['/ordini/fornitori', 'Ordini a fornitore']],
+  },
+  {
     id: 'cosa-manca', area: 'commesse', titolo: 'Cosa manca per la commessa: componenti da ordinare',
     parole: 'cosa manca commessa componenti mancanti da ordinare ordinati arrivati bom bozza materiale acquisti',
     testo: [
