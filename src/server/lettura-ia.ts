@@ -5,7 +5,7 @@
  * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5). Chiamata e consumi: ia.ts.
  */
 import { ATTR, FAMIGLIE, type Attributi } from '../engine/codifica/regole.js';
-import { chiediTestoIa, iaConfigurata } from './ia.js';
+import { chiediTestoIa, iaConfigurata, strumentoRicercaWeb } from './ia.js';
 
 export { iaConfigurata };
 
@@ -80,4 +80,56 @@ export async function proponiCompatibiliIa(righe: RigaCompatibile[]): Promise<Ma
     }
   }
   return out;
+}
+
+// ───────────────────────────── ricerca su internet dei componenti non trovati (Adriano 5/11/2026) ─────────────────────────────
+export interface RigaDaCercareSulWeb { riga: number; pn: string; produttore: string; descrizione: string; valore: string; footprint: string; famiglia: string }
+export interface EsitoRicercaWeb {
+  /** codice completo e corretto del produttore (es. "S505H-1.6-R" → "BK1-S505H-1.6-R"), null se non trovato */
+  pnCompleto: string | null; produttore: string;
+  /** true = è lo stesso identico componente della BOM scritto per intero (non un'alternativa) */
+  stessoComponente: boolean;
+  /** dove si compra secondo il web (distributori, sito del produttore), in parole */
+  dove: string;
+  /** criticità trovata (obsoleto, fine vita, tempi lunghi, solo a bobina, nessun distributore…), vuota se nessuna */
+  criticita: string;
+  /** cosa è stato trovato, in breve, per le note della riga */
+  nota: string;
+}
+
+const ISTRUZIONI_RICERCA_WEB = `Sei l'ufficio acquisti di Casteltech, assemblaggio di schede elettroniche. Un componente della BOM del cliente
+non si trova presso i nostri distributori (DigiKey, Mouser, Farnell, TME, Arrow): il codice può essere incompleto, scritto male, con il prefisso
+o il suffisso del produttore mancante, oppure il componente può essere obsoleto o non distribuito. Cerca su internet (siti dei distributori,
+del produttore, octopart, findchips) e rispondi SOLO con un oggetto JSON:
+{"pnCompleto": "<codice completo e ordinabile del produttore, o null>", "produttore": "<nome>", "stessoComponente": <true se pnCompleto è
+lo stesso identico componente della BOM scritto per intero, false se è un'alternativa o non sei sicuro>, "dove": "<dove si compra, es. DigiKey
+283-3538-ND, Mouser>", "criticita": "<problema trovato: obsoleto, fine vita, tempi di consegna lunghi, solo a bobina intera, non distribuito…
+oppure stringa vuota>", "nota": "<in italiano, 1-2 frasi: cosa hai trovato e con quale certezza>"}.
+Solo codici reali trovati nelle pagine lette: se non trovi niente di sicuro, pnCompleto null e spiegalo nella nota.`;
+
+/** Legge l'oggetto JSON anche se la risposta ha testo o \`\`\` intorno. */
+function leggiOggetto(testo: string): any {
+  const a = testo.indexOf('{'), b = testo.lastIndexOf('}');
+  if (a < 0 || b <= a) return null;
+  try { return JSON.parse(testo.slice(a, b + 1)); } catch { return null; }
+}
+
+/**
+ * Cerca su internet un componente non trovato (una richiesta per riga, al massimo `maxRicerche` ricerche web l'una):
+ * codice completo, dove si compra, criticità. Il codice trovato conta solo se poi un distributore lo vende (lo controlla il portale).
+ */
+export async function cercaComponenteSulWeb(r: RigaDaCercareSulWeb, maxRicerche = 4): Promise<EsitoRicercaWeb | null> {
+  if (!iaConfigurata()) return null;
+  const testo = [`P/N della BOM: ${r.pn}`, r.produttore && `produttore: ${r.produttore}`, r.descrizione && `descrizione: ${r.descrizione}`,
+    r.valore && `valore: ${r.valore}`, r.footprint && `case/impronta: ${r.footprint}`, r.famiglia && `famiglia del portale: ${r.famiglia}`].filter(Boolean).join('\n');
+  const risposta = await chiediTestoIa('ricerca componenti su internet', { max_tokens: 2000, system: ISTRUZIONI_RICERCA_WEB,
+    messages: [{ role: 'user', content: testo }], strumenti: [strumentoRicercaWeb(maxRicerche)] }, 120_000);
+  const x = leggiOggetto(risposta);
+  if (!x) return null;
+  const pn = String(x.pnCompleto ?? '').trim().toUpperCase();
+  return {
+    pnCompleto: /^[A-Z0-9][A-Z0-9\-+/.#,]{2,}$/.test(pn) ? pn : null, produttore: String(x.produttore ?? '').trim().slice(0, 80),
+    stessoComponente: x.stessoComponente === true, dove: String(x.dove ?? '').trim().slice(0, 200),
+    criticita: String(x.criticita ?? '').trim().slice(0, 300), nota: String(x.nota ?? '').trim().slice(0, 400),
+  };
 }
