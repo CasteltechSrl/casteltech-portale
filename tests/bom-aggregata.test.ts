@@ -83,6 +83,8 @@ test('pagina BOM: riquadro senza prezzo solo con il filtro, "Cerca alternative",
   assert.match(v, /id="da-prezzare" hidden/);
   assert.match(v, /\/bom\/:id\/alternative'/);
   assert.match(v, /<th>Riferimenti<\/th>/);
+  // Rielabora (5/11/2026): ai distributori solo i P/N mai cercati, non "solo cache"
+  assert.match(v, /rielabora', async[\s\S]*?\{ mancanti: true \}/);
   const js = readFileSync(new URL('../public/componenti.js', import.meta.url), 'utf8');
   assert.match(js, /riquadro\.hidden = b\.dataset\.filtro !== 'da-prezzare'/);
   const s = readFileSync(new URL('../src/server/codifica-servizio.ts', import.meta.url), 'utf8');
