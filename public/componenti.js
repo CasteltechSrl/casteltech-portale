@@ -32,15 +32,25 @@
 
   // filtri della tabella
   const filtri = document.getElementById('filtri');
-  if (filtri) filtri.addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
+  const applicaFiltro = b => {
     filtri.querySelectorAll('button').forEach(x => x.classList.toggle('attivo', x === b));
     const voluti = b.dataset.filtro.split(' ').filter(Boolean);
     document.querySelectorAll('table.bom tbody tr').forEach(tr => {
       const classi = tr.dataset.classi.split(' ');
       tr.hidden = voluti.length > 0 && !voluti.some(v => classi.includes(v));
     });
-  });
+    // il riquadro dei prezzi mancanti si vede solo con il filtro "Senza prezzo" (Adriano 5/11/2026)
+    const riquadro = document.getElementById('da-prezzare');
+    if (riquadro) riquadro.hidden = b.dataset.filtro !== 'da-prezzare';
+  };
+  if (filtri) {
+    filtri.addEventListener('click', e => { const b = e.target.closest('button'); if (b) applicaFiltro(b); });
+    // dopo "Salva" di un prezzo nel riquadro si torna con #da-prezzare: filtro di nuovo attivo
+    const daPrezzare = filtri.querySelector('button[data-filtro="da-prezzare"]');
+    const apriSeChiesto = () => { if (daPrezzare && location.hash === '#da-prezzare') { applicaFiltro(daPrezzare); document.getElementById('da-prezzare')?.scrollIntoView(); } };
+    apriSeChiesto();
+    window.addEventListener('hashchange', apriSeChiesto);
+  }
 
   document.querySelectorAll('form.conferma-elimina').forEach(f => f.addEventListener('submit', e => {
     const n = Number(f.dataset.preventivi) || 0;

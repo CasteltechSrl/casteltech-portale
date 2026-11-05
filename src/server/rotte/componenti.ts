@@ -3,6 +3,7 @@
  * Logica in src/server/codifica-servizio.ts; regole in src/engine/codifica/* e src/engine/acquisti.ts.
  */
 import { righeDaPrezzare } from '../../engine/non-quotati.js';
+import { righeOriginali } from '../../engine/codifica/aggrega.js';
 import express, { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
@@ -156,6 +157,11 @@ export function rotteComponenti() {
   r.post('/bom/:id/rielabora', async (req, res) => {
     // "Rielabora" = solo codifica con i prezzi già letti, nessuna richiesta ai distributori; "Aggiorna prezzi" = li rilegge tutti (Adriano 4/11/2026)
     avviaElaborazione(Number(req.params.id), req.body.prezzi ? { forzaPrezzi: true } : { soloCache: true });
+    res.redirect(`/quotazioni/bom/${req.params.id}`);
+  });
+  // "Cerca alternative" per le righe senza prezzo o non disponibili (Adriano 5/11/2026): prezzi dalla cache, distributori solo per le alternative
+  r.post('/bom/:id/alternative', async (req, res) => {
+    avviaElaborazione(Number(req.params.id), { soloCache: true, alternative: true });
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   r.post('/bom/:id/colonne', async (req, res) => {
@@ -402,7 +408,7 @@ function rimandoPreventivo(a: any, prev: { id: number; numero: string }): Raw {
   return html`<div class="avviso ${problemi.length || inCorso ? '' : 'info'} rimando-preventivo">
     <span>BOM quotata per il preventivo <a href="/preventivi/${prev.id}">${prev.numero}</a>.
       ${inCorso ? 'Quotazione in corso: quando finisce, controlla le righe segnalate.'
-        : problemi.length ? html`Da sistemare: ${problemi.join(' · ')}. Quando hai finito torna al preventivo per la quota.`
+        : problemi.length ? html`Da sistemare: ${problemi.join(' · ')}.${costo.senzaPrezzo || costo.nonDisponibili ? html` <a href="#da-prezzare">Vedi le righe senza prezzo</a>.` : ''} Quando hai finito torna al preventivo per la quota.`
         : 'Nessun problema aperto: torna al preventivo per la quota.'}</span>
     <a class="bottone primario" href="/preventivi/${prev.id}?quota-bom=1">Torna al preventivo per la quota</a></div>`;
 }
@@ -425,10 +431,16 @@ function riquadroDaPrezzare(a: any, righe: RigaBom[], preventivo = 0): Raw {
   const x = righeDaPrezzare(righe);
   if (!x.length) return html``;
   const senza = x.filter(r => r.motivo === 'senza prezzo').length, nd = x.length - senza;
-  return html`<section class="blocco riquadro-da-prezzare" id="da-prezzare">
+  const inCorso = a.stato === 'in_corso' || a.stato === 'da_elaborare' || avanzamenti.has(a.id);
+  // si vede solo con il filtro "Senza prezzo" (Adriano 5/11/2026: non in cima alla pagina)
+  return html`<section class="blocco riquadro-da-prezzare" id="da-prezzare" hidden>
     <h2>${[senza ? (senza === 1 ? '1 componente senza prezzo' : `${senza} componenti senza prezzo`) : '',
       nd ? (nd === 1 ? '1 non disponibile' : `${nd} non disponibili`) : ''].filter(Boolean).join(' e ')}</h2>
     <p class="nota">Scrivi il prezzo €/pz e premi Salva: da quel momento vale quello e la riga esce da qui. Per un'alternativa o altre modifiche apri la riga.</p>
+    ${inCorso ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/alternative" class="riga-campi">
+      <button title="Cerca dai distributori componenti con le stesse caratteristiche per queste righe; i prezzi delle altre righe non si rileggono">Cerca alternative</button>
+      <small class="nota">Passivi e componenti non attivi con le stesse caratteristiche: si compra da solo il più economico disponibile (segnalato sulla riga).
+        Attivi e alternative non sicuramente uguali: vanno confermate in "Codici compatibili da verificare".</small></form>`}
     <div class="tabella-scorre"><table data-non-ordinare><thead><tr><th>Riga</th><th>P/N</th><th>Riferimenti</th><th class="n">Qtà a scheda</th><th>Problema</th><th>Prezzo a mano €/pz</th><th></th></tr></thead><tbody>
     ${x.map(r => html`<tr><td><a href="#riga-${r.n}">${r.n}</a></td><td><b>${r.nome}</b></td><td>${r.rif}</td><td class="n">${num(r.qtaScheda, 2)}</td>
       <td><span class="livello critico">${r.motivo}</span></td>
@@ -491,14 +503,16 @@ function paginaAnalisi(a: any, preventivo = 0): Raw {
     <button data-filtro="escluso" title="Non montati (DNP), PCB, fiducial, forniti dal cliente">Esclusi (${righe.filter(r => r.esito === ESITI.NON_MONTATO || r.clienteFornisce).length})</button>
     ${solo ? '' : html`<button data-filtro="da-prezzare" title="Righe da comprare senza prezzo o non disponibili">Senza prezzo (${daPrezzare.size})</button>`}
     ${solo ? '' : html`<button data-filtro="critico attenzione">Reperibilità (${righe.filter(r => r.reperibilita && r.reperibilita.livello !== 'ok').length})</button>`}</div>
-  <div class="tabella-scorre"><table class="bom"><thead><tr><th>Riga</th><th>P/N</th><th class="n">Qtà</th><th>Esito</th><th>Codice produzione</th><th>Codice gestionale</th>
+  <div class="tabella-scorre"><table class="bom"><thead><tr><th>Riga</th><th>P/N</th><th>Riferimenti</th><th class="n">Qtà</th><th>Esito</th><th>Codice produzione</th><th>Codice gestionale</th>
     <th>Descrizione</th>${solo ? '' : html`<th>Reperib.</th>`}${quantita.map(s => html`<th class="n">${num(s, 0)} schede</th>`)}<th>Note</th><th></th></tr></thead><tbody>
     ${righe.map(r => html`<tr id="riga-${r.n}"${daPrezzare.has(r.n) ? raw(' class="da-prezzare"') : ''} data-classi="${CLASSE_ESITO[r.clienteFornisce ? ESITI.CLIENTE : r.esito] ?? ''} ${r.reperibilita?.livello ?? ''}${daPrezzare.has(r.n) ? ' da-prezzare' : ''}">
-      <td>${r.n}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
-        ${r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
+      <td>${r.n}${r.righeUnite?.length ? html`<br><small class="nota" title="${`Righe ${righeOriginali(r).join(', ')} della BOM con lo stesso P/N`}">+${r.righeUnite.length} righe</small>` : ''}</td><td><b>${r.pn ?? ''}</b>${r.mpnAcquisto && !r.pn && !r.alternativaScelta ? html`<br><small class="nota">→ ${r.mpnAcquisto}</small>` : ''}
+        ${r.alternativaScelta && r.alternativaAutomatica ? html`<br><small class="alternativa-scelta" title="Il P/N della BOM è senza prezzo o non disponibile: si compra questo, con le stesse caratteristiche (il più economico disponibile)">→ ${r.alternativaScelta} <b>equivalente</b></small>`
+          : r.alternativaScelta ? html`<br><small class="alternativa-scelta" title="Si compra l'alternativa scelta">→ ${r.alternativaScelta}</small>`
           : r.alternativaProposta ? html`<br><a class="compatibile-da-verificare" href="#compatibili" title="P/N non trovato: il prezzo è quello di un compatibile, da verificare">→ ${r.alternativaProposta} <b>compatibile da verificare</b></a>`
           : r.alternative?.length ? html`<br><a class="alternative-pronte" href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative.length === 1 ? '1 alternativa' : `${r.alternative.length} alternative`}: scegli</a>` : ''}
         ${!r.pn && (r.valore || r.descrizioneBom) ? html`<br><small class="nota">${[r.valore, r.footprint].filter(Boolean).join(' · ') || r.descrizioneBom}</small>` : ''}</td>
+      <td class="taglia riferimenti" title="${r.designatori ?? ''}"><small>${r.designatori ?? ''}</small></td>
       <td class="n">${num(r.qtaScheda, 2)}</td><td>${badgeEsito(r, `/quotazioni/bom/${a.id}/riga/${r.n}#verifica`)}</td>
       <td class="codice">${r.codiceProduzione}</td><td class="codice">${r.codiceGestionale}</td><td class="taglia" title="${r.descrizione ?? ''}">${r.descrizione}</td>
       ${solo ? '' : html`<td>${badgeLivello(r)}</td>`}
@@ -507,7 +521,7 @@ function paginaAnalisi(a: any, preventivo = 0): Raw {
         : x ? html`<small class="nota">${num(x.lorda, 0)} pz, prezzo non trovato</small>` : ''}</td>`; })}
       <td class="note" title="${[...r.note, ...(r.reperibilita?.motivi ?? [])].join('\n')}">${r.aggiuntaAMano ? html`<span class="esito nuovo" title="Riga aggiunta a mano dall'ufficio">aggiunta</span> ` : ''}${r.notaOperatore ? html`<b class="nota-ufficio">Nota: ${r.notaOperatore}</b> ` : ''}${r.note.some(n => n.startsWith(NOTA_DA_VALIDARE)) ? html`<strong class="da-validare">⚠ codice da validare</strong> ` : ''}${[...r.note, ...(r.reperibilita?.livello !== 'ok' ? r.reperibilita?.motivi ?? [] : [])].join('; ')}</td>
       <td><a href="/quotazioni/bom/${a.id}/riga/${r.n}">${r.esito === ESITI.DB ? 'dettagli' : 'modifica'}</a>
-        ${inCorso ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/elimina" class="inline" data-conferma="${`Togliere la riga ${r.n} dalla BOM? Non torna nemmeno con Rielabora.`}">
+        ${inCorso ? '' : html`<form method="post" action="/quotazioni/bom/${a.id}/riga/${r.n}/elimina" class="inline" data-conferma="${r.righeUnite?.length ? `Togliere le righe ${righeOriginali(r).join(', ')} (stesso P/N) dalla BOM? Non tornano nemmeno con Rielabora.` : `Togliere la riga ${r.n} dalla BOM? Non torna nemmeno con Rielabora.`}">
           <button class="link negativo" title="Toglie la riga dalla BOM (voce che non serve)">togli</button></form>`}</td></tr>`)}
   </tbody></table></div>
   ${!singola && !inCorso ? bloccoAggiungiRiga(a) : ''}
@@ -552,7 +566,9 @@ function bloccoCompatibili(a: any, righe: RigaBom[]): Raw {
   const elenco = righe.filter(r => r.esito !== ESITI.NON_MONTATO && !r.clienteFornisce
     && (r.alternativaProposta || (!r.alternativaScelta && r.alternative?.length && r.reperibilita?.livello === 'critico')));
   const verificati = righe.filter(r => r.alternativaScelta).length;
-  if (!elenco.length) return verificati ? html`<p class="nota" id="compatibili">${verificati === 1 ? '1 riga compra' : `${verificati} righe comprano`} un'alternativa scelta al posto del P/N della BOM (→ nella colonna P/N).</p>` : html``;
+  const equivalenti = righe.filter(r => r.alternativaScelta && r.alternativaAutomatica).length;
+  const notaScelte = verificati ? html`<p class="nota" id="${elenco.length ? 'alternative-scelte' : 'compatibili'}">${verificati === 1 ? '1 riga compra' : `${verificati} righe comprano`} un'alternativa al posto del P/N della BOM (→ nella colonna P/N)${equivalenti ? `, ${equivalenti === 1 ? 'una' : equivalenti} con le stesse caratteristiche scelta dal portale ("equivalente")` : ''}. Nella stampa del preventivo sono elencate per la conferma del cliente.</p>` : html``;
+  if (!elenco.length) return notaScelte;
   return html`<section class="blocco compatibili" id="compatibili"><h2>Codici compatibili da verificare <small class="nota">${elenco.length}</small></h2>
     <p class="nota">Questi P/N non si trovano presso nessun distributore collegato. Dove c'è un compatibile al 100% (in teoria: stesso P/N con altra
       confezione, stesse caratteristiche, sostituto diretto DigiKey o proposta pin-to-pin dell'IA trovata dai distributori) il prezzo della riga è il suo,
@@ -569,7 +585,7 @@ function bloccoCompatibili(a: any, righe: RigaBom[]): Raw {
           <td>${p && x ? html`${nomeFornitore(x.fornitore)} · ${euro4(x.prezzo)} €/pz${!x.disponibile ? ' · NON DISPONIBILE' : ''}` : ''}</td>
           <td class="n"><a href="/quotazioni/bom/${a.id}/riga/${r.n}#alternative">${r.alternative?.length ?? 0} altre</a></td>
           <td>${p ? html`<form method="post" action="${azione}" class="inline"><button name="usa" value="${p.mpn}" class="primario" title="Controllato sul datasheet: si compra questo">Confermo</button></form>` : ''}</td></tr>`; })}
-    </tbody></table></div></section>`;
+    </tbody></table></div></section>${notaScelte}`;
 }
 
 /** Alternative al P/N: proposte dal portale e scritte a mano; l'operatore sceglie quale comprare (Adriano 28/10/2026). */
