@@ -13,9 +13,20 @@ const dataIt = (d: string | Date | null | undefined) => {
  * Indirizzo proposto, nell'ordine: chi ha mandato la richiesta (email letta dal pulsante in Gmail), l'email per i preventivi
  * dell'anagrafica del cliente (Adriano 4/11/2026, anche più indirizzi), l'ultimo preventivo
  * mandato allo stesso cliente, l'email del CRM (referente o azienda), l'email amministrativa del cliente. Vuoto = da scrivere.
+ * Gli indirizzi di Casteltech (`nostri` = domini, es. casteltech.net) non si propongono mai (Adriano 5/11/2026, Trancerie
+ * Emiliane): una richiesta inoltrata da info@ ("Fwd: …") ha come mittente info@ e il preventivo partiva verso noi stessi
+ * invece che all'email per i preventivi dell'anagrafica.
  */
-export function destinatarioPreventivo(c: { richiesta?: string | null; anagrafica?: string | null; ultimoPreventivo?: string | null; crm?: string | null; amministrazione?: string | null }): string {
-  for (const x of [c.richiesta, c.anagrafica, c.ultimoPreventivo, c.crm, c.amministrazione]) if (x && /@/.test(x)) return x.trim();
+export function destinatarioPreventivo(c: { richiesta?: string | null; anagrafica?: string | null; ultimoPreventivo?: string | null; crm?: string | null; amministrazione?: string | null },
+  nostri: string[] = ['casteltech.net']): string {
+  const domini = nostri.map(d => d.trim().toLowerCase().replace(/^.*@/, '')).filter(Boolean);
+  const nostro = (x: string) => domini.some(d => x.toLowerCase().endsWith(`@${d}`));
+  for (const x of [c.richiesta, c.anagrafica, c.ultimoPreventivo, c.crm, c.amministrazione]) {
+    if (!x || !/@/.test(x)) continue;
+    // più indirizzi con la virgola: si tolgono solo i nostri
+    const buoni = x.split(/[,;]/).map(s => s.trim()).filter(s => /@/.test(s) && !nostro(s));
+    if (buoni.length) return buoni.join(', ');
+  }
   return '';
 }
 

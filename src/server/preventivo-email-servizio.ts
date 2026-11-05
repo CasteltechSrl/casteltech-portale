@@ -4,7 +4,7 @@
  * Resta scritto a chi e quando (preventivi.email_a / email_inviata_il); un preventivo in bozza diventa "inviato".
  */
 import { q, q1 } from './db.js';
-import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
+import { gmailConfigurato, inviaGmail, mittenteGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail } from '../engine/conferme-ordine.js';
 import { destinatarioPreventivo, emailPreventivo } from '../engine/preventivo-email.js';
@@ -84,6 +84,12 @@ async function richiestaDelPreventivo(id: number): Promise<{ mittente: string; o
   return r?.email ? { mittente: String(r.email.mittente ?? ''), oggetto: String(r.email.oggetto ?? '') } : null;
 }
 
+/** Domini delle nostre caselle (info@, alias, email dell'azienda): mai proposti come destinatario. */
+async function dominiNostri(): Promise<string[]> {
+  const az = await caricaAzienda().catch(() => null as any);
+  return [...new Set(['casteltech.net', mittenteGmail(), String(az?.email ?? '')].map(x => x.trim().toLowerCase().replace(/^.*@/, '')).filter(Boolean))];
+}
+
 /** Indirizzo, oggetto e testo proposti nella pagina di stampa. */
 export async function propostaEmailPreventivo(id: number) {
   const p = await leggiPreventivo(id);
@@ -96,7 +102,7 @@ export async function propostaEmailPreventivo(id: number) {
         ORDER BY x.email_inviata_il DESC NULLS LAST LIMIT 1) AS ultimo
     FROM clienti c WHERE c.id = $1`, [p.cliente_id, id]).catch(() => null) : null;
   const a = destinatarioPreventivo({ richiesta: indirizzoEmail(richiesta?.mittente), anagrafica: c?.email_preventivi, ultimoPreventivo: c?.ultimo,
-    crm: indirizzoEmail(c?.crm), amministrazione: indirizzoEmail(c?.email_amministrazione) });
+    crm: indirizzoEmail(c?.crm), amministrazione: indirizzoEmail(c?.email_amministrazione) }, await dominiNostri());
   const azienda = (await caricaAzienda()).ragione_sociale || 'Casteltech S.r.l.';
   const i = p.intestazione ?? {};
   const testo = emailPreventivo({ numero: p.numero, data: p.creato_il, codice: i.codice, descrizione: i.descrizione, revisione: i.revisione,
