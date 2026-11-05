@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { euro, num } from './views/html.js';
 import { CONDIZIONI_GENERALI, type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
+import { fraseAlternative, type AlternativaDaConfermare } from '../engine/alternative-cliente.js';
 
 export interface DatiPdfPreventivo {
   numero: string; data: string;
@@ -20,6 +21,10 @@ export interface DatiPdfPreventivo {
   note?: string; pagamento?: string | null;
   /** tempi di consegna già scritti ("Circa 3 settimane dall'arrivo del materiale"), vuoto = non stampati */
   consegna?: string; condizioni: boolean; firma: boolean;
+  /** righe della validità dell'offerta (montaggio 30 gg, componenti e PCB 10 gg: Adriano 5/11/2026) */
+  validita?: string[];
+  /** codici alternativi alla BOM da confermare: frase sotto le righe e foglio in coda */
+  alternative?: AlternativaDaConfermare[];
 }
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -183,8 +188,25 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     for (const r of righeNote) { if (y < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; } scrivi(p, r, M, y, { dim: 8.5 }); y -= 10.5; }
   }
 
+  // ── avviso dei codici alternativi da confermare ──
+  const alternative = d.alternative ?? [];
+  if (alternative.length) {
+    const righeAvviso = aCapo(fraseAlternative(alternative.length), L - 2 * M - 12, grassetto, 8.5);
+    const alto = righeAvviso.length * 10.5 + 8;
+    if (y - 12 - alto < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; }
+    y -= 10;
+    p.drawRectangle({ x: M, y: y - alto, width: L - 2 * M, height: alto, color: rgb(0xfd / 255, 0xf5 / 255, 0xe1 / 255), borderColor: rgb(0xe2 / 255, 0xb5 / 255, 0x4f / 255), borderWidth: 0.7 });
+    let ya = y - 4 - 8.5;
+    for (const r of righeAvviso) { scrivi(p, r, M + 6, ya, { f: grassetto, dim: 8.5 }); ya -= 10.5; }
+    y -= alto;
+  }
+
   // ── riquadro verde con i prezzi a scheda, poi pagamento e totale ──
-  const altoRiq = 40, altoFondo = 46, altoFirme = d.firma && !d.condizioni ? 50 : 0, altoConsegna = d.consegna ? 30 : 0;
+  const validita = d.validita ?? [];
+  const altoRiq = 40, altoFondo = 46, altoFirme = d.firma && !d.condizioni ? 50 : 0;
+  const largoVal = d.consegna ? (L - 2 * M) / 2 - 12 : L - 2 * M - 12;
+  const righeValidita = validita.flatMap(v => aCapo(v, largoVal, grassetto, 8.5));
+  const altoConsegna = d.consegna || validita.length ? 18 + Math.max(d.consegna ? aCapo(d.consegna, (L - 2 * M) / 2 - 12, grassetto, 9).length : 0, righeValidita.length) * 11 : 0;
   if (y - altoRiq - altoConsegna - altoFondo - altoFirme - 40 < PIEDE) { p = nuovaPagina(); y = H - M - 10; }
   y -= 14;
   const sc = d.scontato ? ' scontato' : '';
@@ -200,10 +222,19 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     scrivi(p, v, x + 8, y - 31, { f: grassetto, dim: 14, colore: VERDE });
   });
   y -= altoRiq + 12;
-  if (d.consegna) {
+  if (altoConsegna) {
+    // tempi di consegna a sinistra, validità dell'offerta a destra
+    const meta2 = (L - 2 * M) / 2;
     linea(p, M, y, L - M);
-    scrivi(p, 'TEMPI DI CONSEGNA', M + 6, y - 11, { dim: 6.5, colore: GRIGIO });
-    scrivi(p, d.consegna, M + 6, y - 23, { f: grassetto, dim: 9 });
+    if (d.consegna) {
+      scrivi(p, 'TEMPI DI CONSEGNA', M + 6, y - 11, { dim: 6.5, colore: GRIGIO });
+      aCapo(d.consegna, meta2 - 12, grassetto, 9).forEach((r, k) => scrivi(p, r, M + 6, y - 23 - k * 11, { f: grassetto, dim: 9 }));
+    }
+    const xv = d.consegna ? M + meta2 + 6 : M + 6;
+    if (validita.length) {
+      scrivi(p, "VALIDITÀ DELL'OFFERTA", xv, y - 11, { dim: 6.5, colore: GRIGIO });
+      righeValidita.forEach((r, k) => scrivi(p, r, xv, y - 23 - k * 11, { f: grassetto, dim: 8.5 }));
+    }
     y -= altoConsegna;
   }
   const xTot = L - M - 175;
@@ -251,6 +282,58 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
       for (const r of aCapo('Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.', L - 2 * M, corsivo, 9)) { scrivi(p, r, M, y, { f: corsivo, dim: 9 }); y -= 12; }
       firme(p, y - 40);
     }
+  }
+
+  // ── foglio a parte: codici alternativi da confermare (Adriano 5/11/2026) ──
+  if (alternative.length) {
+    p = nuovaPagina();
+    y = H - M;
+    testata(p, y);
+    y -= 72;
+    scrivi(p, 'CODICI ALTERNATIVI DA CONFERMARE', M, y, { f: grassetto, dim: 12 });
+    y -= 12;
+    scrivi(p, `allegati al preventivo nr. ${d.numero} del ${dataIt(d.data)} · ${d.codice}${d.revisione ? ` rev. ${d.revisione}` : ''}`, M, y, { dim: 8, colore: GRIGIO });
+    y -= 10;
+    linea(p, M, y, L - M);
+    y -= 14;
+    for (const r of aCapo('Per i componenti qui sotto proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche (non disponibile o più '
+      + 'conveniente). Il prezzo del preventivo è calcolato con il codice alternativo. Vi chiediamo di indicare per ogni riga se lo accettate: senza conferma '
+      + 'acquistiamo il codice della BOM, se disponibile, e il prezzo può cambiare.', L - 2 * M, font, 9)) { scrivi(p, r, M, y, { dim: 9 }); y -= 12; }
+    y -= 6;
+    const col = [{ t: 'RIFERIMENTI', l: 80 }, { t: 'CODICE DELLA BOM', l: 105 }, { t: 'CODICE ALTERNATIVO', l: 105 }, { t: 'DESCRIZIONE', l: 0 }, { t: 'Q.TÀ', l: 32, n: true }, { t: 'CONFERMATO', l: 62 }];
+    col[3].l = L - 2 * M - col.reduce((a, x) => a + x.l, 0);
+    const xc = col.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + col[i - 1].l : M], []);
+    const intest = () => {
+      linea(p, M, y + 4, L - M);
+      col.forEach((k, i) => scrivi(p, k.t, k.n ? xc[i] + k.l - PAD : xc[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
+      y -= 12; linea(p, M, y, L - M); y -= 4;
+    };
+    intest();
+    for (const a of alternative) {
+      const celle = [
+        aCapo(a.riferimenti, col[0].l - 2 * PAD, font, 7.8),
+        [...aCapo(a.pnBom, col[1].l - 2 * PAD, grassetto, 8), ...(a.produttoreBom ? aCapo(a.produttoreBom, col[1].l - 2 * PAD, font, 7) : [])],
+        [...aCapo(a.alternativa, col[2].l - 2 * PAD, grassetto, 8), ...(a.produttoreAlternativa ? aCapo(a.produttoreAlternativa, col[2].l - 2 * PAD, font, 7) : [])],
+        aCapo(a.descrizione, col[3].l - 2 * PAD, font, 7.3),
+      ];
+      const nBom = aCapo(a.pnBom, col[1].l - 2 * PAD, grassetto, 8).length, nAlt = aCapo(a.alternativa, col[2].l - 2 * PAD, grassetto, 8).length;
+      const alto = Math.max(...celle.map(c => c.length)) * 9.5 + 6;
+      if (y - alto < PIEDE + 70) { p = nuovaPagina(); y = H - M - 10; intest(); }
+      celle.forEach((righe, i) => righe.forEach((t, k) => {
+        const forte = (i === 1 && k < nBom) || (i === 2 && k < nAlt);
+        scrivi(p, t, xc[i] + PAD, y - 3 - 8 - k * 9.5, { f: forte ? grassetto : font, dim: forte ? 8 : i === 3 ? 7.3 : 7.8, colore: (i === 1 || i === 2) && !forte ? GRIGIO : NERO });
+      }));
+      scrivi(p, num(a.qtaScheda, a.qtaScheda % 1 ? 2 : 0), xc[4] + col[4].l - PAD, y - 11, { dim: 8, destra: true });
+      // caselle Sì / No da spuntare a penna
+      [['Sì', 0], ['No', 30]].forEach(([t, dx]) => {
+        p.drawRectangle({ x: xc[5] + PAD + (dx as number), y: y - 12, width: 7, height: 7, borderColor: NERO, borderWidth: 0.6 });
+        scrivi(p, t as string, xc[5] + PAD + (dx as number) + 10, y - 11, { dim: 8 });
+      });
+      y -= alto;
+      linea(p, M, y, L - M, RIGA, 0.5);
+      y -= 1.5;
+    }
+    firme(p, Math.max(y - 40, PIEDE + 30));
   }
 
   // ── piede su ogni pagina ──

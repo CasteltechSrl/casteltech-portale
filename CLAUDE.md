@@ -203,6 +203,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (Adriano 4/11/2026, spunta "Dettaglio dei costi una tantum", vale anche per il PDF dell'email: `parametriStampa`, `contenutoStampa({ dettaglioUnaTantum })`).
    Ritocchi per il cliente (Adriano 29/10/2026; migrazione 046, `preventivi.stampa`, `leggiRitocchi`/`contiStampa`, POST `/preventivi/:id/stampa`): note per il cliente,
    sconto (% su tutto o € sul lotto), righe in più; solo nella stampa, il calcolo non cambia. Le note del preventivo sono interne (stampate solo con la spunta).
+   Riquadri in alto del preventivo (Adriano 5/11/2026; `totali` in `rotte/preventivi.ts`, campi nuovi di `engine/riepilogo.ts`, classe `totali-preventivo`): 2 righe × 3 riquadri
+   per tipo: Prezzo a scheda (senza/con una tantum), Vendita a scheda per voce (montaggio = prezzo senza una tantum − componenti − PCB, componenti, PCB), Una tantum;
+   Costi a scheda (produzione = fasi + consumo/energia/spedizione, acquisto = voci MATERIALE PER PRODUZIONE), Margini, Ore del lotto.
+   Validità e alternative nella stampa (Adriano 5/11/2026; `validitaOfferta`/`materialeVenduto` in `engine/stampa-preventivo.ts`, `engine/alternative-cliente.ts`, test in
+   `tests/stampa-preventivo.test.ts`): montaggio 30 giorni, componenti/PCB 10 giorni solo se li vendiamo, accanto ai tempi di consegna; condizioni generali riscritte (validità,
+   ordine, da quando contano le settimane, cosa sposta la consegna, codici alternativi). Righe della BOM collegata con `alternativaScelta`/`alternativaProposta` ≠ P/N
+   = avviso sotto le righe + foglio "Codici alternativi da confermare" (Sì/No e firma), stessa coppia di codici = una riga; anche nel PDF.
    Riquadro verde (Adriano 4/11/2026, `prezziRiquadro`): sotto le righe e sopra il totale, SOLO prezzo a scheda senza e con le una tantum. I due prezzi a scheda si riscrivono a mano nei ritocchi
    (Adriano 4/11/2026, al posto dell'arrotondamento automatico: `Ritocchi.prezzi`, `basePrezzi`: lotto = scheda × schede, una tantum = (con − senza) × schede, righe pareggiate con
    `pareggiaSulPiuGrande`); il calcolo non cambia, "Crea ordine" (`prezziComeInStampa`) e l'avviso "sotto il preventivo" in fattura usano il prezzo scritto a mano. La stampa è sempre

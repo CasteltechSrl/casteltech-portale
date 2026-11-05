@@ -17,7 +17,14 @@ export interface Riepilogo {
   margineScheda: number; margineLotto: number; margineUnaTantum: number;
   oreCicloSec: number; oreUomoSec: number; oreCicloPrimoLottoSec: number; oreUomoPrimoLottoSec: number;
   prezzoOraCiclo: number; prezzoOraUomo: number;
+  /** Adriano 5/11/2026: vendita a scheda divisa per voce (montaggio = senza una tantum, componenti e PCB) */
+  venditaMontaggioScheda: number; venditaComponentiScheda: number; venditaPcbScheda: number;
+  /** costi a scheda: produzione (fasi, consumo, energia, spedizione) e acquisto (componenti, PCB, altro materiale) */
+  costoProduzioneScheda: number; costoAcquistoScheda: number; costoUnaTantum: number;
 }
+
+/** gruppo delle voci di acquisto del materiale (componenti, PCB e altro materiale aggiunto da Impostazioni) */
+const MATERIALE = 'MATERIALE PER PRODUZIONE';
 
 export function riepilogo(ris: Risultato): Riepilogo {
   const t = ris.totali, n = t.nSchede;
@@ -27,7 +34,18 @@ export function riepilogo(ris: Risultato): Riepilogo {
   const unaTantumAcquisti = somma(vociUT.map(v => v.prezzo));
   const costoUnaTantum = somma([...fasiUT.map(f => f.costo), ...vociUT.map(v => v.costo)]);
   const prezzoFasiRic = t.prezzoFasiSecondoLotto;
+  const perScheda = (x: number) => (n ? r2(x / n) : 0);
+  const fasiRic = ris.fasi.filter(f => !f.unaTantum), vociRic = ris.voci.filter(v => !v.unaTantum);
+  const materiale = vociRic.filter(v => v.gruppo === MATERIALE);
+  const prezzoVoce = (cod: string) => somma(vociRic.filter(v => v.codice === cod).map(v => v.prezzo));
+  const venditaComponentiScheda = perScheda(prezzoVoce('valoreAcquistoComponenti'));
+  const venditaPcbScheda = perScheda(prezzoVoce('valoreAcquistoPCB'));
   return {
+    venditaComponentiScheda, venditaPcbScheda,
+    venditaMontaggioScheda: r2(t.prezzoSchedaSecondoLotto - venditaComponentiScheda - venditaPcbScheda),
+    costoProduzioneScheda: perScheda(somma([...fasiRic.map(f => f.costo), ...vociRic.filter(v => v.gruppo !== MATERIALE).map(v => v.costo)])),
+    costoAcquistoScheda: perScheda(somma(materiale.map(v => v.costo))),
+    costoUnaTantum,
     prezzoScheda: t.prezzoSchedaSecondoLotto, prezzoLotto: t.totaleSecondoLotto,
     unaTantum: t.costiUnaTantum, unaTantumInterni, unaTantumAcquisti,
     prezzoSchedaConUnaTantum: t.prezzoSchedaPrimoLotto, prezzoLottoConUnaTantum: t.totalePrimoLotto,

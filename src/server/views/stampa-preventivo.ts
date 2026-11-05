@@ -12,8 +12,10 @@ import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import { noteDaStampare } from '../../engine/non-quotati.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, testoConsegna, type Ritocchi, type VersioneStampa,
+  VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
+  type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
+import { fraseAlternative, type AlternativaDaConfermare } from '../../engine/alternative-cliente.js';
 
 export interface ClienteStampa {
   ragione_sociale: string; partita_iva?: string | null; codice_fiscale?: string | null;
@@ -68,8 +70,12 @@ export function stampaPreventivo(o: {
   messaggio?: string;
   /** componenti non quotati perché non disponibili: stampati sempre nelle note (Adriano 4/11/2026) */
   nonQuotati?: string[];
+  /** codici alternativi alla BOM da far confermare al cliente (Adriano 5/11/2026): frase sotto le righe + foglio in coda */
+  alternative?: AlternativaDaConfermare[];
 }): Raw {
   const { p, d, ris, opz, nonQuotati } = o;
+  const alternative = o.alternative ?? [];
+  const validita = validitaOfferta(p.creato_il, materialeVenduto(ris));
   const r = riepilogo(ris);
   const i = p.intestazione ?? {};
   const a = o.azienda, c = o.cliente;
@@ -224,12 +230,16 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
   </table>
 
   ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
+  ${alternative.length ? html`<p class="avviso-alternative">${fraseAlternative(alternative.length)}</p>` : ''}
   <div class="spinta"></div>
   <div class="riquadro-prezzi">
     <div><div class="etic">Prezzo a scheda${scontato}${riquadro.con != null ? ' senza costi una tantum' : ''}</div><strong>${euro(riquadro.senza)}</strong></div>
     ${riquadro.con != null ? html`<div><div class="etic">Prezzo a scheda${scontato} con i costi una tantum (primo lotto, ${num(d.nSchede, 0)} schede)</div><strong>${euro(riquadro.con)}</strong></div>` : ''}
   </div>
-  ${consegna ? html`<div class="consegna-stampa"><div class="etic">Tempi di consegna</div><b>${consegna}</b></div>` : ''}
+  <div class="consegna-validita">
+    ${consegna ? html`<div class="consegna-stampa"><div class="etic">Tempi di consegna</div><b>${consegna}</b></div>` : ''}
+    <div class="validita-stampa"><div class="etic">Validità dell'offerta</div>${validita.map((v, k) => html`${k ? html`<br>` : ''}<b>${v}</b>`)}</div>
+  </div>
   <div class="fondo">
     <div><div class="etic">Modalità di pagamento</div><b>${c?.pagamento || 'Da concordare'}</b>
       ${a.iban ? html`<br>IBAN ${a.iban}${a.banca ? ` · ${a.banca}` : ''}` : ''}</div>
@@ -243,6 +253,25 @@ ${opz.condizioni ? html`<section class="foglio seconda">
     <div class="titolo"><b>CONDIZIONI GENERALI DI FORNITURA</b><br><small>allegate al preventivo nr. ${numero}</small></div></header>
   <ol class="condizioni">${CONDIZIONI_GENERALI.map(x => html`<li>${x}</li>`)}</ol>
   ${opz.firma ? html`<p class="accetto">Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.</p>${firme}` : ''}
+  <div class="spinta"></div>
+  ${piede}
+</section>` : ''}
+${alternative.length ? html`<section class="foglio alternative">
+  <header class="testa"><img src="/static/logo-casteltech.png" alt="Casteltech" class="logo piccolo">
+    <div class="titolo"><b>CODICI ALTERNATIVI DA CONFERMARE</b><br><small>allegati al preventivo nr. ${numero} · ${i.codice ?? ''}${i.revisione ? ` rev. ${i.revisione}` : ''}</small></div></header>
+  <p class="spiega-alternative">Per i componenti qui sotto proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche
+    (non disponibile o più conveniente). Il prezzo del preventivo è calcolato con il codice alternativo. Vi chiediamo di indicare per ogni riga
+    se lo accettate: senza conferma acquistiamo il codice della BOM, se disponibile, e il prezzo può cambiare.</p>
+  <table class="righe tabella-alternative">
+    <thead><tr><th>Riferimenti</th><th>Codice della BOM</th><th>Codice alternativo proposto</th><th>Descrizione</th><th class="n">Q.tà/scheda</th><th class="conferma">Confermato</th></tr></thead>
+    <tbody>${alternative.map(x => html`<tr>
+      <td>${x.riferimenti}</td>
+      <td><b>${x.pnBom}</b>${x.produttoreBom ? html`<br><small>${x.produttoreBom}</small>` : ''}</td>
+      <td><b>${x.alternativa}</b>${x.produttoreAlternativa ? html`<br><small>${x.produttoreAlternativa}</small>` : ''}</td>
+      <td><small>${x.descrizione}</small></td><td class="n">${num(x.qtaScheda, x.qtaScheda % 1 ? 2 : 0)}</td>
+      <td class="conferma">☐ Sì&nbsp;&nbsp;☐ No</td></tr>`)}</tbody>
+  </table>
+  ${firme}
   <div class="spinta"></div>
   ${piede}
 </section>` : ''}
