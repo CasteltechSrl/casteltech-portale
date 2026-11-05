@@ -73,6 +73,7 @@ export function suggerimentiRiga(r: { famiglia: string | null; attributi: Attrib
     if (vicini.length) parti.push(`Simili: ${elenca(vicini)}.`);
     if (usati.length) parti.push(`Già usati in archivio per ${fam}: ${elenca(usati)}.`);
     parti.push('Se il componente non ha un case standard (pulsanti, moduli, induttanze grandi) scrivi le misure in mm come LLWW, es. 6035 per 6×3,5 mm: resta "da verificare".');
+    parti.push('Componente THT a misura (fusibili, clip e portafusibili, altri senza formato): scrivi la misura in mm come 5X20 o 6.3X32 (clip/portafusibile: CLIP5X20) con Tecnologia T: codice OK senza verifica.');
     parti.push('Apri la casella per vedere tutti i case della tabella. Se il formato è davvero nuovo, aggiungilo con il riquadro "Aggiungi il formato alla tabella" in alto.');
     out.push(parti.join(' '));
   };

@@ -40,7 +40,7 @@ export const REGOLE_CATEGORIE: [string, string][] = [
   ['CHIP RESISTOR', 'RS'], ['THROUGH HOLE RESISTORS', 'RS'], ['RESISTORS', 'RS'],
   ['CERAMIC CAPACITORS', 'CC'], ['ALUMINUM ELECTROLYTIC', 'CE'], ['ALUMINUM - POLYMER', 'CE'], ['ELECTRIC DOUBLE LAYER', 'CE'], ['SUPERCAPACITOR', 'CE'],
   ['TANTALUM', 'CT'], ['FILM CAPACITORS', 'CF'], ['FERRITE BEADS', 'FR'], ['COMMON MODE CHOKES', 'FE'], ['FIXED INDUCTORS', 'ID'], ['INDUCTORS', 'ID'],
-  ['PTC RESETTABLE FUSES', 'FS'], ['FUSES', 'FS'], ['ZENER', 'DZ'], ['VARISTORS', 'VR'], ['TVS', 'SP'],
+  ['PTC RESETTABLE FUSES', 'FS'], ['FUSE HOLDERS', 'FS'], ['FUSEHOLDERS', 'FS'], ['FUSES', 'FS'], ['ZENER', 'DZ'], ['VARISTORS', 'VR'], ['TVS', 'SP'],
   ['OPTOISOLATORS', 'IC'], ['DIGITAL ISOLATORS', 'IC'], ['ISOLATORS', 'IC'],
   ['LED DRIVER', 'IC'], ['LED INDICATION', 'DL'], ['LED ', 'DL'], ['FETS, MOSFETS', 'TM'], ['BIPOLAR (BJT)', 'TB'],
   ['THYRISTORS', 'TS'], ['SCRS', 'TS'], ['TRIACS', 'TS'], ['OSCILLATORS', 'OS'], ['RESONATORS', 'RI'], ['CRYSTALS', 'QZ'],
@@ -98,6 +98,10 @@ function caseDk(par: Record<string, string>, fam: string): string | null {
     if (p) return `P${String(Math.round(Number(p[1]) * 10)).padStart(3, '0')}`;
   }
   if (['RS', 'RR', 'CC', 'CT', 'FR', 'FS', 'ID', 'DL', 'VR', 'NT', 'CF'].includes(fam)) { const m = pc.match(/^\s*(\d{4,5})\s*\(/); if (m) return m[1]; }
+  if (fam === 'FS') { // fusibili e portafusibili THT: "5mm x 20mm" → 5X20 (clip/portafusibile: CLIP5X20), 5/11/2026
+    const f = (par['Fuse Size / Package'] ?? par['Fuse Size'] ?? par['Size / Dimension'] ?? '').match(/(\d{1,2}(?:\.\d)?)\s?mm\s?x\s?(\d{2})\s?mm/i);
+    if (f) return `${/HOLDER|CLIP/i.test(par['Type'] ?? '') || /HOLDER|CLIP/i.test(par['Fuse Type'] ?? '') ? 'CLIP' : ''}${f[1]}X${f[2]}`;
+  }
   if (fam === 'CE') { const d = mm(par['Size / Dimension']); if (d) return `D${g(d[0])}`; }
   if (['ID', 'QZ', 'OS', 'RI'].includes(fam) && (!pc || pc.toUpperCase().includes('NONSTANDARD') || pc.toUpperCase().includes('SMD'))) {
     const d = mm(par['Size / Dimension']);

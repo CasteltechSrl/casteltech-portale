@@ -347,6 +347,13 @@ export function daColonneBom(fam: string | null, valore?: unknown, footprint?: u
     if (t) a.tolleranza = t[1];
   }
   if (fam === 'BT') a.tipo = /HOLDER|PORTA|CLIP|SOCKET/.test(T + ' ' + String(footprint ?? '').toUpperCase()) ? 'PORTABATTERIA' : 'BATTERIA';
+  if (fam === 'FS') {
+    // fusibili e portafusibili THT: formato = misura "5X20" (clip/portafusibile: "CLIP5X20"), 5/11/2026
+    const tf = (T + ' ' + String(footprint ?? '').toUpperCase());
+    const m = tf.match(/(?<![\dX])(\d{1,2}(?:[.,]\d)?)\s?[X×]\s?(\d{2})\s?(?:MM)?(?![\dX])/);
+    const clip = /CLIP|HOLDER|PORTAFUS|FUSEHOLDER/.test(tf);
+    if (m && (!a.case || !/^\d{4}$/.test(String(a.case)) || clip)) { a.case = `${clip ? 'CLIP' : ''}${m[1].replace(',', '.')}X${m[2]}`; a.tecnologia = 'T'; }
+  }
   if (fam === 'CC' || fam === 'CE' || fam === 'CT' || fam === 'CF') {
     const m = T.match(/(\d+(?:[.,]\d+)?\s?[PNUΜµ]F?|\d+[PNU]\d+F?)(?![\w])/);
     if (m) a.valore = m[1].replace(/ /g, '').replace(/µ/g, 'U').replace(/Μ/g, 'U');

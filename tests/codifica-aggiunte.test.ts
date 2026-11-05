@@ -186,3 +186,23 @@ test('righe da completare del 4/11/2026: categorie DigiKey, SOT-23-THIN, indutta
     Parameters: [{ ParameterText: 'Connector Type', ValueText: 'USB - C' }] } as any);
   assert.equal(dk3.attributi.tipo, 'USBC');
 });
+
+test('formato THT a misura (Adriano 5/11/2026): fusibili 5X20, clip CLIP5X20 dalla descrizione, altri THT a misura con tecnologia T', () => {
+  const [fam, a] = daColonneBom('FS', null, 'Fuse:Fuseholder_Clip-5x20mm_Littelfuse_520_Inline_P20.50x5.80mm_D1.30mm_Horizontal', 'Clip portafusibile 5x20 mm 250V 6.3A');
+  assert.equal(fam, 'FS');
+  assert.equal(a.case, 'CLIP5X20');
+  const clip = calcola('FS', { ...a, corrente: '6A3', tensione: '250V' }, '52000001009');
+  assert.equal(clip.prod, 'FS-THT-CLIP5X20-6A3-250V');
+  assert.equal(clip.root, 'TFS-C520-6A30X');
+  assert.equal(clip.stato, OK);
+  const fus = calcola('FS', { case: '5x20', corrente: '1.6A', tensione: '250V', tecnologia: 'T' }, 'BK1-S505H-1.6-R');
+  assert.equal(fus.prod, 'FS-THT-5X20-1A6-250V');
+  assert.equal(fus.root, 'TFS-5X20-1A60X');
+  assert.equal(calcola('FS', { case: '6.3X32', corrente: '10A', tensione: '250V' }, 'X').root, 'TFS-6X32-10A0X');
+  assert.equal(calcola('FS', { case: '10X38', corrente: '10A', tensione: '500V' }, 'X').root, 'TFS-1038-10A0X');
+  assert.equal(calcola('IT', { case: '12X12', tecnologia: 'T' }, 'X').root, 'TIT-1212-XXXXX', 'altro THT a misura con tecnologia T');
+  assert.equal(calcola('IT', { case: '12X12' }, 'X').stato, 'MANUALE', 'senza tecnologia T la misura non basta');
+  assert.equal(calcola('FS', { case: '1206', corrente: '500MA', tensione: '32V' }, 'X').root, 'SFS-1206-0A50X', 'i fusibili SMD non cambiano');
+  assert.equal(famigliaDaDk(['Circuit Protection', 'Fuse Holders'], {}, 'FUSE CLIP CART 250V 6.3A PCB'), 'FS');
+  assert.ok(REGISTRO_AGGIUNTE.some(v => /CLIP5X20/.test(v.cosa)));
+});

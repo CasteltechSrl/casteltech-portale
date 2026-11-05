@@ -357,6 +357,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    case IC nome+piedini (SOIC8), CN tipo MORSETTO → TI con poli prima del passo; solo codici nuovi: in `ricalcola` l'archivio si cerca anche con `prodPrima` (codice alla vecchia maniera).
    Righe da completare del 4/11/2026 (registro in `aggiunte.ts`): categorie DigiKey con switch/driver → IC, SOT-23-THIN, induttanze con decimali, quarzi Abracon ABM (`abraconAbm` in `decoder.ts`),
    USB-A/B standard (`connettoreStandard` in `famiglia-proposta.ts`), pulsanti senza case = misura LLWW.
+   Formato THT a misura (Adriano 5/11/2026, clip portafusibile; `formatoThtMisura` in `regole.ts`, decoder FS, DigiKey "Fuse Holders" → FS, test in `tests/codifica-aggiunte.test.ts`):
+   fusibili "5X20"/"6.3X32"/"10X38" → gestionale 5X20/6X32/1038, clip e portafusibili "CLIP5X20" → C520, letti dalla descrizione/impronta; con Tecnologia T vale per ogni famiglia
+   senza case standard (tranne ID e CE che hanno la loro regola), stato OK.
    Rielabora / Aggiorna prezzi (Adriano 4/11/2026, "ogni richiesta genera costi o arrivo al limite"): "Rielabora" = `avviaElaborazione(id, { mancanti: true })` (dal 5/11/2026, LED mai cercati perché prima "non montati"): `cercaPn` dalla cache
    (anche oltre 24 h) e ai distributori SOLO i P/N mai cercati (`cacheLunga`), alternative e P/N dei passivi di prima tenuti; "Aggiorna prezzi" = `forzaPrezzi` con conferma; cambio schede = soloCache.
    `cercaVarianti` e `digikeySostituti` in cache 24 h ('varianti', 'sostituti_dk' in `fornitori_cache`). Pagina della riga: caselle con elenco (`valoriTabella` + valori
