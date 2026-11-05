@@ -23,6 +23,12 @@ export function html(str: TemplateStringsArray, ...vals: unknown[]): Raw {
 
 const nf2 = new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const euro = (n: number | null | undefined) => (n == null ? '' : nf2.format(n) + ' €');
+/**
+ * Prezzo unitario (Adriano 5/11/2026, ordine 207 a CBS Europe: i componenti da 0,0045 € uscivano "0,00 €"):
+ * due decimali di regola, fino a quattro se il prezzo li ha. Totali e importi restano sempre a due (`euro`).
+ */
+const nf4 = new Intl.NumberFormat('it-IT', { useGrouping: 'always', minimumFractionDigits: 2, maximumFractionDigits: 4 });
+export const euroUnitario = (n: number | null | undefined) => (n == null ? '' : nf4.format(n) + ' €');
 export const num = (n: number | null | undefined, dec = 2) =>
   n == null ? '' : new Intl.NumberFormat('it-IT', { useGrouping: 'always', maximumFractionDigits: dec }).format(n);
 /** Numero dentro una casella di modulo: virgola decimale e niente separatore delle migliaia (che il modulo leggerebbe come decimale). */

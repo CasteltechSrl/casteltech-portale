@@ -19,7 +19,7 @@ import { NOMI_FASCE_SCADUTO, riepilogoCrediti, ritornoSicuro, type FasciaScaduto
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
-import { html, data, euro, num, raw, type Raw, numCampo } from '../views/html.js';
+import { html, data, euro, euroUnitario, num, raw, type Raw, numCampo } from '../views/html.js';
 import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
@@ -760,7 +760,7 @@ export function rotteAmministrazione() {
           <thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Q.tà</th><th>U.m.</th><th class="num">Prezzo</th><th class="num">Sconto</th><th class="num">Importo</th><th>IVA</th></tr></thead>
           <tbody>${righe.map(x => x.solo_descrizione ? html`<tr><td></td><td colspan="7"><em>${x.descrizione}</em></td></tr>` : html`<tr>
             <td>${x.codice ?? ''}</td><td>${x.descrizione}</td><td class="num">${num(x.quantita, 0)}</td><td>${x.um ?? ''}</td>
-            <td class="num">${euro(x.prezzo)}</td><td class="num">${x.sconto ? `${num(x.sconto)} %` : ''}</td>
+            <td class="num">${euroUnitario(x.prezzo)}</td><td class="num">${x.sconto ? `${num(x.sconto)} %` : ''}</td>
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
         </table></div>
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}

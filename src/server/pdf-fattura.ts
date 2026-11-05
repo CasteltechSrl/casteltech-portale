@@ -7,7 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
-import { euro, num } from './views/html.js';
+import { euro, euroUnitario, num } from './views/html.js';
 import { indirizzoSu } from '../engine/ddt.js';
 import { importoRiga, numeroCompleto, type Totali } from '../engine/amministrazione.js';
 import { importoDaIncassare, nomeTipoSdi } from '../engine/tipi-fattura.js';
@@ -153,7 +153,7 @@ export async function pdfFattura(x: DatiPdfFattura): Promise<Buffer> {
       const q = Number(r.quantita), g = percentuale(r.aliquota_iva);
       scrivi(p, r.um ?? '', xs[2] + PAD, yt, { dim: DIM });
       aDestra(num(q, q % 1 ? 2 : 0), 3, yt);
-      aDestra(euro(Number(r.prezzo)), 4, yt);
+      aDestra(euroUnitario(Number(r.prezzo)), 4, yt);
       aDestra(Number(r.sconto) ? num(Number(r.sconto)) : '', 5, yt);
       aDestra(euro(importoRiga(r)), 6, yt, grassetto);
       aDestra(g ? (g.percentuale ? `${num(g.percentuale, 0)}%` : g.natura ?? '') : '', 7, yt);

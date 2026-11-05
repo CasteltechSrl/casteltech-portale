@@ -6,7 +6,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
-import { euro, num } from './views/html.js';
+import { euro, euroUnitario, num } from './views/html.js';
 import { CONDIZIONI_GENERALI, type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
 import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type ComponenteDaVerificare } from '../engine/alternative-cliente.js';
 
@@ -145,22 +145,22 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
       codice = [...aCapo(d.codice, colonne[0].l - 2 * PAD, grassetto, DIM), ...(d.revisione ? [`rev. ${d.revisione}`] : [])];
       descr = aCapo(r.descrizione, largoDescr, grassetto, DIM).map(t => ({ t, f: grassetto, dim: DIM }));
       if (r.sotto) descr.push(...aCapo(r.sotto, largoDescr, corsivo, 7.5).map(t => ({ t, f: corsivo, dim: 7.5, colore: GRIGIO })));
-      valori = [`${num(d.nSchede, 0)} pz`, euro(r.prezzo), euro(r.importo)];
+      valori = [`${num(d.nSchede, 0)} pz`, euroUnitario(r.prezzo), euro(r.importo)];
     } else if (r.tipo === 'voce') {
       rientro = r.stile === 'fase' ? 10 : 0;
       const f = r.stile === 'area' ? grassetto : font, dim = r.stile === 'fase' ? 7.8 : DIM;
       descr = aCapo(r.descrizione, largoDescr - rientro, f, dim).map(t => ({ t, f, dim, colore: r.stile === 'fase' ? GRIGIO : NERO }));
       if (r.sotto) descr.push(...aCapo(r.sotto, largoDescr - rientro, corsivo, 7.5).map(t => ({ t, f: corsivo, dim: 7.5, colore: GRIGIO })));
-      valori = ['', r.prezzo == null ? '' : euro(r.prezzo), euro(r.importo)];
+      valori = ['', r.prezzo == null ? '' : euroUnitario(r.prezzo), euro(r.importo)];
     } else if (r.tipo === 'unaTantum') {
       fondo = true;
       descr = [{ t: 'COSTI UNA TANTUM (solo primo lotto)', f: grassetto, dim: DIM }];
       for (const v of r.voci) descr.push({ t: `${v.nome}  ·  ${euro(v.prezzo)}`, f: font, dim: 7.8, colore: GRIGIO });
-      valori = ['1', euro(r.prezzo), euro(r.importo)];
+      valori = ['1', euroUnitario(r.prezzo), euro(r.importo)];
     } else if (r.tipo === 'aggiunta') {
       fondo = true;
       descr = aCapo(r.descrizione, largoDescr, grassetto, DIM).map(t => ({ t, f: grassetto, dim: DIM }));
-      valori = [num(r.quantita, r.quantita % 1 ? 2 : 0), euro(r.prezzo), euro(r.importo)];
+      valori = [num(r.quantita, r.quantita % 1 ? 2 : 0), euroUnitario(r.prezzo), euro(r.importo)];
     } else {
       fondo = true;
       descr = [{ t: r.descrizione, f: grassetto, dim: DIM }];
