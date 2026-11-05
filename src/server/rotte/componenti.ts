@@ -156,7 +156,8 @@ export function rotteComponenti() {
   });
   r.post('/bom/:id/rielabora', async (req, res) => {
     // "Rielabora" = solo codifica con i prezzi già letti, nessuna richiesta ai distributori; "Aggiorna prezzi" = li rilegge tutti (Adriano 4/11/2026)
-    avviaElaborazione(Number(req.params.id), req.body.prezzi ? { forzaPrezzi: true } : { soloCache: true });
+    // Rielabora (Adriano 5/11/2026, LED mai cercati perché prima "non montati"): i P/N MAI chiesti ai distributori si cercano, il resto dalla cache
+    avviaElaborazione(Number(req.params.id), req.body.prezzi ? { forzaPrezzi: true } : { mancanti: true });
     res.redirect(`/quotazioni/bom/${req.params.id}`);
   });
   // "Cerca alternative" per le righe senza prezzo o non disponibili (Adriano 5/11/2026): prezzi dalla cache, distributori solo per le alternative
@@ -467,7 +468,7 @@ function paginaAnalisi(a: any, preventivo = 0): Raw {
       ${!inCorso && righe.length ? html`<a class="bottone" href="/quotazioni/bom/${a.id}/excel" title="${solo ? 'File Excel: si apre anche in Google Sheets (caricalo nel Drive e aprilo con Fogli Google)' : 'Codifica e acquisti in Excel'}">Scarica Excel</a>` : ''}
       ${!inCorso && rp?.perQuantita.some(x => x.totale > 0) ? html`<a class="bottone" href="/ordini/fornitori/bom/${a.id}" title="Prepara gli ordini a fornitore, uno per distributore">Ordina i componenti</a>` : ''}
       ${inCorso ? '' : solo ? html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica (archivio aggiornato, regole nuove); i prezzi non si cercano">Rielabora</button></form>`
-        : html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica con le regole nuove e l'archivio aggiornato usando i prezzi già letti: nessuna richiesta ai distributori">Rielabora</button>
+        : html`<form method="post" action="/quotazioni/bom/${a.id}/rielabora" class="inline"><button title="Rifà la codifica con le regole nuove e l'archivio aggiornato usando i prezzi già letti; ai distributori chiede solo i codici mai cercati">Rielabora</button>
           <button name="prezzi" value="1" title="Rilegge prezzi e disponibilità da tutti i distributori (consuma le richieste del giorno)" data-conferma="Rileggo prezzi e disponibilità di tutte le righe da tutti i distributori? Consuma le richieste del giorno (Farnell: 1.000).">Aggiorna prezzi</button></form>`}
       <form method="post" action="/quotazioni/bom/${a.id}/elimina" class="inline conferma-elimina"><button class="pericolo">Elimina</button></form>
     </div></div>

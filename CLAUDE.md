@@ -357,8 +357,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    case IC nome+piedini (SOIC8), CN tipo MORSETTO → TI con poli prima del passo; solo codici nuovi: in `ricalcola` l'archivio si cerca anche con `prodPrima` (codice alla vecchia maniera).
    Righe da completare del 4/11/2026 (registro in `aggiunte.ts`): categorie DigiKey con switch/driver → IC, SOT-23-THIN, induttanze con decimali, quarzi Abracon ABM (`abraconAbm` in `decoder.ts`),
    USB-A/B standard (`connettoreStandard` in `famiglia-proposta.ts`), pulsanti senza case = misura LLWW.
-   Rielabora / Aggiorna prezzi (Adriano 4/11/2026, "ogni richiesta genera costi o arrivo al limite"): "Rielabora" = `avviaElaborazione(id, { soloCache: true })`: `cercaPn` solo dalla cache
-   (anche oltre 24 h), nessuna chiamata, alternative e P/N dei passivi di prima tenuti; "Aggiorna prezzi" = `forzaPrezzi` con conferma; cambio schede = soloCache.
+   Rielabora / Aggiorna prezzi (Adriano 4/11/2026, "ogni richiesta genera costi o arrivo al limite"): "Rielabora" = `avviaElaborazione(id, { mancanti: true })` (dal 5/11/2026, LED mai cercati perché prima "non montati"): `cercaPn` dalla cache
+   (anche oltre 24 h) e ai distributori SOLO i P/N mai cercati (`cacheLunga`), alternative e P/N dei passivi di prima tenuti; "Aggiorna prezzi" = `forzaPrezzi` con conferma; cambio schede = soloCache.
    `cercaVarianti` e `digikeySostituti` in cache 24 h ('varianti', 'sostituti_dk' in `fornitori_cache`). Pagina della riga: caselle con elenco (`valoriTabella` + valori
    dell'archivio per famiglia `valoriArchivioFamiglia`), "Ricalcola" resta sulla riga con `esitoRicalcolo`, riquadro "Suggerimenti" (`suggerimentiRiga` in
    `engine/codifica/valori-tabella.ts`, test in `tests/valori-tabella.test.ts`).
