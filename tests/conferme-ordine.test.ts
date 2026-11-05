@@ -92,3 +92,14 @@ test("conferma d'ordine: il PDF si crea (anche su più pagine e con caratteri ch
   assert.ok(letto.getPageCount() >= 2);
   assert.equal(letto.getTitle(), "Conferma d'ordine 12/2026");
 });
+
+test("conferma d'ordine: le righe senza data (servizi una tantum dal preventivo) prendono la prima consegna dell'ordine (controllo serale 5/11/2026)", () => {
+  const r = righeConfermaDaOrdine([
+    riga({ consegnaRichiesta: '2026-11-20' }),
+    riga({ id: 2, codice: null, descrizione: 'PROGRAMMAZIONE ATTREZZATURE', quantita: 1, prezzo: 237.5, consegnaRichiesta: null, consegnaPrevista: null }),
+    riga({ id: 3, consegnaRichiesta: '2026-11-10' }),
+  ]);
+  assert.deepEqual(r.map(x => x.consegna), ['2026-11-20', '2026-11-10', '2026-11-10']);
+  // nessuna data in tutto l'ordine: resta vuota (la scrive l'ufficio)
+  assert.equal(righeConfermaDaOrdine([riga({ consegnaRichiesta: null, consegnaPrevista: null })])[0].consegna, null);
+});

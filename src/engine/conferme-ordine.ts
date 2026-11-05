@@ -42,6 +42,10 @@ export function righeConfermaDaOrdine(righe: RigaOrdineConferma[]): RigaConferma
       out.push({ ...base, posizione: out.length + 1, quantita: Number(r.quantita) || 0, consegna: r.consegnaRichiesta ?? r.consegnaPrevista ?? null });
     }
   }
+  // righe senza data (di solito i servizi una tantum dell'ordine nato dal preventivo: lamine, programmazioni) prendono la prima
+  // consegna dell'ordine, così "Emetti" non si ferma (controllo serale 5/11/2026); la data resta modificabile nella conferma
+  const prima = out.map(x => x.consegna).filter((d): d is string => !!d).sort()[0] ?? null;
+  if (prima) for (const x of out) if (!x.consegna) x.consegna = prima;
   return out;
 }
 

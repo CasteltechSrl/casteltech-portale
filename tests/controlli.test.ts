@@ -75,3 +75,10 @@ test('controlli e avviso margine: menu, cruscotto, bozza di fattura e guida', ()
   assert.ok(cercaGuida('controlli settimanali lunedì').slice(0, 2).some(r => r.argomento.id === 'controlli-settimanali'));
   assert.ok(cercaGuida('fattura prezzo sotto il preventivo').slice(0, 2).some(r => r.argomento.id === 'avviso-margine-fattura'));
 });
+
+test('controlli settimanali: servizi degli ordini mai fatturati con le schede già consegnate = urgente, link all\'ordine (controllo serale 5/11/2026)', () => {
+  const c = elencoControlli({ ...vuoti, serviziNonFatturati: [{ ordineId: 215, ordine: '9001/2026', cliente: 'A.E.E.', descrizione: 'PROGRAMMAZIONE ATTREZZATURE DI PRODUZIONE', importo: 237.5 }] });
+  assert.deepEqual(c.map(x => [x.chiave, x.livello]), [['servizi-non-fatturati', 'urgente']]);
+  assert.equal(c[0].righe[0].link, '/ordini/215');
+  assert.match(c[0].righe[0].dettaglio!, /237,50/);
+});

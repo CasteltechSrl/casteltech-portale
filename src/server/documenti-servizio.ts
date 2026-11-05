@@ -287,6 +287,41 @@ export const ddtDaFatturare = (clienteId: number, esclusoDocumento: number) => q
                      WHERE r.ddt_id = d.id AND x.id <> $2 AND x.stato <> 'annullato')
    ORDER BY d.data, d.numero`, [clienteId, esclusoDocumento]);
 
+/**
+ * Righe di servizio degli ordini del cliente mai fatturate (controllo serale 5/11/2026): lamine, programmazioni e altre una tantum
+ * nate dal preventivo non viaggiano con il DDT, quindi "Fattura questo DDT" non le portava in fattura e, spedite tutte le schede,
+ * l'ordine risultava evaso con i servizi mai fatturati. Qui si propongono nella bozza della fattura.
+ */
+export const righeOrdineDaFatturare = (clienteId: number, esclusoDocumento: number) => q<{ id: number; ordine: string; ordineId: number; codice: string | null; descrizione: string; quantita: number; prezzo: number }>(
+  `SELECT r.id, o.numero || '/' || o.anno AS ordine, o.id AS "ordineId", r.codice, coalesce(r.descrizione, r.codice, '') AS descrizione, r.quantita, coalesce(r.prezzo, 0) AS prezzo
+   FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id
+   WHERE o.cliente_id = $1 AND r.tipo = 'servizio' AND coalesce(r.importo_fatturato, 0) = 0 AND coalesce(r.stato_manuale, '') NOT IN ('evaso', 'annullato')
+     AND coalesce(r.quantita, 0) > 0 AND coalesce(r.prezzo, 0) > 0
+     AND NOT EXISTS (SELECT 1 FROM documenti_righe x JOIN documenti f ON f.id = x.documento_id
+                     WHERE x.riga_ordine_id = r.id AND f.tipo = 'fattura' AND f.id <> $2 AND f.stato NOT IN ('annullato', 'scartato'))
+   ORDER BY o.anno, o.numero, r.posizione, r.id`, [clienteId, esclusoDocumento]);
+
+/** Aggiunge in fondo alla bozza le righe d'ordine scelte (servizi), collegate alla riga d'ordine: una volta emessa la fattura il servizio risulta fatturato ed evaso. */
+export async function aggiungiRigheOrdine(id: number, rigaIds: number[]): Promise<number> {
+  return transazione(async c => {
+    const d = (await c.query(`SELECT stato, cliente_id FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');
+    let pos = Number((await c.query(`SELECT coalesce(max(posizione), 0) AS p FROM documenti_righe WHERE documento_id = $1`, [id])).rows[0].p);
+    let aggiunti = 0;
+    for (const rigaId of rigaIds) {
+      const r = (await c.query(`SELECT r.id, r.codice, r.descrizione, r.quantita, r.prezzo, r.prodotto_id, o.numero, o.anno FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id
+        WHERE r.id = $1 AND o.cliente_id = $2 AND r.tipo = 'servizio'
+        AND NOT EXISTS (SELECT 1 FROM documenti_righe x WHERE x.documento_id = $3 AND x.riga_ordine_id = r.id)`, [rigaId, d.cliente_id, id])).rows[0];
+      if (!r) continue;
+      await c.query(`INSERT INTO documenti_righe (documento_id, posizione, prodotto_id, codice, descrizione, quantita, um, prezzo, riga_ordine_id)
+        VALUES ($1, $2, $3, $4, $5, $6, 'PZ', $7, $8)`,
+        [id, ++pos, r.prodotto_id, r.codice, `${r.descrizione ?? r.codice ?? ''} (ordine ${r.numero}/${r.anno})`.trim(), r.quantita, r.prezzo, r.id]);
+      aggiunti++;
+    }
+    return aggiunti;
+  });
+}
+
 /** Aggiunge in fondo alla bozza le righe dei DDT scelti, ciascuno preceduto dalla riga "DDT n. X del gg/mm/aaaa". */
 export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number> {
   return transazione(async c => {
