@@ -38,6 +38,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   test in `tests/scheda-cliente.test.ts`): sei numeri (fatturato anno/anno prima, da incassare e scaduto con giorni medi di incasso, ordini aperti, commesse,
   DDT da fatturare, preventivi) + riquadri ordini, commesse, DDT, incassi scaduti, documenti, preventivi, prodotti e prezzi, CRM; pulsanti Dati fiscali, Prodotti,
   CRM, + Preventivo (`/preventivi/nuovo?cliente=ID` preseleziona il cliente), + Fattura, + DDT. Tasto "Scheda" nell'elenco Clienti; la ricerca in alto porta qui.
+  Codici prodotti per anno (Adriano 5/11/2026, "quanti codici diversi ho fatto di Selea nel 2026?"; `codiciPerAnno` in `engine/scheda-cliente.ts`, tabella in fondo alla scheda):
+  una colonna per anno (ultimi 3, `?anni=tutti` per tutti) con i pezzi e in testa quanti codici diversi; contano DDT con causale di vendita/reso lavorato (`causaleDaFatturare`)
+  e fatture senza DDT; fuori servizi (`eServizio` sulla prima riga della descrizione, salvo riga collegata a un prodotto), resi non lavorati, garanzie.
 - Sezione Anagrafiche (menu in alto, `rotte/anagrafiche.ts`; Adriano 27/10/2026): TUTTE le anagrafiche stanno lì, non in Impostazioni.
   Tasti in alto Clienti / Fornitori / Prodotti / Componenti (archivio della codifica), sotto l'elenco con la ricerca veloce
   (`engine/ricerca.ts` = `public/ricerca.js`: filtra mentre si scrive, più parole, accenti e trattini dei codici non contano).

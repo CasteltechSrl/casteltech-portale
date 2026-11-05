@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fatturatoPerAnno, giorniMediIncasso, situazioneIncassi } from '../src/engine/scheda-cliente.js';
+import { codiciDiversiPerAnno, codiciPerAnno, fatturatoPerAnno, giorniMediIncasso, situazioneIncassi } from '../src/engine/scheda-cliente.js';
 
 test('scheda cliente: fatturato per anno = fatture meno note di credito, fuori bozze/annullate/scartate, ultimi 3 anni', () => {
   const docs = [
@@ -28,4 +28,39 @@ test('scheda cliente: incassi scaduti e a scadere, giorni medi di incasso', () =
 test('scheda cliente: la nota di credito aperta toglie dal credito ma non conta come rata (Adriano 1/11/2026)', () => {
   const r = situazioneIncassi([{ data: '2026-10-01', importo: 1000, pagata: false }, { data: '2026-10-01', importo: -200, pagata: false }], '2026-11-02');
   assert.deepEqual(r, { scaduto: 800, scaduteN: 1, aScadere: 0, aScadereN: 0 });
+});
+
+test('scheda cliente: codici prodotti per anno = DDT di vendita/reso lavorato + fatture senza DDT, fuori servizi, resi e garanzie (Adriano 5/11/2026)', () => {
+  const righe = [
+    { tipo: 'ddt', anno: 2026, codice: 'WPAJZERO6', descrizione: 'JZERO6\nOrdine 112', quantita: 300, causale: 'RESO LAVORATO' },
+    { tipo: 'ddt', anno: 2026, codice: 'wpajzero6', descrizione: 'JZERO6', quantita: 100, causale: 'RESO LAVORATO' },
+    { tipo: 'ddt', anno: 2026, codice: 'WPAJZERO6', descrizione: 'JZERO6', quantita: 5, causale: 'Reso da riparazione in garanzia' },
+    { tipo: 'ddt', anno: 2026, codice: '', descrizione: 'CSM10uD25VP', quantita: 1000, causale: 'RESO NON LAVORATO' },
+    { tipo: 'ddt', anno: 2026, codice: '001', descrizione: 'LAMINA SERIGRAFICA', quantita: 2, causale: 'RESO LAVORATO' },
+    { tipo: 'ddt', anno: 2026, codice: 'WPACAMJR3', descrizione: 'CAMJR3\nMontaggio e spedizione', quantita: 50, causale: '' },
+    { tipo: 'ddt', anno: 2025, codice: '', descrizione: 'PCBA JZERO6\nMontaggio e spedizione', quantita: 20, causale: 'RESO LAVORATO' },
+    { tipo: 'ddt', anno: 2025, codice: 'WPACAMJR3', descrizione: 'CAMJR3', quantita: 540, causale: 'VENDITA' },
+    { tipo: 'ddt', anno: 2023, codice: 'WPAVECCHIO', descrizione: 'vecchio', quantita: 9, causale: 'RESO LAVORATO' },
+    { tipo: 'fattura', anno: 2026, codice: 'WPAJZERO6', descrizione: 'JZERO6', quantita: 300, citaDdt: true },
+    { tipo: 'fattura', anno: 2026, codice: 'WPACAMJR3', descrizione: 'CAMJR3', quantita: 35, ddtId: 7 },
+    { tipo: 'fattura', anno: 2026, codice: 'WPADIRETTO', descrizione: 'Fatturato senza DDT', quantita: 10 },
+    { tipo: 'fattura', anno: 2026, codice: 'UT-LAMINA', descrizione: 'Lamina', quantita: 1 },
+    { tipo: 'fattura', anno: 2026, codice: 'SPED', descrizione: 'SPEDIZIONE', quantita: 1, prodottoId: 3, descrizioneAnagrafica: 'SPEDIZIONE DEDICATA' },
+  ];
+  const r = codiciPerAnno(righe, 2026);
+  assert.deepEqual(r.anni, [2024, 2025, 2026]);
+  assert.deepEqual(r.codici.map(c => [c.codice, c.senzaCodice, c.pezzi]), [
+    ['WPAJZERO6', false, { 2026: 400 }],
+    ['WPACAMJR3', false, { 2025: 540, 2026: 50 }],
+    ['WPADIRETTO', false, { 2026: 10 }],
+    ['SPED', false, { 2026: 1 }],            // collegata a un prodotto dell'anagrafica: conta anche se sembra un servizio
+    ['PCBA JZERO6', true, { 2025: 20 }],
+  ]);
+  assert.deepEqual(codiciDiversiPerAnno(r), { 2024: 0, 2025: 2, 2026: 4 });
+  // descrizione: dall'anagrafica se c'è, altrimenti dalla prima riga passata (la più recente)
+  assert.equal(r.codici.find(c => c.codice === 'SPED')?.descrizione, 'SPEDIZIONE DEDICATA');
+  assert.equal(r.codici.find(c => c.codice === 'WPAJZERO6')?.descrizione, 'JZERO6');
+  const tutti = codiciPerAnno(righe, 2026, 0);
+  assert.deepEqual(tutti.anni, [2023, 2025, 2026]);
+  assert.equal(tutti.codici.find(c => c.codice === 'WPAVECCHIO')?.pezzi[2023], 9);
 });
