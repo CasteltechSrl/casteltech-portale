@@ -32,7 +32,7 @@ const ESEMPI: Record<string, Partial<Record<Attr, string>> & { caseTht?: string 
   CF: { case: '1206', caseTht: 'P150 (passo 15 mm)', valore: '100NF', tolleranza: '10', tensione: '63V' },
   ID: { case: '0805', valore: '10UH', corrente: '1A', dcr: '0R2' },
   FR: { case: '0603', valore: '600R', tolleranza: '25', corrente: '500MA', dcr: '0R3' },
-  FS: { case: '1206', corrente: '500MA', tensione: '32V' },
+  FS: { case: '1206', caseTht: '5X20 (clip: CLIP5X20)', corrente: '500MA', tensione: '32V' },
   DI: { case: 'SOD-123', caseTht: 'DO-41', corrente: '1A', tensione: '100V' },
   DS: { case: 'SMA', caseTht: 'DO-41', corrente: '1A', tensione: '40V' },
   DZ: { case: 'SOD-323', potenza: '200MW', valore: '5V1' },

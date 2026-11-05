@@ -460,6 +460,21 @@ export function codiceProduzione(fam: string, a: Attributi, pn: unknown, tht = f
 }
 
 // ───────────────────────────── codice gestionale (codifica A) ─────────────────────────────
+/**
+ * Formato THT scritto come misura "AxB" in mm (5X20, 6.3X32, 10X38; "CLIP5X20" per clip e portafusibili): vale per i fusibili e, con
+ * tecnologia T, per ogni altra famiglia senza un case standard (induttanze SMD ed elettrolitici hanno già la loro regola).
+ * Codice gestionale di 4 caratteri: 5X20 → "5X20", 6.3X32 → "6X32", 10X38 → "1038"; con CLIP → "C520", "C632".
+ */
+export function formatoThtMisura(fam: string, a: Attributi, cr: string): Case | null {
+  if (fam === 'ID' || fam === 'CE') return null;
+  if (fam !== 'FS' && a.tecnologia !== 'T') return null;
+  const m = cr.match(/^(CLIP|HOLDER|PORTAF[A-Z]*)?(\d{1,2})(?:[.,]\d+)?X(\d{1,2})(?:[.,]\d+)?(?:MM)?$/);
+  if (!m) return null;
+  const [A, B] = [String(parseInt(m[2], 10)), String(parseInt(m[3], 10))];
+  if (m[1]) return [`C${A}${B}`.slice(0, 4), 'T', OK, ''];
+  return [`${A}X${B}`.length <= 4 ? `${A}X${B}` : `${zfill(A, 2)}${zfill(B, 2)}`, 'T', OK, ''];
+}
+
 function caseGest(fam: string, a: Attributi): Case {
   const cas = a.case; const cr = String(cas ?? '').replace(/[\s\-]/g, '').toUpperCase();
   if (fam === 'CN' || fam === 'TI') {
@@ -481,6 +496,10 @@ function caseGest(fam: string, a: Attributi): Case {
   }
   if (!cr) return [null, null, MAN, 'case non indicato'];
   if (['THT', 'ASS', 'RAD'].includes(cr) && fam !== 'DL') return [null, 'T', MAN, 'componente THT: indicare il formato (passo/dimensione)'];
+  // formato THT a misura (Adriano 5/11/2026, clip portafusibile 5x20: "nel THT alle volte è complicato, cosa possiamo metterci?"):
+  // fusibili e portafusibili "5X20", "6.3X32" (clip/portafusibile: "CLIP5X20" → C520), altri THT senza case standard "LLXWW" in mm
+  const mis = formatoThtMisura(fam, a, cr);
+  if (mis) return mis;
   if (fam === 'CE') {
     const m = cr.match(/^D?(\d+)(?:[.,](\d))?(?:X[\d.,]+)?$/);
     if (m) return [`E${zfill(String(parseInt(m[1], 10)), 2)}${m[2] || 0}`, 'S', OK, ''];

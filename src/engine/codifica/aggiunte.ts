@@ -73,6 +73,8 @@ export const TIPI_ANTENNE: Record<string, string> = { CHIP: 'ANTC', PCB: 'ANTP',
 
 /** Tutto quello che è stato aggiunto, con la data e il motivo (pagina Impostazioni → Componenti). */
 export const REGISTRO_AGGIUNTE: VoceRegistro[] = [
+  { data: '05/11/2026', tipo: 'case', cosa: 'Formato THT a misura: fusibili 5X20 / 6.3X32 / 10X38, clip e portafusibili CLIP5X20 (gestionale C520); con Tecnologia T vale per ogni famiglia senza case standard; DigiKey "Fuse Holders" → FS',
+    perche: 'Adriano: "nel THT alle volte è complicato, cosa possiamo metterci?" (clip portafusibile 52000001009 restava senza case)' },
   { data: '04/11/2026', tipo: 'case', cosa: 'Formati aggiunti dall\'ufficio dalla pagina della riga BOM (tabella codifica_case)',
     perche: 'Adriano: "vorrei poter aggiungere un formato nuovo da qui" (pulsante 2SMD); elenco e "Togli" sopra, i componenti in archivio non cambiano codice' },
   { data: '01/11/2026', tipo: 'famiglia', cosa: 'CF Condensatori film (MKP/MKT, poliestere, polipropilene)',
