@@ -15,6 +15,7 @@ import {
 import { leggiImpostazioniCassa, NOMI_FINESTRE, type CodiceFinestra, type Movimento } from '../../engine/previsione-cassa.js';
 import { caricaPrevisione, salvaImpostazioniCassa } from '../previsione-cassa-servizio.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
+import { rotteAnalisiProdotti } from './analisi-prodotti.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -22,7 +23,7 @@ const pct = (v: number | null) => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
 const NOME_CLIENTE = `coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '(senza nome)')`;
 const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato')`;
 
-async function caricaDati(anno: number, oggi: string) {
+export async function caricaDatiAnalisi(anno: number, oggi: string) {
   const unAnnoFa = `${Number(oggi.slice(0, 4)) - 1}${oggi.slice(4)}`;
   const [fatture, righe, preventivi, acquisti, incassi, aperte] = await Promise.all([
     q<FatturaAnalisi>(`SELECT ${NOME_CLIENTE} AS cliente, d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
@@ -54,10 +55,12 @@ async function caricaDati(anno: number, oggi: string) {
   return { fatture, righe, preventivi: mappaPreventivi, acquisti, incassi, aperte: aperte as (typeof aperte[number] & { importo60: number })[] };
 }
 
-/** Le due pagine dell'Analisi: andamento (fatturato, clienti, prodotti) e previsione di cassa. */
-function tastiAnalisi(attiva: 'andamento' | 'cassa'): Raw {
+/** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026) e previsione di cassa. */
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
+    <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
+    <a href="/amministrazione/analisi/clienti" class="${attiva === 'clienti' ? 'attivo' : ''}">Clienti</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
 
@@ -174,6 +177,7 @@ function cassaRiservata(req: Request): string {
 
 export function rotteAnalisi() {
   const r = Router();
+  r.use(rotteAnalisiProdotti());   // Prodotti e Clienti (Adriano 5/11/2026)
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
   r.get('/cassa', async (req: Request, res) => {
@@ -208,7 +212,7 @@ export function rotteAnalisi() {
     const anno = Math.min(annoOggi, Math.max(2019, Number(req.query.anno) || annoOggi));
     const finoA = anno === annoOggi ? oggi : null;
     const periodo = { anno, finoA };
-    const d = await caricaDati(anno, oggi);
+    const d = await caricaDatiAnalisi(anno, oggi);
 
     const fatturatoMesi = perMese(d.fatture, f => f.imponibile, anno), fatturatoPrimaMesi = perMese(d.fatture, f => f.imponibile, anno - 1);
     const acquistiMesi = perMese(d.acquisti, a => a.imponibile, anno);
@@ -271,12 +275,13 @@ export function rotteAnalisi() {
       ${clienti.length > 40 ? html`<p class="nota">Elencati i primi 40 di ${clienti.length}.</p>` : ''}
 
       <h2>Prodotti · ${prodotti.filter(p => p.fatturato > 0).length}</h2>
-      <p class="nota">Righe di fattura con il codice prodotto. Prezzo del preventivo e margine = ultimo preventivo del codice (lotti successivi, senza una tantum).</p>
+      <p class="nota">Righe di fattura con il codice prodotto. Prezzo del preventivo e margine = ultimo preventivo del codice (lotti successivi, senza una tantum).
+        Clic sul codice per la scheda di analisi del prodotto (anno per anno); la classifica completa con il filtro per cliente è in <a href="/amministrazione/analisi/prodotti">Prodotti</a>.</p>
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Codice</th><th>Cliente</th><th class="num">Schede</th><th class="num">Fatturato</th><th class="num">Prezzo medio</th><th class="num">Prezzo preventivo</th>
           <th class="num">Scarto</th><th class="num">Margine preventivo</th><th class="num">${confronto}</th></tr></thead>
         <tbody>${prodotti.slice(0, 40).map(p => html`<tr class="${(p.scartoPrezzo ?? 0) <= -5 || (p.marginePct ?? 100) < 10 ? 'scaduta' : ''}">
-          <td title="${p.descrizione}">${p.codice}</td><td>${p.cliente}</td><td class="num">${num(p.schede, 0)}</td><td class="num">${euro(p.fatturato)}</td>
+          <td title="${p.descrizione}"><a href="/amministrazione/analisi/prodotto?codice=${encodeURIComponent(p.codice)}&cliente=${encodeURIComponent(p.cliente)}">${p.codice}</a></td><td>${p.cliente}</td><td class="num">${num(p.schede, 0)}</td><td class="num">${euro(p.fatturato)}</td>
           <td class="num">${p.prezzoMedio != null ? `${num(p.prezzoMedio, 2)} €` : ''}</td><td class="num">${p.prezzoPreventivo != null ? `${num(p.prezzoPreventivo, 2)} €` : ''}</td>
           <td class="num">${pct(p.scartoPrezzo)}</td><td class="num">${p.marginePct != null ? `${num(p.marginePct, 1)}%` : ''}</td><td class="num">${euro(p.fatturatoPrima)}</td></tr>`)}</tbody></table></div>
       ${prodotti.length > 40 ? html`<p class="nota">Elencati i primi 40 di ${prodotti.length}.</p>` : ''}

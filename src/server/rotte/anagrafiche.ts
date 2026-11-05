@@ -667,10 +667,11 @@ function tabellaCodiciPerAnno(d: DatiSchedaCliente): Raw {
     <section class="area codici-per-anno">
       <header><h2>Codici prodotti per anno</h2>
         <a href="/anagrafiche/clienti/${c.id}${d.tuttiGliAnni ? '' : '?anni=tutti'}">${d.tuttiGliAnni ? 'Solo gli ultimi 3 anni' : 'Tutti gli anni'} →</a></header>
-      <p class="nota">Pezzi consegnati con DDT (vendita o reso lavorato) e fatture senza DDT; fuori servizi, lamine, resi di materiale e garanzie.
+      <p class="nota">Pezzi consegnati con DDT (vendita o reso lavorato) e fatture senza DDT; fuori servizi, lamine, resi di materiale e garanzie. Clic sul codice = scheda di analisi del prodotto;
+        <a href="/amministrazione/analisi/prodotti?cliente=c${c.id}">classifica dei prodotti del cliente</a>.
         ${anni.map((a, i) => html`${i ? ' · ' : ''}<b>${a}: ${diversi[a]} ${diversi[a] === 1 ? 'codice' : 'codici'}</b>`)}</p>
       ${codici.length ? html`<table><thead><tr><th>Codice</th><th>Descrizione</th>${anni.map(a => html`<th class="num">${a}</th>`)}</tr></thead>
-        <tbody>${codici.map(x => html`<tr><td>${x.senzaCodice ? html`<span class="nota">(senza codice)</span> ${x.codice}` : x.codice}</td><td>${x.descrizione}</td>
+        <tbody>${codici.map(x => html`<tr><td>${x.senzaCodice ? html`<span class="nota">(senza codice)</span> ${x.codice}` : html`<a href="/amministrazione/analisi/prodotto?codice=${encodeURIComponent(x.codice)}&cliente=c${c.id}" title="Scheda di analisi del prodotto">${x.codice}</a>`}</td><td>${x.descrizione}</td>
           ${anni.map(a => html`<td class="num">${x.pezzi[a] ? num(x.pezzi[a], 0) : ''}</td>`)}</tr>`)}</tbody></table>`
         : html`<p class="nota">Nessuna consegna in questi anni.</p>`}
     </section>`;
