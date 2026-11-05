@@ -67,6 +67,11 @@ test('preventivo per email: destinatario proposto, oggetto e testo', () => {
   assert.equal(destinatarioPreventivo({ ultimoPreventivo: 'acq@cliente.it', crm: 'info@cliente.it' }), 'acq@cliente.it');
   assert.equal(destinatarioPreventivo({ crm: '', amministrazione: 'amm@cliente.it' }), 'amm@cliente.it');
   assert.equal(destinatarioPreventivo({}), '');
+  // Trancerie Emiliane 4/11/2026: richiesta inoltrata da info@ → vale l'email per i preventivi dell'anagrafica
+  assert.equal(destinatarioPreventivo({ richiesta: 'info@casteltech.net', anagrafica: 's.boraschi@trancerieemiliane.it' }), 's.boraschi@trancerieemiliane.it');
+  assert.equal(destinatarioPreventivo({ richiesta: 'INFO@Casteltech.net', ultimoPreventivo: 'info@casteltech.net', crm: 'acq@cliente.it' }), 'acq@cliente.it');
+  assert.equal(destinatarioPreventivo({ anagrafica: 'info@casteltech.net, a@cliente.it' }), 'a@cliente.it');
+  assert.equal(destinatarioPreventivo({ richiesta: 'info@casteltech.net' }), '');
   const e = emailPreventivo({ numero: 'P2026-0100', data: '2026-11-04', codice: 'EA1002', descrizione: 'SCHEDA MAIN', revisione: 'B', nSchede: 50, azienda: 'Casteltech S.r.l.' });
   assert.equal(e.oggetto, 'Preventivo n. P2026-0100 - EA1002 - SCHEDA MAIN - Casteltech S.r.l.');
   assert.match(e.testo, /preventivo n\. P2026-0100 del 04\/11\/2026 per EA1002 - SCHEDA MAIN rev\. B \(50 schede\)/);
