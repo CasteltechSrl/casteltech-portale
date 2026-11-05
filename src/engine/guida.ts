@@ -539,9 +539,10 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'azioni-preventivi', area: 'preventivi', titolo: 'Stati, duplicare, eliminare, creare la commessa',
-    parole: 'stato bozza inviato accettato rifiutato archiviato duplica copia prezzi attuali elimina commessa azioni multiple',
+    parole: 'stato bozza inviato accettato rifiutato archiviato duplica copia prezzi attuali elimina commessa azioni multiple elenco colonne totale a scheda una tantum pcb',
     testo: [
       'Ogni preventivo ha uno stato: bozza, inviato, accettato, rifiutato, archiviato.',
+      'Colonne dei prezzi nell\'elenco: "€/PCB" e "Totale" sono il prezzo a scheda e il totale del lotto SENZA le una tantum (lotti successivi); "Una tantum" sono i costi del solo primo lotto; "€/PCB con u.t." (dal 5/11/2026) è il prezzo a scheda del primo lotto, cioè (totale + una tantum) ÷ nr. PCB. Se nei ritocchi della stampa hai scritto a mano il prezzo a scheda con le una tantum, l\'elenco mostra quello con un asterisco. Le stesse colonne sono anche nell\'Excel.',
       'Nell\'elenco puoi spuntare più preventivi e: creare la commessa, duplicare, eliminare.',
       '"Duplica" copia il preventivo con le tariffe di allora; "Duplica con prezzi attuali" lo rifà con tariffe e fasi di oggi.',
       'Un preventivo che ha già una commessa non si elimina.',
