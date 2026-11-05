@@ -16,7 +16,12 @@ export const PREZZI_IA: [prefisso: string, ingresso: number, uscita: number][] =
   ['claude-haiku-5-5', 0.10, 0.50], ['claude-haiku', 1, 5],
 ];
 
-export interface UsoIa { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number }
+export interface UsoIa { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
+  /** ricerche su internet fatte dall'IA (strumento web_search): 10 $ ogni 1.000 */
+  server_tool_use?: { web_search_requests?: number } }
+
+/** Costo di una ricerca su internet dell'IA in dollari (listino Anthropic: 10 $ ogni 1.000 ricerche). */
+export const COSTO_RICERCA_WEB = 0.01;
 
 export function prezzoModello(modello: string): { ingresso: number; uscita: number } {
   const m = [...PREZZI_IA].sort((a, b) => b[0].length - a[0].length).find(([p]) => modello.startsWith(p));
@@ -29,7 +34,8 @@ export function costoIa(modello: string, u: UsoIa): number {
   const p = prezzoModello(modello);
   const n = (x?: number) => Number(x) || 0;
   return (n(u.input_tokens) * p.ingresso + n(u.cache_creation_input_tokens) * p.ingresso * 1.25
-    + n(u.cache_read_input_tokens) * p.ingresso * 0.1 + n(u.output_tokens) * p.uscita) / 1_000_000;
+    + n(u.cache_read_input_tokens) * p.ingresso * 0.1 + n(u.output_tokens) * p.uscita) / 1_000_000
+    + n(u.server_tool_use?.web_search_requests) * COSTO_RICERCA_WEB;
 }
 
 // ───────────────────────────── IA: errori in parole chiare ─────────────────────────────

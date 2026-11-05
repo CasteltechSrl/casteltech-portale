@@ -23,7 +23,7 @@ import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
 import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
-import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js';
+import { cercaComponenteSulWeb, iaConfigurata, leggiConIa, proponiCompatibiliIa, type EsitoRicercaWeb } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
@@ -60,6 +60,8 @@ export interface RigaBom {
   alternativaRifiutata?: boolean;
   /** altre righe della BOM con lo stesso P/N unite in questa (Adriano 5/11/2026: "non ha senso avere codici che si ripetono") */
   righeUnite?: number[];
+  /** cosa ha trovato su internet l'IA per un componente non trovato / senza prezzo (Adriano 5/11/2026); null = cercato senza esito */
+  ricercaInternet?: RicercaInternetRiga | null;
   /** prezzo €/pz scritto dall'operatore: vale al posto di quello dei distributori (Adriano 28/10/2026) */
   prezzoManuale?: number | null;
   /** modifiche a mano (Federico, 2/11/2026): scarto al posto di quello standard, nota dell'ufficio, riga aggiunta e dove si compra */
@@ -71,7 +73,11 @@ export const PREZZO_A_MANO = 'manuale' as const;
 export const nomeFornitore = (f: Fornitore | typeof PREZZO_A_MANO) => f === PREZZO_A_MANO ? 'prezzo a mano' : NOMI_FORNITORI[f];
 
 export const FONTI_ALTERNATIVA = { STESSE: 'stesse caratteristiche', VARIANTE: 'variante dello stesso P/N', MANO: 'scritta a mano',
-  SOSTITUTO: 'sostituto indicato da DigiKey', IA: 'proposta dall\'IA (pin-to-pin)' } as const;
+  SOSTITUTO: 'sostituto indicato da DigiKey', IA: 'proposta dall\'IA (pin-to-pin)', INTERNET: 'codice completo trovato su internet' } as const;
+/** Esito della ricerca su internet di un componente non trovato (Adriano 5/11/2026), conservato sulla riga finché il P/N è lo stesso. */
+export interface RicercaInternetRiga extends EsitoRicercaWeb { il: string; pnCercato: string }
+/** Inizio delle note scritte dalla ricerca su internet. */
+export const NOTA_INTERNET = 'ricerca su internet';
 export interface Alternativa {
   mpn: string; produttore: string; descrizione: string;
   fonte: typeof FONTI_ALTERNATIVA[keyof typeof FONTI_ALTERNATIVA];
@@ -260,6 +266,8 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
       r.alternativaAutomatica = rivaluta ? false : !!prima.alternativaAutomatica;
       r.alternativaRifiutata = !!prima.alternativaRifiutata;
       r.prezzoManuale = prima.prezzoManuale ?? null;
+      // la ricerca su internet si rifà solo con "Aggiorna prezzi" (costa: token e ricerche)
+      if (!opz.forzaPrezzi && prima.ricercaInternet !== undefined) r.ricercaInternet = prima.ricercaInternet;
       if (opz.soloCache) { r.alternativaProposta = prima.alternativaProposta ?? null; (r as any)._primaMpn = prima.mpnAcquisto ?? null; }
     }
     applicaMano(r, mano);
@@ -566,6 +574,8 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
 
 // ───────────────────────────── alternative e compatibili ─────────────────────────────
 const MAX_ALTERNATIVE = 6, MAX_RIGHE_ALTERNATIVE = 30;
+/** Righe cercate su internet in una elaborazione (ogni riga = una richiesta all'IA con fino a 4 ricerche web). */
+const MAX_RICERCHE_WEB = 12;
 /** Famiglie il cui codice di produzione dice tutte le caratteristiche (senza P/N dentro): lì "stesso codice" = componente identico. */
 const SENZA_PN = (fam: string | null) => !!fam && !!FAMIGLIE[fam] && !FAMIGLIE[fam].prod.some(c => c === 'RID' || c === 'PN');
 
@@ -682,7 +692,7 @@ export function ordinaAlternative(alternative: Alternativa[], qta: number): Alte
  * stesso codice di produzione, sostituto diretto DigiKey, proposta dell'IA (pin-to-pin) trovata dai distributori. In quest'ordine,
  * prima quelle disponibili nella quantità, poi la più economica. Mai una con caratteristiche diverse o un sostituto solo "simile".
  */
-const ORDINE_FONTE: Record<string, number> = { [FONTI_ALTERNATIVA.VARIANTE]: 0, [FONTI_ALTERNATIVA.STESSE]: 1, [FONTI_ALTERNATIVA.SOSTITUTO]: 2, [FONTI_ALTERNATIVA.IA]: 3 };
+const ORDINE_FONTE: Record<string, number> = { [FONTI_ALTERNATIVA.INTERNET]: 0, [FONTI_ALTERNATIVA.VARIANTE]: 0, [FONTI_ALTERNATIVA.STESSE]: 1, [FONTI_ALTERNATIVA.SOSTITUTO]: 2, [FONTI_ALTERNATIVA.IA]: 3 };
 export function compatibileProposto(alternative: Alternativa[], qta: number): Alternativa | null {
   const valide = alternative.filter(a => a.identica !== false && a.fonte !== FONTI_ALTERNATIVA.MANO && a.offerte.length
     && (a.fonte !== FONTI_ALTERNATIVA.SOSTITUTO || a.diretto));
@@ -745,25 +755,80 @@ async function alternativeRighe(righe: RigaBom[], forza?: boolean, soloCache?: b
     }
     const giaQui = new Set((r.alternative ?? []).map(a => pnKey(a.mpn)));
     r.alternative = [...trovate.filter(a => !giaQui.has(pnKey(a.mpn))), ...(r.alternative ?? [])];
-    const pnRiga = r.pn ?? r.mpnAcquisto;
-    const problema = r.reperibilita?.livello === 'critico' ? 'non si trova' : r.acquisti.some(x => !x.scelta) ? 'è senza prezzo' : 'non è disponibile';
-    r.note = r.note.filter(x => !/^(P\/N non trovato: prezzo del compatibile|\d+ alternative? trovat|nessuna alternativa trovata|alternativa equivalente:)/.test(x));
-    // passivi e non attivi con le stesse caratteristiche: si compra il più economico disponibile, senza conferma (Adriano 5/11/2026)
-    const auto = r.alternativaRifiutata ? null : alternativaAutomatica(r.famiglia, r.alternative, qta, FONTI_ALTERNATIVA.MANO);
-    if (auto) {
-      r.alternativaScelta = auto.mpn; r.alternativaAutomatica = true;
-      r.note.push(`alternativa equivalente: ${pnRiga} ${problema}, si compra ${auto.mpn} (stesse caratteristiche, il più economico disponibile)`);
-      continue;
-    }
-    const proposta = compatibileProposto(r.alternative, qta);
-    r.alternativaProposta = proposta?.mpn ?? null;
-    const perche = tipoComponente(r.famiglia) === 'attivo' ? 'componente attivo: serve la conferma' : 'da confermare';
-    if (proposta) r.note.push(`P/N non trovato: prezzo del compatibile ${proposta.mpn} (${proposta.fonte}), DA VERIFICARE (${pnRiga} ${problema}; ${perche})`);
-    else if (trovate.length) r.note.push(`${trovate.length === 1 ? '1 alternativa trovata' : `${trovate.length} alternative trovate`} (nessuna sicuramente uguale): scegli dalla riga`);
-    else r.note.push('nessuna alternativa trovata dai distributori: puoi scriverne una a mano dalla riga');
+    decidiAlternativa(r, qta, trovate.length);
   }
+  // ancora senza niente: ricerca su internet con l'IA (Adriano 5/11/2026: codice incompleto, dove si compra, criticità)
+  await ricercaSulWeb(daCercare.filter(x => !x.r.alternativaScelta && !x.r.alternativaProposta), forza);
   for (const r of righe) r.note = unico(r.note);
 }
+
+/** Con le alternative trovate decide: equivalente da sola (passivi e non attivi), compatibile da confermare, o solo note. */
+function decidiAlternativa(r: RigaBom, qta: number, trovate: number) {
+  const pnRiga = r.pn ?? r.mpnAcquisto;
+  const problema = r.reperibilita?.livello === 'critico' ? 'non si trova' : r.acquisti.some(x => !x.scelta) ? 'è senza prezzo' : 'non è disponibile';
+  r.note = r.note.filter(x => !/^(P\/N non trovato: prezzo del compatibile|\d+ alternative? trovat|nessuna alternativa trovata|alternativa equivalente:)/.test(x));
+  // passivi e non attivi con le stesse caratteristiche: si compra il più economico disponibile, senza conferma (Adriano 5/11/2026)
+  const auto = r.alternativaRifiutata ? null : alternativaAutomatica(r.famiglia, r.alternative ?? [], qta, FONTI_ALTERNATIVA.MANO);
+  if (auto) {
+    r.alternativaScelta = auto.mpn; r.alternativaAutomatica = true;
+    const perche = auto.fonte === FONTI_ALTERNATIVA.INTERNET ? 'codice completo dello stesso componente, trovato su internet' : 'stesse caratteristiche, il più economico disponibile';
+    r.note.push(`alternativa equivalente: ${pnRiga} ${problema}, si compra ${auto.mpn} (${perche})`);
+    return;
+  }
+  const proposta = compatibileProposto(r.alternative ?? [], qta);
+  r.alternativaProposta = proposta?.mpn ?? null;
+  const perche = tipoComponente(r.famiglia) === 'attivo' ? 'componente attivo: serve la conferma' : 'da confermare';
+  if (proposta) r.note.push(`P/N non trovato: prezzo del compatibile ${proposta.mpn} (${proposta.fonte}), DA VERIFICARE (${pnRiga} ${problema}; ${perche})`);
+  else if (trovate) r.note.push(`${trovate === 1 ? '1 alternativa trovata' : `${trovate} alternative trovate`} (nessuna sicuramente uguale): scegli dalla riga`);
+  else r.note.push('nessuna alternativa trovata dai distributori: puoi scriverne una a mano dalla riga');
+}
+
+/**
+ * Ricerca su internet per le righe rimaste senza prezzo e senza alternativa (Adriano 5/11/2026: "il P/N non era completo, su internet l'ho
+ * trovato"): l'IA cerca il codice completo, dove si compra e le criticità. Il codice trovato si chiede ai distributori: se lo vendono ed è lo
+ * stesso componente diventa l'alternativa (passivi e non attivi da soli, attivi con conferma). In ogni caso cosa è stato trovato e la
+ * criticità vanno nelle note della riga. Esito conservato sulla riga: si rifà solo con "Aggiorna prezzi".
+ */
+async function ricercaSulWeb(righe: { r: RigaBom; qta: number }[], forza?: boolean) {
+  const oggi = new Date().toISOString().slice(0, 10);
+  let fatte = 0;
+  for (const { r } of righe) {
+    const pn = r.pn ?? r.mpnAcquisto;
+    r.note = r.note.filter(x => !x.startsWith(NOTA_INTERNET));
+    if (!pn) continue;
+    const vecchia = r.ricercaInternet && pnKey(r.ricercaInternet.pnCercato) === pnKey(pn) ? r.ricercaInternet : undefined;
+    if (vecchia !== undefined && !forza) continue;
+    if (!iaConfigurata()) continue;
+    if (fatte >= MAX_RICERCHE_WEB) { r.note.push(`${NOTA_INTERNET} non fatta (troppe righe in questa elaborazione): premi "Aggiorna prezzi" o "Cerca alternative"`); continue; }
+    fatte++;
+    try {
+      const esito = await cercaComponenteSulWeb({ riga: r.n, pn, produttore: r.produttore ?? '', descrizione: r.descrizione ?? r.descrizioneBom ?? '',
+        valore: r.valore ?? '', footprint: r.footprint ?? r.attributi.case ?? '', famiglia: r.famiglia ?? '' });
+      r.ricercaInternet = esito ? { ...esito, il: oggi, pnCercato: pn } : null;
+    } catch (e: any) { r.note.push(`${NOTA_INTERNET} non riuscita: ${e.message}`); }
+  }
+  // i codici completi trovati si chiedono ai distributori (una volta sola per tutti)
+  const codiceNuovo = (r: RigaBom) => { const c = r.ricercaInternet?.pnCompleto; return c && pnKey(c) !== pnKey(r.pn ?? r.mpnAcquisto) ? c : null; };
+  const codici = unico(righe.map(({ r }) => codiceNuovo(r)).filter((x): x is string => !!x));
+  const es = codici.length ? await cercaPn(codici, { forza }) : null;
+  for (const { r, qta } of righe) {
+    const ri = r.ricercaInternet;
+    if (ri === undefined) continue;
+    if (!ri) { r.note.push(`${NOTA_INTERNET}: nessun esito`); continue; }
+    const trovato = codiceNuovo(r);
+    const offerte = trovato && es ? Object.values(es.perPn.get(pnKey(trovato)!) ?? {}).flatMap(x => x?.offerte ?? []) : [];
+    if (trovato && offerte.length && !(r.alternative ?? []).some(a => pnKey(a.mpn) === pnKey(trovato))) {
+      // stesso componente scritto per intero = identico; altrimenti da controllare a mano
+      r.alternative = [{ mpn: trovato, produttore: ri.produttore || offerte[0].produttore, descrizione: offerte[0].descrizione, fonte: FONTI_ALTERNATIVA.INTERNET,
+        identica: ri.stessoComponente ? true : null, offerte, nota: ri.nota }, ...(r.alternative ?? [])];
+      decidiAlternativa(r, qta, r.alternative.length);
+    }
+    const parti = [trovato ? `codice completo ${trovato}${ri.produttore ? ` (${ri.produttore})` : ''}${offerte.length ? ', venduto dai distributori' : ', ma nessun distributore collegato lo vende'}` : 'codice completo non trovato',
+      ri.dove && `si compra da: ${ri.dove}`, ri.criticita && `CRITICITÀ: ${ri.criticita}`, ri.nota].filter(Boolean);
+    r.note.push(`${NOTA_INTERNET} (${ri.il}): ${parti.join('; ')}`);
+  }
+}
+
 
 /** Prezzo €/pz scritto a mano su una riga (null = torna al prezzo dei distributori). Ricalcola gli acquisti. */
 export async function impostaPrezzoManuale(id: number, n: number, prezzo: number | null): Promise<string> {

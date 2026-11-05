@@ -371,6 +371,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Alternative anche per senza prezzo / non disponibili (`serveAlternativa`): passivi e non attivi con stesso codice di produzione = scelta da sola la più economica disponibile
    (`alternativaAutomatica`, `alternativaAutomatica: true` sulla riga, rivalutata con "Aggiorna prezzi"), attivi sempre conferma; "Cerca alternative" (POST `/quotazioni/bom/:id/alternative`)
    = prezzi dalla cache + richieste solo per le alternative. Elenco per il cliente: `alternativeDaConfermare` in `engine/alternative-cliente.ts` (stampa del preventivo).
+   Ricerca su internet (Adriano 5/11/2026, "S505H-1.6-R" era "BK1-S505H-1.6-R"; `cercaComponenteSulWeb` in `lettura-ia.ts` con lo strumento web_search di Anthropic
+   = `strumentoRicercaWeb` in `server/ia.ts`, 1 centesimo a ricerca in `costoIa`; `ricercaSulWeb` in `codifica-servizio.ts`, test in `tests/ricerca-internet.test.ts`):
+   righe ancora senza prezzo e senza alternativa dopo `alternativeRighe` → l'IA cerca codice completo, dove si compra, criticità; esito in `RigaBom.ricercaInternet`
+   (conservato finché il P/N è lo stesso, rifatto solo con "Aggiorna prezzi"), codice trovato chiesto ai distributori → alternativa `FONTI_ALTERNATIVA.INTERNET`
+   (`identica` true se "stesso componente": regole di `decidiAlternativa`), nota "ricerca su internet (data): … CRITICITÀ: …" sempre; max 12 righe per elaborazione.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
    affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
    (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
