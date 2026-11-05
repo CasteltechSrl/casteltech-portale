@@ -729,7 +729,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     </section>
 
     <section class="colonna-risultati">
-      <div class="totali" id="totali">${totali(ris, d)}</div>
+      <div class="totali totali-preventivo" id="totali">${totali(ris, d)}</div>
       <label class="target">Prezzo target cliente a scheda <span class="unita">€</span>
         <input inputmode="decimal" data-campo="prezzoTargetScheda" value="${d.prezzoTargetScheda ?? ''}">
         <output id="diff-target"></output></label>
@@ -787,20 +787,52 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   }));
 }
 
+/**
+ * Riquadri in alto del preventivo (Adriano 5/11/2026): due righe di tre riquadri, uno per tipo di informazione.
+ * Riga 1 = a quanto vendiamo: prezzo a scheda senza/con una tantum, vendita a scheda per voce (montaggio, componenti, PCB),
+ * una tantum. Riga 2 = costi a scheda (produzione, acquisto), margini, ore. Solo lettura del calcolo: le formule non cambiano.
+ */
 export function totali(ris: Risultato, _d?: DatiPreventivo): Raw {
   const r = riepilogo(ris);
+  const voce = (nome: string, valore: string, titolo = '', classe = '') =>
+    html`<div class="voce-tot ${classe}" title="${titolo}"><span>${nome}</span><b>${valore}</b></div>`;
+  const conUt = r.unaTantum > 0;
   return html`
-    <div class="totale principale"><span title="Prezzo a scheda dei lotti, senza costi una tantum">Prezzo scheda</span><strong>${euro(r.prezzoScheda)}</strong>
-      <small>Lotto: ${euro(r.prezzoLotto)}</small></div>
-    <div class="totale ut"><span title="Costi una tantum (solo 1° lotto)">Una tantum</span><strong>${euro(r.unaTantum)}</strong>
-      <small title="Pre-produzione e programmazioni">Interni: ${euro(r.unaTantumInterni)}</small>
-      <small title="Lamine, attrezzaggio PCB">Acquisti: ${euro(r.unaTantumAcquisti)}</small></div>
-    <div class="totale ut"><span title="Prezzo a scheda del 1° lotto, con i costi una tantum">Prezzo scheda+una tantum</span><strong>${euro(r.prezzoSchedaConUnaTantum)}</strong>
-      <small>Lotto: ${euro(r.prezzoLottoConUnaTantum)}</small></div>
-    <div class="totale"><span title="Margine a scheda dei lotti, senza una tantum">Margine scheda</span><strong>${euro(r.margineScheda)}</strong><small>Lotto: ${euro(r.margineLotto)}</small></div>
-    <div class="totale ut"><span>Margine una tantum</span><strong>${euro(r.margineUnaTantum)}</strong></div>
-    <div class="totale"><span title="Ore ciclo del lotto, senza una tantum">Ore ciclo</span><strong>${ore(r.oreCicloSec)}</strong>
-      <small>${euro(r.prezzoOraCiclo)}/h ciclo</small><small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)}</small></div>
-    <div class="totale"><span title="Ore uomo del lotto, senza una tantum">Ore uomo</span><strong>${ore(r.oreUomoSec)}</strong>
-      <small>${euro(r.prezzoOraUomo)}/h uomo</small><small>1° lotto: ${ore(r.oreUomoPrimoLottoSec)}</small></div>`;
+    <div class="totale principale">
+      <h3>Prezzo a scheda</h3>
+      ${voce('Senza una tantum', euro(r.prezzoScheda), 'Prezzo a scheda dei lotti, senza costi una tantum', 'grande')}
+      ${voce('Con una tantum', euro(r.prezzoSchedaConUnaTantum), 'Prezzo a scheda del 1° lotto, con i costi una tantum')}
+      <small>Lotto: ${euro(r.prezzoLotto)}${conUt ? html` · 1° lotto: ${euro(r.prezzoLottoConUnaTantum)}` : ''}</small>
+    </div>
+    <div class="totale">
+      <h3>Vendita a scheda per voce</h3>
+      ${voce('Montaggio', euro(r.venditaMontaggioScheda), 'A quanto vendiamo la scheda senza una tantum, componenti e PCB', 'forte')}
+      ${voce('Componenti', r.venditaComponentiScheda ? euro(r.venditaComponentiScheda) : '—', 'Prezzo di vendita dei componenti a scheda (spunta Componenti)')}
+      ${voce('PCB', r.venditaPcbScheda ? euro(r.venditaPcbScheda) : '—', 'Prezzo di vendita del PCB a scheda (spunta PCB)')}
+    </div>
+    <div class="totale ut">
+      <h3>Una tantum (solo 1° lotto)</h3>
+      ${voce('Vendita', euro(r.unaTantum), 'Costi una tantum fatturati al cliente', 'forte')}
+      ${voce('Interni', euro(r.unaTantumInterni), 'Pre-produzione e programmazioni')}
+      ${voce('Acquisti', euro(r.unaTantumAcquisti), 'Lamine, attrezzaggio PCB')}
+    </div>
+    <div class="totale">
+      <h3>Costi a scheda</h3>
+      ${voce('Produzione', euro(r.costoProduzioneScheda), 'Costo delle fasi di lavoro, del materiale di consumo, dell\'energia e della spedizione', 'forte')}
+      ${voce('Acquisto', euro(r.costoAcquistoScheda), 'Costo di componenti, PCB e altro materiale comprato da noi', 'forte')}
+      ${voce('Una tantum (totale)', euro(r.costoUnaTantum), 'Costo dei lavori e degli acquisti una tantum (solo 1° lotto)')}
+    </div>
+    <div class="totale">
+      <h3>Margini</h3>
+      ${voce('A scheda', euro(r.margineScheda), 'Margine a scheda dei lotti, senza una tantum', 'forte')}
+      ${voce('Lotto', euro(r.margineLotto))}
+      ${voce('Una tantum (totale)', euro(r.margineUnaTantum))}
+    </div>
+    <div class="totale">
+      <h3>Ore del lotto</h3>
+      ${voce('Ciclo', ore(r.oreCicloSec), 'Ore ciclo del lotto, senza una tantum', 'forte')}
+      ${voce('Uomo', ore(r.oreUomoSec), 'Ore uomo del lotto, senza una tantum', 'forte')}
+      <small>${euro(r.prezzoOraCiclo)}/h ciclo · ${euro(r.prezzoOraUomo)}/h uomo</small>
+      <small>1° lotto: ${ore(r.oreCicloPrimoLottoSec)} ciclo · ${ore(r.oreUomoPrimoLottoSec)} uomo</small>
+    </div>`;
 }

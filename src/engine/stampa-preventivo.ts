@@ -117,14 +117,59 @@ export function righeUnaTantum(ris: Risultato, o: { doppia: boolean; nLamine: nu
   ];
 }
 
-/** Condizioni generali stampate sotto il preventivo (testi standard di tutela, da rivedere con Adriano). */
+/** Validità dell'offerta (Adriano 5/11/2026): montaggio 30 giorni, materiale comprato da noi (componenti, PCB) 10 giorni. */
+export const VALIDITA_MONTAGGIO_GG = 30;
+export const VALIDITA_MATERIALE_GG = 10;
+const dataPiuGiorni = (d: Date | string, gg: number) => {
+  const x = new Date(d instanceof Date ? d.getTime() : String(d ?? ''));
+  if (Number.isNaN(x.getTime())) return '';
+  x.setUTCDate(x.getUTCDate() + gg);
+  return x.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+/** Componenti e PCB venduti da noi in questo preventivo (voci con un prezzo): decidono la riga dei 10 giorni. */
+export function materialeVenduto(ris: Risultato): { componenti: boolean; pcb: boolean } {
+  const c = (cod: string) => ris.voci.some(v => v.codice === cod && v.prezzo > 0);
+  return { componenti: c('valoreAcquistoComponenti'), pcb: c('valoreAcquistoPCB') };
+}
+/**
+ * Righe della validità da stampare sotto il preventivo: il montaggio sempre; componenti e PCB solo se li vendiamo noi
+ * (Adriano: "nota da mettere in base alla richiesta del cliente"). Con la data del preventivo si scrive anche la scadenza.
+ */
+export function validitaOfferta(dataPreventivo: Date | string | null | undefined, materiale: { componenti: boolean; pcb: boolean }): string[] {
+  const fino = (gg: number) => { const t = dataPreventivo ? dataPiuGiorni(dataPreventivo, gg) : ''; return t ? ` (fino al ${t})` : ''; };
+  const cosa = materiale.componenti && materiale.pcb ? 'componenti e PCB' : materiale.componenti ? 'componenti' : materiale.pcb ? 'PCB' : '';
+  return [
+    `Montaggio: ${VALIDITA_MONTAGGIO_GG} giorni${fino(VALIDITA_MONTAGGIO_GG)}`,
+    ...(cosa ? [`${cosa.charAt(0).toUpperCase() + cosa.slice(1)}: ${VALIDITA_MATERIALE_GG} giorni${fino(VALIDITA_MATERIALE_GG)}, poi prezzi da riconfermare`] : []),
+  ];
+}
+
+/**
+ * Condizioni generali stampate nella seconda pagina del preventivo. Riscritte il 5/11/2026 (Adriano: "migliora le note contrattuali,
+ * soprattutto la data di consegna, che non è chiarissima"): validità separata montaggio / materiale, da quando contano le settimane
+ * di consegna, cosa la sposta, alternative ai codici della BOM da confermare.
+ */
 export const CONDIZIONI_GENERALI = [
-  'Offerta valida 30 giorni dalla data. Prezzi in euro, IVA esclusa, franco nostro stabilimento salvo spedizione indicata.',
-  'Componenti e PCB: prezzi e disponibilità sono quelli del giorno dell\'offerta; variazioni del mercato saranno comunicate prima dell\'acquisto.',
-  'Lavorazione eseguita secondo la documentazione del cliente (BOM, file di montaggio, Gerber) e lo standard IPC-A-610 classe 2. Errori o mancanze nella documentazione sono a carico del cliente.',
-  'Materiale fornito dal cliente: completo, identificato e con la scorta per l\'attrezzaggio delle macchine. Non rispondiamo di componenti difettosi o non conformi forniti dal cliente.',
-  'Tempi di consegna indicativi, a partire dal ricevimento del materiale e della documentazione completi.',
-  'Collaudo funzionale compreso solo se indicato. Reclami entro 8 giorni dal ricevimento della merce; la garanzia è limitata al rifacimento o alla riparazione della lavorazione, esclusi danni indiretti.',
+  'Prezzi e validità. Prezzi in euro, IVA esclusa, franco nostro stabilimento salvo spedizione indicata. Il prezzo del montaggio vale '
+    + `${VALIDITA_MONTAGGIO_GG} giorni dalla data del preventivo. I prezzi di componenti e PCB acquistati da noi valgono ${VALIDITA_MATERIALE_GG} giorni, perché seguono `
+    + 'prezzi e disponibilità del mercato: dopo questo termine li riconfermiamo prima di accettare l\'ordine.',
+  'Ordine. Il preventivo diventa impegnativo con l\'ordine scritto del cliente o con questo documento firmato per accettazione. '
+    + 'Rispondiamo con la conferma d\'ordine, che riporta la data di consegna.',
+  'Tempi di consegna. I tempi indicati nel preventivo sono stimati in settimane lavorative ("circa"). La data che vale è quella '
+    + 'della conferma d\'ordine. Materiale del cliente (conto lavoro): le settimane contano dal giorno in cui abbiamo ricevuto tutto il materiale '
+    + 'e la documentazione completa e corretta. Materiale acquistato da noi: le settimane contano dalla conferma d\'ordine e comprendono '
+    + 'l\'arrivo del materiale nei tempi dichiarati dai distributori al momento dell\'acquisto.',
+  'Cosa sposta la consegna. Materiale incompleto, non conforme o arrivato in ritardo, ritardi dei distributori, modifiche alla BOM o alla '
+    + 'documentazione dopo l\'ordine, conferme del cliente non ancora arrivate (codici alternativi, dubbi sulla documentazione) spostano la '
+    + 'consegna dello stesso tempo. Lo comunichiamo appena lo sappiamo, con la nuova data.',
+  'Codici alternativi. Se un componente della BOM non è disponibile o ha un equivalente più conveniente, proponiamo un codice alternativo '
+    + 'con le stesse caratteristiche, elencato nel foglio "Codici alternativi da confermare". Lo acquistiamo solo dopo la conferma scritta del cliente.',
+  'Materiale fornito dal cliente: completo, identificato e con la scorta per l\'attrezzaggio delle macchine. Non rispondiamo di componenti '
+    + 'difettosi o non conformi forniti dal cliente.',
+  'Lavorazione eseguita secondo la documentazione del cliente (BOM, file di montaggio, Gerber) e lo standard IPC-A-610 classe 2. Errori o '
+    + 'mancanze nella documentazione sono a carico del cliente.',
+  'Collaudo funzionale compreso solo se indicato. Reclami entro 8 giorni dal ricevimento della merce; la garanzia è limitata al rifacimento '
+    + 'o alla riparazione della lavorazione, esclusi danni indiretti.',
   'Costi una tantum fatturati con il primo lotto. Per ogni controversia è competente il Foro di Piacenza.',
 ];
 
@@ -172,9 +217,10 @@ export function consegnaCompleta(c: Consegna, predefinito: boolean): boolean {
 /** Frase dei tempi di consegna da stampare; vuota se mancano. */
 export function testoConsegna(c: Consegna, predefinito: boolean): string {
   if (!consegnaCompleta(c, predefinito)) return '';
+  // Adriano 5/11/2026: "la data di consegna non è chiarissima" → si dice da quando si conta e, se compriamo noi, il totale
   const t = acquistoMateriale(c, predefinito)
-    ? `${settimane(c.materiale!)} per l'arrivo del materiale e ${settimane(c.montaggio!)} per il montaggio`
-    : `${settimane(c.montaggio!)} dall'arrivo del materiale`;
+    ? `${settimane(c.materiale! + c.montaggio!)} dalla conferma d'ordine: ${settimane(c.materiale!)} per l'arrivo del materiale e ${settimane(c.montaggio!)} per il montaggio`
+    : `${settimane(c.montaggio!)} dall'arrivo di tutto il materiale del cliente`;
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 

@@ -27,6 +27,7 @@ import { iaConfigurata, leggiConIa, proponiCompatibiliIa } from './lettura-ia.js
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
 import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
+import { alternativeDaConfermare } from '../engine/alternative-cliente.js';
 import { controllaNuovoCase, type ValoriArchivio } from '../engine/codifica/valori-tabella.js';
 import { CASE_DAL_PORTALE, impostaCaseDalPortale, type CasePortale } from '../engine/codifica/aggiunte.js';
 
@@ -880,7 +881,7 @@ export function costoMaterialiPer(righe: RigaBom[], schede: number, regole: Rego
   const copia: RigaBom[] = structuredClone(righe);
   calcolaAcquistiCon(copia, [schede], regole);
   // componenti critici per queste schede: vanno nelle note del preventivo (Adriano 4/11/2026)
-  return { ...riepilogo(copia, [schede]).perQuantita[0], nonQuotati: righeNonQuotate(copia) };
+  return { ...riepilogo(copia, [schede]).perQuantita[0], nonQuotati: righeNonQuotate(copia), alternative: alternativeDaConfermare(copia) };
 }
 
 /**

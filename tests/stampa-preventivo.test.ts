@@ -130,11 +130,11 @@ test('stampa: prezzi a scheda scritti a mano, totale di conseguenza (Adriano 4/1
 test('stampa: tempi di consegna sempre "circa", conto lavoro o materiale comprato da noi (Adriano 4/11/2026)', () => {
   // conto lavoro: settimane dall'arrivo del materiale
   const cl = leggiRitocchi({ consegnaAcquisto: 'no', settimaneMontaggio: '3' }).consegna;
-  assert.equal(testoConsegna(cl, true), "Circa 3 settimane dall'arrivo del materiale");
-  assert.equal(testoConsegna({ acquisto: false, materiale: null, montaggio: 1 }, false), "Circa 1 settimana dall'arrivo del materiale");
+  assert.equal(testoConsegna(cl, true), "Circa 3 settimane dall'arrivo di tutto il materiale del cliente");
+  assert.equal(testoConsegna({ acquisto: false, materiale: null, montaggio: 1 }, false), "Circa 1 settimana dall'arrivo di tutto il materiale del cliente");
   // materiale comprato da noi: arrivo del materiale + montaggio, servono tutti e due
   const ac = leggiRitocchi({ consegnaAcquisto: 'si', settimaneMateriale: '4', settimaneMontaggio: '2' }).consegna;
-  assert.equal(testoConsegna(ac, false), "Circa 4 settimane per l'arrivo del materiale e circa 2 settimane per il montaggio");
+  assert.equal(testoConsegna(ac, false), "Circa 6 settimane dalla conferma d'ordine: circa 4 settimane per l'arrivo del materiale e circa 2 settimane per il montaggio");
   assert.equal(consegnaCompleta({ acquisto: true, materiale: null, montaggio: 2 }, false), false);
   // non scelto: vale la spunta "Componenti" del preventivo
   const ns = leggiRitocchi({ settimaneMontaggio: '2' }).consegna;
@@ -148,4 +148,56 @@ test('stampa: tempi di consegna sempre "circa", conto lavoro o materiale comprat
   // salvato nel preventivo e riletto uguale
   const r = leggiRitocchi({ consegnaAcquisto: 'si', settimaneMateriale: '6', settimaneMontaggio: '2' });
   assert.deepEqual(leggiRitocchi(JSON.parse(JSON.stringify(r))), r);
+});
+
+test('stampa: validità dell\'offerta, montaggio 30 giorni e componenti/PCB 10 solo se li vendiamo (Adriano 5/11/2026)', async () => {
+  const { validitaOfferta, materialeVenduto, CONDIZIONI_GENERALI } = await import('../src/engine/stampa-preventivo.js');
+  const data = new Date('2026-11-05T10:00:00Z');
+  assert.deepEqual(validitaOfferta(data, { componenti: false, pcb: false }), ['Montaggio: 30 giorni (fino al 05/12/2026)']);
+  assert.deepEqual(validitaOfferta(data, { componenti: true, pcb: true }),
+    ['Montaggio: 30 giorni (fino al 05/12/2026)', 'Componenti e PCB: 10 giorni (fino al 15/11/2026), poi prezzi da riconfermare']);
+  assert.equal(validitaOfferta(null, { componenti: false, pcb: true })[1], 'PCB: 10 giorni, poi prezzi da riconfermare');
+  const ris = calcolaPreventivo([F('a', 'SMD', 100)], [V('valoreAcquistoComponenti', 'MATERIALE PER PRODUZIONE', 50), V('valoreAcquistoPCB', 'MATERIALE PER PRODUZIONE', 0)], t, { nSchede: 10, parametri: {} });
+  assert.deepEqual(materialeVenduto(ris), { componenti: true, pcb: false });
+  // condizioni: validità e da quando contano le settimane di consegna
+  const testo = CONDIZIONI_GENERALI.join(' ');
+  assert.match(testo, /montaggio vale 30 giorni/);
+  assert.match(testo, /componenti e PCB acquistati da noi valgono 10 giorni/);
+  assert.match(testo, /conferma d'ordine/);
+  assert.match(testo, /Codici alternativi/);
+});
+
+test('stampa: codici alternativi alla BOM da confermare, uniti per coppia di codici (Adriano 5/11/2026)', async () => {
+  const { alternativeDaConfermare, fraseAlternative } = await import('../src/engine/alternative-cliente.js');
+  const alt = [{ mpn: 'GRM188R61A106KE69D', produttore: 'Murata', descrizione: 'CAP 10UF 10V X5R 0603' }];
+  const righe = [
+    { pn: 'CL10A106MQ8NNNC', produttore: 'Samsung', designatori: 'C36', qtaScheda: 1, alternativaProposta: 'GRM188R61A106KE69D', alternative: alt },
+    { pn: 'CL10A106MQ8NNNC', produttore: 'Samsung', designatori: 'C47, C48', qtaScheda: 2, alternativaScelta: 'GRM188R61A106KE69D', alternative: alt },
+    { pn: 'RC0603FR-0710KL', designatori: 'R1', qtaScheda: 1 },                                       // nessuna alternativa
+    { pn: 'ABC-1', designatori: 'U1', qtaScheda: 1, alternativaScelta: 'ABC1' },                     // stesso codice scritto diverso
+    { pn: 'XYZ', designatori: 'U2', qtaScheda: 1, alternativaScelta: 'XYZ-B', esito: 'NON MONTATO' }, // non montato
+    { pn: 'QWE', designatori: 'U3', qtaScheda: 1, alternativaScelta: 'QWE-B', clienteFornisce: true }, // lo dà il cliente
+  ];
+  const x = alternativeDaConfermare(righe);
+  assert.equal(x.length, 1);
+  assert.deepEqual(x[0], { pnBom: 'CL10A106MQ8NNNC', produttoreBom: 'Samsung', alternativa: 'GRM188R61A106KE69D', produttoreAlternativa: 'Murata',
+    descrizione: 'CAP 10UF 10V X5R 0603', riferimenti: 'C36, C47, C48', qtaScheda: 3 });
+  assert.equal(fraseAlternative(0), '');
+  assert.match(fraseAlternative(1), /è stato individuato 1 codice alternativo da confermare/);
+  assert.match(fraseAlternative(3), /sono stati individuati 3 codici alternativi/);
+});
+
+test('riquadri del preventivo: vendita per voce (montaggio, componenti, PCB) e costi di produzione/acquisto (Adriano 5/11/2026)', async () => {
+  const { riepilogo } = await import('../src/engine/riepilogo.js');
+  const ris = calcolaPreventivo([F('a', 'SMD', 100), F('u', 'PRE-PRODUZIONE', 30, true)],
+    [V('valoreAcquistoComponenti', 'MATERIALE PER PRODUZIONE', 50), V('valoreAcquistoPCB', 'MATERIALE PER PRODUZIONE', 20), V('consumo', 'MATERIALE DI CONSUMO', 10)],
+    t, { nSchede: 10, parametri: {} });
+  const r = riepilogo(ris);
+  // costi a scheda: produzione = fase + consumo, acquisto = componenti + PCB
+  assert.equal(r.costoProduzioneScheda, 11);
+  assert.equal(r.costoAcquistoScheda, 7);
+  assert.equal(r.costoUnaTantum, 30);
+  // vendita: componenti e PCB a parte, il montaggio è il resto del prezzo a scheda senza una tantum
+  assert.ok(r.venditaComponentiScheda > 0 && r.venditaPcbScheda > 0);
+  assert.equal(Math.round((r.venditaMontaggioScheda + r.venditaComponentiScheda + r.venditaPcbScheda) * 100) / 100, r.prezzoScheda);
 });

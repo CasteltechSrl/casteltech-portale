@@ -150,6 +150,22 @@ details.blocco > summary .conta { font-size: .72rem; background: var(--accento-c
 .totale.principale { background: var(--accento); border-color: var(--accento); color: #fff; grid-column: span 2; }
 .totale.principale span, .totale.principale small { color: #d6ece7; }
 .totale.principale strong { font-size: 1.7rem; }
+/* riquadri in alto del preventivo (Adriano 5/11/2026): 2 righe × 3 riquadri, una voce per riga dentro ogni riquadro */
+.totali.totali-preventivo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .totali.totali-preventivo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .totali.totali-preventivo { grid-template-columns: 1fr; } }
+.totali-preventivo .totale { align-content: start; gap: .15rem; }
+.totali-preventivo .totale.principale { grid-column: auto; }
+.totali-preventivo .totale h3 { margin: 0 0 .25rem; font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--tenue); }
+.totali-preventivo .totale.principale h3 { color: #d6ece7; }
+.totali-preventivo .totale.ut h3 { color: var(--ut-testo); }
+.voce-tot { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; }
+.voce-tot span { font-size: .85rem; }
+.voce-tot b { font-variant-numeric: tabular-nums; font-weight: 550; font-size: 1rem; }
+.voce-tot.forte b { font-size: 1.15rem; font-weight: 650; }
+.voce-tot.grande b { font-size: 1.6rem; font-weight: 700; }
+.totale.principale .voce-tot b { color: #fff; }
+.totale.ut .voce-tot b { color: #4a3300; }
 .target { margin: 1rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .target input { width: 8rem; margin: 0; }
 .target output { font-weight: 550; padding: 0; }

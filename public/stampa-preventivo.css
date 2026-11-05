@@ -130,3 +130,16 @@ table.ut td { padding: .3mm 0; }
 #tempi-consegna:has(input[value="si"]:checked) .solo-conto-lavoro { display: none; }
 .messaggio-stampa.manca-consegna { border-color: #d9a400; font-weight: 600; }
 .pannello-stampa .invia-email .aiuto.manca { color: #8a5a00; }
+
+/* Validità dell'offerta accanto ai tempi di consegna, avviso e foglio dei codici alternativi (Adriano 5/11/2026) */
+.consegna-validita { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #ccc; margin-top: 4mm; break-inside: avoid; }
+.consegna-validita > div { padding: 2.5mm 3mm 0; font-size: 8.5pt; line-height: 1.4; }
+.consegna-validita .consegna-stampa { border-top: 0; margin-top: 0; }
+.consegna-validita .validita-stampa:only-child { grid-column: 1 / -1; }
+.consegna-validita + .fondo { margin-top: 2mm; }
+.avviso-alternative { margin: 3mm 0 0; padding: 2mm 3mm; border: 1px solid #e2b54f; background: #fdf5e1; font-size: 8.5pt; font-weight: 600; break-inside: avoid; }
+.spiega-alternative { font-size: 9pt; line-height: 1.45; margin: 6mm 0 0; border-top: 1px solid #ccc; padding-top: 4mm; }
+table.tabella-alternative td { font-size: 8.5pt; }
+table.tabella-alternative small { color: #555; }
+table.tabella-alternative .conferma { white-space: nowrap; width: 24mm; }
+@media print { .foglio.alternative { break-before: page; } }
