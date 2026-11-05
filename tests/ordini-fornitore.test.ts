@@ -93,3 +93,52 @@ test('ordine a fornitore: il PDF usa lo stesso impaginato della conferma con i t
   const letto = await PDFDocument.load(pdf);
   assert.equal(letto.getTitle(), 'Ordine a fornitore 205/2026');
 });
+
+// ── Adriano 5/11/2026: prezzi unitari con i decimali che hanno, blocco finale in fondo all'ultima pagina, nota sulla conferma ──
+import { euroUnitario, euro } from '../src/server/views/html.js';
+import { NOTA_ACCETTAZIONE_FORNITORE } from '../src/server/pdf-conferma-ordine.js';
+import { testoPdf } from '../src/server/testo-pdf.js';
+
+test('prezzo unitario: 2 decimali di regola, fino a 4 se servono; importi sempre a 2', () => {
+  assert.equal(euroUnitario(12), '12,00 €');
+  assert.equal(euroUnitario(0.0045), '0,0045 €');
+  assert.equal(euroUnitario(0.125), '0,125 €');
+  assert.equal(euroUnitario(1234.5), '1.234,50 €');
+  assert.equal(euroUnitario(0.00456), '0,0046 €');
+  assert.equal(euroUnitario(null), '');
+  assert.equal(euro(0.0045 * 1000), '4,50 €');
+});
+
+const datiOrdine = (nRighe: number) => ({
+  numero: 207, anno: 2026, data: '2026-11-05', modello: MODELLO_ORDINE_FORNITORE,
+  azienda: { nome: 'CASTELTECH S.R.L.', indirizzo: 'STRADA FIORENZUOLA, 8', piva: '01777320332', rea: 'PC-190591', tel: '0523 190 24 64', email: 'info@casteltech.net', pec: 'casteltech@pec.it' },
+  cliente: { ragione_sociale: 'CBS EUROPE S.R.L.', partita_iva: '01234567890' }, rifCliente: 'OFF 123', pagamento: 'Bonifico 30 gg', note: null,
+  righe: Array.from({ length: nRighe }, (_, i) => ({ posizione: i + 1, codice: `C${i + 1}`, descrizione: `Condensatore ${i + 1}`, quantita: 1000, prezzo: 0.0045, consegna: null, prodotto_id: null, riga_ordine_id: null })),
+});
+
+test('PDF ordine a fornitore: prezzo con 4 decimali, importo a 2, nota sulla conferma sopra le firme', async () => {
+  const testo = await testoPdf(await pdfConfermaOrdine(datiOrdine(2)));
+  assert.match(testo, /0,0045 €/);
+  assert.match(testo, /4,50 €/);
+  assert.match(testo, /confermato con la firma di questo documento/);
+  assert.match(testo, /confermarci sempre l'ordine/);
+  assert.ok(testo.indexOf('TOTALE ORDINE') < testo.indexOf('confermarci sempre'), 'la nota sta dopo il totale');
+  assert.ok(testo.indexOf('confermarci sempre') < testo.indexOf('Per accettazione del fornitore'), 'la nota sta sopra le firme');
+  assert.equal(NOTA_ACCETTAZIONE_FORNITORE.includes("conferma d'ordine"), true);
+});
+
+test('PDF ordine a fornitore con molte righe: più pagine, blocco finale solo nell\'ultima', async () => {
+  const pdf = await pdfConfermaOrdine(datiOrdine(70));
+  const letto = await PDFDocument.load(pdf);
+  assert.ok(letto.getPageCount() >= 2);
+  const testo = await testoPdf(pdf);
+  assert.equal(testo.match(/MODALITÀ DI PAGAMENTO/g)?.length, 1);
+  assert.equal(testo.match(/Per accettazione del fornitore/g)?.length, 1);
+  assert.match(testo, /pagina 1 di \d+/);
+});
+
+test('PDF conferma d\'ordine al cliente: nessuna nota sulla conferma (vale solo per l\'ordine a fornitore)', async () => {
+  const testo = await testoPdf(await pdfConfermaOrdine({ ...datiOrdine(1), modello: undefined }));
+  assert.doesNotMatch(testo, /confermarci sempre/);
+  assert.match(testo, /Per accettazione del cliente/);
+});

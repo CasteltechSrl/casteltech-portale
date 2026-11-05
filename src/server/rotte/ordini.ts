@@ -19,7 +19,7 @@ import { confermeDellOrdine, creaConferma, duplicaConferma, eliminaOAnnulla } fr
 import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
-import { html, data, euro, num, numCampo, raw, type Raw } from '../views/html.js';
+import { html, data, euro, euroUnitario, num, numCampo, raw, type Raw } from '../views/html.js';
 import { aggiungiProdottoCliente, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { serviziAttivi, servizioPerCodice } from '../servizi-una-tantum-servizio.js';
 import { opzioniServizi } from '../views/scelta-prodotto.js';
@@ -107,7 +107,7 @@ export function rotteOrdini() {
             <td class="nowrap"><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a></td><td>${data(x.dataOrdine)}</td>
             <td class="taglia">${x.cliente}</td><td>${x.rifCliente}</td><td class="nowrap">${x.codice}</td><td class="taglia">${x.descrizione}</td>
             <td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
-            <td class="n">${x.residuoQuantita ? num(x.residuoQuantita, 0) : ''}</td><td class="n">${euro(x.prezzo)}</td>
+            <td class="n">${x.residuoQuantita ? num(x.residuoQuantita, 0) : ''}</td><td class="n">${euroUnitario(x.prezzo)}</td>
             <td class="n">${x.residuoValore ? euro(x.residuoValore) : ''}</td>
             <td>${data(x.arrivoMateriale)}</td><td>${data(x.consegnaRichiesta)}${x.consegne?.length ? html` <small class="nota" title="consegne a programma">(${x.consegne.length} consegne)</small>` : ''}</td>
             <td>${data(x.prevista)}</td><td>${ritardo(x.ritardo)}</td>

@@ -4,7 +4,7 @@
  * Dati del D.P.R. 472/96: mittente, destinatario, luogo di destinazione, numero e data, causale, descrizione e quantità dei beni,
  * aspetto, colli, peso, trasporto a cura del, vettore, inizio del trasporto, firme. Senza prezzi (come il modello "DDT" di FIC).
  */
-import { html, data, euro, num, type Raw } from './html.js';
+import { html, data, euro, euroUnitario, num, type Raw } from './html.js';
 import { VERSIONE } from './layout.js';
 import { indirizzoSu } from '../../engine/ddt.js';
 import { importoRiga, numeroCompleto, type Totali } from '../../engine/amministrazione.js';
@@ -113,7 +113,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
     <tbody>${righe.map(r => r.solo_descrizione
       ? html`<tr><td></td><td colspan="7"><em>${r.descrizione}</em></td></tr>`
       : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}</td><td class="um">${r.um ?? ''}</td>
-        <td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td><td class="q">${euro(Number(r.prezzo))}</td>
+        <td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td><td class="q">${euroUnitario(Number(r.prezzo))}</td>
         <td class="um">${Number(r.sconto) ? num(Number(r.sconto)) : ''}</td><td class="q">${euro(importoRiga(r))}</td>
         <td class="um">${(() => { const g = percentuale(r.aliquota_iva); return g ? (g.percentuale ? `${num(g.percentuale, 0)}%` : g.natura) : ''; })()}</td></tr>`)}</tbody>
   </table>

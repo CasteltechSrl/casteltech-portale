@@ -2,12 +2,14 @@
  * PDF della conferma d'ordine, impaginato come la stampa dei preventivi (stile Fatture in Cloud, PR #38):
  * logo e dati dell'azienda, destinatario, riquadro verde con ordine del cliente e totale, tabella Codice / Descrizione /
  * Quantità / Prezzo unitario / Importo / Consegna, pagamento e totale in fondo, firma del cliente per accettazione.
+ * Prezzo unitario con i decimali che ha (2, fino a 4: `euroUnitario`), importi e totale sempre a 2; il blocco pagamento / totale / firme
+ * sta sempre in fondo al foglio, nell'ultima pagina (Adriano 5/11/2026).
  * Fatto sul server (pdf-lib) perché il file si salva nel documento e si allega all'email.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
-import { euro, num } from './views/html.js';
+import { euro, euroUnitario, num } from './views/html.js';
 import { importoRigaConferma, totaleConferma, type RigaConferma } from '../engine/conferme-ordine.js';
 
 export interface DatiPdfConferma {
@@ -21,15 +23,24 @@ export interface DatiPdfConferma {
   modello?: ModelloPdf;
 }
 
-export interface ModelloPdf { titolo: string; destinatario: string; rif: string; firma: string; piede: string; bozza: string; iban: boolean; nomeDocumento: string }
+export interface ModelloPdf {
+  titolo: string; destinatario: string; rif: string; firma: string; piede: string; bozza: string; iban: boolean; nomeDocumento: string;
+  /** nota stampata sopra le firme (Adriano 5/11/2026: come si considera confermato l'ordine a fornitore) */
+  notaAccettazione?: string;
+}
 export const MODELLO_CONFERMA: ModelloPdf = {
   titolo: "CONFERMA D'ORDINE", destinatario: 'DESTINATARIO', rif: 'VOSTRO ORDINE', firma: 'Per accettazione del cliente', piede: "Conferma d'ordine",
   bozza: 'BOZZA - NON VALIDA COME CONFERMA', iban: true, nomeDocumento: "Conferma d'ordine",
 };
+/** Adriano 5/11/2026: l'ordine a fornitore vale come confermato in uno di tre modi, ma una conferma la chiediamo sempre. */
+export const NOTA_ACCETTAZIONE_FORNITORE =
+  "L'ordine si considera confermato con la firma di questo documento per accettazione, con la vostra conferma d'ordine oppure con una email di conferma. "
+  + 'Vi chiediamo in ogni caso di confermarci sempre l\'ordine.';
 /** Ordine a fornitore (Adriano 31/10/2026): stesso impaginato; niente IBAN di Casteltech (paghiamo noi), firma del fornitore. */
 export const MODELLO_ORDINE_FORNITORE: ModelloPdf = {
   titolo: 'ORDINE A FORNITORE', destinatario: 'FORNITORE', rif: 'VOSTRA OFFERTA', firma: 'Per accettazione del fornitore', piede: 'Ordine a fornitore',
   bozza: 'BOZZA - NON VALIDO COME ORDINE', iban: false, nomeDocumento: 'Ordine a fornitore',
+  notaAccettazione: NOTA_ACCETTAZIONE_FORNITORE,
 };
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -149,6 +160,8 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   colonne[1].l = L - 2 * M - colonne.reduce((s, x) => s + x.l, 0);
   const xs = colonne.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + colonne[i - 1].l : M], []);
   const PAD = 4, DIM = 8.5, INTERLINEA = 10.5, PIEDE = M + 26;
+  // spazio che le righe e le note lasciano libero in fondo a ogni pagina: il blocco finale ci sta anche se arriva all'ultima riga
+  const RISERVA = 46 + 34 + 22 + (m.notaAccettazione ? 3 * 9.5 + 6 : 0);
   const testataTabella = () => {
     linea(p, M, y + 4, L - M);
     colonne.forEach((k, i) => scrivi(p, k.t, k.n ? xs[i] + k.l - PAD : xs[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
@@ -162,12 +175,12 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
     const codice = aCapo(r.codice ?? '', colonne[0].l - 2 * PAD, grassetto, DIM);
     const descr = aCapo(r.descrizione, colonne[1].l - 2 * PAD, font, DIM);
     const alto = Math.max(codice.length, descr.length) * INTERLINEA + 6;
-    if (y - alto < PIEDE + 10) altraPagina();
+    if (y - alto < PIEDE + RISERVA + 10) altraPagina();
     p.drawRectangle({ x: M, y: y - alto, width: L - 2 * M, height: alto, color: FONDO });
     const yt = y - 3 - DIM;
     codice.forEach((t, i) => scrivi(p, t, xs[0] + PAD, yt - i * INTERLINEA, { f: grassetto, dim: DIM }));
     descr.forEach((t, i) => scrivi(p, t, xs[1] + PAD, yt - i * INTERLINEA, { dim: DIM }));
-    const valori = [quantita(r.quantita), euro(r.prezzo), euro(importoRigaConferma(r)), dataIt(r.consegna) || 'da definire'];
+    const valori = [quantita(r.quantita), euroUnitario(r.prezzo), euro(importoRigaConferma(r)), dataIt(r.consegna) || 'da definire'];
     valori.forEach((v, i) => scrivi(p, v, xs[i + 2] + colonne[i + 2].l - PAD, yt, { dim: DIM, f: i === 3 ? grassetto : font, colore: i === 3 && !r.consegna ? GRIGIO : NERO, destra: true }));
     y -= alto;
     linea(p, M, y, L - M, RIGA, 0.5);
@@ -177,17 +190,20 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   // ── note ──
   if (d.note?.trim()) {
     const righeNote = aCapo(d.note, L - 2 * M, font, 8.5);
-    if (y - 20 - righeNote.length * 10.5 < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; }
+    if (y - 20 - righeNote.length * 10.5 < PIEDE + RISERVA + 10) { p = nuovaPagina(); y = H - M - 10; }
     y -= 12;
     scrivi(p, 'NOTE', M, y, { dim: 6.5, colore: GRIGIO });
     y -= 11;
     for (const r of righeNote) { scrivi(p, r, M, y, { dim: 8.5 }); y -= 10.5; }
   }
 
-  // ── fondo: pagamento e totale, poi firme ──
-  const altoFondo = 46, altoFirme = 50;
-  if (y - altoFondo - altoFirme - 20 < PIEDE) { p = nuovaPagina(); y = H - M - 10; }
-  y -= 14;
+  // ── fondo: pagamento e totale, nota, firme: SEMPRE in fondo al foglio, nell'ultima pagina se sono più d'una (Adriano 5/11/2026) ──
+  const altoFondo = 46, altoFirme = 22, spazioFirme = 34;
+  const righeNota = m.notaAccettazione ? aCapo(m.notaAccettazione, L - 2 * M, font, 7.5) : [];
+  const altoNota = righeNota.length ? righeNota.length * 9.5 + 6 : 0;
+  const altoBlocco = altoFondo + altoNota + spazioFirme + altoFirme;
+  if (y - 14 < PIEDE + altoBlocco) { p = nuovaPagina(); }
+  y = PIEDE + altoBlocco;   // il blocco parte da qui e finisce sul piede, qualunque sia il contenuto sopra
   const xTot = L - M - 175;
   linea(p, M, y, L - M); linea(p, M, y - altoFondo, L - M);
   p.drawLine({ start: { x: xTot, y }, end: { x: xTot, y: y - altoFondo }, thickness: 0.7, color: LINEA });
@@ -197,7 +213,12 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   scrivi(p, 'TOTALE ORDINE', L - M - 6, y - 11, { dim: 6.5, colore: GRIGIO, destra: true });
   scrivi(p, euro(totale), L - M - 6, y - 30, { f: grassetto, dim: 16, destra: true });
   scrivi(p, 'IVA esclusa', L - M - 6, y - 41, { dim: 7, colore: GRIGIO, destra: true });
-  y -= altoFondo + 34;
+  y -= altoFondo;
+  if (righeNota.length) {
+    y -= 6;
+    for (const r of righeNota) { y -= 9.5; scrivi(p, r, M, y, { dim: 7.5, colore: GRIGIO }); }
+  }
+  y -= spazioFirme;
   const largoFirma = (L - 2 * M - 30) / 2;
   [[d.azienda.nome, ''], [m.firma, 'Data, timbro e firma']].forEach(([t, s], i) => {
     const x = M + i * (largoFirma + 30);

@@ -4,7 +4,7 @@
  * pagamento e totale in fondo), riquadro verde con i prezzi, condizioni generali e firma del cliente per accettazione.
  * A schermo, a sinistra, il pannello "Cosa stampare" con le quattro versioni (src/engine/stampa-preventivo.ts).
  */
-import { html, euro, data, num, raw, type Raw } from './html.js';
+import { html, euro, euroUnitario, data, num, raw, type Raw } from './html.js';
 import { VERSIONE } from './layout.js';
 import { riquadroInvio } from './invio.js';
 import type { Risultato } from '../../engine/calcolo.js';
@@ -117,15 +117,15 @@ export function stampaPreventivo(o: {
     switch (x.tipo) {
       case 'prodotto': return html`
     <tr class="prodotto"><td><b>${i.codice}</b>${i.revisione ? html`<br><small>rev. ${i.revisione}</small>` : ''}</td>
-      <td><b>${i.descrizione}</b>${sotto(x.sotto)}</td><td class="n">${qta}</td><td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      <td><b>${i.descrizione}</b>${sotto(x.sotto)}</td><td class="n">${qta}</td><td class="n">${euroUnitario(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'voce': return html`<tr class="${x.stile}"><td></td><td>${x.descrizione}${sotto(x.sotto)}</td><td></td>
-        <td class="n">${x.prezzo == null ? '' : euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+        <td class="n">${x.prezzo == null ? '' : euroUnitario(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'unaTantum': return html`
     <tr class="prodotto"><td></td><td><b>COSTI UNA TANTUM</b> (solo primo lotto)
       ${x.voci.length ? html`<table class="ut">${x.voci.map(v => html`<tr><td>${v.nome}</td><td class="n">${euro(v.prezzo)}</td></tr>`)}</table>` : ''}</td>
-      <td class="n">1</td><td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      <td class="n">1</td><td class="n">${euroUnitario(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'aggiunta': return html`<tr class="prodotto"><td></td><td><b>${x.descrizione}</b></td><td class="n">${num(x.quantita, x.quantita % 1 ? 2 : 0)}</td>
-      <td class="n">${euro(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
+      <td class="n">${euroUnitario(x.prezzo)}</td><td class="n">${euro(x.importo)}</td></tr>`;
       case 'sconto': return html`<tr class="prodotto sconto"><td></td><td><b>${x.descrizione}</b></td><td></td><td></td><td class="n">− ${euro(x.importo)}</td></tr>`;
     }
   });
