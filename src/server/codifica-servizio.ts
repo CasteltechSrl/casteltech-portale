@@ -188,7 +188,10 @@ export async function caricaRegoleScarto(): Promise<RegoleScarto> {
   return leggiRegoleScarto((await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'regole_scarto'`))?.valore);
 }
 
-const NON_MONTARE = /\b(DNP|DNM|DNI|NM|N\.M\.|NOT\s+(MOUNTED|FITTED|POPULATED|PLACED)|NON\s+MONTA(RE|TO))\b/i;
+/** Parole della BOM che dicono "non montare". "NM" solo se non è il nanometro dei LED ("590 nm", Adriano 5/11/2026: 34 LED esclusi per sbaglio). */
+const NON_MONTARE = /\b(DNP|DNM|DNI|(?<!\d\s?)NM|N\.M\.|NOT\s+(MOUNTED|FITTED|POPULATED|PLACED)|NON\s+MONTA(RE|TO))\b/i;
+/** La parola che ha fatto scattare "non montare", per dirla nella nota. */
+export const parolaNonMontare = (testo: string) => NON_MONTARE.exec(testo)?.[1] ?? null;
 /** Righe che non sono componenti da acquistare (fiducial, fori di fissaggio, loghi). */
 const NON_COMPONENTE = /\b(FIDUCIAL|FIDUCIALE|MOUNTING\s*HOLE|FORO\s+DI\s+FISSAGGIO|LOGO)\b|^FID\d|TESTPOINT_PAD/i;
 /** Cella di una colonna DNP / "Exclude from BOM" (KiCad) che toglie la riga dagli acquisti. */
@@ -296,7 +299,8 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
   for (const r of righe) {
     av.fatti++;
     if ((r as any)._escluso) { r.esito = ESITI.NON_MONTATO; r.note.push('escluso nella BOM (DNP / non in distinta)'); continue; }
-    if (NON_MONTARE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''}`)) { r.esito = ESITI.NON_MONTATO; r.note.push('componente da non montare'); continue; }
+    { const parola = parolaNonMontare(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''}`);
+      if (parola) { r.esito = ESITI.NON_MONTATO; r.note.push(`componente da non montare ("${parola}" nella BOM)`); continue; } }
     if (rigaPcb(r)) { r.esito = ESITI.NON_MONTATO; r.note.push('circuito stampato (PCB): non è un componente, si quota a parte'); continue; }
     if (NON_COMPONENTE.test(`${r.valore ?? ''} ${r.descrizioneBom ?? ''} ${r.pn ?? ''} ${r.footprint ?? ''}`) || NON_COMPONENTE.test(r.designatori ?? '')) {
       r.esito = ESITI.NON_MONTATO; r.note.push('non è un componente da acquistare (fiducial, foro, logo)'); continue;
