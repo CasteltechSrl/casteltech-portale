@@ -209,7 +209,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Validità e alternative nella stampa (Adriano 5/11/2026; `validitaOfferta`/`materialeVenduto` in `engine/stampa-preventivo.ts`, `engine/alternative-cliente.ts`, test in
    `tests/stampa-preventivo.test.ts`): montaggio 30 giorni, componenti/PCB 10 giorni solo se li vendiamo, accanto ai tempi di consegna; condizioni generali riscritte (validità,
    ordine, da quando contano le settimane, cosa sposta la consegna, codici alternativi). Righe della BOM collegata con `alternativaScelta`/`alternativaProposta` ≠ P/N
-   = avviso sotto le righe + foglio "Codici alternativi da confermare" (Sì/No e firma), stessa coppia di codici = una riga; anche nel PDF.
+   = avviso sotto le righe + ultimo foglio "Componenti: alternative da confermare e problemi di acquisto" (Sì/No e firma), stessa coppia di codici = una riga; anche nel PDF.
+   Nello stesso foglio (Adriano 5/11/2026, `componentiDaVerificare`): non trovati (non quotati), non disponibili, disponibilità da riconfermare, fine vita; spunta
+   "Pagina componenti" sempre attiva, `?allegato=0` la toglie (OpzioniStampa.allegato, anche nel PDF dell'email).
    Riquadro verde (Adriano 4/11/2026, `prezziRiquadro`): sotto le righe e sopra il totale, SOLO prezzo a scheda senza e con le una tantum. I due prezzi a scheda si riscrivono a mano nei ritocchi
    (Adriano 4/11/2026, al posto dell'arrotondamento automatico: `Ritocchi.prezzi`, `basePrezzi`: lotto = scheda × schede, una tantum = (con − senza) × schede, righe pareggiate con
    `pareggiaSulPiuGrande`); il calcolo non cambia, "Crea ordine" (`prezziComeInStampa`) e l'avviso "sotto il preventivo" in fattura usano il prezzo scritto a mano. La stampa è sempre

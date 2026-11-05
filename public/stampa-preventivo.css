@@ -143,3 +143,6 @@ table.tabella-alternative td { font-size: 8.5pt; }
 table.tabella-alternative small { color: #555; }
 table.tabella-alternative .conferma { white-space: nowrap; width: 24mm; }
 @media print { .foglio.alternative { break-before: page; } }
+.titolo-sezione { font-size: 10.5pt; margin: 6mm 0 0; }
+.titolo-sezione + .spiega-alternative { border-top: 0; padding-top: 1mm; margin-top: 1mm; }
+table.tabella-alternative tr.non-quotato td:last-child { color: #a11; font-weight: 600; }

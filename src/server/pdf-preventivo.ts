@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { euro, num } from './views/html.js';
 import { CONDIZIONI_GENERALI, type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
-import { fraseAlternative, type AlternativaDaConfermare } from '../engine/alternative-cliente.js';
+import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type ComponenteDaVerificare } from '../engine/alternative-cliente.js';
 
 export interface DatiPdfPreventivo {
   numero: string; data: string;
@@ -25,6 +25,8 @@ export interface DatiPdfPreventivo {
   validita?: string[];
   /** codici alternativi alla BOM da confermare: frase sotto le righe e foglio in coda */
   alternative?: AlternativaDaConfermare[];
+  /** componenti non trovati o con problemi di acquisto, nello stesso foglio (Adriano 5/11/2026) */
+  problemiAcquisto?: ComponenteDaVerificare[];
 }
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -189,9 +191,9 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
   }
 
   // ── avviso dei codici alternativi da confermare ──
-  const alternative = d.alternative ?? [];
-  if (alternative.length) {
-    const righeAvviso = aCapo(fraseAlternative(alternative.length), L - 2 * M - 12, grassetto, 8.5);
+  const alternative = d.alternative ?? [], problemi = d.problemiAcquisto ?? [];
+  if (alternative.length || problemi.length) {
+    const righeAvviso = aCapo(fraseAlternative(alternative.length, problemi.length), L - 2 * M - 12, grassetto, 8.5);
     const alto = righeAvviso.length * 10.5 + 8;
     if (y - 12 - alto < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; }
     y -= 10;
@@ -284,56 +286,75 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     }
   }
 
-  // ── foglio a parte: codici alternativi da confermare (Adriano 5/11/2026) ──
-  if (alternative.length) {
+  // ── foglio a parte: codici alternativi da confermare e componenti con problemi di acquisto (Adriano 5/11/2026) ──
+  if (alternative.length || problemi.length) {
     p = nuovaPagina();
     y = H - M;
     testata(p, y);
     y -= 72;
-    scrivi(p, 'CODICI ALTERNATIVI DA CONFERMARE', M, y, { f: grassetto, dim: 12 });
+    scrivi(p, FOGLIO_COMPONENTI.toUpperCase(), M, y, { f: grassetto, dim: 12 });
     y -= 12;
-    scrivi(p, `allegati al preventivo nr. ${d.numero} del ${dataIt(d.data)} · ${d.codice}${d.revisione ? ` rev. ${d.revisione}` : ''}`, M, y, { dim: 8, colore: GRIGIO });
+    scrivi(p, `allegato al preventivo nr. ${d.numero} del ${dataIt(d.data)} · ${d.codice}${d.revisione ? ` rev. ${d.revisione}` : ''}`, M, y, { dim: 8, colore: GRIGIO });
     y -= 10;
     linea(p, M, y, L - M);
     y -= 14;
-    for (const r of aCapo('Per i componenti qui sotto proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche (non disponibile o più '
-      + 'conveniente). Il prezzo del preventivo è calcolato con il codice alternativo. Vi chiediamo di indicare per ogni riga se lo accettate: senza conferma '
-      + 'acquistiamo il codice della BOM, se disponibile, e il prezzo può cambiare.', L - 2 * M, font, 9)) { scrivi(p, r, M, y, { dim: 9 }); y -= 12; }
-    y -= 6;
-    const col = [{ t: 'RIFERIMENTI', l: 80 }, { t: 'CODICE DELLA BOM', l: 105 }, { t: 'CODICE ALTERNATIVO', l: 105 }, { t: 'DESCRIZIONE', l: 0 }, { t: 'Q.TÀ', l: 32, n: true }, { t: 'CONFERMATO', l: 62 }];
-    col[3].l = L - 2 * M - col.reduce((a, x) => a + x.l, 0);
-    const xc = col.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + col[i - 1].l : M], []);
-    const intest = () => {
-      linea(p, M, y + 4, L - M);
-      col.forEach((k, i) => scrivi(p, k.t, k.n ? xc[i] + k.l - PAD : xc[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
-      y -= 12; linea(p, M, y, L - M); y -= 4;
+    type Col = { t: string; l: number; n?: boolean };
+    // una tabella: colonne (la larghezza 0 prende il resto), celle per riga [testo, grassetto][] e caselle Sì/No in fondo
+    const tabella = (titolo: string, spiega: string, col: Col[], righe: { celle: [string, boolean, number?][][]; qta: number; siNo: boolean; rosso?: number }[]) => {
+      if (y < PIEDE + 120) { p = nuovaPagina(); y = H - M - 10; }
+      scrivi(p, titolo, M, y, { f: grassetto, dim: 10 });
+      y -= 13;
+      for (const r of aCapo(spiega, L - 2 * M, font, 8.5)) { scrivi(p, r, M, y, { dim: 8.5 }); y -= 11; }
+      y -= 6;
+      const libera = col.findIndex(c => !c.l);
+      col[libera].l = L - 2 * M - col.reduce((a, x) => a + x.l, 0);
+      const xc = col.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + col[i - 1].l : M], []);
+      const intest = () => {
+        linea(p, M, y + 4, L - M);
+        col.forEach((k, i) => scrivi(p, k.t, k.n ? xc[i] + k.l - PAD : xc[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
+        y -= 12; linea(p, M, y, L - M); y -= 4;
+      };
+      intest();
+      const iQta = col.findIndex(c => c.n), iSiNo = righe.some(r => r.siNo) ? col.length - 1 : -1;
+      for (const r of righe) {
+        // ogni cella: pezzi di testo [testo, grassetto, dimensione] mandati a capo nella sua colonna
+        const celle = r.celle.map((pezzi, i) => pezzi.flatMap(([t, g, dim]) => aCapo(t, col[i].l - 2 * PAD, g ? grassetto : font, dim ?? 7.8).map(x => ({ t: x, g, dim: dim ?? 7.8 }))));
+        const alto = Math.max(1, ...celle.map(c => c.length)) * 9.5 + 6;
+        if (y - alto < PIEDE + 70) { p = nuovaPagina(); y = H - M - 10; intest(); }
+        celle.forEach((righeCella, i) => righeCella.forEach((x, k) =>
+          scrivi(p, x.t, xc[i] + PAD, y - 3 - 8 - k * 9.5, { f: x.g ? grassetto : font, dim: x.dim, colore: i === r.rosso ? rgb(0.65, 0.07, 0.07) : !x.g && x.dim < 7.5 ? GRIGIO : NERO })));
+        if (iQta >= 0) scrivi(p, num(r.qta, r.qta % 1 ? 2 : 0), xc[iQta] + col[iQta].l - PAD, y - 11, { dim: 8, destra: true });
+        if (r.siNo && iSiNo >= 0) [['Sì', 0], ['No', 30]].forEach(([t, dx]) => {
+          p.drawRectangle({ x: xc[iSiNo] + PAD + (dx as number), y: y - 12, width: 7, height: 7, borderColor: NERO, borderWidth: 0.6 });
+          scrivi(p, t as string, xc[iSiNo] + PAD + (dx as number) + 10, y - 11, { dim: 8 });
+        });
+        y -= alto;
+        linea(p, M, y, L - M, RIGA, 0.5);
+        y -= 1.5;
+      }
+      y -= 14;
     };
-    intest();
-    for (const a of alternative) {
-      const celle = [
-        aCapo(a.riferimenti, col[0].l - 2 * PAD, font, 7.8),
-        [...aCapo(a.pnBom, col[1].l - 2 * PAD, grassetto, 8), ...(a.produttoreBom ? aCapo(a.produttoreBom, col[1].l - 2 * PAD, font, 7) : [])],
-        [...aCapo(a.alternativa, col[2].l - 2 * PAD, grassetto, 8), ...(a.produttoreAlternativa ? aCapo(a.produttoreAlternativa, col[2].l - 2 * PAD, font, 7) : [])],
-        aCapo(a.descrizione, col[3].l - 2 * PAD, font, 7.3),
-      ];
-      const nBom = aCapo(a.pnBom, col[1].l - 2 * PAD, grassetto, 8).length, nAlt = aCapo(a.alternativa, col[2].l - 2 * PAD, grassetto, 8).length;
-      const alto = Math.max(...celle.map(c => c.length)) * 9.5 + 6;
-      if (y - alto < PIEDE + 70) { p = nuovaPagina(); y = H - M - 10; intest(); }
-      celle.forEach((righe, i) => righe.forEach((t, k) => {
-        const forte = (i === 1 && k < nBom) || (i === 2 && k < nAlt);
-        scrivi(p, t, xc[i] + PAD, y - 3 - 8 - k * 9.5, { f: forte ? grassetto : font, dim: forte ? 8 : i === 3 ? 7.3 : 7.8, colore: (i === 1 || i === 2) && !forte ? GRIGIO : NERO });
-      }));
-      scrivi(p, num(a.qtaScheda, a.qtaScheda % 1 ? 2 : 0), xc[4] + col[4].l - PAD, y - 11, { dim: 8, destra: true });
-      // caselle Sì / No da spuntare a penna
-      [['Sì', 0], ['No', 30]].forEach(([t, dx]) => {
-        p.drawRectangle({ x: xc[5] + PAD + (dx as number), y: y - 12, width: 7, height: 7, borderColor: NERO, borderWidth: 0.6 });
-        scrivi(p, t as string, xc[5] + PAD + (dx as number) + 10, y - 11, { dim: 8 });
-      });
-      y -= alto;
-      linea(p, M, y, L - M, RIGA, 0.5);
-      y -= 1.5;
-    }
-    firme(p, Math.max(y - 40, PIEDE + 30));
+    if (alternative.length) tabella('Codici alternativi da confermare',
+      'Per questi componenti proponiamo un codice diverso da quello della BOM, con le stesse caratteristiche (non disponibile o più conveniente). '
+      + 'Il prezzo del preventivo è calcolato con il codice alternativo. Indicate per ogni riga se lo accettate: senza conferma acquistiamo il codice della BOM, se disponibile, e il prezzo può cambiare.',
+      [{ t: 'RIFERIMENTI', l: 80 }, { t: 'CODICE DELLA BOM', l: 105 }, { t: 'CODICE ALTERNATIVO', l: 105 }, { t: 'DESCRIZIONE', l: 0 }, { t: 'Q.TÀ', l: 32, n: true }, { t: 'CONFERMATO', l: 62 }],
+      alternative.map(a => ({ qta: a.qtaScheda, siNo: true, celle: [
+        [[a.riferimenti, false]],
+        [[a.pnBom, true, 8], ...(a.produttoreBom ? [[a.produttoreBom, false, 7] as [string, boolean, number]] : [])],
+        [[a.alternativa, true, 8], ...(a.produttoreAlternativa ? [[a.produttoreAlternativa, false, 7] as [string, boolean, number]] : [])],
+        [[a.descrizione, false, 7.3]], [], [],
+      ] })));
+    if (problemi.length) tabella('Componenti non trovati o con problemi di acquisto',
+      'Componenti della BOM che non abbiamo trovato o che hanno una disponibilità da verificare al momento dell\'offerta. Quelli "non quotati" non sono '
+      + 'compresi nel prezzo: potete fornirli voi, indicarci un codice equivalente o chiederci di cercarlo.',
+      [{ t: 'RIFERIMENTI', l: 80 }, { t: 'CODICE DELLA BOM', l: 110 }, { t: 'DESCRIZIONE', l: 0 }, { t: 'Q.TÀ', l: 32, n: true }, { t: 'PROBLEMA', l: 150 }],
+      problemi.map(x => ({ qta: x.qtaScheda, siNo: false, rosso: x.quotato ? undefined : 4, celle: [
+        [[x.riferimenti, false]],
+        [[x.codice, true, 8], ...(x.produttore ? [[x.produttore, false, 7] as [string, boolean, number]] : [])],
+        [[x.descrizione, false, 7.3]], [], [[x.problema, !x.quotato, 7.5]],
+      ] })));
+    if (y - 40 < PIEDE + 30) { p = nuovaPagina(); y = H - M - 10; }
+    firme(p, y - 30);
   }
 
   // ── piede su ogni pagina ──

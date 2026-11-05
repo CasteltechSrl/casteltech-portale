@@ -184,6 +184,8 @@ test('stampa: codici alternativi alla BOM da confermare, uniti per coppia di cod
     descrizione: 'CAP 10UF 10V X5R 0603', riferimenti: 'C36, C47, C48', qtaScheda: 3 });
   assert.equal(fraseAlternative(0), '');
   assert.match(fraseAlternative(1), /è stato individuato 1 codice alternativo da confermare/);
+  assert.match(fraseAlternative(0, 2), /2 componenti hanno problemi di acquisto/);
+  assert.doesNotMatch(fraseAlternative(0, 1), /acquistiamo solo dopo/);
   assert.match(fraseAlternative(3), /sono stati individuati 3 codici alternativi/);
 });
 
@@ -200,4 +202,31 @@ test('riquadri del preventivo: vendita per voce (montaggio, componenti, PCB) e c
   // vendita: componenti e PCB a parte, il montaggio è il resto del prezzo a scheda senza una tantum
   assert.ok(r.venditaComponentiScheda > 0 && r.venditaPcbScheda > 0);
   assert.equal(Math.round((r.venditaMontaggioScheda + r.venditaComponentiScheda + r.venditaPcbScheda) * 100) / 100, r.prezzoScheda);
+});
+
+test('stampa: componenti non trovati o con problemi di acquisto nell\'ultima pagina (Adriano 5/11/2026)', async () => {
+  const { componentiDaVerificare } = await import('../src/engine/alternative-cliente.js');
+  const ok = { scelta: { disponibile: true } };
+  const righe = [
+    { pn: 'NONESISTE1', designatori: 'U1', qtaScheda: 1, acquisti: [{}], reperibilita: { livello: 'critico', motivi: ['non trovato presso nessun distributore'] } },
+    { pn: null, valore: '10K', designatori: 'R9', qtaScheda: 1, acquisti: [{}] },
+    { pn: 'SCARSO', designatori: 'U2', qtaScheda: 2, acquisti: [{ scelta: { disponibile: false } }],
+      reperibilita: { livello: 'critico', motivi: ['non disponibile da nessuna parte: 4 pz in tutto contro 10 necessari'] } },
+    { pn: 'DIVISO', designatori: 'U3', qtaScheda: 1, acquisti: [ok],
+      reperibilita: { livello: 'attenzione', motivi: ['Mouser non ha risposto: premi "Aggiorna prezzi"'] } },
+    { pn: 'VECCHIO', designatori: 'U4', qtaScheda: 1, acquisti: [ok], reperibilita: { livello: 'ok', motivi: ['Mouser: Obsolete'] } },
+    { pn: 'BUONO', designatori: 'U5', qtaScheda: 1, acquisti: [ok], reperibilita: { livello: 'ok', motivi: [] } },
+    { pn: 'AMANO', designatori: 'U6', qtaScheda: 1, acquisti: [{}], prezzoManuale: 1.2 },                      // risolto dall'ufficio
+    { pn: 'CONALT', designatori: 'U7', qtaScheda: 1, acquisti: [{}], alternativaProposta: 'ALT' },             // già tra le alternative
+    { pn: 'NONESISTE1', designatori: 'U8', qtaScheda: 1, acquisti: [{}] },                                    // stesso codice: unito
+  ];
+  const x = componentiDaVerificare(righe);
+  assert.deepEqual(x.map(c => c.codice), ['NONESISTE1', '10K', 'SCARSO', 'DIVISO', 'VECCHIO']);
+  assert.equal(x[0].riferimenti, 'U1, U8');
+  assert.equal(x[0].quotato, false);
+  assert.match(x[0].problema, /non trovato presso i distributori: non quotato/i);
+  assert.match(x[1].problema, /non indicato nella BOM/);
+  assert.match(x[2].problema, /4 pz in tutto contro 10 necessari/);
+  assert.doesNotMatch(x[3].problema, /premi|Mouser/);
+  assert.match(x[4].problema, /fine vita/);
 });
