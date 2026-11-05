@@ -32,7 +32,7 @@ import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-se
 import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
+  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, aggiungiRigheOrdine, righeOrdineDaFatturare, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
   creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
@@ -812,10 +812,11 @@ export function rotteAmministrazione() {
     if (d.tipo === 'ddt') return res.send(pagina(req, titolo, html`${testa}${await moduloDdt(d, righe)}`, msg(req), ['documenti.js', 'autosalva.js']));
 
     // bozza: modulo modificabile
-    const [aliquote, condizioni, ddt, { esito, erroriExtra }, acconti, cliente] = await Promise.all([
+    const [aliquote, condizioni, ddt, { esito, erroriExtra }, acconti, cliente, servizOrdine] = await Promise.all([
       caricaAliquote(true), caricaCondizioniPagamento(true), d.cliente_id ? ddtDaFatturare(d.cliente_id, id) : Promise.resolve([]), anteprimaDocumento(id),
       d.cliente_id && d.tipo === 'fattura' && !['TD02', 'TD05'].includes(d.tipo_sdi) ? accontiDaScalare(d.cliente_id) : Promise.resolve([]),
-      d.cliente_id ? q1(`SELECT pubblica_amministrazione, split_payment, codice_sdi FROM clienti WHERE id = $1`, [d.cliente_id]) : Promise.resolve(null)]);
+      d.cliente_id ? q1(`SELECT pubblica_amministrazione, split_payment, codice_sdi FROM clienti WHERE id = $1`, [d.cliente_id]) : Promise.resolve(null),
+      d.cliente_id && d.tipo === 'fattura' && !['TD02'].includes(d.tipo_sdi) ? righeOrdineDaFatturare(d.cliente_id, id) : Promise.resolve([])]);
     const dateDdt = righe.filter(x => x.ddt_id).map(x => x.ddt_data ? String(x.ddt_data) : '').filter(Boolean);
     const termine = esito.tipoSdi === 'TD24' ? termineDifferita(dateDdt) : null;
     const errori = [...esito.errori, ...erroriExtra];
@@ -893,6 +894,14 @@ export function rotteAmministrazione() {
             <span class="nota">${x.righe} righe${x.causale ? ` · ${x.causale}` : ''}</span></label>`)}</details>` : ''}
         <button>Aggiungi i DDT scelti</button> <span class="nota">Salva prima le modifiche alle righe: i DDT si aggiungono in fondo.</span>
       </form>` : ''}
+      ${servizOrdine.length ? html`<form method="post" action="/amministrazione/documenti/${id}/righe-ordine" class="blocco da-verificare">
+        <h2>Servizi degli ordini non ancora fatturati</h2>
+        <p class="nota">Lamine, programmazioni e altre una tantum degli ordini di questo cliente che non viaggiano con un DDT: se vanno in questa fattura, spuntale e aggiungile.
+          Una volta emessa la fattura il servizio risulta fatturato (e la riga dell'ordine evasa).</p>
+        ${servizOrdine.map(x => html`<label class="riga-spunta"><input type="checkbox" name="riga" value="${x.id}"> Ordine ${x.ordine} · ${x.codice ? `${x.codice} · ` : ''}${x.descrizione}
+          <span class="nota">${x.quantita} × ${euro(x.prezzo)}</span></label>`)}
+        <button>Aggiungi le righe scelte</button> <span class="nota">Salva prima le modifiche alle righe: le righe si aggiungono in fondo.</span>
+      </form>` : ''}
       ${acconti.length ? html`<form method="post" action="/amministrazione/documenti/${id}/acconti" class="blocco">
         <h2>Fatture d'acconto da scalare</h2>
         ${acconti.map(x => html`<label class="riga-spunta"><input type="checkbox" name="acconto" value="${x.id}"> Acconto n. ${numeroCompleto(x.numero, x.sezionale)} del ${data(x.data)}
@@ -931,6 +940,13 @@ export function rotteAmministrazione() {
     const scelti = [req.body.ddt ?? []].flat().map(Number).filter(Boolean);
     const n = scelti.length ? await aggiungiDdt(id, scelti) : 0;
     res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(n ? `Aggiunti ${n} DDT.` : 'Nessun DDT scelto.')}`);
+  });
+
+  r.post('/documenti/:id/righe-ordine', async (req, res) => {
+    const id = Number(req.params.id);
+    const scelte = [req.body.riga ?? []].flat().map(Number).filter(Boolean);
+    const n = scelte.length ? await aggiungiRigheOrdine(id, scelte) : 0;
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(n ? `Aggiunte ${n} righe dell'ordine.` : 'Nessuna riga scelta.')}`);
   });
 
   r.post('/documenti/:id/emetti', async (req, res) => {

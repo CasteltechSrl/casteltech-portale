@@ -3,6 +3,7 @@ import { q } from './db.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
 
 import { GIORNI_PREVENTIVO_FERMO, GIORNI_TEMPO_APERTO, type DatiControlli } from '../engine/controlli.js';
+import { righeOrdini } from './ordini-servizio.js';
 
 const NOME_CLIENTE = `coalesce(c.ragione_sociale, d.intestatario->>'nome', '')`;
 
@@ -48,8 +49,11 @@ export async function datiControlli(oggi: string): Promise<DatiControlli> {
       WHERE r.aperta_il IS NOT NULL AND r.chiusa_il IS NULL AND r.data < $1::date - $2::int
       ORDER BY r.data LIMIT 100`, [oggi, GIORNI_TEMPO_APERTO]),
   ]);
+  // servizi d'ordine (lamine, programmazioni…) risultati evasi perché le schede sono tutte partite, ma mai fatturati (controllo serale 5/11/2026)
+  const serviziNonFatturati = (await righeOrdini()).filter(r => r.tipo === 'servizio' && r.stato === 'evaso' && !r.statoManuale && r.importoFatturato <= 0 && r.prezzo > 0 && r.quantita > 0)
+    .slice(0, 100).map(r => ({ ordineId: r.ordineId, ordine: `${r.numero}/${r.anno}`, cliente: r.cliente ?? '', descrizione: r.descrizione ?? r.codice ?? '', importo: r.quantita * r.prezzo }));
   return { oggi, ddtDaFatturare: ddt, ordiniSenzaConsegna: ordini, prodottiSenzaPrezzo: prodotti, clientiSenzaRecapitoSdi: clienti,
-    fattureFornitoriSenzaScadenza: fornitori, preventiviFermi: preventivi, commesseOltreConsegna: commesse, tempiApertiVecchi: tempi };
+    fattureFornitoriSenzaScadenza: fornitori, preventiviFermi: preventivi, commesseOltreConsegna: commesse, tempiApertiVecchi: tempi, serviziNonFatturati };
 }
 
 /** Ultimo preventivo salvato per codice prodotto di un cliente (prezzo a scheda dei lotti successivi e margine), per l'avviso in fattura. */

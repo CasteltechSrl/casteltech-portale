@@ -22,7 +22,7 @@ import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandida
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
-import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
+import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, parametriDaCache, parametriInCache, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
 import { cercaComponenteSulWeb, iaConfigurata, leggiConIa, proponiCompatibiliIa, type EsitoRicercaWeb } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
@@ -520,6 +520,7 @@ function paroleRicerca(r: RigaBom): string | null {
 
 export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>, soloCache = false) {
   const attivi = fornitoriConfigurati();
+  const perRadice = new Map<string, string | null>();   // radice del codice gestionale → P/N trovato (null = nessuno), in questa elaborazione
   for (const r of righe) {
     if (r.pn || r.clienteFornisce || ![ESITI.NUOVO, ESITI.NUOVO_VER, ESITI.DB_PROD].includes(r.esito as any)) continue;
     // "Rielabora": il P/N trovato l'altra volta con i suoi prezzi già letti, senza nuove ricerche
@@ -540,9 +541,24 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
     const parole = paroleRicerca(r);
     const radice = r.codiceGestionale?.slice(0, -4);
     if (!parole || !radice) continue;
+    // stesso componente (stessa radice del codice gestionale) già cercato in questa BOM o negli ultimi giorni: niente nuova ricerca
+    // per parametri (controllo serale 5/11/2026: ogni riga senza P/N faceva la sua ricerca a DigiKey e Mouser, anche se uguale a un'altra)
+    const giaCercato = perRadice.has(radice) ? perRadice.get(radice)! : await parametriDaCache(radice);
+    if (giaCercato !== undefined) {
+      perRadice.set(radice, giaCercato);
+      if (giaCercato) {
+        r.mpnAcquisto = giaCercato;
+        r.note.push(`proposto ${r.mpnAcquisto} (il più economico con gli stessi dati)`);
+        const es = await cercaPn([r.mpnAcquisto]);
+        perPnDist.set(pnKey(r.mpnAcquisto)!, es.perPn.get(pnKey(r.mpnAcquisto)!) ?? {});
+      } else r.note.push('nessun P/N equivalente trovato dai distributori');
+      continue;
+    }
     const stessaRadice = (fam: string | null, attr: Attributi, pn: string) => calcola(fam, regolaResistenze(fam, attr).attributi, pn).root === radice;
+    let cercato = false;
     try {
       if (attivi.digikey) {
+        cercato = true;
         for (const x of await digikeyParametri(parole)) {
           const d = daDigikey(x.prodotto);
           if (d.famiglia === r.famiglia && stessaRadice(d.famiglia, d.attributi, x.prodotto.ManufacturerProductNumber ?? '') && x.offerte.length) {
@@ -553,6 +569,7 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
         }
       }
       if (!r.mpnAcquisto && attivi.mouser) {
+        cercato = true;
         const offerte = await mouserParametri(parole);
         for (const o of offerte) {
           const [fam, attr] = decodificaMpn(o.mpn);
@@ -563,7 +580,8 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
           }
         }
       }
-    } catch (e: any) { r.note.push(`ricerca per parametri non riuscita: ${e.message}`); }
+    } catch (e: any) { r.note.push(`ricerca per parametri non riuscita: ${e.message}`); cercato = false; }
+    if (cercato) { perRadice.set(radice, r.mpnAcquisto ?? null); await parametriInCache(radice, r.mpnAcquisto ?? null); }
     if (r.mpnAcquisto) {
       r.note.push(`proposto ${r.mpnAcquisto} (il più economico con gli stessi dati)`);
       const es = await cercaPn([r.mpnAcquisto]);

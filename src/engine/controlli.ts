@@ -19,6 +19,7 @@ export interface DatiControlli {
   preventiviFermi: { id: number; numero: string; cliente: string; aggiornato: string }[];                  // bozze ferme da oltre 30 giorni
   commesseOltreConsegna: { id: number; numero: string; cliente: string; consegna: string }[];              // aperte con consegna passata
   tempiApertiVecchi: { id: number; commessa: string; commessaId: number; fase: string; sigla: string; data: string }[]; // fasi aperte dal telefono da oltre 2 giorni
+  serviziNonFatturati?: { ordineId: number; ordine: string; cliente: string; descrizione: string; importo: number }[]; // servizi d'ordine evasi (schede consegnate) mai fatturati
 }
 
 export const GIORNI_DDT_URGENTE = 20;
@@ -43,6 +44,11 @@ export function elencoControlli(d: DatiControlli): Controllo[] {
       chiave: 'ddt-vecchi', titolo: `DDT da fatturare da più di ${GIORNI_DDT_URGENTE} giorni`, livello: 'urgente',
       spiegazione: 'DDT emessi e mai messi in una fattura. Fatture differite li raggruppa per cliente.',
       righe: ddtVecchi.map(x => ({ testo: `DDT n. ${x.numero} del ${dataIt(x.data)} · ${x.cliente}`, dettaglio: `${giorniTra(x.data, d.oggi)} gg`, link: `/amministrazione/documenti/${x.id}` })),
+    },
+    {
+      chiave: 'servizi-non-fatturati', titolo: 'Servizi degli ordini mai fatturati con le schede già consegnate', livello: 'urgente',
+      spiegazione: 'Lamine, programmazioni e una tantum che non viaggiano con il DDT: le schede sono tutte partite ma il servizio non è in nessuna fattura. Aggiungerlo dalla bozza della fattura ("Servizi degli ordini non ancora fatturati") o segnare la riga evasa nell\'ordine se è già stato pagato altrove.',
+      righe: (d.serviziNonFatturati ?? []).map(x => ({ testo: `${x.ordine} · ${x.cliente}`, dettaglio: `${x.descrizione} · ${euroIt(x.importo)}`, link: `/ordini/${x.ordineId}` })),
     },
     {
       chiave: 'tempi-aperti', titolo: `Fasi aperte dal telefono da più di ${GIORNI_TEMPO_APERTO} giorni`, livello: 'controllare',

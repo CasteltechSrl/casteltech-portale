@@ -137,6 +137,13 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   correzioni di "Ricalcola" salvate in `righe_file[].mano.codifica` e rimesse a ogni rielaborazione; `nonControllati` senza Würth (codici non WE) e senza Arrow se un altro ha risposto;
   una tantum riscritte a mano divise in proporzione (`pareggiaSulPiuGrande`, mai negative), ordine dal preventivo con lo sconto della stampa; `stampa.riferimento` = prezzo
   calcolato e schede quando si scrivono i prezzi a mano (avviso se il preventivo cambia); "Emetti e invia" con le spunte non emette senza chiave né con la chiave di prova.
+- Controllo serale del 5/11/2026 (routine "Controllo serale del portale", lun–ven 22:30; report in Project Files → controlli; test in `tests/conferme-ordine.test.ts`, `tests/controlli.test.ts`):
+  flussi provati con i dati veri in locale (storico FIC + ordini + CRM, PostgreSQL del container; preventivo → stampa → ordine → conferma → commessa → DDT → fattura → NC, BOM vere di LPS).
+  Servizi d'ordine (una tantum dal preventivo) non viaggiano col DDT: riquadro "Servizi degli ordini non ancora fatturati" nella bozza fattura (`righeOrdineDaFatturare`,
+  POST `/documenti/:id/righe-ordine` → `aggiungiRigheOrdine`, riga con `riga_ordine_id`); `righeOrdini` conta anche le fatture emesse dal portale (`fatturato_portale`),
+  così il servizio fatturato diventa evaso; controllo settimanale `servizi-non-fatturati` (urgente). Conferma d'ordine: righe senza data prendono la prima consegna
+  dell'ordine (`righeConfermaDaOrdine`). Ricerca per parametri dei passivi senza P/N: esito in `fornitori_cache` ('parametri', radice del gestionale, 7 giorni,
+  `parametriDaCache`/`parametriInCache`) e riusato tra righe uguali della stessa BOM.
 - Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
   nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.

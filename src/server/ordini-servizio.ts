@@ -165,13 +165,16 @@ export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
   const righe = await q(`
     SELECT r.*, o.numero, o.anno, o.data_ordine, o.cliente_nome, o.cliente_id, o.rif_cliente,
       coalesce((SELECT json_agg(json_build_object('data', k.data, 'quantita', k.quantita) ORDER BY k.data) FROM ordini_consegne k WHERE k.riga_id = r.id), '[]') AS consegne,
-      coalesce((SELECT sum(d.quantita) FROM ddt_righe d WHERE d.riga_id = r.id AND d.origine = 'acquisito'), 0) AS spedita_acquisita
+      coalesce((SELECT sum(d.quantita) FROM ddt_righe d WHERE d.riga_id = r.id AND d.origine = 'acquisito'), 0) AS spedita_acquisita,
+      -- fatture emesse dal portale che citano la riga (dal DDT o dalle righe di servizio aggiunte in fattura): i servizi diventano evasi
+      coalesce((SELECT sum(x.quantita * x.prezzo * (1 - coalesce(x.sconto, 0) / 100)) FROM documenti_righe x JOIN documenti f ON f.id = x.documento_id
+        WHERE x.riga_ordine_id = r.id AND f.tipo = 'fattura' AND f.origine <> 'fic' AND f.numero IS NOT NULL AND f.stato NOT IN ('bozza', 'annullato', 'scartato')), 0) AS fatturato_portale
     FROM ordini_righe r JOIN ordini o ON o.id = r.ordine_id
     ORDER BY o.anno, o.numero, r.posizione, r.id`);
   const base: RigaOrdine[] = righe.map(r => ({
     id: r.id, ordineId: r.ordine_id, tipo: r.tipo === 'servizio' || eServizio(r.codice, r.descrizione) ? 'servizio' : 'scheda',
     quantita: r.quantita, prezzo: r.prezzo, quantitaSpedita: Number(r.quantita_spedita) + Number(r.spedita_acquisita),   // + DDT in PDF confermati dopo l'import
-    importoFatturato: r.importo_fatturato, statoManuale: r.stato_manuale, consegnaRichiesta: r.consegna_richiesta, arrivoMateriale: r.arrivo_materiale,
+    importoFatturato: Number(r.importo_fatturato ?? 0) + Number(r.fatturato_portale ?? 0), statoManuale: r.stato_manuale, consegnaRichiesta: r.consegna_richiesta, arrivoMateriale: r.arrivo_materiale,
     dataLavorazione: r.data_lavorazione, ritardiProduzione: r.ritardi_produzione, consegnaPrevista: r.consegna_prevista, consegne: r.consegne,
   }));
   // DDT del portale non ancora contati: si abbinano alle schede ancora da spedire

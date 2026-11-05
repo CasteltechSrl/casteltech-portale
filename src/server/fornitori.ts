@@ -75,6 +75,21 @@ async function daCache(fornitore: string, chiave: string, ore = ORE_CACHE): Prom
     AND aggiornato_il > now() - make_interval(hours => $3)`, [fornitore, chiave, ore]);
   return r?.dati ?? null;
 }
+/**
+ * Ricerca per parametri dei passivi senza P/N (controllo serale 5/11/2026): l'esito per radice del codice gestionale
+ * (es. SCC-0603-100NE) resta valido GIORNI_PARAMETRI giorni, così la stessa resistenza o condensatore in BOM diverse
+ * non rifà la ricerca a DigiKey e Mouser. undefined = mai cercato; null = cercato e non trovato.
+ */
+export const GIORNI_PARAMETRI = 7;
+export async function parametriDaCache(radice: string): Promise<string | null | undefined> {
+  const r = await q1<{ dati: { mpn: string | null } }>(`SELECT dati FROM fornitori_cache WHERE fornitore = 'parametri' AND chiave = $1
+    AND aggiornato_il > now() - make_interval(days => $2)`, [radice, GIORNI_PARAMETRI]);
+  return r ? (r.dati?.mpn ?? null) : undefined;
+}
+export async function parametriInCache(radice: string, mpn: string | null) {
+  await q(`INSERT INTO fornitori_cache (fornitore, chiave, dati, aggiornato_il) VALUES ('parametri', $1, $2, now())
+    ON CONFLICT (fornitore, chiave) DO UPDATE SET dati = $2, aggiornato_il = now()`, [radice, JSON.stringify({ mpn })]);
+}
 /** Salva in cache un risultato già ottenuto (es. dalla ricerca per parametri), così non si richiede di nuovo. */
 export const memorizza = (fornitore: Fornitore, pn: string, dati: RisultatoFornitore) => inCache(fornitore, pnKey(pn)!, dati);
 async function inCache(fornitore: string, chiave: string, dati: RisultatoFornitore) {
