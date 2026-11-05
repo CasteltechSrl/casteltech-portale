@@ -293,6 +293,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    nello storico del prodotto (tabella segnalazioni) e si stampano sulle prossime schede.
    Numerazione fasi (migrazione 019): lettere per pre-produzione, M1… gestione materiale, poi 1, 2, 3… progressivi.
    Sigle operatori: Impostazioni → Operatori (dati reali: solo nel database, mai nel repository).
+3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
+   `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
+   "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei
+   documenti del cliente (quello del preventivo, altrimenti l'ultimo della stessa revisione, con avviso) con file scaricabili (GET `/preventivi/documenti/:id/file?nome=`);
+   3) segnalazioni preanalisi/preventivo/storico; 4) BOM quotata con le offerte della quantità più vicina e stato del materiale (`situazioneMateriale`: dal cliente =
+   `clienteFornisce` o codice in `componenti_clienti`, arrivato/ordinato/da ordinare da `mancantiCommessa`, "già in casa" spuntato a mano: NON c'è magazzino);
+   5) cosa fare / non fare proposti (`propostaCosaFare`) + caselle dell'ufficio; 6) checklist (`VOCI_CHECKLIST` filtrate dalle lavorazioni) con firma (nome utente + data)
+   per voce, "Via libera alla produzione" solo a checklist completa (commessa aperta → in produzione), decade se si toglie una voce. Una voce nuova = una riga in `VOCI_CHECKLIST`.
 3b. ✅ Filiera commessa → DDT → fattura (proposta della revisione, Adriano 1/11/2026; `rigaDdtDaCommessa` e `rigaOrdinePerCommessa` in `engine/ddt.ts`,
    `creaDdtDaCommessa` e `documentiDellaCommessa` in `documenti-servizio.ts`, POST `/amministrazione/documenti/ddt-da-commessa/:id`, test in `tests/ddt.test.ts`):
    "Crea DDT" nella pagina della commessa e nel rientro confermato → bozza con cliente, prodotto, schede delle spedizioni del rientro (o tutta la commessa) meno quelle

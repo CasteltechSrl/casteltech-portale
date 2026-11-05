@@ -992,6 +992,15 @@ table.bom tr.da-prezzare td:first-child { box-shadow: inset 4px 0 0 var(--negati
 /* link a pagine che il profilo non può aprire (engine/link-profilo.ts): testo semplice */
 .link-spento { color: inherit; }
 
+/* Scheda di pre-produzione della commessa (Adriano 5/11/2026) */
+ul.checklist { list-style: none; padding: 0; margin: 0 0 .6rem; }
+ul.checklist li { padding: .45rem .6rem; border-left: 4px solid var(--bordo); margin-bottom: .4rem; background: #fafbfa; border-radius: 0 6px 6px 0; display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: baseline; }
+ul.checklist li:has(input:checked) { border-color: var(--positivo); background: #f3f8f3; }
+ul.checklist li small { flex-basis: 100%; }
+pre.testo-note { white-space: pre-wrap; font-family: inherit; font-size: .9rem; background: #fafbfa; border: 1px solid var(--bordo); border-radius: 6px; padding: .6rem .8rem; max-height: 18rem; overflow: auto; }
+.etichetta.critico { background: #fbe2e0; color: var(--negativo); }
+.etichetta.attenzione { background: #fff2cc; color: #8a6100; }
+
 /* Analisi → Clienti (Adriano 5/11/2026): riquadri in calo forte / fermi / nuovi / persi */
 .colonne-analisi { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: 1rem 0; }
 .colonne-analisi section { background: var(--carta); border: 1px solid var(--bordo); border-radius: var(--raggio); padding: .6rem 1rem; }
