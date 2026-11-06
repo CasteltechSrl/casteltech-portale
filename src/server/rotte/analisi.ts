@@ -16,6 +16,7 @@ import { leggiImpostazioniCassa, NOMI_FINESTRE, type CodiceFinestra, type Movime
 import { caricaPrevisione, salvaImpostazioniCassa } from '../previsione-cassa-servizio.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteAnalisiProdotti } from './analisi-prodotti.js';
+import { rotteAnalisiAcquisti } from './analisi-acquisti.js';
 import { rottePareggio } from './pareggio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -56,12 +57,13 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
   return { fatture, righe, preventivi: mappaPreventivi, acquisti, incassi, aperte: aperte as (typeof aperte[number] & { importo60: number })[] };
 }
 
-/** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), punto di pareggio (6/11/2026) e previsione di cassa. */
-export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'pareggio' | 'cassa'): Raw {
+/** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), fornitori e punto di pareggio (6/11/2026) e previsione di cassa. */
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'pareggio' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
     <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
     <a href="/amministrazione/analisi/clienti" class="${attiva === 'clienti' ? 'attivo' : ''}">Clienti</a>
+    <a href="/amministrazione/analisi/fornitori" class="${attiva === 'fornitori' ? 'attivo' : ''}">Fornitori</a>
     <a href="/amministrazione/analisi/pareggio" class="${attiva === 'pareggio' ? 'attivo' : ''}">Punto di pareggio</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
@@ -180,6 +182,7 @@ function cassaRiservata(req: Request): string {
 export function rotteAnalisi() {
   const r = Router();
   r.use(rotteAnalisiProdotti());   // Prodotti e Clienti (Adriano 5/11/2026)
+  r.use(rotteAnalisiAcquisti());   // Fornitori, componenti e materiali (Adriano 6/11/2026)
   r.use(rottePareggio());          // Punto di pareggio (Adriano 6/11/2026)
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
