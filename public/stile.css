@@ -1017,4 +1017,15 @@ main:has(#dettagli-pareggio:not(:checked)) table.pareggio tr.riga-dettaglio { di
 table.pareggio tr.riga-totale th { text-align: left; border-top: 2px solid var(--bordo); }
 table.pareggio tr.riga-totale th.num, .elenco tr.riga-totale th.num { text-align: right; }
 .mesi-fonte { display: flex; flex-wrap: wrap; gap: .3rem; }
+/* niente scritte a capo (Adriano 6/11/2026): riquadri più larghi, numeri e mesi su una riga, voci del dettaglio più discrete */
+.cifre.cifre-pareggio { grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); }
+.cifre-pareggio .cifra span, .cifre-pareggio .cifra b { white-space: nowrap; }
+table.pareggio td.num, table.pareggio th.num, table.confronto-pareggio td.num, table.confronto-pareggio th.num, table.bilanci-pareggio td.num, table.bilanci-pareggio th.num { white-space: nowrap; }
+table.confronto-pareggio td.num small { display: block; font-size: .75rem; }
+table.pareggio tr.riga-famiglia th small { text-transform: none; letter-spacing: 0; }
+table.bilanci-pareggio { font-size: .88rem; }
+table.bilanci-pareggio td, table.bilanci-pareggio th { padding-left: .45rem; padding-right: .45rem; }
+table.pareggio td.nowrap, table.confronto-pareggio td.nowrap, table.bilanci-pareggio td.nowrap { white-space: nowrap; }
+form.cerca.cerca-pareggio label { white-space: nowrap; display: inline-flex; align-items: center; gap: .3rem; }
+form.cerca.cerca-pareggio input[name="ipotesi"] { width: 7rem; }
 td.negativo { color: var(--negativo); font-weight: 600; }

@@ -687,7 +687,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    MEDIA mensile di ogni voce (famiglie `FAMIGLIE`: ricavi, materie prime = variabili, servizi, affitti/leasing, personale, compensi, ammortamenti, oneri, finanziari) nel periodo
    scelto (Da/a mese, `?da=AAAA-MM&a=`), pareggio = costi fissi ÷ margine di contribuzione, "fatturato ipotizzato" → utile. Mesi col bilancino del commercialista valgono così come
    sono; gli altri dal portale (fatture, ricevute per categoria `famigliaDiCategoria`, `costi_personale` con SOCIO = compensi) + stima per le voci mancanti (`stimaFamiglia`: media
-   dei mesi del commercialista, poi bilancio ufficiale ÷ 12). Bilancino = Excel con un foglio per mese (saldi progressivi, conti a 8 cifre; `leggiBilancino`: mese = progressivo −
+   degli ULTIMI 3 mesi del bilancino `MESI_PER_STIMA`, così il leasing finito a luglio 2026 non continua nelle stime; poi bilancio ufficiale ÷ 12). Il file "Analisi CASTELTECH SRL" è di un
+   consulente esterno, solo indicativo (Adriano 6/11/2026): nelle pagine si dice "bilancino", non "commercialista". Bilancino = Excel con un foglio per mese (saldi progressivi, conti a 8 cifre; `leggiBilancino`: mese = progressivo −
    mese prima, serve il mese prima) caricato da Impostazioni → Amministrazione con l'anno; bilanci ufficiali 2019–2025 dai PDF (Project Files → analisi-pareggio) in impostazioni
    'bilanci_ufficiali'. "Verifica: commercialista contro portale" segnala differenze oltre 500 € e 5 %. Non comprende le imposte sul reddito.
 =======
