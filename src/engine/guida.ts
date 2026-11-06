@@ -739,7 +739,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Una riga è evasa quando le schede spedite con DDT arrivano alla quantità ordinata, parziale se ne è partita una parte. Lo stato scritto dall\'ufficio vince sempre.',
       'I DDT che stanno nel portale (storico di Fatture in Cloud e, dopo il 10/11, quelli fatti nel portale) si abbinano da soli: ogni riga va alla riga d\'ordine aperta dello stesso cliente con lo stesso codice (o la stessa descrizione), prima agli ordini più vecchi. Nella pagina dell\'ordine sono sotto "Abbinati in automatico". Le fatture non contano: una fattura d\'anticipo non vuol dire merce consegnata.',
-      'Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum o di avvio produzione, trasporto, sconti, acconti, prototipazione) non sono prodotti da evadere: sono evase quando sono fatturate o quando l\'ordine non ha più schede da spedire. Il portale le riconosce dalla descrizione, anche se nell\'ordine erano scritte come schede.',
+      'Le righe di costo (programmazioni, lamine serigrafiche, attrezzaggio, costi una tantum o di avvio produzione, acquisto PCB o del materiale, trasporto, sconti, acconti, prototipazione, servizi UT-…) non sono prodotti: dal 6/11/2026 non compaiono tra le righe "Da evadere" (si vedono in "Tutti" e nella pagina dell\'ordine) e risultano evase quando sono fatturate o quando l\'ordine non ha più schede da spedire. Il portale le riconosce dalla descrizione, anche se nell\'ordine erano scritte come schede.',
       'Se una riga risulta ancora da evadere ma è stata consegnata (codice diverso nel DDT, consegna senza DDT), apri l\'ordine e scegli "evaso" nello Stato della riga, poi Salva; se è consegnato tutto l\'ordine, premi "Segna tutto evaso" in alto.',
       'Date: lavorazione = arrivo del materiale + 3 giorni; consegna prevista = lavorazione + 5 giorni + ritardi. Le date si possono scrivere a mano nell\'ordine.',
     ],
@@ -1124,7 +1124,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Per chi da fuori deve vedere il portale senza toccare nulla (consulenti, revisori, auditor, ospiti) c\'è il profilo "Esterno (vede tutto, sola lettura)": stesso menu dell\'ufficio, entra nel cruscotto generale e apre tutte le pagine (anagrafiche, preventivi, commesse, ordini, acquisti, amministrazione, qualità, dipendenti, suggerimenti), scarica Excel e stampe e usa la ricerca in alto.',
       'Non può modificare nulla: le caselle sono spente, i pulsanti Salva, Elimina, Emetti, Invia… e le spunte degli elenchi non compaiono, e il portale rifiuta comunque ogni modifica. In alto c\'è la scritta "sola lettura".',
-      'Restano fuori le Impostazioni (chiavi dei servizi, utenti, backup) e l\'area riservata delle buste paga; il costo del personale per mese invece si vede, come per l\'ufficio.',
+      'Restano fuori le Impostazioni (chiavi dei servizi, utenti, backup) e l\'area riservata delle buste paga; il costo del personale per mese invece si vede, come per l\'ufficio. L\'Analisi la vede: dal 6/11/2026 è riservata all\'amministratore e a questo profilo.',
       'L\'utente lo crea l\'ufficio in Impostazioni → Utenti con il profilo "Esterno (vede tutto, sola lettura)" e una password di almeno 10 caratteri. Per chiudere l\'accesso si toglie la spunta Attivo.',
     ],
     passi: ['Impostazioni → Utenti.', 'Nell\'ultima riga scrivi nome ed email, scegli "Esterno (vede tutto, sola lettura)" e una password.', 'Premi Aggiungi e manda indirizzo del portale, email e password alla persona.', 'Finito il lavoro, togli la spunta Attivo.'],
@@ -1181,6 +1181,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'I commenti guardano: fatturato in calo o in crescita e da quali clienti viene, previsione dell\'anno con la media dei mesi chiusi, acquisti che pesano più dell\'anno prima, dipendenza da pochi clienti, clienti che non hanno ancora comprato e clienti nuovi, chi paga in ritardo, fatture scadute da oltre 60 giorni, prodotti venduti sotto il prezzo del preventivo o con margine sotto il 10 %.',
       'Tabelle: fatturato per mese con il grafico dei due anni, clienti (peso, variazione, margine stimato dal preventivo, giorni di incasso e ritardo), prodotti (schede, prezzo medio, prezzo e margine dell\'ultimo preventivo), acquisti per categoria e primi fornitori. I tasti Prodotti e Clienti aprono la classifica dei prodotti (con la scheda di ogni codice anno per anno) e la visione d\'insieme dei clienti.',
       'Non è il bilancio: mancano personale, ammortamenti e banca. Il bilancio provvisorio arriva dopo prima nota e partita doppia. Il margine dei prodotti è quello del preventivo; con i tempi veri delle commesse arriverà il margine reale.',
+      'Chi la vede (dal 6/11/2026): solo l\'amministratore e il profilo Esterno. Gli utenti dell\'ufficio e la contabilità non aprono l\'Analisi e non vedono i suoi collegamenti (menu, tasto "Analisi" nelle anagrafiche, cruscotti). La Previsione di cassa segue la sua regola: amministratore, contabilità e chi ha il permesso delle buste paga.',
     ],
     passi: ['Amministrazione → Analisi.', 'Leggi "Cosa dicono i numeri".', 'Per un anno passato scegli l\'anno e premi Mostra.'],
     pagine: [['/amministrazione/analisi', 'Analisi']],
@@ -1209,6 +1210,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Amministrazione → Analisi → Clienti.', 'Guarda i riquadri "Calo forte" e "Fermi": sono le telefonate da fare.', 'Per un anno passato scegli l\'anno e premi Mostra.'],
     pagine: [['/amministrazione/analisi/clienti', 'Clienti: visione d\'insieme'], ['/amministrazione/crediti', 'Crediti verso clienti'], ['/anagrafiche/clienti', 'Clienti']],
+  },
+  {
+    id: 'punto-pareggio', area: 'amministrazione', titolo: 'Punto di pareggio: il fatturato che copre tutti i costi',
+    parole: 'punto di pareggio pareggio break even bep fatturato necessario costi fissi costi variabili margine di contribuzione conto economico medio media mensile voci entrate uscite commercialista bilancino bilancio ufficiale bilanci anni passati stima ammortamenti verifica discrepanze confronto periodo devo fatturare utile mensile ricarico',
+    testo: [
+      'In Amministrazione → Analisi → Punto di pareggio vedi la media mensile di tutte le voci del conto economico (ricavi, materie prime, servizi e spese generali, affitti e leasing, personale, compensi dell\'amministratore, ammortamenti, imposte e oneri, oneri finanziari) nel periodo che scegli, e il fatturato necessario per il pareggio: costi fissi diviso il margine di contribuzione (quanto resta di ogni euro fatturato dopo le materie prime).',
+      'Scegli il periodo con "Da" e "a" (mese e anno) e premi Mostra: la tabella mostra la media al mese, il totale del periodo e il peso sui ricavi di ogni voce, con i dettagli (i conti del commercialista o le categorie delle fatture ricevute). Scrivendo un "fatturato mensile ipotizzato" vedi l\'utile che ne verrebbe con gli stessi costi fissi.',
+      'Da dove vengono i numeri: i mesi con il bilancino del commercialista (caricato da Impostazioni → Amministrazione → Bilancino mensile del commercialista, un Excel con un foglio per mese) valgono così come sono. Per gli altri mesi il portale usa le fatture emesse, le fatture dei fornitori per categoria e le buste paga, e stima le voci che non ha (ammortamenti, oneri finanziari, imposte) con la media dei mesi del commercialista o il bilancio ufficiale diviso 12. Sotto la tabella c\'è, mese per mese, la fonte usata.',
+      '"Verifica: commercialista contro portale" confronta, nei mesi con il bilancino, ricavi contro fatture emesse, materie prime contro fatture ricevute e personale contro buste paga: le differenze oltre 500 € e 5 % sono in rosso e vanno capite con il commercialista (date diverse, fatture registrate in un altro mese, documenti mancanti).',
+      'In fondo i bilanci ufficiali degli anni passati (caricati da Impostazioni → Amministrazione → Bilanci ufficiali) letti con la stessa regola: ricavi, costi, risultato e fatturato di pareggio di ogni anno. Il pulsante Excel scarica la tabella. Non comprende le imposte sul reddito: è un aiuto, non il bilancio.',
+    ],
+    passi: ['Impostazioni → Amministrazione → Bilancino mensile del commercialista: scrivi l\'anno, scegli l\'Excel, Controlla il file, poi Conferma e carica.', 'Amministrazione → Analisi → Punto di pareggio.', 'Scegli il periodo e premi Mostra; guarda "Fatturato di pareggio" e la verifica con il portale.'],
+    pagine: [['/amministrazione/analisi/pareggio', 'Punto di pareggio'], ['/amministrazione/analisi', 'Analisi'], ['/impostazioni/amministrazione#bilancino', 'Impostazioni → Amministrazione']],
   },
   {
     id: 'analisi-acquisti', area: 'amministrazione', titolo: 'Analisi degli acquisti: fornitori, componenti e materiali di consumo',
@@ -1271,7 +1285,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   {
     id: 'utenti', area: 'impostazioni', titolo: 'Utenti del portale e ruoli (amministratore)',
     parole: 'utenti nuovo utente password accesso ufficio produzione ruolo ruoli disattivare amministratore admin permessi cambiare profilo',
-    testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo. Ruoli: Amministratore (tutto, più è l\'unico che sceglie i ruoli e vede stipendi, buste paga e previsione di cassa), Ufficio (tutto il resto), Produzione (solo tempi e note), Contabilità (sola lettura dell\'Amministrazione e delle buste paga), Esterno (vede tutto, non modifica nulla).',
+    testo: ['In Impostazioni → Utenti si aggiungono gli utenti con email, password e ruolo. Ruoli: Amministratore (tutto, più è l\'unico che sceglie i ruoli e vede stipendi, buste paga, previsione di cassa e Analisi), Ufficio (tutto il resto, senza l\'Analisi), Produzione (solo tempi e note), Contabilità (sola lettura dell\'Amministrazione e delle buste paga, senza l\'Analisi), Esterno (vede tutto, Analisi compresa, non modifica nulla).',
       'Solo l\'amministratore sceglie o cambia il ruolo degli utenti e modifica gli utenti amministratori. Chi è nell\'ufficio può aggiungere utenti della produzione e correggere nome, email e password degli altri. Nessuno può cambiarsi il ruolo da solo e resta sempre almeno un amministratore attivo. Un ruolo cambiato vale dal prossimo accesso di quella persona.',
       'Chi ha già lavorato non si elimina: si toglie la spunta "Attivo". Togliendo "Attivo", cambiando il ruolo o la password, la persona esce subito da tutti i telefoni e computer dove era entrata (chi lascia l\'azienda non può più entrare, nemmeno con una pagina già aperta).',
       'Password: almeno 10 caratteri e non facili da indovinare (niente soli numeri, sequenze di tasti, "password", "casteltech", il proprio nome o l\'email). Dopo 8 tentativi sbagliati dallo stesso posto, o 20 sulla stessa email, l\'accesso si blocca per qualche minuto.',

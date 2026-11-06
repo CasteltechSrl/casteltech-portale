@@ -96,7 +96,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   o cambia i ruoli in Impostazioni → Utenti (`controlloUtente`/`controlloEliminaUtente`: l'ufficio aggiunge solo Produzione, non tocca gli amministratori, nessuno
   si cambia il ruolo, resta sempre un amministratore attivo). Primo amministratore all'avvio: l'utente di ADMIN_EMAIL se non ce n'è nessuno (`catalogo-db.ts`).
   Stipendi, buste paga e previsione di cassa (da cui si ricavano gli stipendi) SOLO a chi `vedePaghe`: amministratore, contabilità, ufficio con `utenti.paghe`;
-  ruolo e permesso letti dal database. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
+  ruolo e permesso letti dal database. Analisi riservata (Adriano 6/11/2026, `vedeAnalisi`/`analisiPermessa`/`PERCORSO_ANALISI` in `engine/ruoli.ts`, guardia su
+  `/analisi` in `rotte/amministrazione.ts`): tutta Amministrazione → Analisi SOLO ad amministratore ed esterno; ufficio e contabilità ricevono 403 e non vedono i
+  link (menu filtrato con `linkPermesso` in `layout.ts`, `spegniLinkNonPermessi` ora anche per l'ufficio: i link "Analisi" spariscono); la Previsione di cassa resta a `vedePaghe`. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
 - Registro "chi ha cambiato cosa e quando" e accessi (Adriano, lista del 4/11/2026; migrazione 075 `registro_attivita`, regole in `engine/registro.ts`, scrittura in
   `registro-servizio.ts` = middleware `registraAttivita` in `index.ts`, pagina Impostazioni → Registro, test in `tests/registro.test.ts`): una riga per ogni POST riuscito
   (sezione dal percorso, azione = `azione` del modulo o ultima parola, righe = id nel percorso + `ids` spuntati; elimina/annulla/scarta = 'eliminazione'), accessi e
@@ -679,6 +681,16 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `/amministrazione/analisi/clienti` = visione d'insieme (`visioneClienti`): classifica con peso, stesso periodo dell'anno prima, segnali (calo forte ≤ −30 % su almeno 2.000 €, in calo,
    in crescita, nuovo = prima vendita nell'anno, perso = anno prima sì e anno scelto no, fermo = nessuna vendita da 6+ mesi, solo anno in corso), primi 3/5, margine medio dai preventivi,
    giorni di incasso e ritardo (da `analisiClienti`), scaduto (→ Crediti). GET `/api/claude/storico` = conteggi dei documenti per tipo/anno/origine (controllo dello storico caricato).
+<<<<<<< HEAD
+   ✅ Punto di pareggio (Adriano 6/11/2026, dal file "Analisi CASTELTECH SRL" del commercialista; tasto in Analisi, `/amministrazione/analisi/pareggio` + `.xlsx`,
+   conti in `engine/pareggio.ts`, letture in `pareggio-servizio.ts`, pagina in `rotte/pareggio.ts`, migrazione 078 `conto_economico_mensile`, test in `tests/pareggio.test.ts`):
+   MEDIA mensile di ogni voce (famiglie `FAMIGLIE`: ricavi, materie prime = variabili, servizi, affitti/leasing, personale, compensi, ammortamenti, oneri, finanziari) nel periodo
+   scelto (Da/a mese, `?da=AAAA-MM&a=`), pareggio = costi fissi ÷ margine di contribuzione, "fatturato ipotizzato" → utile. Mesi col bilancino del commercialista valgono così come
+   sono; gli altri dal portale (fatture, ricevute per categoria `famigliaDiCategoria`, `costi_personale` con SOCIO = compensi) + stima per le voci mancanti (`stimaFamiglia`: media
+   dei mesi del commercialista, poi bilancio ufficiale ÷ 12). Bilancino = Excel con un foglio per mese (saldi progressivi, conti a 8 cifre; `leggiBilancino`: mese = progressivo −
+   mese prima, serve il mese prima) caricato da Impostazioni → Amministrazione con l'anno; bilanci ufficiali 2019–2025 dai PDF (Project Files → analisi-pareggio) in impostazioni
+   'bilanci_ufficiali'. "Verifica: commercialista contro portale" segnala differenze oltre 500 € e 5 %. Non comprende le imposte sul reddito.
+=======
    ✅ Analisi degli acquisti e tasto "Analisi" nelle anagrafiche (Adriano 6/11/2026; `engine/analisi-acquisti.ts`, letture in `analisi-acquisti-servizio.ts`, pagine in
    `rotte/analisi-acquisti.ts`, test in `tests/analisi-acquisti.test.ts`): in Anagrafiche → Prodotti / Fornitori / Componenti / Materiali ogni riga ha il tasto "Analisi"
    (`linkAnalisi…` in `engine/analisi-acquisti.ts`; sparisce da solo per i profili che non aprono l'Analisi, `link-profilo`).
@@ -687,6 +699,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    categorie di costo, ultime fatture; `/componente?id=` e `/materiale?id=` = `schedaArticolo` dalle righe degli ordini a fornitore emessi dal portale (pezzi, spesa, prezzo medio
    pesato netto sconto, variazione prezzo, fornitori, ultimo acquisto, min/max) + ultimo acquisto dell'anagrafica se più recente; componente anche BOM che lo usano (`bomDelComponente`,
    jsonb di `bom_analisi.righe`). Gli acquisti FIC non sono riga per riga nel portale: le schede di componenti e materiali partono dagli ordini del portale.
+>>>>>>> origin/main
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

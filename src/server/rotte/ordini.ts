@@ -11,7 +11,7 @@ import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
 import { pianificaProduzione, righeOrdini, type RigaElenco } from '../ordini-servizio.js';
 import {
-  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, cruscotto, differenzaGiorni, lavorativo, periodoGantt, piuGiorni, statoOrdine,
+  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, cruscotto, daEvadere, differenzaGiorni, lavorativo, periodoGantt, piuGiorni, statoOrdine,
   type Barra, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
@@ -52,8 +52,9 @@ export function rotteOrdini() {
     const vista = ['evasi', 'tutti'].includes(String(query.vista)) ? String(query.vista) : 'aperti';
     const cerca = String(query.q ?? '').trim().toUpperCase();
     const tutte = await righeOrdini();
+    // "Da evadere" = solo schede (Adriano 6/11/2026): le righe di costo (una tantum, programmazioni, lamine, acquisti) si vedono in "Tutti"
     let righe = tutte.filter(x =>
-      (vista === 'tutti' || (vista === 'evasi' ? ['evaso', 'annullato'].includes(x.stato) : ['da_evadere', 'parziale'].includes(x.stato))) &&
+      (vista === 'tutti' || (vista === 'evasi' ? ['evaso', 'annullato'].includes(x.stato) : daEvadere([x]).length > 0)) &&
       (!cerca || [x.cliente, x.codice, x.descrizione, x.codiceCliente, x.rifCliente, String(x.numero)].some(t => String(t ?? '').toUpperCase().includes(cerca))));
     righe = vista === 'aperti'
       ? righe.sort((a, b) => (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999') || a.numero - b.numero)
@@ -119,8 +120,8 @@ export function rotteOrdini() {
       ${modulo.chiudi}
       <p class="nota">Una riga è <b>evasa</b> quando le schede spedite con DDT arrivano alla quantità ordinata, <b>parziale</b> se ne è partita una parte.
         I DDT caricati nel portale si abbinano da soli (le fatture no: possono essere anticipi) alle righe aperte dello stesso cliente con lo stesso codice.
-        Le righe di servizio (programmazione attrezzature, lamine, attrezzaggio, costi una tantum, trasporto) non sono da evadere da sole:
-        sono evase quando sono fatturate o quando l'ordine non ha più schede da spedire.
+        Le righe di costo (programmazioni, lamine, attrezzaggio, costi una tantum, acquisto PCB e componenti, trasporto) non sono prodotti:
+        non compaiono qui tra le righe da evadere (si vedono in "Tutti" e nell'ordine) e risultano evase quando sono fatturate o quando l'ordine non ha più schede da spedire.
         Consegna prevista = arrivo materiale + ${3} gg + ${5} gg + ritardi di produzione, come nel foglio.</p>`,
       { avviso: req.query.msg ? String(req.query.msg) : undefined }));
   });
