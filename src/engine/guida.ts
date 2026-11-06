@@ -1211,6 +1211,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/analisi/clienti', 'Clienti: visione d\'insieme'], ['/amministrazione/crediti', 'Crediti verso clienti'], ['/anagrafiche/clienti', 'Clienti']],
   },
   {
+    id: 'punto-pareggio', area: 'amministrazione', titolo: 'Punto di pareggio: il fatturato che copre tutti i costi',
+    parole: 'punto di pareggio pareggio break even bep fatturato necessario costi fissi costi variabili margine di contribuzione conto economico medio media mensile voci entrate uscite commercialista bilancino bilancio ufficiale bilanci anni passati stima ammortamenti verifica discrepanze confronto periodo devo fatturare utile mensile ricarico',
+    testo: [
+      'In Amministrazione → Analisi → Punto di pareggio vedi la media mensile di tutte le voci del conto economico (ricavi, materie prime, servizi e spese generali, affitti e leasing, personale, compensi dell\'amministratore, ammortamenti, imposte e oneri, oneri finanziari) nel periodo che scegli, e il fatturato necessario per il pareggio: costi fissi diviso il margine di contribuzione (quanto resta di ogni euro fatturato dopo le materie prime).',
+      'Scegli il periodo con "Da" e "a" (mese e anno) e premi Mostra: la tabella mostra la media al mese, il totale del periodo e il peso sui ricavi di ogni voce, con i dettagli (i conti del commercialista o le categorie delle fatture ricevute). Scrivendo un "fatturato mensile ipotizzato" vedi l\'utile che ne verrebbe con gli stessi costi fissi.',
+      'Da dove vengono i numeri: i mesi con il bilancino del commercialista (caricato da Impostazioni → Amministrazione → Bilancino mensile del commercialista, un Excel con un foglio per mese) valgono così come sono. Per gli altri mesi il portale usa le fatture emesse, le fatture dei fornitori per categoria e le buste paga, e stima le voci che non ha (ammortamenti, oneri finanziari, imposte) con la media dei mesi del commercialista o il bilancio ufficiale diviso 12. Sotto la tabella c\'è, mese per mese, la fonte usata.',
+      '"Verifica: commercialista contro portale" confronta, nei mesi con il bilancino, ricavi contro fatture emesse, materie prime contro fatture ricevute e personale contro buste paga: le differenze oltre 500 € e 5 % sono in rosso e vanno capite con il commercialista (date diverse, fatture registrate in un altro mese, documenti mancanti).',
+      'In fondo i bilanci ufficiali degli anni passati (caricati da Impostazioni → Amministrazione → Bilanci ufficiali) letti con la stessa regola: ricavi, costi, risultato e fatturato di pareggio di ogni anno. Il pulsante Excel scarica la tabella. Non comprende le imposte sul reddito: è un aiuto, non il bilancio.',
+    ],
+    passi: ['Impostazioni → Amministrazione → Bilancino mensile del commercialista: scrivi l\'anno, scegli l\'Excel, Controlla il file, poi Conferma e carica.', 'Amministrazione → Analisi → Punto di pareggio.', 'Scegli il periodo e premi Mostra; guarda "Fatturato di pareggio" e la verifica con il portale.'],
+    pagine: [['/amministrazione/analisi/pareggio', 'Punto di pareggio'], ['/amministrazione/analisi', 'Analisi'], ['/impostazioni/amministrazione#bilancino', 'Impostazioni → Amministrazione']],
+  },
+  {
     id: 'analisi-acquisti', area: 'amministrazione', titolo: 'Analisi degli acquisti: fornitori, componenti e materiali di consumo',
     parole: 'analisi acquisti fornitore fornitori componente componenti materiale materiali consumo scheda anno per anno spesa speso quanto ho speso quanto compro variazione peso prezzo medio aumentato prezzo salito ultimo acquisto fermo classifica fornitori quando si paga il fornitore ritardo bom schede che lo usano pulsante analisi',
     testo: [

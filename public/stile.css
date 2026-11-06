@@ -1007,3 +1007,14 @@ pre.testo-note { white-space: pre-wrap; font-family: inherit; font-size: .9rem; 
 .colonne-analisi h2 { font-size: 1rem; margin: .2rem 0 .5rem; }
 .elenco-semplice { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; }
 .elenco-semplice li { display: flex; flex-direction: column; }
+
+/* Analisi → Punto di pareggio (6/11/2026): famiglie in grassetto, dettagli rientrati e più leggeri */
+table.pareggio tr.riga-famiglia th { text-align: left; font-weight: 650; background: #f4f6f4; }
+table.pareggio tr.riga-famiglia th small { display: block; font-weight: 400; }
+table.pareggio tr.riga-dettaglio td { color: var(--tenue); font-size: .85rem; padding-left: 1.4rem; }
+main:has(#dettagli-pareggio:not(:checked)) table.pareggio tr.riga-dettaglio { display: none; }
+@media print { table.pareggio tr.riga-dettaglio { display: none; } }
+table.pareggio tr.riga-totale th { text-align: left; border-top: 2px solid var(--bordo); }
+table.pareggio tr.riga-totale th.num, .elenco tr.riga-totale th.num { text-align: right; }
+.mesi-fonte { display: flex; flex-wrap: wrap; gap: .3rem; }
+td.negativo { color: var(--negativo); font-weight: 600; }
