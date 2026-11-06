@@ -27,6 +27,20 @@ test('analisi: per mese e stesso periodo dell\'anno prima (note di credito in ne
   assert.equal(perMese(fatture, x => x.imponibile, 2026)[3], -200);
 });
 
+test('analisi: fatture lorde e note di credito separate per mese (il grafico di FIC mostra solo le fatture)', () => {
+  // Adriano 6/11/2026: febbraio FIC 25.845 (solo fatture), portale 7.432 (meno 18.414 di note di credito)
+  const xs = [
+    { tipo: 'fattura', data: '2026-02-28', imponibile: 25845 },
+    { tipo: 'nota_credito', data: '2026-02-28', imponibile: 18413 },
+    { tipo: 'nota_credito', data: '2026-02-11', imponibile: 0.6 },
+  ];
+  const lorde = perMese(xs.filter(x => x.tipo !== 'nota_credito'), x => x.imponibile, 2026);
+  const note = perMese(xs.filter(x => x.tipo === 'nota_credito'), x => x.imponibile, 2026).map(v => -v);
+  assert.equal(lorde[1], 25845);
+  assert.equal(note[1], 18413.6);
+  assert.equal(perMese(xs, x => x.imponibile, 2026)[1], 7431.4);
+});
+
 test('analisi: clienti con peso, variazione, margine stimato dal preventivo e giorni di incasso', () => {
   const c = analisiClienti(periodo, fatture, righe, preventivi, [
     { cliente: 'ALFA', dataDocumento: '2026-01-10', scadenza: '2026-03-10', incassata: '2026-03-20', importo: 1000 },

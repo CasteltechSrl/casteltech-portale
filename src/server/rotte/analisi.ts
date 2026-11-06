@@ -228,6 +228,10 @@ export function rotteAnalisi() {
     const [d, righeCosto, regole] = await Promise.all([caricaDatiAnalisi(anno, oggi), righeCosti([anno, anno - 1]), regoleCategorie()]);
 
     const fatturatoMesi = perMese(d.fatture, f => f.imponibile, anno), fatturatoPrimaMesi = perMese(d.fatture, f => f.imponibile, anno - 1);
+    // Fatture lorde e note di credito separate (Adriano 6/11/2026: il grafico di Fatture in Cloud mostra solo le fatture, senza togliere le note di credito)
+    const soloFattureMesi = perMese(d.fatture.filter(f => f.tipo !== 'nota_credito'), f => f.imponibile, anno);
+    const noteCreditoMesi = perMese(d.fatture.filter(f => f.tipo === 'nota_credito'), f => f.imponibile, anno).map(v => -v);
+    const ciSonoNote = noteCreditoMesi.some(v => v > 0);
     const acquistiMesi = perMese(d.acquisti, a => a.imponibile, anno);
     const somma = (v: number[], fino = 12) => v.slice(0, fino).reduce((s, x) => s + x, 0);
     const fatturato = somma(perMese(d.fatture, f => f.imponibile, anno, finoA)), fatturatoPrima = somma(perMese(d.fatture, f => f.imponibile, anno - 1, finoA));
@@ -272,12 +276,13 @@ export function rotteAnalisi() {
         : html`<p class="nota">Pochi dati per un commento.</p>`}
       <p class="nota">Sono indicazioni calcolate sui numeri: le scelte restano tue e del commercialista.</p>
       <h2>Fatturato per mese</h2>
+      ${ciSonoNote ? html`<p class="nota">Fatturato = fatture meno le note di credito del mese (il grafico per mese di Fatture in Cloud mostra solo le fatture).</p>` : ''}
       <p class="legenda"><span class="campione fatturato"></span> ${anno} <span class="campione anno-prima"></span> ${anno - 1}</p>
       <div class="tabella-scorre grafico">${graficoMesi(fatturatoMesi, fatturatoPrimaMesi, ['fatturato', 'anno-prima'], [String(anno), String(anno - 1)])}</div>
       <div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Mese</th><th class="num">Fatturato ${anno}</th><th class="num">${anno - 1}</th><th class="num">Variazione</th><th class="num">Acquisti ${anno}</th><th class="num">Resta</th></tr></thead>
+        <thead><tr><th>Mese</th>${ciSonoNote ? html`<th class="num">Fatture ${anno}</th><th class="num">Note di credito</th>` : ''}<th class="num">Fatturato ${anno}</th><th class="num">${anno - 1}</th><th class="num">Variazione</th><th class="num">Acquisti ${anno}</th><th class="num">Resta</th></tr></thead>
         <tbody>${fatturatoMesi.map((f, i) => (finoA && i > mesiChiusi) ? '' : html`<tr><td>${nomeMese(i + 1)}${finoA && i === mesiChiusi ? ' (in corso)' : ''}</td>
-          <td class="num">${euro(f)}</td><td class="num">${euro(fatturatoPrimaMesi[i])}</td><td class="num">${finoA && i === mesiChiusi ? '' : pct(variazionePct(f, fatturatoPrimaMesi[i]))}</td>
+          ${ciSonoNote ? html`<td class="num">${euro(soloFattureMesi[i])}</td><td class="num">${noteCreditoMesi[i] ? '− ' + euro(noteCreditoMesi[i]) : ''}</td>` : ''}<td class="num">${euro(f)}</td><td class="num">${euro(fatturatoPrimaMesi[i])}</td><td class="num">${finoA && i === mesiChiusi ? '' : pct(variazionePct(f, fatturatoPrimaMesi[i]))}</td>
           <td class="num">${euro(acquistiMesi[i])}</td><td class="num">${euro(f - acquistiMesi[i])}</td></tr>`)}</tbody></table></div>
 
       <h2>Clienti · ${clienti.filter(c => c.fatturato > 0).length}</h2>
