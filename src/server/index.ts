@@ -29,6 +29,7 @@ import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteQualita } from './rotte/qualita.js';
 import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
+import { rotteFlusso } from './rotte/flusso.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { rotteDipendenti } from './rotte/dipendenti.js';
@@ -194,6 +195,7 @@ app.get('/salute', (_req, res) => { res.send('ok'); });
 app.use('/cerca', amministrazioneOContabilita, rotteCerca());
 // cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026)
 app.use('/cruscotto', soloUfficio, rotteCruscottoGenerale());
+app.use('/produzione/flusso', soloUfficio, rotteFlusso());
 app.use('/anagrafiche', soloUfficio, rotteAnagrafiche());
 app.use('/preventivi/documenti', soloUfficio, rotteSchedeCliente());
 app.use('/preventivi', soloUfficio, rottePreventivi());
