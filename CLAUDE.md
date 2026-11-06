@@ -308,6 +308,19 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `clienteFornisce` o codice in `componenti_clienti`, arrivato/ordinato/da ordinare da `mancantiCommessa`, "già in casa" spuntato a mano: NON c'è magazzino);
    5) cosa fare / non fare proposti (`propostaCosaFare`) + caselle dell'ufficio; 6) checklist (`VOCI_CHECKLIST` filtrate dalle lavorazioni) con firma (nome utente + data)
    per voce, "Via libera alla produzione" solo a checklist completa (commessa aperta → in produzione), decade se si toglie una voce. Una voce nuova = una riga in `VOCI_CHECKLIST`.
+3a2. ✅ Flusso di produzione nel cruscotto (Adriano 6/11/2026; regole in `engine/flusso.ts`, letture e azioni in `flusso-servizio.ts`, finestre e rotte in `rotte/flusso.ts`
+   montate su `/produzione/flusso`, migrazione 079 `flusso_righe` + `commesse.fine_lavorazione` + `documenti.partito_il/partito_da`, test in `tests/flusso.test.ts`):
+   cinque finestre in cima a `/cruscotto` (sopra "Da fare oggi"; menu Produzione → Flusso di produzione = `/cruscotto?flusso=preparare`): 1 Da acquistare, 2 Da preparare per
+   produzione, 3 In produzione, 4 Da spedire, 5 Spedite nel mese. Unità = riga d'ordine di tipo scheda (`daEvadere`), una riga può stare in più finestre (`valutaRiga`).
+   Priorità automatica = consegna richiesta, poi data ordine (`ordinaPerPriorita`); numero a mano in `flusso_righe.priorita` (▲ ▼ / casella, "auto" lo toglie).
+   1: cose da comprare dalle spunte del preventivo + righe di costo dell'ordine (`cosaAcquistare`), spunte con nome e data (`flusso_righe.acquisti`).
+   2: fasi macro dal ciclo (`fasiPreviste` da `commesse_fasi`/parametri: estrazione, SMD TOP/BOT, THT, meccanico, collaudo, coating, etichettatura), spunta materiale per
+   fase (`flusso_righe.materiale`); tutte spuntate o "Passa in produzione" → commessa in_produzione. 3: fasi segnate da sole dalle `rilevazioni` chiuse (✓ blu) o a mano;
+   fine lavorazione parziale/totale in `commesse.fine_lavorazione` (`aggiungiFineLavorazione`: mai oltre la quantità) da cruscotto, telefono (`POST /r/c/:codice/fine-lavorazione`),
+   pagina della commessa (`POST /commesse/:id/fine-lavorazione`) e riquadro FINE LAVORAZIONE sulla scheda stampata letto dall'IA (`fine_lavorazione` in `istruzioniTempi`,
+   `fineLavorazioneDaScansione`, origine 'scansione', senza doppioni). 4: schede finite non partite; DDT emesso (non partito) = "in attesa di corriere"; "Spedito" scrive
+   `documenti.partito_il` (`segnaSpedito`), "Non partito" lo toglie. 5: DDT partiti negli ultimi 30 giorni (`GIORNI_SPEDITE`), collegati alla riga via `riga_ordine_id`,
+   abbinamento DDT o commessa. Profilo esterno in sola lettura. Letto all'apertura del cruscotto (`datiFlusso`), niente timer.
 3b. ✅ Filiera commessa → DDT → fattura (proposta della revisione, Adriano 1/11/2026; `rigaDdtDaCommessa` e `rigaOrdinePerCommessa` in `engine/ddt.ts`,
    `creaDdtDaCommessa` e `documentiDellaCommessa` in `documenti-servizio.ts`, POST `/amministrazione/documenti/ddt-da-commessa/:id`, test in `tests/ddt.test.ts`):
    "Crea DDT" nella pagina della commessa e nel rientro confermato → bozza con cliente, prodotto, schede delle spedizioni del rientro (o tutta la commessa) meno quelle

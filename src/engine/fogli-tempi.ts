@@ -10,7 +10,7 @@ export interface RigaLetta {
   fase?: unknown; operatore?: unknown; data?: unknown; apertura?: unknown; chiusura?: unknown; totale?: unknown;
   persone?: unknown; pezzi?: unknown; sp?: unknown; resp?: unknown; note?: unknown; incerta?: unknown;
 }
-export interface FoglioLetto { commessa?: unknown; foglio?: unknown; righe?: RigaLetta[] }
+export interface FoglioLetto { commessa?: unknown; foglio?: unknown; righe?: RigaLetta[]; fine_lavorazione?: { schede?: unknown; totale?: unknown; data?: unknown } | null }
 
 /** Riga pronta per il rientro (stessi campi del modulo Rientro). */
 export interface RigaScansione {
