@@ -124,6 +124,8 @@ export function rotteApiClaude() {
       ricevuti_sdi: await q(`SELECT numero, data::text, totale::float, ricevuto_il::text FROM documenti_ricevuti WHERE origine = 'sdi' ORDER BY ricevuto_il DESC NULLS LAST, id DESC LIMIT 20`),
       numerazioni: await q(`SELECT tipo, sezionale, anno, ultimo_numero, ultima_data::text FROM numerazioni WHERE anno = $1 ORDER BY tipo, sezionale`, [anno]),
     });
+  });
+
   // Documentazione dei prodotti dalle cartelle del Drive (Adriano 6/11/2026): Claude legge i file sul PC dell'ufficio, calcola il riassunto
   // con lo stesso motore del portale e lo manda qui; nel portale entra solo il riassunto (i file restano sul Drive, niente peso su Neon).
   r.get('/documentazione', async (req, res) => {
