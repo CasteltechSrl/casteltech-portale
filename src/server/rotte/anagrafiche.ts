@@ -4,6 +4,7 @@
  * Nei preventivi cliente e codice si scelgono SOLO da qui. Tutto in maiuscolo.
  */
 import { elencoIndirizzi } from '../../engine/conferme-ordine.js';
+import { linkAnalisiComponente, linkAnalisiProdotto } from '../../engine/analisi-acquisti.js';
 import express, { Router, type Request } from 'express';
 import { maiuscoloPulito } from '../../engine/componenti-clienti.js';
 import { conCampo } from '../../engine/errori-campo.js';
@@ -298,7 +299,8 @@ export function rotteAnagrafiche() {
       ${clienti.map(c => html`<option value="${c.id}" ${c.id === sel ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}`;
     res.send(await pag(req, 'prodotti', html`
       <p class="nota">Nei preventivi codice e descrizione si scelgono solo da qui. Ogni codice deve avere il suo cliente. Tutto viene salvato in MAIUSCOLO.
-        Il tasto <b>Elimina</b> compare solo sui prodotti mai usati (preventivi, commesse, ordini).</p>
+        Il tasto <b>Analisi</b> apre la scheda di analisi del prodotto (pezzi e fatturato anno per anno, preventivi, consuntivo delle commesse);
+        il tasto <b>Elimina</b> compare solo sui prodotti mai usati (preventivi, commesse, ordini).</p>
       ${avvisoCodici ? html`<div class="avviso senza-cliente">${avvisoCodici}
         ${filtro === -1 ? '' : html` <a href="/anagrafiche/prodotti?cliente=-1">Mostra solo i codici senza cliente</a>`}</div>` : ''}
       <form method="get" class="cerca" action="/anagrafiche/prodotti">
@@ -328,7 +330,8 @@ export function rotteAnagrafiche() {
               title="${testoPrezzo(p)}"></td>
             <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"
               placeholder="un prezzo per tutte le quantità" title="Facoltativi: es. 1-5=10; 6-20=8; 21+=7 (21+ = da 21 in su)"></td><td class="n">${p.preventivi}</td>
-            <td class="nowrap"><form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
+            <td class="nowrap"><a class="bottone" href="${linkAnalisiProdotto(p)}" title="Analisi del prodotto: pezzi e fatturato anno per anno, preventivi e consuntivo delle commesse">Analisi</a>
+              <form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}" class="inline"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
         </tbody></table></div>
@@ -378,7 +381,8 @@ export function rotteAnagrafiche() {
           <td class="taglia">${c.descrizione}</td>
           <td class="n" title="${testoAcquisto(c)}">${c.prezzo_acquisto == null ? '' : num(Number(c.prezzo_acquisto), 5)}</td>
           <td class="taglia" title="${testoAcquisto(c)}">${c.prezzo_fornitore ?? ''}</td><td>${c.stato}</td><td class="taglia">${c.fonte}</td><td class="taglia" title="${c.note ?? ''}">${c.note}</td>
-          <td><form method="post" action="/anagrafiche/componenti/${c.id}/elimina?${qs}" class="inline"
+          <td class="nowrap"><a class="bottone" href="${linkAnalisiComponente(c.id)}" title="Analisi del componente: acquisti anno per anno, prezzo, fornitori, schede che lo usano">Analisi</a>
+            <form method="post" action="/anagrafiche/componenti/${c.id}/elimina?${qs}" class="inline"
             data-conferma="${`Eliminare dall'archivio ${c.codice_gestionale || c.codice_produzione || c.pn}?` + (c.codice_gestionale ? `\n\nSe il codice ${c.codice_gestionale} è già stato creato in Moka, non eliminarlo: il suo numero verrebbe riassegnato al prossimo componente nuovo.` : '')}">
             <button class="link negativo">Elimina</button></form></td></tr>`)}
         </tbody></table></div>${barra}`
