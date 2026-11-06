@@ -58,12 +58,13 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
 }
 
 /** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), fornitori e punto di pareggio (6/11/2026) e previsione di cassa. */
-export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'pareggio' | 'cassa'): Raw {
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
     <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
     <a href="/amministrazione/analisi/clienti" class="${attiva === 'clienti' ? 'attivo' : ''}">Clienti</a>
     <a href="/amministrazione/analisi/fornitori" class="${attiva === 'fornitori' ? 'attivo' : ''}">Fornitori</a>
+    <a href="/amministrazione/analisi/acquisti" class="${attiva === 'acquisti' ? 'attivo' : ''}">Acquisti</a>
     <a href="/amministrazione/analisi/pareggio" class="${attiva === 'pareggio' ? 'attivo' : ''}">Punto di pareggio</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
