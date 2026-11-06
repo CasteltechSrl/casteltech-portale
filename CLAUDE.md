@@ -681,7 +681,6 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `/amministrazione/analisi/clienti` = visione d'insieme (`visioneClienti`): classifica con peso, stesso periodo dell'anno prima, segnali (calo forte ≤ −30 % su almeno 2.000 €, in calo,
    in crescita, nuovo = prima vendita nell'anno, perso = anno prima sì e anno scelto no, fermo = nessuna vendita da 6+ mesi, solo anno in corso), primi 3/5, margine medio dai preventivi,
    giorni di incasso e ritardo (da `analisiClienti`), scaduto (→ Crediti). GET `/api/claude/storico` = conteggi dei documenti per tipo/anno/origine (controllo dello storico caricato).
-<<<<<<< HEAD
    ✅ Punto di pareggio (Adriano 6/11/2026, dal file "Analisi CASTELTECH SRL" del commercialista; tasto in Analisi, `/amministrazione/analisi/pareggio` + `.xlsx`,
    conti in `engine/pareggio.ts`, letture in `pareggio-servizio.ts`, pagina in `rotte/pareggio.ts`, migrazione 078 `conto_economico_mensile`, test in `tests/pareggio.test.ts`):
    MEDIA mensile di ogni voce (famiglie `FAMIGLIE`: ricavi, materie prime = variabili, servizi, affitti/leasing, personale, compensi, ammortamenti, oneri, finanziari) nel periodo
@@ -700,7 +699,6 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    di componenti/PCB/meccanica contro pezzi fatturati × `venditaComponentiScheda`/`venditaPcbScheda` del preventivo più recente del prodotto (`riepilogo()`), costo previsto
    (`costoAcquistoScheda`), lamine comprate contro UT-LAMINA fatturate; "Riassunto, opinione e proposte" scritto dai numeri. Regole dell'ufficio (fornitore = nome maiuscolo,
    documento, riga; POST `/costi/regola`) vincono sulle automatiche; una categoria nuova = una voce in `CATEGORIE` (+ parole/fornitori). Le categorie restano calcolate in lettura.
-=======
    ✅ Analisi degli acquisti e tasto "Analisi" nelle anagrafiche (Adriano 6/11/2026; `engine/analisi-acquisti.ts`, letture in `analisi-acquisti-servizio.ts`, pagine in
    `rotte/analisi-acquisti.ts`, test in `tests/analisi-acquisti.test.ts`): in Anagrafiche → Prodotti / Fornitori / Componenti / Materiali ogni riga ha il tasto "Analisi"
    (`linkAnalisi…` in `engine/analisi-acquisti.ts`; sparisce da solo per i profili che non aprono l'Analisi, `link-profilo`).
@@ -708,8 +706,18 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    fatture ricevute (NC in negativo, storico FIC dal 2019), variazione, peso sugli acquisti, ordini del portale, pagamenti (giorni medi e ritardo su 12 mesi, da pagare, scaduto),
    categorie di costo, ultime fatture; `/componente?id=` e `/materiale?id=` = `schedaArticolo` dalle righe degli ordini a fornitore emessi dal portale (pezzi, spesa, prezzo medio
    pesato netto sconto, variazione prezzo, fornitori, ultimo acquisto, min/max) + ultimo acquisto dell'anagrafica se più recente; componente anche BOM che lo usano (`bomDelComponente`,
-   jsonb di `bom_analisi.righe`). Gli acquisti FIC non sono riga per riga nel portale: le schede di componenti e materiali partono dagli ordini del portale.
->>>>>>> origin/main
+   jsonb di `bom_analisi.righe`).
+   Storico riga per riga e "dove l'ho comprato e a quanto" (Adriano 6/11/2026; migrazione 079 `documenti_ricevuti_righe` + `documenti_ricevuti.righe_lette_il`, regole in
+   `engine/righe-fattura.ts`, letture/caricamento in `righe-fornitori-servizio.ts`, test in `tests/righe-fattura.test.ts`): ogni DettaglioLinee delle fatture dei fornitori
+   (codice, descrizione, quantità, prezzo di listino, sconto, imponibile, IVA, P/N riconosciuto con `pnDallaRiga`: "P/N // cliente" nelle fatture scritte in FIC, "279-PN" di Mouser,
+   prima parola se sembra un codice; mai valori 4.7K/100R). Storico 2019–2026 dagli XML dell'archivio (`tools/righe-fornitori-da-xml.ts` → `righe_fornitori.json.gz` in
+   Project Files → archivio-fic, caricato da Impostazioni → Amministrazione → "Righe delle fatture dei fornitori", abbinato per `fic_id`, ricaricabile; 975 fatture solo PDF restano
+   senza righe); le fatture dallo SdI scrivono le righe in `registraRicevuta`; "Leggi le righe dagli XML" per quelle con XML e senza righe. Abbinamento (`abbinaRighe`, in memoria):
+   componenti con ogni parola della descrizione/P/N/codice contro `pn_key`, codice gestionale e di produzione; materiali con il codice MC-… o i codici del fornitore tra parentesi
+   nella descrizione del materiale (`codiciFornitoreMateriale`). Schede componente/materiale = fatture + ordini del portale NON collegati a una fattura con righe (niente doppi conteggi);
+   scheda fornitore: "Cosa compriamo da questo fornitore". `/amministrazione/analisi/acquisti?q=` (tasto Acquisti) = ricerca per P/N (anche senza trattini), codice o parole:
+   articoli uniti (`articoliComprati`: volte, quantità, spesa, ultimo prezzo e da chi, min–max, fornitori con l'ultimo prezzo) + tutte le righe + Excel. Colonna `categoria` della riga
+   libera per il thread del punto di pareggio (categorie di Adriano per riga).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

@@ -59,8 +59,9 @@ const SQL_RIGHE_ARTICOLO = `SELECT to_char(d.data, 'YYYY-MM-DD') AS data, d.id A
     coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '') AS fornitore, d.fornitore_id AS "fornitoreId",
     r.quantita::float AS quantita, r.prezzo::float AS prezzo, coalesce(r.sconto, 0)::float AS sconto, r.descrizione, r.arrivati::float AS arrivati, d.commessa_id AS "commessaId"
   FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
-  WHERE ${ORDINI_OK} AND NOT r.solo_descrizione`;
-export type RigaAcquistoLetta = RigaAcquistoArticolo & { descrizione: string; arrivati: number; commessaId: number | null };
+  WHERE ${ORDINI_OK} AND NOT r.solo_descrizione
+    AND NOT EXISTS (SELECT 1 FROM documenti_ricevuti x WHERE x.id = d.ricevuto_id AND x.righe_lette_il IS NOT NULL)`;
+export type RigaAcquistoLetta = RigaAcquistoArticolo & { descrizione: string; arrivati: number; commessaId: number | null; fonte?: 'ordine' | 'fattura' };
 
 /** Righe degli ordini a fornitore che comprano il componente (collegato con componente_id o con uno dei suoi tre codici). */
 export function righeAcquistoComponente(c: { id: number; pn: string | null; codice_gestionale: string | null; codice_produzione: string | null }): Promise<RigaAcquistoLetta[]> {
