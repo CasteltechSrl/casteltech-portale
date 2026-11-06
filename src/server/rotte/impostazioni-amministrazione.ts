@@ -9,6 +9,8 @@ import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoAzienda } from '../../engine/amministrazione.js';
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
+import { caricaBilancino, caricaBilanciUfficiali, eliminaBilancino, mesiCaricati } from '../pareggio-servizio.js';
+import { nomeMeseIt } from '../../engine/pareggio.js';
 import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaSediOperative, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
@@ -37,8 +39,9 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   const torna = (msg: string, ancora = '') => `/impostazioni/amministrazione?msg=${encodeURIComponent(msg)}${ancora}`;
 
   r.get('/', async (req, res) => {
-    const [azienda, numerazioni, aliquote, condizioni, sdi] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
-      caricaCondizioniPagamento(), statoInvoicetronic()]);
+    const [azienda, numerazioni, aliquote, condizioni, sdi, bilancini] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
+      caricaCondizioniPagamento(), statoInvoicetronic(), mesiCaricati()]);
+    const annoOggi = new Date().getFullYear();
     const ricevute = sdi.ambiente ? await ultimeRicevute() : [];
     const scelta = (nome: string, valori: Record<string, string> | string[], attuale: string | null, form?: string, vuota = false) => {
       const voci = Array.isArray(valori) ? valori.map(v => [v, v]) : Object.entries(valori);
@@ -190,6 +193,37 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
           <output id="esito-storico-fic"></output>
           <button class="primario" type="button" id="conferma-storico-fic" hidden>Conferma e carica</button>
         </div>
+      </details>
+
+      <h2 id="bilancino">Bilancino mensile del commercialista (punto di pareggio)</h2>
+      <details class="blocco">
+        <summary>Carica l'Excel del commercialista con un foglio per mese (GENNAIO, FEBBRAIO…)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Ogni foglio ha i conti del conto economico con il saldo progressivo dall'inizio dell'anno (conto a 8 cifre, descrizione, saldo):
+            il portale calcola il valore di ogni mese e lo usa in Amministrazione → Analisi → Punto di pareggio. Ricaricare un mese lo sostituisce;
+            un mese nuovo si carica solo se c'è anche il mese prima (nel file o già nel portale). Prima mostra un riepilogo e chiede conferma.</p>
+          ${bilancini.length ? html`<p class="nota">Già caricati: ${bilancini.map(b => html`<b>${b.anno}</b> ${b.mesi.map(m => nomeMeseIt(m)).join(', ')} `)}</p>` : ''}
+          <label>Anno del file <input id="anno-bilancino" inputmode="numeric" size="5" value="${annoOggi}"></label>
+          <label>File <input type="file" id="file-bilancino" accept=".xlsx"></label>
+          <button class="primario" type="button" id="carica-bilancino">Controlla il file</button>
+          <output id="esito-bilancino"></output>
+          <button class="primario" type="button" id="conferma-bilancino" hidden>Conferma e carica</button>
+          ${bilancini.length ? html`<form method="post" action="/impostazioni/amministrazione/bilancino/elimina" data-conferma="Togliere tutti i mesi del commercialista di quest'anno? Si possono ricaricare dall'Excel.">
+            <label>Togli i mesi dell'anno <input name="anno" inputmode="numeric" size="5" value="${bilancini[bilancini.length - 1].anno}"></label> <button>Elimina</button></form>` : ''}
+        </div>
+      </details>
+
+      <h2 id="bilanci">Bilanci ufficiali degli anni passati</h2>
+      <details class="blocco">
+        <summary>Carica il file bilanci_ufficiali.json.gz (preparato da Claude dai PDF depositati)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Conto economico di ogni anno (ricavi, materie prime, servizi, affitti e leasing, personale, ammortamenti, oneri, imposte, utile):
+            si vede in Analisi → Punto di pareggio e serve a stimare le voci che il portale non ha nei mesi senza bilancino. Un anno già presente viene sostituito.</p>
+          <label>File <input type="file" id="file-bilanci" accept=".gz,.json"></label>
+          <button class="primario" type="button" id="carica-bilanci">Controlla il file</button>
+          <output id="esito-bilanci"></output>
+          <button class="primario" type="button" id="conferma-bilanci" hidden>Conferma e carica</button>
+        </div>
       </details>`, req.query.msg ? String(req.query.msg) : undefined, 'amministrazione.js'));
   });
 
@@ -218,6 +252,25 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
       if (f.tipo !== 'sedi_operative' || !Array.isArray(righe)) throw new Error();
     } catch { return res.status(400).json({ errore: 'File non valido: serve sedi_operative_fic.json.gz' }); }
     res.json(await caricaSediOperative(righe, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/bilancino', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+    const anno = Number(req.query.anno);
+    if (!Number.isInteger(anno) || anno < 2000 || anno > 2100) return res.status(400).json({ errore: 'Scrivi l\'anno del file (es. 2026).' });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ errore: 'Scegli prima il file Excel.' });
+    try { res.json(await caricaBilancino(req.body, anno, { anteprima: req.query.conferma !== '1' })); }
+    catch (e) { res.status(400).json({ errore: `File non letto: ${(e as Error).message}` }); }
+  });
+  r.post('/bilancino/elimina', async (req, res) => {
+    const anno = Number(req.body?.anno);
+    const n = Number.isInteger(anno) ? await eliminaBilancino(anno) : 0;
+    res.redirect(torna(n ? `Tolti ${n} valori del commercialista del ${anno}.` : 'Niente da togliere.', '#bilancino'));
+  });
+  r.post('/bilanci', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
+    let righe: unknown;
+    try { righe = leggiFile(req.body).bilanci; if (!Array.isArray(righe)) throw new Error(); }
+    catch { return res.status(400).json({ errore: 'File non valido: serve bilanci_ufficiali.json.gz' }); }
+    res.json(await caricaBilanciUfficiali(righe, { anteprima: req.query.conferma !== '1' }));
   });
 
   r.post('/storico-fic', express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {

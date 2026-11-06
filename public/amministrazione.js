@@ -5,7 +5,7 @@ document.querySelectorAll('input.maiuscolo').forEach(el => el.addEventListener('
 const elenco = (titolo, voci) => voci.length ? `\n${titolo} (${voci.length}): ${voci.slice(0, 15).join('; ')}${voci.length > 15 ? '…' : ''}` : '';
 const euro = n => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
 
-function caricamento(nome, riepilogo) {
+function caricamento(nome, riepilogo, altriParametri) {
   const controlla = document.getElementById(`carica-${nome}`);
   const conferma = document.getElementById(`conferma-${nome}`);
   const out = document.getElementById(`esito-${nome}`);
@@ -15,7 +15,9 @@ function caricamento(nome, riepilogo) {
     if (!f) { out.textContent = 'Scegli prima il file.'; return; }
     controlla.disabled = conferma.disabled = true;
     out.textContent = definitivo ? 'Caricamento in corso…' : 'Controllo del file…';
-    const res = await fetch(`/impostazioni/amministrazione/${nome}?conferma=${definitivo ? 1 : 0}`,
+    const extra = altriParametri ? altriParametri() : '';
+    if (extra === null) { out.textContent = 'Scrivi prima l\'anno del file.'; controlla.disabled = conferma.disabled = false; return; }
+    const res = await fetch(`/impostazioni/amministrazione/${nome}?conferma=${definitivo ? 1 : 0}${extra}`,
       { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } });
     const j = await res.json().catch(() => ({}));
     controlla.disabled = conferma.disabled = false;
@@ -46,3 +48,12 @@ caricamento('storico-fic', j => Object.entries(j.documenti).map(([tipo, n]) => `
   + elenco('Numerazioni aggiornate', j.numerazioni)
   + elenco('Intestatari non in anagrafica (documenti caricati lo stesso)', j.senzaAnagrafica)
   + elenco('Non caricati', j.errori));
+
+// Bilancino mensile del commercialista (punto di pareggio): serve l'anno del file
+caricamento('bilancino', j => `${j.mesi.length} mesi del ${j.anno} (${j.mesi.map(m => m.slice(5)).join(', ')}), ${j.conti} conti.`
+  + Object.keys(j.ricavi).map(m => `\n${m}: ricavi ${euro(j.ricavi[m])}, costi ${euro(j.costi[m])}`).join('')
+  + elenco('Avvisi', j.avvisi), () => {
+  const anno = Number(document.getElementById('anno-bilancino').value);
+  return anno >= 2000 && anno <= 2100 ? `&anno=${anno}` : null;
+});
+caricamento('bilanci', j => `bilanci degli anni ${j.anni.join(', ')}.` + elenco('Righe non lette', j.errori));
