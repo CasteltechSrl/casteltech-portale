@@ -53,7 +53,7 @@ caricamento('storico-fic', j => Object.entries(j.documenti).map(([tipo, n]) => `
   + elenco('Intestatari non in anagrafica (documenti caricati lo stesso)', j.senzaAnagrafica)
   + elenco('Non caricati', j.errori));
 
-// Bilancino mensile del commercialista (punto di pareggio): serve l'anno del file
+// Bilancino mensile (punto di pareggio): serve l'anno del file
 caricamento('bilancino', j => `${j.mesi.length} mesi del ${j.anno} (${j.mesi.map(m => m.slice(5)).join(', ')}), ${j.conti} conti.`
   + Object.keys(j.ricavi).map(m => `\n${m}: ricavi ${euro(j.ricavi[m])}, costi ${euro(j.costi[m])}`).join('')
   + elenco('Avvisi', j.avvisi), () => {

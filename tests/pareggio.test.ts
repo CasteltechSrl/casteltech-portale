@@ -115,9 +115,9 @@ test('pareggio: mesi del commercialista così come sono, mesi del portale con le
   assert.equal(f('personale').media, Math.round(((9000 + 9000 + 9500) / 3) * 100) / 100);
   assert.equal(f('senza_categoria').totale, 1000);
   assert.equal(f('ammortamenti').fonti.stima, 1);
-  assert.match(f('ammortamenti').nota!, /2 mesi dal commercialista, 1 stimati/);
-  assert.equal(f('ricavi').nota, '2 mesi dal commercialista, 1 dal portale');
-  assert.ok(f('ammortamenti').dettagli.some(d => d.fonte === 'stima' && /media dei mesi 2026/.test(d.voce)));
+  assert.match(f('ammortamenti').nota!, /2 mesi dal bilancino, 1 stimati/);
+  assert.equal(f('ricavi').nota, '2 mesi dal bilancino, 1 dal portale');
+  assert.ok(f('ammortamenti').dettagli.some(d => d.fonte === 'stima' && /media gen–feb 2026 del bilancino/.test(d.voce)));
   // costi fissi = tutto tranne le materie; pareggio = fissi / margine
   const fissi = f('personale').media + f('ammortamenti').media + f('finanziari').media + f('senza_categoria').media;
   assert.equal(ce.pareggio.fissiMedi, Math.round(fissi * 100) / 100);
@@ -127,12 +127,12 @@ test('pareggio: mesi del commercialista così come sono, mesi del portale con le
 test('pareggio: senza bilancino la stima viene dal bilancio ufficiale ÷ 12, i compensi non si stimano dal bilancio', () => {
   assert.deepEqual(stimaFamiglia('ammortamenti', 2025, [], [bilancio2025]), { importo: 2722, da: 'bilancio 2025 ÷ 12' });
   assert.equal(stimaFamiglia('compensi', 2025, [], [bilancio2025]), null);
-  assert.deepEqual(stimaFamiglia('oneri', 2027, [comm(2026, 1, '73500001', 120)], [bilancio2025]), { importo: 120, da: 'media dei mesi 2026 del commercialista' });
+  assert.deepEqual(stimaFamiglia('oneri', 2027, [comm(2026, 1, '73500001', 120)], [bilancio2025]), { importo: 120, da: 'media degli ultimi mesi 2026 del bilancino' });
   assert.deepEqual(stimaFamiglia('finanziari', 2024, [], [bilancio2025]), { importo: 327, da: 'bilancio 2025 ÷ 12' });   // anno senza bilancio: l'ultimo
   const ce = contoEconomico({ periodo: { da: '2025-01', a: '2025-02' }, commercialista: [], portale: [{ anno: 2025, mese: 1, voci: [{ famiglia: 'ricavi', voce: 'F', importo: 40000 }] }], bilanci: [bilancio2025] });
   assert.equal(ce.famiglie.find(f => f.codice === 'ammortamenti')!.media, 2722);
   assert.equal(ce.famiglie.find(f => f.codice === 'ricavi')!.media, 20000);
-  assert.ok(ce.avvisi.some(a => /Nessun mese del commercialista/.test(a)));
+  assert.ok(ce.avvisi.some(a => /Nessun mese del bilancino/.test(a)));
 });
 
 test('pareggio: bilancio ufficiale letto con la stessa regola', () => {
@@ -181,4 +181,14 @@ test('pareggio: periodo', () => {
 test('guida: punto di pareggio', () => {
   assert.equal(cercaGuida('quanto devo fatturare per il pareggio')[0].argomento.id, 'punto-pareggio');
   assert.equal(cercaGuida('bilancino del commercialista')[0].argomento.id, 'punto-pareggio');
+});
+
+test('pareggio: la stima usa gli ultimi 3 mesi del bilancino, così un costo finito (leasing terminato a luglio 2026) non continua nei mesi stimati', () => {
+  const leasing = [1, 2, 3, 4, 5].map(m => comm(2026, m, '71700011', 3585));
+  const affitto = [1, 2, 3, 4, 5, 6, 7, 8].map(m => comm(2026, m, '71700001', 1000));
+  const s = stimaFamiglia('godimento', 2026, [...leasing, ...affitto], []);
+  assert.equal(s?.importo, 1000);                 // giugno–agosto: solo l'affitto
+  assert.match(s!.da, /giu–ago 2026/);
+  // con un solo mese di bilancino la stima è quel mese
+  assert.deepEqual(stimaFamiglia('godimento', 2026, [comm(2026, 3, '71700001', 900)], []), { importo: 900, da: 'marzo 2026 del bilancino' });
 });
