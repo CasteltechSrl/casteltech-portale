@@ -28,7 +28,7 @@ export const FAMIGLIE: Famiglia[] = [
   { codice: 'ammortamenti', nome: 'Ammortamenti', tipo: 'fisso', spiegazione: 'quote di macchinari, attrezzature, arredi e beni immateriali' },
   { codice: 'oneri', nome: 'Imposte, tasse e altri oneri', tipo: 'fisso', spiegazione: 'bolli, registro, rifiuti, diritti camerali, sanzioni, abbuoni passivi' },
   { codice: 'finanziari', nome: 'Oneri finanziari', tipo: 'fisso', spiegazione: 'interessi su mutui e conto corrente, commissioni, oneri bancari, cambi' },
-  { codice: 'senza_categoria', nome: 'Fatture senza categoria', tipo: 'fisso', spiegazione: 'fatture dei fornitori senza categoria di costo nel portale (solo nei mesi presi dal portale)' },
+  { codice: 'senza_categoria', nome: 'Fatture senza categoria', tipo: 'fisso', spiegazione: 'fatture dei fornitori senza categoria (dal 6/11/2026 non succede più: i mesi del portale usano le categorie di Casteltech, vedi Costi per categoria)' },
 ];
 export const famiglia = (c: CodiceFamiglia): Famiglia => FAMIGLIE.find(f => f.codice === c)!;
 

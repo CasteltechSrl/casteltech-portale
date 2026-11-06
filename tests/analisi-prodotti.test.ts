@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  classificaProdotti, consuntivoLotto, eConsegna, margineMedioConsuntivi, mesiDa, riepilogoProdotti, schedaProdotto, totaliFatturato, visioneClienti,
+  classificaProdotti, consuntivoLotto, contaRiquadri, eConsegna, filtraRiquadro, riquadroClassifica, margineMedioConsuntivi, mesiDa, riepilogoProdotti, schedaProdotto, totaliFatturato, visioneClienti,
   type FatturaCliente, type RigaVenditaProdotto,
 } from '../src/engine/analisi-prodotti.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -87,6 +87,21 @@ test('analisi prodotti: classifica con variazione, peso sul cliente e sul totale
   const c25 = classificaProdotti(prodotti.values(), totali, 2025, oggi);
   assert.deepEqual(c25.map(x => x.codice), ['SCH-1', 'SCH-2']);
   assert.equal(classificaProdotti(prodotti.values(), totali, 2026, oggi, 'c2').length, 1);
+});
+
+test('analisi prodotti: i riquadri Venduti / In calo forte / Fermi sono filtri dell\'elenco, i numeri restano quelli di tutta la classifica', () => {
+  const prodotti = riepilogoProdotti(righe), totali = totaliFatturato(fatture);
+  const c = classificaProdotti(prodotti.values(), totali, 2026, oggi);
+  const n = contaRiquadri(c);
+  assert.equal(n.venduti, c.filter(p => p.fatturato > 0).length);
+  assert.equal(n.calo, 1);                       // SCH-1 di c1: −40 % su 1.000 €
+  assert.equal(n.fermi, c.filter(p => p.fermo).length);
+  assert.deepEqual(filtraRiquadro(c, 'calo').map(p => `${p.clienteChiave}|${p.codice}`), ['c1|SCH-1']);
+  assert.equal(filtraRiquadro(c, null).length, c.length);
+  assert.equal(filtraRiquadro(c, 'venduti').every(p => p.fatturato > 0), true);
+  assert.equal(riquadroClassifica('fermi'), 'fermi');
+  assert.equal(riquadroClassifica('altro'), null);
+  assert.equal(riquadroClassifica(undefined), null);
 });
 
 test('analisi prodotti: scheda anno per anno con totale e ordini del portale', () => {
