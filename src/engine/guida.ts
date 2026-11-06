@@ -315,6 +315,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
   },
   {
+    id: 'documentazione-prodotto', area: 'anagrafiche', titolo: 'Documentazione del prodotto: revisioni dei file del cliente e differenze',
+    parole: 'documentazione documenti prodotto revisione revisioni bom gerber pick place file cliente drive neon spazio confronto differenze aggiornamento nuova versione stravolto confronta',
+    testo: [
+      'Su ogni riga di Anagrafiche → Prodotti il tasto Doc apre la documentazione di quel codice: per ogni revisione dei documenti del cliente c\'è il riassunto (componenti con riferimento, P/N, valore, case, lato; SMD per lato, THT, codici diversi, misure, strati Gerber, file usati).',
+      'I file del cliente restano su Google Drive: nel portale c\'è solo il riassunto, che pesa pochi KB e non consuma lo spazio del database (Neon). Nella riga c\'è scritta la cartella del Drive da cui vengono i file.',
+      'La revisione si legge dai file (intestazione della BOM, Gerber, GenCAD, nomi di cartelle e file come "Rev.C", "V1.0.7"); se non c\'è scritta da nessuna parte è la revisione 0. Se il cliente manda di nuovo la stessa revisione, la nuova riga si chiama "C-2".',
+      'Quando il cliente manda i file aggiornati: nella pagina del prodotto scegli i file o la cartella (BOM, pick and place, Gerber, anche zip) e premi "Carica e confronta". Il portale li legge come nei Documenti dei clienti, scrive la revisione nuova e dice le differenze con quella prima: componenti aggiunti, tolti, cambiati (P/N, valore, case, lato, montaggio, non montato), conteggi, misure e strati Gerber.',
+      'Se il progetto è stravolto (meno della metà dei riferimenti in comune, o misure molto diverse) il confronto riga per riga non ha senso: il portale lo dice e mostra solo i numeri.',
+      'I file appena caricati vengono tolti dal database subito dopo il riassunto, salvo la spunta "Tieni anche i file nel portale" (serve solo per "Codifica la BOM" dai Documenti dei clienti). "Confronta con …" su una revisione la confronta con quella prima. Elimina toglie solo la riga del portale, mai i file sul Drive.',
+      'Le prime revisioni dei prodotti fatti nel 2026 le ha caricate Claude leggendo le cartelle del Drive (1_DOCUMENTAZIONE DI PRODOTTO), origine "cartelle del Drive".',
+    ],
+    passi: ['Anagrafiche → Prodotti → tasto Doc sulla riga del prodotto.', 'Per una revisione nuova: scegli i file o la cartella, eventualmente scrivi la revisione, premi "Carica e confronta".', 'Leggi le differenze con la revisione precedente in cima alla pagina.'],
+    pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
+  },
+  {
     id: 'fornitori', area: 'anagrafiche', titolo: 'Fornitori',
     parole: 'fornitore fornitori partita iva p.iva acquisti nuovo',
     testo: [
@@ -1163,7 +1178,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'acquisti-mese', area: 'amministrazione', titolo: 'Acquisti per fornitore e mese (cosa ho comprato)',
-    parole: 'acquisti comprato comprati spesa spese mese mensile fornitore fornitori mouser digikey anthropic online traccia riepilogo gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre',
+    parole: 'acquisti comprato comprati cosa ho comprato spesa spese mese mesi mensile gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre fornitore fornitori mouser digikey anthropic online traccia riepilogo',
     testo: [
       'In Acquisti → Acquisti per fornitore e mese (o dal link in Fatture fornitori) c\'è una tabella con i fornitori sulle righe e i mesi sulle colonne: l\'imponibile delle fatture ricevute, note di credito in negativo, fornitori dal più grande.',
       'Cliccando un importo si vedono le fatture di quel fornitore in quel mese con la descrizione; per i fornitori esteri (Mouser, DigiKey, Anthropic…) anche gli articoli scritti nell\'autofattura, e l\'ordine a fornitore collegato se c\'è. Non serve più fare l\'ordine dopo la fattura solo per tenerne traccia, come si faceva in Fatture in Cloud.',
