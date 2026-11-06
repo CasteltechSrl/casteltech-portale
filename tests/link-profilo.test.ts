@@ -19,10 +19,21 @@ test('esterno: tutto tranne Impostazioni, buste paga, cassa e pagine nuovo', () 
   assert.equal(linkPermesso('esterno', '/amministrazione/analisi/cassa'), false);
 });
 
-test('ufficio e amministratore: la pagina non cambia; produzione solo reparto e guida', () => {
+test('amministratore: la pagina non cambia; ufficio: solo i link dell\'Analisi spariscono (Adriano 6/11/2026); produzione solo reparto e guida', () => {
   const p = '<!doctype html><a href="/impostazioni">Impostazioni</a>';
   assert.equal(spegniLinkNonPermessi(p, 'ufficio'), p);
   assert.equal(spegniLinkNonPermessi(p, 'amministratore'), p);
+  const a = '<!doctype html><nav class="tasti-sezione"><a href="/amministrazione/vies">Controllo VIES</a><a href="/amministrazione/analisi">Analisi</a></nav>'
+    + ' <a class="bottone" href="/amministrazione/analisi/prodotto?codice=X&amp;cliente=c1">Analisi</a> <a href="/amministrazione/analisi/clienti">visione d\'insieme dei clienti</a>'
+    + ' <a href="/amministrazione/analisi/cassa">🔒 Previsione di cassa</a>';
+  const r = spegniLinkNonPermessi(a, 'ufficio');
+  assert.match(r, /<a href="\/amministrazione\/vies">Controllo VIES<\/a>/);
+  assert.doesNotMatch(r, />Analisi</);
+  assert.match(r, /<span class="link-spento"[^>]*>visione d'insieme dei clienti<\/span>/);
+  assert.match(r, /<a href="\/amministrazione\/analisi\/cassa">/);
+  assert.equal(spegniLinkNonPermessi(a, 'amministratore'), a);
+  assert.doesNotMatch(spegniLinkNonPermessi(a, 'contabilita'), />Analisi</);
+  assert.match(spegniLinkNonPermessi(a, 'esterno'), /<a href="\/amministrazione\/analisi">Analisi<\/a>/);
   assert.equal(linkPermesso('produzione', '/r/c/ABC'), true);
   assert.equal(linkPermesso('produzione', '/commesse/1'), false);
 });

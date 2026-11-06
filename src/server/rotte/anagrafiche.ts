@@ -4,6 +4,7 @@
  * Nei preventivi cliente e codice si scelgono SOLO da qui. Tutto in maiuscolo.
  */
 import { elencoIndirizzi } from '../../engine/conferme-ordine.js';
+import { vedeAnalisi } from '../../engine/ruoli.js';
 import { linkAnalisiComponente, linkAnalisiProdotto } from '../../engine/analisi-acquisti.js';
 import express, { Router, type Request } from 'express';
 import { maiuscoloPulito } from '../../engine/componenti-clienti.js';
@@ -299,8 +300,8 @@ export function rotteAnagrafiche() {
       ${clienti.map(c => html`<option value="${c.id}" ${c.id === sel ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}`;
     res.send(await pag(req, 'prodotti', html`
       <p class="nota">Nei preventivi codice e descrizione si scelgono solo da qui. Ogni codice deve avere il suo cliente. Tutto viene salvato in MAIUSCOLO.
-        Il tasto <b>Analisi</b> apre la scheda di analisi del prodotto (pezzi e fatturato anno per anno, preventivi, consuntivo delle commesse);
-        il tasto <b>Elimina</b> compare solo sui prodotti mai usati (preventivi, commesse, ordini).</p>
+        ${vedeAnalisi(req.session.utente?.ruolo) ? html`Il tasto <b>Analisi</b> apre la scheda di analisi del prodotto (pezzi e fatturato anno per anno, preventivi, consuntivo delle commesse);
+        il` : 'Il'} tasto <b>Elimina</b> compare solo sui prodotti mai usati (preventivi, commesse, ordini).</p>
       ${avvisoCodici ? html`<div class="avviso senza-cliente">${avvisoCodici}
         ${filtro === -1 ? '' : html` <a href="/anagrafiche/prodotti?cliente=-1">Mostra solo i codici senza cliente</a>`}</div>` : ''}
       <form method="get" class="cerca" action="/anagrafiche/prodotti">

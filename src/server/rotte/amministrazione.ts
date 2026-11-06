@@ -12,6 +12,7 @@ import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cel
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout } from '../views/layout.js';
+import { analisiPermessa } from '../../engine/ruoli.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
 import { gruppiSolleciti, inviaSollecito, propostaSollecito, registraSollecito } from '../solleciti-servizio.js';
 import { NOMI_LIVELLO, giorniRitardo } from '../../engine/solleciti.js';
@@ -220,7 +221,13 @@ export function rotteAmministrazione() {
 
   r.use('/fatture-estere', rotteAutofatture());
   r.use('/registri', rotteRegistriIva());
-  r.use('/analisi', rotteAnalisi());
+  // Analisi riservata (Adriano 6/11/2026): solo amministratore ed esterno; la Previsione di cassa decide da sola (vedePaghe)
+  r.use('/analisi', (req, res, next) => {
+    if (analisiPermessa(req.session.utente?.ruolo, req.baseUrl + req.path)) return next();
+    res.status(403).send(String(layout({ titolo: 'Analisi', utente: req.session.utente, attiva: 'amministrazione', contenuto: html`<h1>Analisi riservata</h1>
+      <p>L'Analisi (andamento, prodotti, clienti, fornitori, punto di pareggio) la vedono solo l'amministratore e il profilo esterno.</p>
+      <p><a href="/amministrazione">← Amministrazione</a></p>` })));
+  }, rotteAnalisi());
   r.use('/', rotteFiscale());
   r.use('/vies', rotteVies());
 

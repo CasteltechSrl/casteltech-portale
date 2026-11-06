@@ -46,6 +46,14 @@ test('profilo Esterno: stesso menu dell\'ufficio, senza Impostazioni, con "sola 
   assert.match(p, /\/static\/sola-lettura\.js/);
   assert.doesNotMatch(p, /href="\/impostazioni"/);
   assert.match(p, /href="\/suggerimenti"/);
+  // Analisi nel menu solo per amministratore ed esterno (Adriano 6/11/2026): l'ufficio non la vede
+  assert.match(p, /href="\/amministrazione\/analisi"/);
+  assert.doesNotMatch(u, /href="\/amministrazione\/analisi"/);
+  const a = String(layout({ titolo: 'Prova', utente: { id: 3, nome: 'Adriano', ruolo: 'amministratore' }, contenuto: html`` }));
+  assert.match(a, /href="\/amministrazione\/analisi"/);
+  const c = String(layout({ titolo: 'Prova', utente: { id: 4, nome: 'Commercialista', ruolo: 'contabilita' }, contenuto: html`` }));
+  assert.doesNotMatch(c, /href="\/amministrazione\/analisi"/);
+  assert.match(c, /href="\/amministrazione\/analisi\/cassa"/);
   assert.match(p, /class="cerca-globale"/);
   // i moduli restano visibili (il preventivo è un modulo), si nascondono pulsanti che salvano e spunte
   const css = readFileSync('public/stile.css', 'utf8');
