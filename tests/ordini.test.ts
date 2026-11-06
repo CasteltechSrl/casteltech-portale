@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaSpedizioni, barreNelPeriodo, caricoGiornaliero, periodoGantt, consegneDaFare, cruscotto, dateRiga, eServizio, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
+import { abbinaSpedizioni, barreNelPeriodo, caricoGiornaliero, periodoGantt, consegneDaFare, cruscotto, dateRiga, daEvadere, eServizio, pianifica, piuLavorativi, residuo, statoOrdine, statoRiga, type RigaOrdine } from '../src/engine/ordini.js';
 
 const riga = (x: Partial<RigaOrdine>): RigaOrdine => ({ id: 1, ordineId: 1, tipo: 'scheda', quantita: 100, prezzo: 10, quantitaSpedita: 0, importoFatturato: 0, ...x });
 
@@ -116,11 +116,31 @@ test('ordini: i servizi non sono da evadere da soli (Adriano, 28/10/2026)', () =
   assert.ok(!eServizio('TB170TSS', 'LARMAN5 Rev C02 - coating +ispezione + test'));   // lavorazione sulla scheda
   assert.ok(!eServizio('WPACAMJR3', 'SCHEDA ASSEMBLATA CAMJR3'));
   assert.ok(!eServizio(null, 'MODULE PESEE PROGRAMMATE'));
+  // Adriano 6/11/2026: costi per fare il prodotto, non prodotti
+  assert.ok(eServizio(null, 'COSTO UNA TANTUM: SPESE REALIZZAZIONE ATTREZZATURE, PROGRAMMA P&P, CONTROLLO'));
+  assert.ok(eServizio(null, 'Programmazione'));
+  assert.ok(eServizio(null, 'Lamina serigrafica TOP'));
+  assert.ok(eServizio(null, 'STENCIL SMD'));
+  assert.ok(eServizio(null, 'Acquisto PCB'));
+  assert.ok(eServizio(null, 'ACQUISTO DEI COMPONENTI'));
+  assert.ok(eServizio(null, 'Acquisto materiale'));
+  assert.ok(eServizio(null, 'NRE'));
+  assert.ok(!eServizio('CR00802', 'PCBA CPUMODULE M3-QFP64'));
+  assert.ok(!eServizio('MSBE0R0PC1100', 'ASSIEME PCB 2 DPDT MECH -60°C'));
   // ordine di soli servizi: evaso; servizio con schede ancora da spedire: segue l'ordine
   const s1 = riga({ id: 1, ordineId: 9, tipo: 'servizio', quantita: 1 });
   assert.equal(statoRiga(s1, [s1]), 'evaso');
   const a = riga({ id: 2, quantitaSpedita: 100 }), b = riga({ id: 3, statoManuale: 'annullato' }), s = riga({ id: 4, tipo: 'servizio', quantita: 1 });
   assert.equal(statoRiga(s, [a, b, s]), 'evaso');
+});
+
+test('ordini: le righe di costo non stanno tra gli ordini da evadere (Adriano 6/11/2026)', () => {
+  const righe = [
+    { id: 1, tipo: 'scheda' as const, stato: 'da_evadere' as const }, { id: 2, tipo: 'servizio' as const, stato: 'da_evadere' as const },
+    { id: 3, tipo: 'scheda' as const, stato: 'parziale' as const }, { id: 4, tipo: 'scheda' as const, stato: 'evaso' as const },
+    { id: 5, tipo: 'servizio' as const, stato: 'parziale' as const },
+  ];
+  assert.deepEqual(daEvadere(righe).map(r => r.id), [1, 3]);
 });
 
 test('ordini: i DDT del portale evadono le righe aperte dello stesso cliente e codice', () => {

@@ -58,9 +58,10 @@ export function dateRiga(r: Pick<RigaOrdine, 'arrivoMateriale' | 'dataLavorazion
  * Righe che sono servizi e non schede da produrre (Adriano, 28/10/2026: "programmazione attrezzature" è un servizio
  * necessario per produrre, non un prodotto): lamine, programmazione attrezzature, attrezzaggio, costi una tantum / avvio
  * produzione, trasporto e spedizione, sconti, acconti, prototipazione, progettazione, scansioni, caricamento firmware.
- * "Coating + ispezione + test" resta una scheda: è una lavorazione sulla scheda.
+ * Adriano 6/11/2026: anche lamine serigrafiche (stencil), ogni programmazione, acquisto PCB / componenti / materiale: sono costi per fare
+ * il prodotto, non prodotti. "Coating + ispezione + test" resta una scheda: è una lavorazione sulla scheda.
  */
-const PAROLE_SERVIZIO = /\b(LAMIN[AE]|PROGRAMMAZION[EI] (ATTREZZATUR|MACCHIN)|ATTREZZAGGIO|ATTREZZATURE|UNA TANTUM|AVVIO (DI )?PRODUZIONE|INITIAL PRODUCTION|SET ?UP|TRASPORTO|SPEDIZION[EI]|SPESE DI|SCONTO|ACCONTO|ANTICIPO|ADVANCE PAYMENT|PROTOTIPAZIONE|PROGETTAZIONE|SCANSIONE|UPLOAD FIRMWARE)\b/;
+const PAROLE_SERVIZIO = /\b(LAMIN[AE]|STENCIL|PROGRAMMAZION[EI]|ATTREZZAGGIO|ATTREZZATURE|UNA TANTUM|COST[IO] (DI )?(AVVIO|AVVIAMENTO|SETUP|SET UP)|AVVIO (DI )?PRODUZIONE|INITIAL PRODUCTION|SET ?UP|NRE|ACQUISTO (DI |DEI |DEL |DELLE |DEGLI )?(PCB|COMPONENTI|MATERIAL[EI])|TRASPORTO|SPEDIZION[EI]|SPESE DI|SCONTO|ACCONTO|ANTICIPO|ADVANCE PAYMENT|PROTOTIPAZIONE|PROGETTAZIONE|SCANSIONE|UPLOAD FIRMWARE)\b/;
 export function eServizio(codice: string | null | undefined, descrizione: string | null | undefined): boolean {
   if (/^UT-/i.test(String(codice ?? '').trim())) return true;     // servizi una tantum (Anagrafiche → Servizi una tantum)
   return PAROLE_SERVIZIO.test(`${codice ?? ''} ${descrizione ?? ''}`.toUpperCase().replace(/[-_]/g, ' '));
@@ -81,6 +82,15 @@ export function statoRiga(r: RigaOrdine, righeOrdine: RigaOrdine[]): StatoRiga {
   if (r.quantita <= 0) return r.importoFatturato > 0 ? 'evaso' : 'da_evadere';
   if (r.quantitaSpedita >= r.quantita - 0.01) return 'evaso';
   return r.quantitaSpedita > 0 ? 'parziale' : 'da_evadere';
+}
+
+/**
+ * Righe da mostrare tra gli "Ordini da evadere" (Adriano 6/11/2026): SOLO le schede ancora da spedire. Le righe di costo (una tantum,
+ * programmazioni, lamine, acquisto PCB e componenti, attrezzaggio, servizi UT-…) restano nell'ordine e si fatturano con le schede,
+ * ma non sono cose da produrre o spedire: non compaiono nell'elenco né nei conteggi.
+ */
+export function daEvadere<T extends { tipo: 'scheda' | 'servizio'; stato: StatoRiga }>(righe: T[]): T[] {
+  return righe.filter(x => x.tipo === 'scheda' && (x.stato === 'da_evadere' || x.stato === 'parziale'));
 }
 
 /** Stato dell'ordine intero: evaso se tutte le righe sono evase (o annullate), parziale se qualcosa è partito. */

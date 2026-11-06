@@ -8,7 +8,7 @@ import { pianificaProduzione, righeOrdini } from './ordini-servizio.js';
 import { elencoOrdiniFornitore } from './ordini-fornitore-servizio.js';
 import { elencoBackup } from './backup.js';
 import { avvisoServizi } from './stato-servizi.js';
-import { caricoGiornaliero } from '../engine/ordini.js';
+import { caricoGiornaliero, daEvadere as daEvadereSchede } from '../engine/ordini.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
@@ -74,8 +74,9 @@ export async function datiCruscottoGenerale(oggi: string) {
 
   // ── Ordini clienti ──
   const aperte = righe.filter(x => ['da_evadere', 'parziale'].includes(x.stato));
-  const daEvadere = somma(aperte.map(x => x.residuoValore));
-  const schedeAperte = aperte.filter(x => x.tipo === 'scheda' && x.residuoQuantita > 0);
+  const daEvadere = somma(aperte.map(x => x.residuoValore));   // valore ancora da fatturare: anche le righe di costo (una tantum, lamine…)
+  // righe da evadere = solo schede (Adriano 6/11/2026): le righe di costo non sono prodotti da produrre o spedire
+  const schedeAperte = daEvadereSchede(aperte).filter(x => x.residuoQuantita > 0);
   const inRitardo = schedeAperte.filter(x => x.consegna && x.consegna < oggi);
   const prossime = schedeAperte.filter(x => x.consegna && x.consegna <= fra14).sort((a, b) => a.consegna!.localeCompare(b.consegna!));
   const pian = await pianificaProduzione(oggi, righe);
@@ -118,7 +119,7 @@ export async function datiCruscottoGenerale(oggi: string) {
     daFare,
     cifre: {
       fatturato, variazioneFatturato: variazione(fatturato, fatturatoPrima), fatturatoPrima,
-      daEvadere, righeDaEvadere: aperte.length, consegne14: prossime.length,
+      daEvadere, righeDaEvadere: schedeAperte.length, consegne14: prossime.length,
       preventiviAperti: (prev('bozza')?.quanti ?? 0) + (prev('inviato')?.quanti ?? 0) + (prev('da_validare')?.quanti ?? 0),
       preventiviInviati: prev('inviato')?.quanti ?? 0, valoreInviati: prev('inviato')?.valore ?? 0,
       commesseAperte: (comm('aperta')?.quanti ?? 0) + (comm('in_produzione')?.quanti ?? 0),
@@ -130,7 +131,7 @@ export async function datiCruscottoGenerale(oggi: string) {
       daValidare: prev('da_validare')?.quanti ?? 0, bozze: prev('bozza')?.quanti ?? 0, inviati: prev('inviato')?.quanti ?? 0,
       ultimi: preventiviUltimi, crmScadute: crm[0]?.scadute ?? 0, crmSettimana: crm[0]?.settimana ?? 0, crmProssime,
     },
-    ordini: { daEvadere: aperte.length, inRitardo: inRitardo.length, valore: daEvadere, prossime: prossime.slice(0, MOSTRATE), altreProssime: Math.max(0, prossime.length - MOSTRATE), ordiniDaAcquisire },
+    ordini: { daEvadere: schedeAperte.length, inRitardo: inRitardo.length, valore: daEvadere, prossime: prossime.slice(0, MOSTRATE), altreProssime: Math.max(0, prossime.length - MOSTRATE), ordiniDaAcquisire },
     produzione: {
       aperte: comm('aperta')?.quanti ?? 0, inProduzione: comm('in_produzione')?.quanti ?? 0, tempiAperti: tempiAperti[0]?.quanti ?? 0,
       schedeScansionate, settimane, oreGiorno: pian.oreGiorno, commesse: commesseAperte,
