@@ -240,3 +240,29 @@ export function commentiAnalisi(d: DatiCommenti): Commento[] {
 }
 
 export const nomeMese = (m: number) => MESI[m - 1];
+
+// ───────────────────────────── note di credito: mese della fattura stornata ─────────────────────────────
+
+/**
+ * Adriano 6/11/2026: la nota di credito n. 2/2026 di JOX (28/02/2026) storna una fattura del dicembre 2025, e nell'Analisi
+ * non deve abbassare febbraio 2026. Regola: nell'Analisi una nota di credito collegata a una fattura (`documento_origine_id`)
+ * conta nel mese e nell'anno della fattura stornata; senza collegamento conta nella sua data. Registri IVA e cruscotti
+ * fiscali non cambiano: lì vale sempre la data del documento.
+ * Da usare nelle query con `d` = documento e `o` = fattura collegata (LEFT JOIN documenti o ON o.id = d.documento_origine_id).
+ */
+export const SQL_DATA_ANALISI = `CASE WHEN d.tipo = 'nota_credito' AND o.data IS NOT NULL THEN o.data ELSE d.data END`;
+
+/** Data con cui un documento entra nell'Analisi (stessa regola di `SQL_DATA_ANALISI`, per i conti in memoria). */
+export function dataAnalisi(doc: { tipo: string; data: string; dataOrigine?: string | null }): string {
+  return doc.tipo === 'nota_credito' && doc.dataOrigine ? doc.dataOrigine : doc.data;
+}
+
+/** Perché una nota di credito non si può collegare a quella fattura (null = si può). */
+export function controlloStorno(nota: { tipo: string; stato: string; cliente_id: number | null }, fattura: { tipo: string; stato: string; cliente_id: number | null; numero: number | null; data: string } | null, dataNota: string): string | null {
+  if (nota.tipo !== 'nota_credito') return 'Solo una nota di credito si collega a una fattura.';
+  if (nota.stato === 'bozza') return 'Collega la fattura dopo aver emesso la nota di credito (in bozza si usa "Crea nota di credito" dalla fattura).';
+  if (!fattura || fattura.tipo !== 'fattura' || fattura.numero == null || ['bozza', 'annullato', 'scartato'].includes(fattura.stato)) return 'Scegli una fattura emessa.';
+  if (fattura.cliente_id == null || fattura.cliente_id !== nota.cliente_id) return 'La fattura deve essere dello stesso cliente della nota di credito.';
+  if (fattura.data > dataNota) return 'La fattura stornata non può avere una data successiva alla nota di credito.';
+  return null;
+}

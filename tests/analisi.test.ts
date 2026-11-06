@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeCategoria, perMese, quotaPrimi, raggruppaAcquisti,
+  SQL_DATA_ANALISI, analisiClienti, analisiProdotti, commentiAnalisi, controlloStorno, dataAnalisi, marginePreventivo, nomeCategoria, perMese, quotaPrimi, raggruppaAcquisti,
   type FatturaAnalisi, type PreventivoProdotto, type RigaAnalisi,
 } from '../src/engine/analisi.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -99,4 +99,30 @@ test('analisi: commenti critici prima, con il consiglio (calo, dipendenza, clien
 test('guida: analisi', () => {
   for (const q of ['analisi', 'come sta andando l\'azienda', 'margine per cliente', 'clienti che pagano in ritardo'])
     assert.ok(cercaGuida(q).slice(0, 3).some(r => r.argomento.id === 'analisi'), q);
+});
+
+test('analisi: la nota di credito collegata a una fattura conta nel mese della fattura stornata (JOX 2/2026 su dicembre 2025)', () => {
+  // Adriano 6/11/2026
+  assert.equal(dataAnalisi({ tipo: 'nota_credito', data: '2026-02-28', dataOrigine: '2025-12-29' }), '2025-12-29');
+  assert.equal(dataAnalisi({ tipo: 'nota_credito', data: '2026-03-31', dataOrigine: null }), '2026-03-31');
+  assert.equal(dataAnalisi({ tipo: 'fattura', data: '2026-02-28', dataOrigine: '2025-12-29' }), '2026-02-28');
+  assert.match(SQL_DATA_ANALISI, /nota_credito/);
+  const xs = [
+    { tipo: 'fattura', data: '2026-02-28', imponibile: 25845 },
+    { tipo: 'nota_credito', data: dataAnalisi({ tipo: 'nota_credito', data: '2026-02-28', dataOrigine: '2025-12-29' }), imponibile: 18000 },
+  ];
+  assert.equal(perMese(xs, x => x.imponibile, 2026)[1], 25845);
+  assert.equal(perMese(xs, x => x.imponibile, 2025)[11], -18000);
+});
+
+test('analisi: collegare una nota di credito alla fattura stornata (stesso cliente, emessa, non successiva)', () => {
+  const nota = { tipo: 'nota_credito', stato: 'emesso', cliente_id: 7 };
+  const ok = { tipo: 'fattura', stato: 'emesso', cliente_id: 7, numero: 152, data: '2025-12-29' };
+  assert.equal(controlloStorno(nota, ok, '2026-02-28'), null);
+  assert.match(controlloStorno(nota, null, '2026-02-28')!, /fattura emessa/);
+  assert.match(controlloStorno(nota, { ...ok, cliente_id: 8 }, '2026-02-28')!, /stesso cliente/);
+  assert.match(controlloStorno(nota, { ...ok, stato: 'bozza' }, '2026-02-28')!, /fattura emessa/);
+  assert.match(controlloStorno(nota, { ...ok, data: '2026-03-01' }, '2026-02-28')!, /successiva/);
+  assert.match(controlloStorno({ ...nota, stato: 'bozza' }, ok, '2026-02-28')!, /emesso/);
+  assert.match(controlloStorno({ ...nota, tipo: 'fattura' }, ok, '2026-02-28')!, /Solo una nota/);
 });
