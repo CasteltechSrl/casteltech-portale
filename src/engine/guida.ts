@@ -739,6 +739,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/fornitori', 'Ordini a fornitore'], ['/quotazioni', 'Quotazioni (BOM)']],
   },
   {
+    id: 'ddt-ricevuti', area: 'ordini', titolo: 'DDT in ingresso: merce arrivata e materiale dei clienti, incrocio e anomalie',
+    parole: 'ddt ricevuto ricevuti ingresso bolla scansione scansionare incrocio incrociare anomalia anomalie conto lavoro arrivata',
+    testo: [
+      'I DDT che arrivano con la merce (dai fornitori) o con il materiale in conto lavoro (dai clienti) si scansionano e si mettono nella cartella Google Drive «Da acquisire», oppure si caricano in Ordini da e-mail e PDF. L\'IA capisce che è un DDT destinato a Casteltech e legge mittente, numero, data, ordine citato e righe.',
+      'Il portale cerca il mittente in anagrafica (per P.IVA o per nome): se è un fornitore incrocia le righe con gli ordini a fornitore emessi a lui (stesso codice o part number, prima l\'ordine citato sul DDT, poi le righe con pezzi da ricevere); se è un cliente le cerca tra i suoi componenti (Anagrafiche → Componenti clienti) e tra i suoi prodotti, e collega il DDT al suo ordine aperto (quello citato, o l\'unico aperto).',
+      'Le anomalie compaiono in cima alla pagina: mittente non in anagrafica, merce arrivata senza ordine, riga che non corrisponde a nessuna riga ordinata, pezzi in più di quelli attesi, riga già arrivata tutta, ordine citato non trovato o di un altro fornitore, consegna parziale (cosa resta da ricevere), codici del cliente non in anagrafica, cliente senza ordini aperti o con più ordini aperti. Quelle "da sistemare" bloccano la conferma finché non le correggi o spunti «Ho controllato le anomalie».',
+      'Ogni riga si può riabbinare a mano (tendina della riga dell\'ordine, del componente o del prodotto); cambiando il mittente premi «Salva le correzioni» e le righe si riabbinano da sole.',
+      'Alla conferma di un DDT di fornitore i pezzi si sommano agli «arrivati» dell\'ordine a fornitore (data dell\'arrivo = data del DDT): l\'ordine passa ad "arrivato in parte" o "arrivato". Per un DDT di cliente il DDT resta registrato con il materiale e l\'ordine: lo vedi nella pagina dell\'ordine ("Materiale arrivato dal cliente"). Il portale non ha un magazzino: le quantità non si scaricano.',
+      'Acquisti → DDT ricevuti: quelli da confermare in cima, poi tutti quelli registrati con mittente, ordini collegati e anomalie. «Elimina» serve per un DDT registrato per errore: toglie i pezzi dagli arrivati e rimette il file da confermare.',
+    ],
+    passi: ['Scansiona il DDT e mettilo nella cartella Drive «Da acquisire» (o caricalo in Ordini da e-mail e PDF).', 'Apri il file: controlla mittente, numero, data e le righe abbinate; leggi le anomalie.',
+      'Correggi gli abbinamenti se serve e premi «Conferma il DDT».', 'Controlla l\'ordine a fornitore (arrivi) o l\'ordine del cliente (materiale arrivato).'],
+    pagine: [['/acquisti/ddt', 'Acquisti → DDT ricevuti'], ['/ordini/acquisire', 'Ordini da e-mail e PDF'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/anagrafiche/componenti-clienti', 'Componenti clienti']],
+  },
+  {
     id: 'ddt-acquisiti', area: 'ordini', titolo: 'DDT spediti: segnare la merce consegnata',
     parole: 'ddt spedizione spedito consegnato evaso parziale bolla documento trasporto',
     testo: [

@@ -22,6 +22,7 @@ const SEZIONI: [string, string][] = [
   ['/preventivi', 'Preventivi'],
   ['/ordini/acquisire', 'Ordini da e-mail e PDF'],
   ['/ordini/fornitori', 'Ordini a fornitore'],
+  ['/acquisti/ddt', 'DDT ricevuti'],
   ['/ordini/conferme', 'Conferme d\'ordine'],
   ['/ordini', 'Ordini clienti'],
   ['/commesse', 'Commesse'],

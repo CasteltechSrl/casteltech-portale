@@ -19,6 +19,7 @@ import { confermeDellOrdine, creaConferma, duplicaConferma, eliminaOAnnulla } fr
 import { rotteConferme, statoConferma } from './conferme-ordine.js';
 import { layout } from '../views/layout.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
+import { ddtRicevutiPerOrdineCliente } from '../ddt-ricevuti-servizio.js';
 import { html, data, euro, euroUnitario, num, numCampo, raw, type Raw } from '../views/html.js';
 import { aggiungiProdottoCliente, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { serviziAttivi, servizioPerCodice } from '../servizi-una-tantum-servizio.js';
@@ -300,6 +301,7 @@ export function rotteOrdini() {
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
+    const ddtRicevuti = await ddtRicevutiPerOrdineCliente(o.id);
     const ddtPortale = await q(`SELECT DISTINCT d.id, d.numero, d.data, d.stato FROM documenti d LEFT JOIN documenti_righe x ON x.documento_id = d.id
       LEFT JOIN ordini_righe y ON y.id = x.riga_ordine_id
       WHERE d.tipo = 'ddt' AND d.stato <> 'annullato' AND (d.ordine_id = $1 OR y.ordine_id = $1) ORDER BY d.data, d.numero`, [o.id]);
@@ -374,6 +376,11 @@ export function rotteOrdini() {
             Se un abbinamento è sbagliato, scegli lo stato della riga a mano.</p>
             <table><thead><tr><th>Documento</th><th>Codice</th><th class="n">Q.tà</th></tr></thead>
             <tbody>${spedizioni.map(a => html`<tr><td>${a.documento}</td><td>${a.codice}</td><td class="n">${num(a.quantita, 0)}</td></tr>`)}</tbody></table>` : ''}</section>
+        ${ddtRicevuti.length ? html`<section><h2>Materiale arrivato dal cliente</h2>
+          <p class="nota">DDT del cliente letti da Da acquisire e collegati a quest'ordine (conto lavoro). Elenco in Acquisti → DDT ricevuti.</p>
+          <table><thead><tr><th>DDT</th><th>Data</th><th>Codice</th><th class="n">Q.tà</th><th>Anomalia</th></tr></thead>
+          <tbody>${ddtRicevuti.map(k => html`<tr><td>${k.acquisizione_id ? html`<a href="/ordini/acquisire/${k.acquisizione_id}">${k.numero ?? '?'}</a>` : k.numero ?? '?'}</td><td>${data(k.data)}</td>
+            <td>${k.codice || k.descrizione}</td><td class="n">${num(Number(k.quantita), 0)}</td><td>${k.anomalia ? html`<span class="esito verifica">${k.anomalia}</span>` : ''}</td></tr>`)}</tbody></table></section>` : ''}
         <section><h2>Fatture</h2>${fatture.length ? html`<table><thead><tr><th>Fattura</th><th>Data</th><th>Codice</th><th class="n">Imponibile</th></tr></thead>
           <tbody>${fatture.map(f => html`<tr><td>${f.numero}${f.ddt_numero ? html` <small class="nota">(DDT ${f.ddt_numero})</small>` : ''}</td><td>${data(f.data)}</td><td>${f.codice || f.descrizione}</td><td class="n">${euro(f.imponibile)}</td></tr>`)}</tbody></table>` : html`<p class="nota">Nessuna fattura.</p>`}</section>
       </div>`, { avviso: req.query.salvato ? 'Salvato' : req.query.msg ? String(req.query.msg) : undefined }));

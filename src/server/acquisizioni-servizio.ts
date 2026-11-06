@@ -16,6 +16,7 @@ import { righeDaFoglio, type FoglioLetto, type RigaScansione } from '../engine/f
 import { fineLavorazioneDaScansione, leggiFineLavorazione } from '../engine/flusso.js';
 import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
+import { collegaDdtRicevuto } from './ddt-ricevuti-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
 /** servizio: codice del servizio una tantum (UT-…, Adriano 3/11/2026) per le righe di servizio; proposto dalla descrizione. */
@@ -23,7 +24,7 @@ export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
 export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
 
-const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt', 'fattura_estera'];
+const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt', 'ddt_ricevuto', 'fattura_estera'];
 
 /**
  * Registra un file arrivato. Lo stesso file di Drive non entra due volte; lo stesso contenuto arrivato di nuovo
@@ -117,6 +118,13 @@ export async function elabora(id: number): Promise<void> {
     if (lettura.tipo === 'ddt') {
       const ddt = await collegaDdt({ tipoDocumento: 'ddt', ...lettura.ddt, clienteId: null, righe: lettura.ddt.righe });
       await q(`UPDATE acquisizioni SET tipo = 'ddt', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
+        [id, JSON.stringify(ddt)]);
+      return;
+    }
+    // DDT di un fornitore o di un cliente (Adriano 6/11/2026): incrocio con gli ordini e anomalie, poi l'ufficio conferma
+    if (lettura.tipo === 'ddt_ricevuto') {
+      const ddt = await collegaDdtRicevuto({ tipoDocumento: 'ddt_ricevuto', ...lettura.ddt, mittenteTipo: null, fornitoreId: null, clienteId: null, ordineId: undefined, righe: lettura.ddt.righe });
+      await q(`UPDATE acquisizioni SET tipo = 'ddt_ricevuto', stato = 'da_confermare', proposta = $2, errore = NULL, elaborato_il = now() WHERE id = $1`,
         [id, JSON.stringify(ddt)]);
       return;
     }
