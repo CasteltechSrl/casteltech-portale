@@ -9,6 +9,7 @@ import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoAzienda } from '../../engine/amministrazione.js';
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
+import { passaggioChiaveReale } from '../../engine/sdi.js';
 import { caricaBilancino, caricaBilanciUfficiali, eliminaBilancino, mesiCaricati } from '../pareggio-servizio.js';
 import { nomeMeseIt } from '../../engine/pareggio.js';
 import { caricaRigheFornitori, rileggiRigheDagliXml, statoRighe } from '../righe-fornitori-servizio.js';
@@ -73,8 +74,11 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
         ${ricevute.length ? html`<p><strong>Ultime fatture arrivate dallo SdI</strong> (con la chiave di prova sono finte e non entrano nelle fatture fornitori):</p>
           <ul>${ricevute.map(x => html`<li>${new Date(x.ricevuto_il).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' })}
             ${x.ambiente === 'prova' ? html`<span class="etichetta">prova</span>` : ''} ${x.esito ?? ''}</li>`)}</ul>` : ''}
-        <p class="nota">Il codice destinatario di Casteltech in Invoicetronic è 7HD37X0: si registra sul sito dell'Agenzia delle Entrate solo il giorno del passaggio,
-          perché da quel momento le fatture dei fornitori arrivano qui e non più in Fatture in Cloud.</p>
+        <h3>Passaggio alla chiave reale</h3>
+        <p class="nota">Il codice destinatario di Casteltech in Invoicetronic è 7HD37X0, registrato all'Agenzia delle Entrate il 6/11/2026: da quel giorno le fatture
+          dei fornitori arrivano in Invoicetronic e non più in Fatture in Cloud. Finché manca la chiave reale restano lì in attesa (non si perdono).</p>
+        <ol class="passi-passaggio">${passaggioChiaveReale({ ambiente: sdi.ambiente, webhookCollegato: !!sdi.webhook }).map(p => html`
+          <li class="${p.fatto ? 'fatto' : 'da-fare'}">${p.fatto ? '✓' : '○'} ${p.testo}${p.dove ? html` <a href="${p.dove}">Apri</a>` : ''}</li>`)}</ol>
       </div>
 
       <h2 id="numerazioni">Numerazioni</h2>

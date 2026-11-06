@@ -14,6 +14,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { randomBytes } from 'node:crypto';
 import { q, q1 } from '../db.js';
 import { chiaveGiusta } from '../../engine/gmail.js';
+import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
@@ -101,6 +102,22 @@ export function rotteApiClaude() {
           (SELECT json_agg(json_build_object('importo', s.importo::float, 'data', s.data::text, 'pagataIl', s.pagata_il::text) ORDER BY s.data, s.id)
              FROM documenti_ricevuti_scadenze s WHERE s.documento_id = r.id) AS scadenze
         FROM documenti_ricevuti r WHERE r.fic_id IS NOT NULL AND extract(year FROM r.data) = $1 ORDER BY r.data, r.id`, [anno]),
+    });
+  });
+
+  // Stato dell'invio allo SdI (Adriano 6/11/2026, passaggio alla chiave reale di Invoicetronic): ambiente della chiave, crediti, esiti collegati,
+  // ultimi invii e ultime fatture ricevute, numerazioni dell'anno. Claude verifica da qui che invio e ricezione reali funzionino. Niente nomi di clienti né segreti.
+  r.get('/sdi', async (_req, res) => {
+    const stato = await statoInvoicetronic();
+    const anno = new Date().getFullYear();
+    res.json({
+      ambiente: stato.ambiente, operazioni: stato.operazioni ?? null, errore: stato.errore ?? null,
+      webhook: stato.webhook ? { url: stato.webhook.url, collegato_il: stato.webhook.collegato_il } : null,
+      invii: await q(`SELECT i.id, i.documento_id, d.tipo, d.sezionale, d.numero, d.stato AS stato_documento, i.ambiente, i.stato, i.identificativo, i.messaggio, i.inviato_il, i.aggiornato_il
+        FROM sdi_invii i JOIN documenti d ON d.id = i.documento_id ORDER BY i.id DESC LIMIT 20`),
+      ricevute: await ultimeRicevute(),
+      ricevuti_sdi: await q(`SELECT numero, data::text, totale::float, ricevuto_il::text FROM documenti_ricevuti WHERE origine = 'sdi' ORDER BY ricevuto_il DESC NULLS LAST, id DESC LIMIT 20`),
+      numerazioni: await q(`SELECT tipo, sezionale, anno, ultimo_numero, ultima_data::text FROM numerazioni WHERE anno = $1 ORDER BY tipo, sezionale`, [anno]),
     });
   });
 

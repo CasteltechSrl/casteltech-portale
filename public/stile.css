@@ -1074,3 +1074,7 @@ table.rivendita-costi tr.riga-famiglia th, table.rivendita-costi tr.riga-famigli
 form.in-riga { display: inline-flex; gap: .3rem; align-items: center; }
 form.in-riga select { max-width: 14rem; }
 .rosso { color: #c62828; } .verde { color: #2e7d32; }
+
+/* Passaggio alla chiave reale di Invoicetronic (Impostazioni → Amministrazione, 6/11/2026) */
+.passi-passaggio li.fatto { color: #2e7d32; }
+.passi-passaggio li.da-fare { font-weight: 600; }
