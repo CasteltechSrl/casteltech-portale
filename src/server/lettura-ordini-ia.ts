@@ -6,6 +6,7 @@
  */
 import { chiediTestoIa, iaConfigurata } from './ia.js';
 import { normalizzaDdt, normalizzaProposta, oggettoJson, type DdtLetto, type Proposta } from '../engine/acquisizioni.js';
+import { normalizzaDdtRicevuto, type DdtRicevutoLetto } from '../engine/ddt-ricevuti.js';
 import type { FoglioLetto } from '../engine/fogli-tempi.js';
 import { normalizzaFatturaEstera, type FatturaEstera } from '../engine/autofatture.js';
 
@@ -33,6 +34,11 @@ rispondi solo {"scheda_produzione": true, "commesse": ["<numeri di commessa che 
 ECCEZIONE: se è un DOCUMENTO DI TRASPORTO (DDT) emesso da Casteltech (Casteltech è il mittente, il cliente è il destinatario)
 rispondi solo {"ddt": true, "numero": "<numero del DDT>", "data": "AAAA-MM-GG", "cliente": "<destinatario>", "rif_ordine": "<ordine del cliente citato, se c'è>",
 "righe": [{"codice": "", "descrizione": "", "quantita": 0}], "note": ""}.
+ECCEZIONE: se è un DOCUMENTO DI TRASPORTO (DDT, bolla di consegna, delivery note, packing list) emesso da UN'ALTRA AZIENDA e destinato a Casteltech
+(Casteltech è il destinatario: "Destinatario", "Spett.le", "Ship to", "Consegnare a"; il mittente è un fornitore o un cliente che ci manda materiale)
+rispondi solo {"ddt_ricevuto": true, "mittente": "<ragione sociale di chi emette il DDT, mai Casteltech>", "partita_iva": "<P.IVA del mittente se scritta>",
+"numero": "<numero del DDT come scritto>", "data": "AAAA-MM-GG", "rif_ordine": "<ordine citato sul DDT: il numero dell'ordine di Casteltech ("Vs. ordine", "PO") oppure
+l'ordine del mittente, come scritto>", "righe": [{"codice": "<codice articolo del mittente>", "descrizione": "<descrizione; se c'è anche il part number del produttore mettilo qui>", "quantita": 0}], "note": ""}.
 ECCEZIONE: se è una FATTURA (o invoice) emessa da un FORNITORE a Casteltech (Casteltech è il cliente/acquirente: "Bill to", "Sold to",
 "Fatturare a"), per esempio Mouser, DigiKey, Amazon, un abbonamento software, rispondi solo {"fattura_fornitore": true}.
 In note metti in italiano, in breve, quello che l'ufficio deve sapere (condizioni particolari, consegne parziali, dubbi di lettura).
@@ -59,7 +65,7 @@ async function chiediIa(parti: Parte[], sistema: string, voce: string): Promise<
 
 /** Esito della prima lettura: un ordine, oppure le schede di produzione di Casteltech (fogli tempi) con i numeri di commessa. */
 export type Lettura = { tipo: 'ordine'; proposta: Proposta } | { tipo: 'scheda_produzione'; commesse: string[] } | { tipo: 'ddt'; ddt: DdtLetto }
-  | { tipo: 'fattura_estera' };
+  | { tipo: 'ddt_ricevuto'; ddt: DdtRicevutoLetto } | { tipo: 'fattura_estera' };
 
 /** Legge il documento: se è un ordine restituisce la proposta pulita, se è una scheda di produzione i numeri di commessa. */
 export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promise<Lettura> {
@@ -69,6 +75,7 @@ export async function leggiOrdineConIa(parti: Parte[], clienti: string[]): Promi
     return { tipo: 'scheda_produzione', commesse: [...new Set<string>(commesse)] };
   }
   if (x?.ddt === true) return { tipo: 'ddt', ddt: normalizzaDdt(x) };
+  if (x?.ddt_ricevuto === true) return { tipo: 'ddt_ricevuto', ddt: normalizzaDdtRicevuto(x) };
   if (x?.fattura_fornitore === true) return { tipo: 'fattura_estera' };
   return { tipo: 'ordine', proposta: normalizzaProposta(x) };
 }

@@ -25,6 +25,7 @@ import { rotteAnagrafiche } from './rotte/anagrafiche.js';
 import { rotteOrdini } from './rotte/ordini.js';
 import { rotteAcquisizioni } from './rotte/acquisizioni.js';
 import { rotteOrdiniFornitore } from './rotte/ordini-fornitore.js';
+import { rotteDdtRicevuti } from './rotte/ddt-ricevuti.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteQualita } from './rotte/qualita.js';
@@ -201,6 +202,7 @@ app.use('/impostazioni', soloUfficio, rotteImpostazioni());
 app.use('/commesse', soloUfficio, rotteCommesse());
 app.use('/ordini/acquisire', soloUfficio, rotteAcquisizioni());
 app.use('/ordini/fornitori', soloUfficio, rotteOrdiniFornitore());
+app.use('/acquisti/ddt', soloUfficio, rotteDdtRicevuti());
 app.use('/ordini', soloUfficio, rotteOrdini());
 // Quotazioni (fino al 28/10/2026 "Componenti"): i vecchi indirizzi /componenti/... portano qui (307 = anche i moduli inviati)
 app.use('/produzione/codifica-componenti', soloUfficio, rotteCodificaComponenti()); // Adriano 4/11/2026: codifica BOM senza prezzi

@@ -427,6 +427,16 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    DDT di Casteltech in PDF (migrazione 029): l'IA li riconosce (Casteltech mittente), ogni riga si abbina alla riga d'ordine aperta del cliente
    con lo stesso codice (`abbinaDdt`: prima quelle ancora da spedire, poi l'ordine citato, poi la consegna più vicina); l'ufficio conferma →
    `ddt_righe` origine 'acquisito' (lo spedito della riga = import + DDT acquisiti). Ricaricando il file ordini restano, salvo che il file contenga lo stesso DDT.
+   DDT in ingresso (Adriano 6/11/2026; migrazione 081 `ddt_ricevuti` + tipo acquisizione 'ddt_ricevuto', regole in `engine/ddt-ricevuti.ts`, letture in
+   `ddt-ricevuti-servizio.ts`, pagina di controllo in `rotte/acquisizioni.ts` (`paginaDdtRicevuto`, POST `/:id/ddt-ricevuto`), elenco Acquisti → DDT ricevuti =
+   `/acquisti/ddt` (`rotte/ddt-ricevuti.ts`), test in `tests/ddt-ricevuti.test.ts`): i DDT dei FORNITORI e dei CLIENTI scansionati nella cartella Drive / Da acquisire;
+   l'IA risponde `ddt_ricevuto` (Casteltech destinatario) con mittente, P.IVA, numero, data, ordine citato, righe. Mittente dall'anagrafica per P.IVA o nome
+   (`stessoNomeFornitore` / `risolvi`; sia fornitore sia cliente → fornitore se ha ordini a fornitore emessi). Fornitore: `abbinaDdtFornitore` incrocia con le
+   righe degli ordini a fornitore emessi (`chiaviArticolo`: codice distributore o P/N, "595-TPS…" = "TPS…"; prima l'ordine citato, poi le righe con pezzi da ricevere,
+   poi il più vecchio); alla conferma `documenti_righe.arrivati += quantità` (data = data del DDT). Cliente: `abbinaDdtCliente` cerca ogni riga tra `componenti_clienti`
+   e `prodotti` del cliente, ordine = quello citato (rif_cliente o numero) o l'unico aperto; nessun magazzino, il DDT resta solo registrato (pagina dell'ordine:
+   "Materiale arrivato dal cliente"). Anomalie `{livello, testo}` in cima alla pagina e conservate in `ddt_ricevuti.anomalie`: quelle 'errore' bloccano la conferma
+   senza la spunta "Ho controllato le anomalie". "Elimina" in DDT ricevuti toglie i pezzi dagli arrivati e rimette il file da confermare.
    Evasione automatica (Adriano 28/10/2026, `abbinaSpedizioni` in `engine/ordini.ts`): i DDT del portale (storico FIC, poi quelli emessi dal portale;
    le fatture no: possono essere anticipi) non già contati nell'import si abbinano alle righe aperte stesso cliente + stesso codice (o descrizione), prima gli ordini
    più vecchi; calcolato in lettura, niente tabelle nuove. Servizi (`eServizio`: lamine, programmazione attrezzature, una tantum, trasporto…) non sono

@@ -22,6 +22,7 @@ import { nomeFornitore } from '../codifica-servizio.js';
 import { NOMI_STATO_MANCA } from '../../engine/cosa-manca.js';
 import { pagina } from './ordini.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
+import { ddtRicevutiPerOrdineFornitore } from '../ddt-ricevuti-servizio.js';
 import { html, data, euro, num, raw, numCampo } from '../views/html.js';
 
 const STATI: Record<string, [string, string]> = {
@@ -196,10 +197,11 @@ export function rotteOrdiniFornitore() {
     if (!x) return res.status(404).send('Ordine non trovato');
     const { d, righe } = x;
     const emesso = !!d.numero, annullato = d.stato === 'annullato';
-    const [condizioni, fornitori, commesse, email, fatture, ultimo] = await Promise.all([
+    const [condizioni, fornitori, commesse, email, fatture, ddtRicevuti, ultimo] = await Promise.all([
       caricaCondizioniPagamento(true), emesso ? Promise.resolve([]) : fornitoriPerOrdini(), commessePerOrdini(),
       emesso && !annullato ? propostaEmailOrdine(d.id) : Promise.resolve(null),
       emesso && d.fornitore_id ? fattureCollegabili(d.fornitore_id, d.data, d.id) : Promise.resolve([]),
+      ddtRicevutiPerOrdineFornitore(d.id),
       emesso ? Promise.resolve(null) : ultimoNumeroOrdini(d.anno),
     ]);
     const errori = emesso ? [] : controlliEmissioneOrdine({ fornitoreId: d.fornitore_id }, righe);
@@ -298,6 +300,11 @@ export function rotteOrdiniFornitore() {
           <button name="tutto" value="1" title="Segna tutte le righe come arrivate per intero">Tutto arrivato</button>
           <button class="primario">Salva gli arrivi</button></div>
       </form>
+      ${ddtRicevuti.length ? html`<section class="blocco"><h2>DDT del fornitore arrivati</h2>
+        <p class="nota">Letti da Da acquisire e confermati: i pezzi sono già tra gli arrivati qui sopra. Elenco completo in Acquisti → DDT ricevuti.</p>
+        <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>Anomalia</th></tr></thead>
+          <tbody>${ddtRicevuti.map(k => html`<tr><td>${k.acquisizione_id ? html`<a href="/ordini/acquisire/${k.acquisizione_id}">${k.numero ?? '?'}</a>` : k.numero ?? '?'}</td><td>${data(k.data)}</td>
+            <td>${k.codice}</td><td>${k.descrizione}</td><td class="n">${num(Number(k.quantita), 3)}</td><td>${k.anomalia ? html`<span class="esito verifica">${k.anomalia}</span>` : ''}</td></tr>`)}</tbody></table></section>` : ''}
       <form method="post" action="${base}/fattura" class="blocco">
         <h2>Fattura del fornitore</h2>
         ${d.ricevuto_id ? html`<p>Collegata: fattura <a href="/amministrazione/ricevuti/${d.ricevuto_id}">${d.fattura_numero || '?'} del ${data(d.fattura_data)}</a>

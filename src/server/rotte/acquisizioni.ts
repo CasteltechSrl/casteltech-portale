@@ -14,6 +14,8 @@ import { pagina } from './ordini.js';
 import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
 import { opzioniServizi } from '../views/scelta-prodotto.js';
 import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta } from '../acquisizioni-servizio.js';
+import { confermaDdtRicevuto, contestoDdtRicevuto, salvaDdtRicevuto, type DdtRicevutoDb } from '../ddt-ricevuti-servizio.js';
+import { riassuntoAnomalie } from '../../engine/ddt-ricevuti.js';
 import type { Request } from 'express';
 import { html, data, euro, num, numCampo, raw } from '../views/html.js';
 
@@ -118,13 +120,91 @@ async function paginaDdt(req: Request, a: any): Promise<string> {
     { avviso: req.query.errore ? String(req.query.errore) : req.query.salvato ? 'Salvato' : undefined });
 }
 
+/**
+ * DDT ricevuto da un fornitore o da un cliente (Adriano 6/11/2026): mittente dall'anagrafica, numero, data, ordine citato;
+ * per ogni riga la riga dell'ordine a fornitore (gli arrivati si aggiornano alla conferma) oppure il componente/prodotto del cliente;
+ * in cima le anomalie trovate dall'incrocio.
+ */
+async function paginaDdtRicevuto(req: Request, a: any): Promise<string> {
+  const d: DdtRicevutoDb | null = a.proposta;
+  const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!d;
+  const dis = modificabile ? '' : raw('disabled');
+  const [clienti, fornitori, ctx] = await Promise.all([
+    q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`),
+    q(`SELECT id, ragione_sociale FROM fornitori_anagrafica ORDER BY ragione_sociale`),
+    d ? contestoDdtRicevuto(d) : Promise.resolve({ aperte: [], componenti: [], prodotti: [], ordini: [] }),
+  ]);
+  const tipo = d?.mittenteTipo;
+  const anomalie = d?.anomalie ?? [];
+  const errori = anomalie.filter(x => x.livello === 'errore').length;
+  const ddtId = a.stato === 'confermato' ? (await q1<{ id: number }>(`SELECT id FROM ddt_ricevuti WHERE acquisizione_id = $1`, [a.id]))?.id : null;
+  const it = (n: number) => num(n, 3);
+  return pagina(req.session.utente, a.nome_file, 'acquisire', html`
+    <h2>${a.nome_file} <span class="stato acq-${a.stato}">${a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span></h2>
+    <dl class="dati-ordine">
+      <dt>Arrivato</dt><dd>${oraRoma(a.creato_il)} · ${a.origine === 'drive' ? 'cartella Google Drive' : 'caricato dal portale'} · DDT ricevuto
+        ${tipo ? html`da un ${tipo}` : ''}${ddtId ? html` · <a href="/acquisti/ddt">elenco dei DDT ricevuti</a>` : ''}</dd>
+      ${a.contenuto ? html`<dt>File</dt><dd><a href="/ordini/acquisire/${a.id}/file" target="_blank" rel="noopener">apri la scansione</a></dd>` : ''}
+      ${a.errore ? html`<dt>Errore</dt><dd>${a.errore}</dd>` : ''}
+    </dl>
+    ${anomalie.length ? html`<div class="${errori ? 'avviso-riga' : 'nota'} anomalie-ddt"><b>${a.stato === 'confermato' ? 'Anomalie trovate alla conferma' : 'Anomalie dell\'incrocio con gli ordini'} (${riassuntoAnomalie(anomalie)}):</b>
+      <ul>${anomalie.map(x => html`<li>${x.livello === 'errore' ? html`<b>Da sistemare:</b> ` : ''}${x.testo}</li>`)}</ul></div>`
+      : d && a.stato !== 'errore' ? html`<p class="nota positivo">Nessuna anomalia: le righe del DDT corrispondono ${tipo === 'fornitore' ? "all'ordine a fornitore" : "all'anagrafica e all'ordine del cliente"}.</p>` : ''}
+    ${d ? html`<form method="post" action="/ordini/acquisire/${a.id}/ddt-ricevuto">
+      <div class="campi-ordine">
+        <label>Mittente <select name="mittenteTipo" ${dis}>
+          <option value="" ${!tipo ? raw('selected') : ''}>— scegli —</option>
+          <option value="fornitore" ${tipo === 'fornitore' ? raw('selected') : ''}>fornitore (merce ordinata)</option>
+          <option value="cliente" ${tipo === 'cliente' ? raw('selected') : ''}>cliente (materiale per un suo ordine)</option></select>
+          ${d.mittente ? html`<small class="nota">Letto «${d.mittente}»${d.partitaIva ? ` P.IVA ${d.partitaIva}` : ''}.</small>` : ''}</label>
+        <label>Fornitore (dall'anagrafica) <select name="fornitore" ${dis}><option value="">— nessuno —</option>
+          ${fornitori.map(f => html`<option value="${f.id}" ${f.id === d.fornitoreId ? raw('selected') : ''}>${f.ragione_sociale}</option>`)}</select></label>
+        <label>Cliente (dall'anagrafica) <select name="cliente" ${dis}><option value="">— nessuno —</option>
+          ${clienti.map(c => html`<option value="${c.id}" ${c.id === d.clienteId ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select></label>
+        <label>Numero DDT <input name="numero" value="${d.numero}" ${dis}></label>
+        <label>Data <input type="date" name="data" value="${d.data ?? ''}" ${dis}></label>
+        <label>Ordine citato sul DDT <input name="rif" value="${d.rifOrdine}" ${dis}></label>
+        ${tipo === 'cliente' ? html`<label>Ordine del cliente a cui serve il materiale <select name="ordine" ${dis}><option value="0">— nessuno —</option>
+          ${ctx.ordini.map(o => html`<option value="${o.id}" ${o.id === d.ordineId ? raw('selected') : ''}>ordine ${o.numero}/${o.anno}${o.rifCliente ? ` (${o.rifCliente})` : ''} · ${o.righe.map(x => x.codice ?? '').filter(Boolean).slice(0, 3).join(', ')}</option>`)}</select></label>` : ''}
+        <label class="largo">Note <textarea name="note" rows="2" ${dis}>${d.note}</textarea></label>
+      </div>
+      <div class="tabella-scorre"><table class="elenco">
+        <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th>
+          <th>${tipo === 'cliente' ? 'Componente / prodotto del cliente' : "Riga dell'ordine a fornitore"}</th><th>Esito</th></tr></thead>
+        <tbody>${d.righe.map((r, i) => html`<tr class="${r.anomalia ? 'da-controllare' : ''}">
+          <td><input name="righe[r${i}][codice]" value="${r.codice}" class="maiuscolo" ${dis}></td>
+          <td><input name="righe[r${i}][descrizione]" value="${r.descrizione}" class="lungo maiuscolo" ${dis}></td>
+          <td class="n"><input name="righe[r${i}][quantita]" value="${numCampo(r.quantita, 3)}" inputmode="decimal" class="corto" ${dis}></td>
+          <td>${tipo === 'fornitore' ? html`<select name="righe[r${i}][scelta]" ${dis}><option value="0">— nessun ordine —</option>
+              ${ctx.aperte.map(o => html`<option value="${o.ordineId}:${o.posizione}" ${o.ordineId === r.ordineId && o.posizione === r.posizione ? raw('selected') : ''}>ordine ${o.ordine} · ${o.codice ?? ''} ${o.descrizione.slice(0, 40)} · da ricevere ${it(Math.max(0, o.quantita - o.arrivati))} su ${it(o.quantita)}</option>`)}</select>`
+            : tipo === 'cliente' ? html`<select name="righe[r${i}][scelta]" ${dis}><option value="">— non in anagrafica —</option>
+              ${ctx.componenti.length ? html`<optgroup label="Componenti del cliente">${ctx.componenti.map(c => html`<option value="c:${c.id}" ${c.id === r.componenteClienteId ? raw('selected') : ''}>${c.codice} · ${c.descrizione ?? ''}</option>`)}</optgroup>` : ''}
+              ${ctx.prodotti.length ? html`<optgroup label="Prodotti (schede)">${ctx.prodotti.map(p => html`<option value="p:${p.id}" ${p.id === r.prodottoId ? raw('selected') : ''}>${p.codice} · ${p.descrizione ?? ''}</option>`)}</optgroup>` : ''}</select>
+              ${r.rigaOrdineId ? html`<br><small class="nota">scheda della riga d'ordine ${r.rigaOrdineId}</small>` : ''}`
+            : html`<span class="nota">scegli prima il mittente</span>`}</td>
+          <td>${r.anomalia ? html`<span class="esito verifica">${r.anomalia}</span>` : r.ordineId || r.componenteClienteId || r.prodottoId ? html`<span class="esito ok">ok${r.attesi != null ? ` (attesi ${it(r.attesi)})` : ''}</span>` : ''}</td></tr>`)}</tbody>
+      </table></div>
+      ${modificabile ? html`<p class="nota">${tipo === 'fornitore' ? "Alla conferma i pezzi di ogni riga si sommano agli «arrivati» della riga dell'ordine a fornitore scelta (data dell'arrivo = data del DDT)."
+          : tipo === 'cliente' ? 'Alla conferma il DDT resta registrato con il materiale arrivato e l\'ordine del cliente: lo vedi nella pagina dell\'ordine e in Acquisti → DDT ricevuti. Il portale non ha un magazzino: le quantità non si scaricano da nessuna parte.'
+          : 'Scegli il mittente (fornitore o cliente) e premi «Salva le correzioni» per vedere gli ordini con cui incrociare le righe.'}
+        Se cambi il mittente premi «Salva le correzioni»: le righe si riabbinano.</p>
+        ${errori ? html`<p><label><input type="checkbox" name="anomalieControllate" value="1"> Ho controllato le anomalie: registro il DDT così com'è</label></p>` : ''}
+        <p class="pulsanti"><button class="primario" name="azione" value="conferma">Conferma il DDT</button>
+          <button name="azione" value="salva">Salva le correzioni</button></p>` : ''}
+    </form>` : ''}
+    ${a.stato !== 'confermato' ? html`<p class="pulsanti">
+      ${a.contenuto ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+      ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo DDT? Non viene registrato e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
+    { avviso: req.query.errore ? String(req.query.errore) : req.query.salvato ? 'Salvato' : undefined });
+}
+
 export function rotteAcquisizioni() {
   const r = Router();
 
   // ── Elenco dei file arrivati e caricamento ──
   r.get('/', async (req, res) => {
     const elenco = await q(`SELECT a.id, a.origine, a.nome_file, a.tipo, a.stato, a.errore, a.creato_il, a.ordine_id,
-        coalesce(a.proposta->>'cliente', a.proposta->'fornitore'->>'ragione_sociale', (SELECT 'COMMESSA ' || string_agg(x->>'numero', ', ') FROM jsonb_array_elements(a.proposta->'commesse') x)) AS cliente,
+        coalesce(a.proposta->>'cliente', a.proposta->>'mittente', a.proposta->'fornitore'->>'ragione_sociale', (SELECT 'COMMESSA ' || string_agg(x->>'numero', ', ') FROM jsonb_array_elements(a.proposta->'commesse') x)) AS cliente,
         coalesce(jsonb_array_length(a.proposta->'righe'), (SELECT sum(jsonb_array_length(x->'righe'))::int FROM jsonb_array_elements(a.proposta->'commesse') x), 0) AS righe,
         (a.proposta->>'eOrdine')::boolean AS e_ordine, o.numero, o.anno
       FROM acquisizioni a LEFT JOIN ordini o ON o.id = a.ordine_id
@@ -148,8 +228,9 @@ export function rotteAcquisizioni() {
       <section class="blocco">
         <h2>Carica ordini</h2>
         <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt),
-          oppure la scansione delle schede di produzione compilate (i fogli tempi vanno nel rientro della commessa)
-          o le fatture dei fornitori esteri (si controllano in Amministrazione → Autofatture).
+          oppure la scansione delle schede di produzione compilate (i fogli tempi vanno nel rientro della commessa),
+          le fatture dei fornitori esteri (si controllano in Amministrazione → Autofatture), i DDT di Casteltech
+          e i <b>DDT ricevuti</b> dai fornitori (merce ordinata: incrocio con l'ordine a fornitore) e dai clienti (materiale per i loro ordini): il portale segnala le anomalie.
           L'IA legge cliente, riferimento, righe, prezzi e consegne e prepara una proposta: l'ordine nasce solo quando lo confermi.
           ${iaConfigurata() ? '' : html`<b>La chiave dell'IA (ANTHROPIC_API_KEY) non è configurata: i file si registrano ma non si leggono.</b>`}
           Gli export di Fatture in Cloud si registrano qui; la lettura automatica dell'incrocio arriverà con il prossimo passo.</p>
@@ -166,7 +247,7 @@ export function rotteAcquisizioni() {
           <td>${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</td><td>${a.origine === 'drive' ? 'Drive' : 'caricato'}</td>
           <td class="taglia">${a.cliente}${a.e_ordine === false ? html` <span class="esito verifica">non sembra un ordine</span>` : ''}</td>
           <td class="n">${a.righe || ''}</td>
-          <td><span class="stato acq-${a.stato}">${a.tipo === 'ddt' && a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
+          <td><span class="stato acq-${a.stato}">${(a.tipo === 'ddt' || a.tipo === 'ddt_ricevuto') && a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
             ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>${modulo.chiudi}`
         : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: ['acquisizioni.js', 'elenco.js'], avviso: req.query.drive ? String(req.query.drive) : req.query.msg ? String(req.query.msg) : undefined }));
   });
@@ -200,6 +281,7 @@ export function rotteAcquisizioni() {
     if (!a) return res.status(404).send('Non trovato');
     if (a.tipo === 'scheda_produzione') return res.send(paginaScheda(req, a));
     if (a.tipo === 'ddt') return res.send(await paginaDdt(req, a));
+    if (a.tipo === 'ddt_ricevuto') return res.send(await paginaDdtRicevuto(req, a));
     if (a.tipo === 'fattura_estera') return res.redirect(`/amministrazione/fatture-estere/${a.id}`);
     const p: PropostaDb | null = a.proposta;
     const modificabile = ['da_confermare', 'errore'].includes(a.stato) && !!p;
@@ -263,7 +345,7 @@ export function rotteAcquisizioni() {
             <button formaction="/ordini/acquisire/${a.id}/salva">Salva le correzioni</button></p>` : ''}
       </form>` : ''}
       ${a.stato !== 'confermato' ? html`<p class="pulsanti">
-        ${a.contenuto && ['ordine', 'email', 'scheda_produzione', 'ddt'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
+        ${a.contenuto && ['ordine', 'email', 'scheda_produzione', 'ddt', 'ddt_ricevuto'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
         ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo documento? Non diventa un ordine e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
       { avviso }));
   });
@@ -272,7 +354,7 @@ export function rotteAcquisizioni() {
     const a = await q1(`SELECT nome_file, tipo, mime, contenuto FROM acquisizioni WHERE id = $1`, [Number(req.params.id)]);
     if (!a?.contenuto) return res.status(404).send('File non disponibile');
     // PDF e immagini si aprono nel browser; email e altri file si scaricano (mai mostrati come pagina)
-    const inLinea = /^(application\/pdf|image\/(png|jpeg|webp))$/.test(a.mime ?? '') && ['ordine', 'fattura_estera'].includes(a.tipo);
+    const inLinea = /^(application\/pdf|image\/(png|jpeg|webp))$/.test(a.mime ?? '') && ['ordine', 'fattura_estera', 'ddt', 'ddt_ricevuto'].includes(a.tipo);
     res.setHeader('Content-Type', inLinea ? a.mime : a.mime === 'text/plain' ? 'text/plain; charset=utf-8' : 'application/octet-stream');
     res.setHeader('Content-Disposition', `${inLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.nome_file)}`);
     res.send(a.contenuto);
@@ -343,6 +425,40 @@ export function rotteAcquisizioni() {
       }
     }
     await salvaDdt(id, d);
+    res.redirect(`/ordini/acquisire/${id}?salvato=1`);
+  });
+
+  // DDT ricevuto da un fornitore o da un cliente: correzioni, riabbinamento e conferma (Adriano 6/11/2026)
+  r.post('/:id/ddt-ricevuto', async (req, res) => {
+    const id = Number(req.params.id);
+    const a = await q1(`SELECT proposta FROM acquisizioni WHERE id = $1 AND tipo = 'ddt_ricevuto'`, [id]);
+    if (!a?.proposta) return res.status(404).send('Non trovato');
+    const b = req.body ?? {};
+    const prima: DdtRicevutoDb = a.proposta;
+    const tipo = b.mittenteTipo === 'fornitore' || b.mittenteTipo === 'cliente' ? b.mittenteTipo : null;
+    const fornitoreId = tipo === 'fornitore' ? Number(b.fornitore) || null : null;
+    const clienteId = tipo === 'cliente' ? Number(b.cliente) || null : null;
+    // mittente cambiato: le righe si ripropongono da capo (scelte dell'ufficio azzerate)
+    const cambiato = tipo !== prima.mittenteTipo || fornitoreId !== prima.fornitoreId || clienteId !== prima.clienteId;
+    const d: DdtRicevutoDb = {
+      ...prima, mittenteTipo: tipo, fornitoreId, clienteId, numero: maiuscolo(b.numero).slice(0, 40), data: dataDa(b.data), rifOrdine: maiuscolo(b.rif).slice(0, 120),
+      note: String(b.note ?? '').trim().slice(0, 500),
+      ordineId: cambiato || tipo !== 'cliente' ? undefined : b.ordine === undefined ? prima.ordineId : Number(b.ordine) || null,
+      righe: Object.entries<any>(b.righe ?? {}).filter(([k]) => /^r\d+$/.test(k)).sort(([x], [y]) => Number(x.slice(1)) - Number(y.slice(1)))
+        .map(([, x]) => ({ codice: maiuscolo(x?.codice), descrizione: maiuscolo(x?.descrizione), quantita: numeroDa(x?.quantita) ?? 0,
+          scelta: cambiato || x?.scelta === undefined ? undefined : String(x.scelta) }))
+        .filter(r => r.codice || r.descrizione),
+    };
+    if (b.azione === 'conferma') {
+      try {
+        await confermaDdtRicevuto(id, d, req.session.utente!.id, oggiRoma(), !!b.anomalieControllate);
+        return res.redirect(`/ordini/acquisire/${id}?salvato=1`);
+      } catch (e: any) {
+        await salvaDdtRicevuto(id, d);
+        return res.redirect(`/ordini/acquisire/${id}?errore=${encodeURIComponent(e.message)}`);
+      }
+    }
+    await salvaDdtRicevuto(id, d);
     res.redirect(`/ordini/acquisire/${id}?salvato=1`);
   });
 
