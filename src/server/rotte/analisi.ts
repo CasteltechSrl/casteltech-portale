@@ -18,6 +18,7 @@ import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteAnalisiProdotti } from './analisi-prodotti.js';
 import { rotteAnalisiAcquisti } from './analisi-acquisti.js';
 import { rottePareggio } from './pareggio.js';
+import { rotteAnalisiCosti } from './analisi-costi.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -58,7 +59,7 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
 }
 
 /** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), fornitori e punto di pareggio (6/11/2026) e previsione di cassa. */
-export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'cassa'): Raw {
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'costi' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
     <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
@@ -66,6 +67,7 @@ export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'for
     <a href="/amministrazione/analisi/fornitori" class="${attiva === 'fornitori' ? 'attivo' : ''}">Fornitori</a>
     <a href="/amministrazione/analisi/acquisti" class="${attiva === 'acquisti' ? 'attivo' : ''}">Acquisti</a>
     <a href="/amministrazione/analisi/pareggio" class="${attiva === 'pareggio' ? 'attivo' : ''}">Punto di pareggio</a>
+    <a href="/amministrazione/analisi/costi" class="${attiva === 'costi' ? 'attivo' : ''}">Costi per categoria</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
 
@@ -185,6 +187,7 @@ export function rotteAnalisi() {
   r.use(rotteAnalisiProdotti());   // Prodotti e Clienti (Adriano 5/11/2026)
   r.use(rotteAnalisiAcquisti());   // Fornitori, componenti e materiali (Adriano 6/11/2026)
   r.use(rottePareggio());          // Punto di pareggio (Adriano 6/11/2026)
+  r.use(rotteAnalisiCosti());      // Costi per categoria (Adriano 6/11/2026)
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
   r.get('/cassa', async (req: Request, res) => {
