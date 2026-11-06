@@ -15,6 +15,7 @@ import { anteprimaDocumento } from './documenti-servizio.js';
 import { caricaAzienda } from './amministrazione-servizio.js';
 import { preparaFornitore } from '../engine/anagrafica-fornitori.js';
 import { datiFattureRicevute, eNostraAutofattura, xmlDaFile } from '../engine/fattura-ricevuta.js';
+import { salvaRigheDaXml } from './righe-fornitori-servizio.js';
 import {
   STATI_SDI, ambienteDaChiave, conNumero, firmaWebhookValida, messaggioErroreApi, numeroDiProva, numeroNellXml, numeroNonValido, statoPiuAvanti, testoErrori,
   type Ambiente, type StatoSdi,
@@ -205,7 +206,7 @@ export async function registraRicevuta(ambiente: Ambiente, r: any): Promise<stri
   if (!fatture.length) return `file ${r.file_name ?? r.id}: nessuna fattura letta`;
   const nostra = (await caricaAzienda()).partita_iva;
   const esiti: string[] = [];
-  for (const f of fatture) {
+  for (const [corpo, f] of fatture.entries()) {
     const chi = `${f.tipo === 'nota_credito' ? 'nota di credito' : 'fattura'} n. ${f.numero} del ${f.data.split('-').reverse().join('/')} di ${f.fornitore.ragione_sociale}`;
     if (eNostraAutofattura(f, nostra)) { esiti.push(`${chi}: copia della nostra autofattura, saltata`); continue; }
     if (ambiente === 'prova') { esiti.push(`PROVA ${chi}, ${f.totale.toFixed(2)} €`); continue; }
@@ -214,11 +215,12 @@ export async function registraRicevuta(ambiente: Ambiente, r: any): Promise<stri
       if ((await c.query(`SELECT 1 FROM documenti_ricevuti WHERE sdi_id = $1`, [sdiId])).rowCount) return `${chi}: già registrata`;
       let forn = (await c.query(`SELECT id FROM fornitori_anagrafica WHERE upper(regexp_replace(partita_iva, '[^A-Za-z0-9]', '', 'g')) = ANY($1) LIMIT 1`,
         [[f.fornitore.partita_iva, f.fornitore.partita_iva.replace(/^IT/, ''), `IT${f.fornitore.partita_iva}`]])).rows[0]?.id ?? null;
-      const doppia = (await c.query(`SELECT id FROM documenti_ricevuti WHERE upper(numero) = upper($1) AND data = $2
+      const doppia = (await c.query(`SELECT id, righe_lette_il FROM documenti_ricevuti WHERE upper(numero) = upper($1) AND data = $2
           AND (fornitore_id = $3 OR regexp_replace(intestatario->>'partita_iva', '[^0-9]', '', 'g') = regexp_replace($4, '[^0-9]', '', 'g'))`,
         [f.numero, f.data, forn, f.fornitore.partita_iva])).rows[0];
       if (doppia) {
         await c.query(`UPDATE documenti_ricevuti SET sdi_id = coalesce(sdi_id, $2), xml = coalesce(xml, $3) WHERE id = $1`, [doppia.id, sdiId, xml]);
+        if (!doppia.righe_lette_il) await salvaRigheDaXml(c, doppia.id, xml, corpo);   // righe per l'analisi degli acquisti
         return `${chi}: già presente (da Fatture in Cloud)`;
       }
       if (!forn) {
@@ -236,6 +238,7 @@ export async function registraRicevuta(ambiente: Ambiente, r: any): Promise<stri
          f.imponibile, f.imposta, f.totale, f.valuta, sdiId, xml, f.ritenuta, f.tipo_ritenuta, f.causale_ritenuta, f.cassa,
          f.ritenuta ? f.netto_a_pagare : null, r.created ?? null])).rows[0].id;
       for (const sc of f.scadenze) await c.query(`INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo) VALUES ($1, $2, $3)`, [id, sc.data, sc.importo]);
+      await salvaRigheDaXml(c, id, xml, corpo);   // righe della fattura per l'analisi degli acquisti (componenti, materiali, "dove l'ho comprato")
       return `${chi}: registrata${forn ? '' : ' (fornitore da aggiungere a mano in anagrafica)'}`;
     }));
   }
