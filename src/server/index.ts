@@ -99,10 +99,11 @@ app.use((req, res, next) => {
 // registro delle attività: chi ha cambiato cosa e quando (engine/registro.ts), una riga dopo ogni salvataggio riuscito
 app.use(registraAttivita);
 
-// contabilità, esterno e produzione: i link alle pagine che il profilo non può aprire diventano testo (engine/link-profilo.ts)
+// contabilità, esterno, produzione e ufficio (per l'Analisi, Adriano 6/11/2026): i link alle pagine che il profilo non può aprire
+// diventano testo (engine/link-profilo.ts)
 app.use((req, res, next) => {
   const ruolo = req.session.utente?.ruolo;
-  if (!ruolo || eUfficio(ruolo)) return next();
+  if (!ruolo || ruolo === 'amministratore') return next();
   const invia = res.send.bind(res);
   res.send = ((corpo?: any) => invia(typeof corpo === 'string' && corpo.includes('<a ') && /^\s*<!doctype html/i.test(corpo)
     ? spegniLinkNonPermessi(corpo, ruolo) : corpo)) as typeof res.send;

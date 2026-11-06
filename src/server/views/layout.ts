@@ -5,6 +5,7 @@ import { avvisoServizi } from '../stato-servizi.js';
 export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
 
 import { eUfficio, type Ruolo } from '../../engine/ruoli.js';
+import { linkPermesso } from '../../engine/link-profilo.js';
 
 export interface Utente { id: number; nome: string; ruolo: Ruolo }
 
@@ -39,8 +40,8 @@ export const MENU_CONTABILITA: [string, string][] = [
   ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'], ['Fatture fornitori', '/amministrazione/ricevuti'],
   ['Acquisti per mese', '/amministrazione/ricevuti/mesi'], ['Registri IVA', '/amministrazione/registri'], ['DDT da fatturare', '/amministrazione/differite'],
   ['Spese', '/amministrazione/spese'], ['Bollo', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'],
-  ['VIES', '/amministrazione/vies'], ['Crediti', '/amministrazione/crediti'], ['Solleciti', '/amministrazione/solleciti'], ['Controlli', '/amministrazione/controlli'], ['Analisi', '/amministrazione/analisi'],
-  ['Previsione di cassa', '/amministrazione/analisi/cassa'], ['Buste paga', '/dipendenti/riservata'],
+  ['VIES', '/amministrazione/vies'], ['Crediti', '/amministrazione/crediti'], ['Solleciti', '/amministrazione/solleciti'], ['Controlli', '/amministrazione/controlli'],
+  ['Previsione di cassa', '/amministrazione/analisi/cassa'], ['Buste paga', '/dipendenti/riservata'],   // niente Analisi: solo amministratore ed esterno (6/11/2026)
 ];
 
 export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
@@ -48,6 +49,8 @@ export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[
 export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; contenuto: Raw; script?: string | string[]; avviso?: string; largo?: boolean }) {
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
+  // nel menu solo le pagine che il profilo può aprire (es. Analisi: solo amministratore ed esterno, Adriano 6/11/2026)
+  const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
   return html`<!doctype html>
 <html lang="it">
 <head>
@@ -61,10 +64,10 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
-  ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${MENU_CONTABILITA.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
+  ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
     ${(eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
-      <div class="tendina">${g.voci.map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
+      <div class="tendina">${permesse(g.voci).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
     </div>`)}
   </nav>`}
   ${opz.utente.ruolo === 'produzione' ? '' : html`<form class="cerca-globale" method="get" action="/cerca" role="search" autocomplete="off">

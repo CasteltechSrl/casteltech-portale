@@ -96,7 +96,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   o cambia i ruoli in Impostazioni → Utenti (`controlloUtente`/`controlloEliminaUtente`: l'ufficio aggiunge solo Produzione, non tocca gli amministratori, nessuno
   si cambia il ruolo, resta sempre un amministratore attivo). Primo amministratore all'avvio: l'utente di ADMIN_EMAIL se non ce n'è nessuno (`catalogo-db.ts`).
   Stipendi, buste paga e previsione di cassa (da cui si ricavano gli stipendi) SOLO a chi `vedePaghe`: amministratore, contabilità, ufficio con `utenti.paghe`;
-  ruolo e permesso letti dal database. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
+  ruolo e permesso letti dal database. Analisi riservata (Adriano 6/11/2026, `vedeAnalisi`/`analisiPermessa`/`PERCORSO_ANALISI` in `engine/ruoli.ts`, guardia su
+  `/analisi` in `rotte/amministrazione.ts`): tutta Amministrazione → Analisi SOLO ad amministratore ed esterno; ufficio e contabilità ricevono 403 e non vedono i
+  link (menu filtrato con `linkPermesso` in `layout.ts`, `spegniLinkNonPermessi` ora anche per l'ufficio: i link "Analisi" spariscono); la Previsione di cassa resta a `vedePaghe`. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
 - Registro "chi ha cambiato cosa e quando" e accessi (Adriano, lista del 4/11/2026; migrazione 075 `registro_attivita`, regole in `engine/registro.ts`, scrittura in
   `registro-servizio.ts` = middleware `registraAttivita` in `index.ts`, pagina Impostazioni → Registro, test in `tests/registro.test.ts`): una riga per ogni POST riuscito
   (sezione dal percorso, azione = `azione` del modulo o ultima parola, righe = id nel percorso + `ids` spuntati; elimina/annulla/scarta = 'eliminazione'), accessi e

@@ -19,10 +19,10 @@ export const NOMI_RUOLI: Record<Ruolo, string> = {
 };
 export const DESCRIZIONI_RUOLI: Record<Ruolo, string> = {
   amministratore: 'accesso completo; l\'unico che cambia i ruoli degli utenti e vede stipendi, buste paga e previsione di cassa',
-  ufficio: 'accesso completo, tranne ruoli degli utenti, buste paga e previsione di cassa',
+  ufficio: 'accesso completo, tranne ruoli degli utenti, Analisi, buste paga e previsione di cassa',
   produzione: 'solo inserimento tempi e note sulle schede',
   contabilita: 'solo lettura di Amministrazione e Guida, per il commercialista e chi aiuta con la contabilità',
-  esterno: 'vede tutto il portale ma non modifica nulla (escluse Impostazioni e buste paga), per consulenti e visitatori esterni',
+  esterno: 'vede tutto il portale, Analisi compresa, ma non modifica nulla (escluse Impostazioni e buste paga), per consulenti e visitatori esterni',
 };
 
 /** Profilo scritto nel modulo Utenti; un valore sconosciuto diventa "produzione" (il più ristretto tra quelli storici). */
@@ -70,6 +70,20 @@ export function controlloEliminaUtente(x: { chi: Ruolo; ruoloBersaglio: Ruolo; a
 /** Previsione di cassa: si ricava il netto degli stipendi per differenza, quindi la vede solo chi vede le paghe. */
 export const PERCORSO_CASSA = /^\/amministrazione\/analisi\/cassa(\.xlsx)?(\/|$)/;
 
+/** Tutte le pagine di Amministrazione → Analisi (andamento, prodotti, clienti, fornitori, pareggio, schede, Excel, cassa). */
+export const PERCORSO_ANALISI = /^\/amministrazione\/analisi(\.xlsx)?(\/|$)/;
+
+/**
+ * Analisi riservata (Adriano 6/11/2026: "l'ambiente analisi non deve essere visibile agli utenti ufficio ma solo all'amministratore
+ * e Esterno"): la vedono solo l'amministratore e il profilo esterno. L'ufficio e la contabilità non la aprono e non ne vedono i link
+ * (menu, tasti "Analisi" nelle anagrafiche, cruscotti). Unica eccezione la Previsione di cassa, che segue la sua regola (`vedePaghe`).
+ */
+export const vedeAnalisi = (ruolo: string | undefined) => ruolo === 'amministratore' || ruolo === 'esterno';
+
+/** Il profilo può aprire questo percorso dell'Analisi? (la cassa è decisa a parte, dalla sua pagina: qui passa) */
+export const analisiPermessa = (ruolo: string | undefined, percorso: string) =>
+  !PERCORSO_ANALISI.test(percorso) || vedeAnalisi(ruolo) || PERCORSO_CASSA.test(percorso);
+
 /** Profili che vedono le pagine ma non modificano nulla (nella pagina: `body.sola-lettura` o `body.sola-lettura-tutto`). */
 export const solaLettura = (ruolo: Ruolo | undefined) => ruolo === 'contabilita' || ruolo === 'esterno';
 
@@ -92,7 +106,8 @@ export const contabilitaPuo = (metodo: string, percorso: string) =>
   ((metodo === 'GET' || metodo === 'HEAD')
     && (percorso === '/amministrazione' || percorso.startsWith('/amministrazione/') || percorso === '/cerca' || percorso === '/cerca/'
       || percorso === '/dipendenti/riservata' || percorso.startsWith('/dipendenti/riservata/'))
-    && !/^\/amministrazione\/documenti\/nuovo(\/|\?|$)/.test(percorso))
+    && !/^\/amministrazione\/documenti\/nuovo(\/|\?|$)/.test(percorso)
+    && analisiPermessa('contabilita', percorso))
   || (metodo === 'POST' && (percorso === '/dipendenti/riservata/sblocca' || percorso === '/dipendenti/riservata/chiudi'));
 
 /**

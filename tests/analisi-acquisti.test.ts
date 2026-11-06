@@ -80,10 +80,11 @@ test('pulsanti Analisi delle anagrafiche: indirizzi e profili (chi non apre l\'A
   assert.equal(linkAnalisiComponente(3), '/amministrazione/analisi/componente?id=3');
   assert.equal(linkAnalisiMateriale(9), '/amministrazione/analisi/materiale?id=9');
   for (const p of ['/amministrazione/analisi/prodotto', '/amministrazione/analisi/fornitore', '/amministrazione/analisi/fornitori', '/amministrazione/analisi/componente', '/amministrazione/analisi/materiale']) {
-    assert.equal(linkPermesso('ufficio', p), true);
+    // Analisi solo all'amministratore e all'esterno (Adriano 6/11/2026)
+    assert.equal(linkPermesso('ufficio', p), false, p);
     assert.equal(linkPermesso('amministratore', p), true);
     assert.equal(linkPermesso('esterno', p), true);
-    assert.equal(linkPermesso('contabilita', p), true);
+    assert.equal(linkPermesso('contabilita', p), false, p);
     assert.equal(linkPermesso('produzione', p), false, p);
   }
 });
