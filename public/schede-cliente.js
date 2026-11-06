@@ -11,6 +11,8 @@
     // dalla cartella si toglie il primo livello (il nome della cartella), che diventa il nome del pacchetto se non è scritto
     const cartella = scelti.find(f => f.webkitRelativePath)?.webkitRelativePath.split('/')[0];
     const nome = document.getElementById('nome-pacchetto').value.trim() || cartella || scelti[0].name.replace(/\.[^.]+$/, '');
+    // dalla pagina Documentazione del prodotto (Anagrafiche → Prodotti): stesso caricamento, poi il riassunto va sul prodotto
+    const prodotto = invia.dataset.prodotto;
     const file = scelti.filter(f => !/(^|\/)(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(percorso(f)));
     invia.disabled = true;
     try {
@@ -44,6 +46,15 @@
       const ra = await fetch(`/preventivi/documenti/${j.id}/analizza`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const ja = await ra.json().catch(() => ({}));
       if (!ra.ok) throw new Error(ja.errore || 'Analisi non riuscita');
+      if (prodotto) {
+        esito.textContent = 'Confronto con la revisione precedente…';
+        const rd = await fetch(`/anagrafiche/prodotti/${prodotto}/documentazione/da-pacchetto/${j.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisione: document.getElementById('revisione-doc')?.value.trim() || null, conserva: !!document.getElementById('conserva-file')?.checked }) });
+        const jd = await rd.json().catch(() => ({}));
+        if (!rd.ok) throw new Error(jd.errore || 'Revisione non salvata');
+        location.href = jd.vai;
+        return;
+      }
       location.href = `/preventivi/documenti/${j.id}`;
     } catch (e) { esito.textContent = e.message; invia.disabled = false; }
   });

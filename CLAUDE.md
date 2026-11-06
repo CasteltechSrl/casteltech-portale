@@ -70,6 +70,16 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   (eccezione voluta alla regola codice-cliente, per questo non sono in `prodotti`). Gruppo "Servizi una tantum" in fondo al menu Codice (`opzioniServizi`: documenti con
   `cellaCodice(x, i, prodotti, servizi)`, ordine con valore `ut:CODICE` → riga tipo servizio), descrizione modificabile, prezzo proposto; Ordini da e-mail e PDF propongono
   il servizio dalla descrizione (`servizioProposto`). Venduto per anno nella pagina: codice UT o, per le fatture di prima/FIC, la prima riga della descrizione che cita UN servizio.
+- Documentazione dei prodotti (Adriano 6/11/2026, "non pesare sul portale, ma solo su Google Drive"; migrazione 081 `prodotti_documenti`, regole in
+  `engine/documenti-prodotto.ts`, letture in `documenti-prodotto-servizio.ts`, pagina `rotte/documenti-prodotto.ts` = tasto "Doc" in Anagrafiche → Prodotti →
+  `/anagrafiche/prodotti/:id/documentazione`, test in `tests/documenti-prodotto.test.ts`): per ogni prodotto le REVISIONI dei documenti del cliente come RIASSUNTO
+  (`riassuntoDaAnalisi`: componenti ref/P/N/valore/case/lato, conteggi, misure, strati Gerber, nomi dei file e cartella del Drive; ~2–20 KB), MAI i file.
+  Revisione dai file (`analisi.prodotto`) o dai nomi (`revisioneDaNomi`: "Rev.C", "V1.0.7", "r2"), altrimenti "0"; già presente = "C-2". Revisione nuova dalla pagina
+  del prodotto: stesso caricamento dei Documenti dei clienti (`schede-cliente.js` con `data-prodotto`), poi POST `.../da-pacchetto/:pid` → `revisioneDaPacchetto`
+  (i file del pacchetto si svuotano dal database salvo la spunta "Tieni anche i file"). Confronto con la revisione prima (`confrontaRevisioni`: aggiunti, tolti,
+  cambiati, conteggi, strati; "stravolto" = meno della metà dei riferimenti in comune o misure diverse oltre il 20 % → niente confronto riga per riga).
+  Acquisizione dal Drive fatta da Claude con `tools/documentazione-da-cartella.ts` (stesso motore, solo il riassunto) → POST `/api/claude/documentazione`
+  (GET = prodotti venduti nell'anno con le revisioni; GET `/api/claude/spazio` = peso delle tabelle su Neon).
 - Sede operativa dei clienti (Adriano 4/11/2026, caso ELEXES; migrazione 072 `clienti.sede_operativa_diversa` + `sede_op_*`, `engine/sede-operativa.ts`, test in
   `tests/sede-operativa.test.ts`): l'indirizzo dei dati fiscali è la sede legale (fattura, intestazione DDT); spunta "Sede operativa diversa dalla sede legale" in
   Anagrafiche → Clienti → Dati fiscali mostra i campi della seconda sede (presso, indirizzo, CAP, comune, provincia, nazione, note per la consegna; CSS `:has`).

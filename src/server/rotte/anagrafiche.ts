@@ -38,6 +38,8 @@ import { codiciDiversiPerAnno } from '../../engine/scheda-cliente.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteMateriali } from './materiali-consumo.js';
 import { rotteServizi } from './servizi-una-tantum.js';
+import { rotteDocumentiProdotto } from './documenti-prodotto.js';
+import { revisioniPerProdotto } from '../documenti-prodotto-servizio.js';
 
 export type SchedaAnagrafiche = 'clienti' | 'fornitori' | 'prodotti' | 'componenti' | 'componenti-clienti' | 'materiali' | 'servizi';
 const SCHEDE: [SchedaAnagrafiche, string][] = [['clienti', 'Clienti'], ['fornitori', 'Fornitori'], ['prodotti', 'Prodotti'], ['componenti', 'Componenti'],
@@ -180,6 +182,7 @@ export function rotteAnagrafiche() {
   // ── Materiali di consumo (Adriano 3/11/2026): pagina, ricerca per le righe degli ordini a fornitore, aggiunta dalla riga ──
   r.use('/materiali', rotteMateriali(paginaAnagrafiche));
   r.use('/servizi', rotteServizi(paginaAnagrafiche));
+  r.use('/prodotti/:id/documentazione', rotteDocumentiProdotto(paginaAnagrafiche));
   // righe del DDT (Adriano 2/11/2026): nostri componenti con codice gestionale e descrizione "P/N (codice produzione)"; componenti del cliente del DDT
   r.get('/componenti-ddt', async (req, res) => res.json(await cercaComponentiPerDdt(String(req.query.q ?? ''))));
   r.get('/componenti-clienti-cerca', async (req, res) => res.json(await cercaComponentiCliente(Number(req.query.cliente) || 0, String(req.query.q ?? ''))));
@@ -288,6 +291,7 @@ export function rotteAnagrafiche() {
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
       ORDER BY (p.cliente_id IS NULL) DESC, p.codice LIMIT 2000`, [filtro]);
     const scaglioni = await scaglioniDi(prodotti.map((p: any) => p.id));
+    const documentazione = await revisioniPerProdotto(prodotti.map((p: any) => p.id));
     // regola codice-cliente (Adriano 29/10/2026): i codici senza cliente si vedono subito, in cima e in giallo
     const senzaCliente = (await q1<{ n: number }>(`SELECT count(*)::int AS n FROM prodotti WHERE cliente_id IS NULL`))!.n;
     const avvisoCodici = avvisoSenzaCliente(senzaCliente);
@@ -331,7 +335,8 @@ export function rotteAnagrafiche() {
               title="${testoPrezzo(p)}"></td>
             <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"
               placeholder="un prezzo per tutte le quantità" title="Facoltativi: es. 1-5=10; 6-20=8; 21+=7 (21+ = da 21 in su)"></td><td class="n">${p.preventivi}</td>
-            <td class="nowrap"><a class="bottone" href="${linkAnalisiProdotto(p)}" title="Analisi del prodotto: pezzi e fatturato anno per anno, preventivi e consuntivo delle commesse">Analisi</a>
+            <td class="nowrap"><a class="bottone" href="/anagrafiche/prodotti/${p.id}/documentazione" title="${documentazione.get(p.id) ? `Documentazione del cliente: ${documentazione.get(p.id)!.n} revisioni, ultima ${documentazione.get(p.id)!.ultima}` : 'Documentazione del cliente (BOM, pick and place, Gerber): nessuna revisione caricata'}">Doc${documentazione.get(p.id) ? html` <span class="conta">${documentazione.get(p.id)!.ultima}</span>` : ''}</a>
+              <a class="bottone" href="${linkAnalisiProdotto(p)}" title="Analisi del prodotto: pezzi e fatturato anno per anno, preventivi e consuntivo delle commesse">Analisi</a>
               <form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}" class="inline"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
                 data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}

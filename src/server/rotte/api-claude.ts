@@ -9,6 +9,9 @@
  *   GET  /api/claude/storico                 → quanti documenti per tipo, anno e origine (solo numeri)
  *   GET  /api/claude/storico/fic?anno=2026   → i documenti arrivati da Fatture in Cloud di un anno, uno per riga, con il loro fic_id
  *                                              (allineamento con FIC, Adriano 6/11/2026: solo numeri, importi, stati e scadenze, niente nomi)
+ *   GET  /api/claude/documentazione?anno=    → prodotti venduti nell'anno con le revisioni dei documenti già caricate (Adriano 6/11/2026)
+ *   POST /api/claude/documentazione          → { cliente, codice, riassunto, revisione?, cartella?, note? } = revisione dalle cartelle del Drive
+ *   GET  /api/claude/spazio                  → spazio occupato su Neon per tabella
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -16,6 +19,8 @@ import { q, q1 } from '../db.js';
 import { chiaveGiusta } from '../../engine/gmail.js';
 import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
+import { prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
+import { testoConfronto } from '../../engine/documenti-prodotto.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
 let chiaveInMemoria: string | null | undefined;
@@ -119,6 +124,31 @@ export function rotteApiClaude() {
       ricevuti_sdi: await q(`SELECT numero, data::text, totale::float, ricevuto_il::text FROM documenti_ricevuti WHERE origine = 'sdi' ORDER BY ricevuto_il DESC NULLS LAST, id DESC LIMIT 20`),
       numerazioni: await q(`SELECT tipo, sezionale, anno, ultimo_numero, ultima_data::text FROM numerazioni WHERE anno = $1 ORDER BY tipo, sezionale`, [anno]),
     });
+  });
+
+  // Documentazione dei prodotti dalle cartelle del Drive (Adriano 6/11/2026): Claude legge i file sul PC dell'ufficio, calcola il riassunto
+  // con lo stesso motore del portale e lo manda qui; nel portale entra solo il riassunto (i file restano sul Drive, niente peso su Neon).
+  r.get('/documentazione', async (req, res) => {
+    const anno = /^\d{4}$/.test(String(req.query.anno ?? '')) ? Number(req.query.anno) : new Date().getFullYear();
+    res.json({ anno, prodotti: await prodottiVendutiNellAnno(anno) });
+  });
+
+  r.post('/documentazione', async (req, res) => {
+    const b = req.body ?? {};
+    const cliente = String(b.cliente ?? '').trim(), codice = String(b.codice ?? '').trim();
+    if (!cliente || !codice || !b.riassunto || !Array.isArray(b.riassunto.componenti)) return res.status(400).json({ errore: 'Servono cliente, codice e riassunto.' });
+    const p = await trovaProdotto(cliente, codice);
+    if (!p) return res.status(404).json({ errore: `Prodotto ${codice} di ${cliente} non trovato in anagrafica (o più di uno).` });
+    const esito = await salvaRevisione({ prodottoId: p.id, riassunto: b.riassunto, revisione: typeof b.revisione === 'string' ? b.revisione : null,
+      nomi: Array.isArray(b.nomi) ? b.nomi.map(String) : undefined, caricatoDa: 'Claude', origine: 'drive',
+      cartella: typeof b.cartella === 'string' ? b.cartella.slice(0, 500) : null, note: typeof b.note === 'string' ? b.note.slice(0, 500) : null });
+    res.json({ ok: true, prodotto: p, id: esito.id, revisione: esito.revisione,
+      confronto: esito.confronto && esito.precedente ? testoConfronto(esito.confronto, esito.precedente.revisione, esito.revisione) : null });
+  });
+
+  r.get('/spazio', async (_req, res) => {
+    const tabelle = await spazioTabelle();
+    res.json({ totaleByte: tabelle.reduce((t, x) => t + x.byte, 0), tabelle });
   });
 
   r.post('/suggerimenti/:id', async (req, res) => {
