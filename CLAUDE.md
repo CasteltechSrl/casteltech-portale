@@ -679,6 +679,14 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `/amministrazione/analisi/clienti` = visione d'insieme (`visioneClienti`): classifica con peso, stesso periodo dell'anno prima, segnali (calo forte ≤ −30 % su almeno 2.000 €, in calo,
    in crescita, nuovo = prima vendita nell'anno, perso = anno prima sì e anno scelto no, fermo = nessuna vendita da 6+ mesi, solo anno in corso), primi 3/5, margine medio dai preventivi,
    giorni di incasso e ritardo (da `analisiClienti`), scaduto (→ Crediti). GET `/api/claude/storico` = conteggi dei documenti per tipo/anno/origine (controllo dello storico caricato).
+   ✅ Analisi degli acquisti e tasto "Analisi" nelle anagrafiche (Adriano 6/11/2026; `engine/analisi-acquisti.ts`, letture in `analisi-acquisti-servizio.ts`, pagine in
+   `rotte/analisi-acquisti.ts`, test in `tests/analisi-acquisti.test.ts`): in Anagrafiche → Prodotti / Fornitori / Componenti / Materiali ogni riga ha il tasto "Analisi"
+   (`linkAnalisi…` in `engine/analisi-acquisti.ts`; sparisce da solo per i profili che non aprono l'Analisi, `link-profilo`).
+   `/amministrazione/analisi/fornitori` = classifica dei fornitori dell'anno (+ Excel; tasto Fornitori in `tastiAnalisi`); `/fornitore?f=f<id>` = acquisti anno per anno dalle
+   fatture ricevute (NC in negativo, storico FIC dal 2019), variazione, peso sugli acquisti, ordini del portale, pagamenti (giorni medi e ritardo su 12 mesi, da pagare, scaduto),
+   categorie di costo, ultime fatture; `/componente?id=` e `/materiale?id=` = `schedaArticolo` dalle righe degli ordini a fornitore emessi dal portale (pezzi, spesa, prezzo medio
+   pesato netto sconto, variazione prezzo, fornitori, ultimo acquisto, min/max) + ultimo acquisto dell'anagrafica se più recente; componente anche BOM che lo usano (`bomDelComponente`,
+   jsonb di `bom_analisi.righe`). Gli acquisti FIC non sono riga per riga nel portale: le schede di componenti e materiali partono dagli ordini del portale.
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

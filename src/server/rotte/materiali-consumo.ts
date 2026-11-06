@@ -6,6 +6,7 @@ import express, { Router, type Request } from 'express';
 import { gunzipSync } from 'node:zlib';
 import { html, raw, euro, data } from '../views/html.js';
 import type { PaginaAnagrafiche } from './anagrafiche.js';
+import { linkAnalisiMateriale } from '../../engine/analisi-acquisti.js';
 import { conCampo } from '../../engine/errori-campo.js';
 import { CATEGORIE_MATERIALI, UM_MATERIALI, categoriaProposta, eCategoria, leggiFilePrezziMateriali } from '../../engine/materiali-consumo.js';
 import { aggiungiMateriale, caricaPrezziMateriali, cercaArticoliOrdine, elencoMateriali, eliminaMateriale, salvaMateriale } from '../materiali-consumo-servizio.js';
@@ -49,7 +50,8 @@ export function rotteMateriali(pagina: PaginaAnagrafiche) {
             ? html`${euro(m.prezzo)}<br><span class="nota">${m.fornitore ?? ''}${m.data ? ` ${data(m.data)}` : ''}</span>` : ''}</td>
           <td><input type="checkbox" name="attivo" value="1" form="m-${m.id}" ${m.attivo ? raw('checked') : ''} title="Tolta la spunta non compare più negli ordini"></td>
           <td class="n">${m.usato || ''}</td>
-          <td class="nowrap"><form method="post" action="/anagrafiche/materiali/${m.id}?categoria=${categoria}" id="m-${m.id}" class="inline"><input type="hidden" name="attivo_presente" value="1"><button>Salva</button></form>
+          <td class="nowrap"><a class="bottone" href="${linkAnalisiMateriale(m.id)}" title="Analisi del materiale: acquisti anno per anno, prezzo, fornitori">Analisi</a>
+            <form method="post" action="/anagrafiche/materiali/${m.id}?categoria=${categoria}" id="m-${m.id}" class="inline"><input type="hidden" name="attivo_presente" value="1"><button>Salva</button></form>
             ${m.usato ? '' : html`<form method="post" action="/anagrafiche/materiali/${m.id}/elimina?categoria=${categoria}" class="inline"
               data-conferma="${`Eliminare ${m.codice}?`}"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
         </tbody></table></div>` : html`<p class="vuoto">Nessun materiale in questa categoria: aggiungilo qui sotto.</p>`}

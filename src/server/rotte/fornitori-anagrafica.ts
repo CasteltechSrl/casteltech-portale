@@ -3,6 +3,7 @@
  * Regole di Adriano (26/10/2026): solo con P.IVA valida, niente doppioni, tutto in MAIUSCOLO (email e PEC in minuscolo).
  */
 import express, { Router, type Request } from 'express';
+import { linkAnalisiFornitore } from '../../engine/analisi-acquisti.js';
 import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, type Raw } from '../views/html.js';
@@ -48,10 +49,11 @@ export function rotteFornitoriAnagrafica(pagina: PaginaAnagrafiche) {
       <div class="ricerca-veloce"><input type="search" data-filtra="tab-fornitori" data-conta="conta-fornitori" placeholder="Cerca nome, P.IVA, comune, email, telefono…" autofocus autocomplete="off">
         <span class="nota">Trovati: <b id="conta-fornitori">${righe.length}</b></span></div>
       <div class="tabella-scorre limitata"><table class="elenco" id="tab-fornitori">
-        <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th>Comune</th><th>Paese</th><th>Email</th><th>Telefono</th><th>Note</th></tr></thead>
+        <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th>Comune</th><th>Paese</th><th>Email</th><th>Telefono</th><th>Note</th><th></th></tr></thead>
         <tbody>${righe.map(f => html`<tr class="cliccabile" data-href="/anagrafiche/fornitori/${f.id}">
           <td><a href="/anagrafiche/fornitori/${f.id}">${f.ragione_sociale}</a></td><td>${f.partita_iva}</td>
-          <td>${f.comune ?? ''}${f.provincia ? ` (${f.provincia})` : ''}</td><td>${f.paese ?? ''}</td><td>${f.email ?? ''}</td><td>${f.telefono ?? ''}</td><td>${f.note ?? ''}</td></tr>`)}
+          <td>${f.comune ?? ''}${f.provincia ? ` (${f.provincia})` : ''}</td><td>${f.paese ?? ''}</td><td>${f.email ?? ''}</td><td>${f.telefono ?? ''}</td><td>${f.note ?? ''}</td>
+          <td class="nowrap"><a class="bottone" href="${linkAnalisiFornitore(f.id)}" title="Analisi del fornitore: acquisti anno per anno, pagamenti, ordini, cosa si compra">Analisi</a></td></tr>`)}
         </tbody></table></div>
       <details class="blocco">
         <summary>Carica l'elenco (file preparato da Claude)</summary>
@@ -93,7 +95,8 @@ export function rotteFornitoriAnagrafica(pagina: PaginaAnagrafiche) {
 
   const scheda = (req: Request, id: number, f: Record<string, any>, avviso?: string) => pag(req, html`
     <p><a href="/anagrafiche/fornitori">← Tutti i fornitori</a></p>
-    <h2>${f.ragione_sociale}</h2>
+    <div class="intestazione-pagina"><h2>${f.ragione_sociale}</h2>
+      <div class="azioni"><a class="bottone" href="${linkAnalisiFornitore(id)}" title="Acquisti anno per anno, pagamenti, ordini, cosa si compra">Analisi</a></div></div>
     ${modulo(f, `/anagrafiche/fornitori/${id}`, 'Salva')}
     <form method="post" action="/anagrafiche/fornitori/${id}/elimina" data-conferma="${`Eliminare il fornitore ${f.ragione_sociale} dall'anagrafica?`}">
       <button class="link negativo">Elimina</button></form>`, avviso);
