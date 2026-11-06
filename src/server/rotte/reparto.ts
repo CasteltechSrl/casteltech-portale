@@ -19,6 +19,7 @@ import { hhmm, minutiDelGiorno, partiRoma } from '../../engine/promemoria.js';
 import { VERSIONE } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import { commesseRecenti, faseSuccessiva, riepilogoOggi, type RigaOggi } from '../../engine/reparto-oggi.js';
+import { dichiaraFineLavorazione, fineLavorazioneDi } from '../flusso-servizio.js';
 
 declare module 'express-session' { interface SessionData { operatore?: { sigla: string; nome: string } } }
 
@@ -220,6 +221,9 @@ export function rotteReparto() {
     const { c, previste, altre } = x;
     const aperte = await fasiAperte({ commessaId: c.id });
     const mie = aperte.filter(f => f.sigla === req.session.operatore!.sigla);
+    // fine lavorazione (flusso di produzione, Adriano 6/11/2026): schede finite, parziale o totale, dichiarate dal telefono
+    const fineLav = await fineLavorazioneDi(c.id);
+    const finite = fineLav.reduce((a, x) => a + x.quantita, 0);
     // appena chiusa una fase (?dopo=codice): si propone la successiva ancora da fare (engine/reparto-oggi.ts)
     const dopo = typeof req.query.dopo === 'string' ? req.query.dopo : '';
     let prossima: { codice: string; numero: string; nome: string } | null = null;
@@ -250,7 +254,28 @@ export function rotteReparto() {
         <ul class="elenco-tocco fasi" id="elenco-fasi">${previste.map(voce)}</ul>
         ${altre.length ? html`<details><summary>Altre fasi (non previste su questa commessa)</summary>
           <ul class="elenco-tocco fasi">${altre.map(voce)}</ul></details>` : ''}
+      </section>
+      <section class="riquadro fine-lavorazione">
+        <h2>Fine lavorazione</h2>
+        <p class="nota">Quando le schede sono finite e pronte per l'imballo: tutte insieme o una parte (es. 50 su ${num(c.quantita, 0)}). In ufficio passano in "Da spedire".</p>
+        ${finite ? html`<p><b>${num(finite, 0)} su ${num(c.quantita, 0)}</b> già dichiarate${finite < c.quantita ? ' (parziale)' : ' (totale)'}:
+          ${fineLav.map((x, k) => html`${k ? ' · ' : ''}${num(x.quantita, 0)} pz ${x.da} ${dataBreve(x.il)}`)}</p>` : ''}
+        ${STATI_APERTI.includes(c.stato) && finite < c.quantita ? html`<form method="post" action="/r/c/${c.codice_qr}/fine-lavorazione" class="riga-oggi">
+          <label>Schede finite <input name="quantita" inputmode="numeric" placeholder="es. 50" class="corto"></label>
+          <button name="totale" value="0">Fine parziale</button>
+          <button name="totale" value="1" class="primario" data-conferma="Tutte le ${num(c.quantita - finite, 0)} schede che mancano sono finite?">Tutte finite</button></form>` : ''}
       </section>` }));
+  });
+
+  // ── Fine lavorazione dal telefono (flusso di produzione, Adriano 6/11/2026) ──
+  r.post('/c/:codice/fine-lavorazione', async (req, res) => {
+    const x = await commessaDaQr(req.params.codice);
+    if (!x) return res.status(404).send('Commessa non trovata');
+    if (!STATI_APERTI.includes(x.c.stato)) return res.redirect(`/r/c/${x.c.codice_qr}?errore=${encodeURIComponent('Commessa già rientrata in ufficio.')}`);
+    const op = req.session.operatore!;
+    const e = await dichiaraFineLavorazione(x.c.id, req.body.quantita, String(req.body.totale) === '1', op.sigla, 'telefono');
+    if (e.errore) return res.redirect(`/r/c/${x.c.codice_qr}?errore=${encodeURIComponent(e.errore)}`);
+    res.redirect(`/r/c/${x.c.codice_qr}?ok=${encodeURIComponent(`Fine lavorazione: ${e.finite} schede su ${e.quantita}${e.finite < e.quantita ? ' (parziale)' : ''}`)}`);
   });
 
   // ── Fase: apri il tempo o scrivi il totale ──

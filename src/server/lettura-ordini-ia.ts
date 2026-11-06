@@ -90,9 +90,11 @@ ${fasi ? `Fasi previste sulla scheda (numero nome): ${fasi}.` : ''}
 
 Regole: trascrivi quello che è scritto, senza inventare. Le righe completamente vuote non vanno riportate.
 Se un valore è corretto a penna (cancellato e riscritto) usa quello finale. Se una cifra è dubbia scrivi la lettura più probabile e metti "incerta": true.
-Le prime pagine (dati della commessa, fasi previste) non hanno righe da trascrivere: considera solo i fogli tempi.
+Le prime pagine (dati della commessa, fasi previste) non hanno righe da trascrivere: considera solo i fogli tempi,
+TRANNE il riquadro "FINE LAVORAZIONE" della prima pagina (sotto le spedizioni): se è compilato a penna riporta in "fine_lavorazione"
+la casella barrata ("totale": true se è barrato TOTALE), le schede scritte dopo "PARZIALE: SCHEDE" e la DATA; se è vuoto lascia "fine_lavorazione": null.
 Rispondi SOLO con un oggetto JSON:
-{"fogli": [{"commessa": "C2026-0001", "foglio": "1/2", "righe": [{"fase": "1+2", "operatore": "AG", "data": "22/10", "apertura": "8:00",
+{"fogli": [{"commessa": "C2026-0001", "foglio": "1/2", "fine_lavorazione": {"schede": "50", "totale": false, "data": "22/10"}, "righe": [{"fase": "1+2", "operatore": "AG", "data": "22/10", "apertura": "8:00",
  "chiusura": "8:30", "totale": "", "persone": "1", "pezzi": "50", "sp": "S", "resp": "", "note": "", "incerta": false}]}]}`;
 
 /** Legge i fogli tempi scansionati (righe come scritte a mano). */

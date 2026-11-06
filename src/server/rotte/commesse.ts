@@ -4,6 +4,8 @@
  */
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
+import { dichiaraFineLavorazione } from '../flusso-servizio.js';
+import { leggiFineLavorazione } from '../../engine/flusso.js';
 import { Router, type Request } from 'express';
 import QRCode from 'qrcode';
 import { q, q1, transazione } from '../db.js';
@@ -184,6 +186,13 @@ export function rotteCommesse() {
     res.send(String(schedaStampa(c, prev, fasi, storico, raw(qr), reali, nomeFase, await caricaOperatori())));
   });
 
+  // ── Fine lavorazione dall'ufficio (flusso di produzione, Adriano 6/11/2026) ──
+  r.post('/:id/fine-lavorazione', async (req, res) => {
+    const id = Number(req.params.id);
+    const e = await dichiaraFineLavorazione(id, req.body.quantita, String(req.body.totale) === '1', req.session.utente?.nome ?? 'ufficio', 'ufficio');
+    res.redirect(`/commesse/${id}?msg=${encodeURIComponent(e.errore ?? `Fine lavorazione: ${e.finite} schede su ${e.quantita}`)}`);
+  });
+
   // ── Inserimento rapido dei tempi dalla pagina della commessa ──
   r.post('/:id/tempi', async (req, res) => {
     const c = await leggiCommessa(Number(req.params.id));
@@ -352,6 +361,9 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const numeroDoc = (x: { numero: number | null; sezionale: string | null }) => (x.numero == null ? 'bozza' : `n. ${x.numero}${x.sezionale ? '/' + x.sezionale : ''}`);
   const nTempi = salvata ? (await q1(`SELECT count(*)::int AS n FROM rilevazioni WHERE commessa_id = $1`, [salvata.id]))!.n : 0;
   const preProd = leggiPreProduzione(salvata?.pre_produzione);
+  // fine lavorazione (flusso di produzione, Adriano 6/11/2026): schede finite dichiarate dal telefono, dalla scheda scansionata o dall'ufficio
+  const fineLav = leggiFineLavorazione(salvata?.fine_lavorazione);
+  const finite = fineLav.reduce((a, x) => a + x.quantita, 0);
   return String(layout({
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
@@ -378,6 +390,10 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       (${f.sigla}, dalle ${f.inizio}${f.data !== partiRoma(new Date()).data ? ` del ${f.data.slice(8, 10)}/${f.data.slice(5, 7)}` : ''}) <a href="/r/chiudi/${f.id}">chiudi</a>`)}</div>` : ''}
     ${documenti.length ? html`<p class="nota filiera">Spedizioni e fatture: ${documenti.map((x, k) => html`${k ? ' · ' : ''}<a href="/amministrazione/documenti/${x.id}">${x.tipo === 'ddt' ? 'DDT' : 'Fattura'} ${numeroDoc(x)}</a>
       del ${data(x.data)}${x.tipo === 'ddt' ? html` (${num(x.quantita, 0)} pz${x.stato === 'annullato' ? ', annullato' : x.fattura_id ? html`, <a href="/amministrazione/documenti/${x.fattura_id}">fattura n. ${x.fattura_numero ?? 'bozza'}</a>` : x.stato === 'emesso' ? ', da fatturare' : ', bozza'})` : x.stato === 'bozza' ? ' (bozza)' : ''}`)}</p>` : ''}
+    ${salvata ? html`<p class="nota filiera fine-lavorazione">Fine lavorazione: ${finite ? html`<b>${num(finite, 0)} su ${num(salvata.quantita, 0)}</b> schede finite${finite < salvata.quantita ? ' (parziale)' : ' (totale)'}
+        · ${fineLav.map((x, k) => html`${k ? ' · ' : ''}${num(x.quantita, 0)} pz ${x.da} ${data(x.il.slice(0, 10))}${x.origine === 'scansione' ? ' (scheda scansionata)' : x.origine === 'telefono' ? ' (telefono)' : ''}`)}` : 'nessuna scheda ancora dichiarata finita'}
+      ${['aperta', 'in_produzione'].includes(salvata.stato) && finite < salvata.quantita ? html` · <span class="fine-lav-inline"><input form="fine-lav-commessa" name="quantita" inputmode="numeric" placeholder="schede" class="corto" title="Schede finite (parziale)">
+        <button form="fine-lav-commessa" name="totale" value="0" class="piccolo">Fine parziale</button> <button form="fine-lav-commessa" name="totale" value="1" class="piccolo primario" title="Tutte le schede che mancano sono finite">Fine lavorazione</button></span>` : ''}</p>` : ''}
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">
@@ -440,7 +456,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     </form>
     ${salvata ? html`<form id="tempi" method="post" action="/commesse/${salvata.id}/tempi"></form>
       <form id="elimina-commessa" method="post" action="/commesse/${salvata.id}/elimina"></form>
-      <form id="ddt-commessa" method="post" action="/amministrazione/documenti/ddt-da-commessa/${salvata.id}"></form>` : ''}`,
+      <form id="ddt-commessa" method="post" action="/amministrazione/documenti/ddt-da-commessa/${salvata.id}"></form>
+      <form id="fine-lav-commessa" method="post" action="/commesse/${salvata.id}/fine-lavorazione"></form>` : ''}`,
   }));
 }
 
@@ -695,6 +712,8 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   const testoConsumo = (v: VoceConsumo) => { const r = consumoReale(v, consumi[v.codice], c.quantita); return r == null ? '' : `${formatoQuantita(r)} ${v.unita}`; };
   const nonPreviste = Object.keys(reali).filter(k => !fasi.some(f => f.codice === k));
   const sped: Partial<Spedizione>[] = [0, 1, 2].map(k => c.spedizioni?.[k] ?? {});
+  const fineLav = leggiFineLavorazione(c.fine_lavorazione);
+  const finite = fineLav.reduce((a, x) => a + x.quantita, 0);
   const segnalazioni = storico.map(s => s.testo + (s.numero && s.numero !== c.numero ? ` (comm. ${s.numero})` : ''));
   return html`<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Scheda ${c.numero} · ${i.codice}</title>
@@ -719,6 +738,11 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <div class="etic centro"><u>SPEDIZIONE ${k + 1}</u></div>
     <div class="campi3"><span>QTA: <b>${x.qta}</b></span><span>COLLI: <b>${x.colli}</b></span><span>BANCALI: <b>${x.bancali}</b></span></div>
     <div class="campi2"><span>PESO: <b>${x.peso}</b></span><span>DIMENSIONE: <b>${x.dimensione}</b></span></div></td>`)}</tr></table>
+  <table class="griglia fine-lavorazione"><tr><td>
+    <div class="etic centro"><u>FINE LAVORAZIONE</u> <span class="etic">(compilare quando le schede sono finite e pronte per l'imballo: viene letto dalla scansione)</span></div>
+    <div class="campi3"><span><span class="casella">${fineLav.some(x => x.quantita > 0 && finite >= c.quantita) ? 'X' : ''}</span> TOTALE</span>
+      <span><span class="casella">${finite && finite < c.quantita ? 'X' : ''}</span> PARZIALE: SCHEDE <b class="linea">${finite && finite < c.quantita ? num(finite, 0) : ''}</b> su ${num(c.quantita, 0)}</span>
+      <span>DATA <b class="linea">${finite ? data(fineLav[fineLav.length - 1].il.slice(0, 10)) : ''}</b></span><span>FIRMA <b class="linea">${finite ? fineLav[fineLav.length - 1].da : ''}</b></span></div></td></tr></table>
 
   <h3 class="gruppo">MATERIALE DI CONSUMO <span>quantità a scheda (conformal coating: bombolette sul lotto)</span></h3>
   <table class="consumo"><tr>${colonne.map(col => html`<th>${col.toUpperCase()}</th>`)}</tr>

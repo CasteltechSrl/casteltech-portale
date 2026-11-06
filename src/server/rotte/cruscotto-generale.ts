@@ -8,6 +8,9 @@ import { datiCruscottoGenerale, cosePerRiprendere, type DatiCruscottoGenerale } 
 import { quandoBreve, type VoceRiprendi } from '../../engine/riprendi.js';
 import { euroBreve, saluto } from '../../engine/cruscotto-generale.js';
 import { layout } from '../views/layout.js';
+import { finestraValida } from '../../engine/flusso.js';
+import { datiFlusso, type DatiFlusso } from '../flusso-servizio.js';
+import { finestreFlusso } from './flusso.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -22,10 +25,12 @@ export function rotteCruscottoGenerale() {
   const r = Router();
   r.get('/', async (req, res) => {
     const oggi = oggiRoma();
-    const [d, riprendi] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null)]);
+    const finestra = finestraValida(req.query.flusso);
+    const [d, riprendi, flusso] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null), datiFlusso(oggi)]);
     res.send(String(layout({
       titolo: 'Cruscotto', utente: req.session.utente, attiva: 'cruscotto', largo: true,
-      contenuto: pagina(d, oggi, req.session.utente?.nome ?? '', riprendi),
+      avviso: req.query.msg ? String(req.query.msg) : undefined,
+      contenuto: pagina(d, oggi, req.session.utente?.nome ?? '', riprendi, { flusso, finestra, solaLettura: req.session.utente?.ruolo === 'esterno' }),
     })));
   });
   return r;
@@ -39,12 +44,15 @@ const elenco = (righe: Raw[], vuoto: string) => (righe.length ? html`<ul>${righe
 const riquadro = (titolo: string, link: string, testoLink: string, corpo: Raw) =>
   html`<section class="area"><header><h2>${titolo}</h2><a href="${link}">${testoLink} →</a></header>${corpo}</section>`;
 
-function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: VoceRiprendi[] = []): Raw {
+function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: VoceRiprendi[] = [],
+  flusso?: { flusso: DatiFlusso; finestra: ReturnType<typeof finestraValida>; solaLettura: boolean }): Raw {
   const c = d.cifre;
   const primoNome = nome.split(' ')[0];
   return html`
     <div class="saluto"><h1>${saluto(oraRoma())}${primoNome ? `, ${primoNome}` : ''}</h1>
       <p class="nota">${giornoEsteso(oggi)} · dati letti all'apertura della pagina (ricarica per aggiornarli)</p></div>
+
+    ${flusso ? finestreFlusso(flusso.flusso, flusso.finestra, oggi, flusso.solaLettura) : ''}
 
     <div class="oggi"><h3>Da fare oggi</h3>
       ${d.daFare.length ? html`<div class="chips">${d.daFare.map(v => html`<a class="chip ${v.livello}" href="${v.link}"><b>${v.quanti}</b> ${v.testo}</a>`)}</div>`

@@ -156,7 +156,7 @@ function paginaRighe(req: Request, anno: number, categoria: string, chiaveF: str
   const scelte = righe.filter(r => r.anno === anno && r.categoria === categoria && (!chiaveF || r.fornitoreChiave === chiaveF)).sort((a, b) => Math.abs(b.importo) - Math.abs(a.importo));
   const totale = scelte.reduce((s, r) => s + r.importo, 0);
   const mostrate = scelte.slice(0, 400);
-  const COME: Record<RigaClassificata['come'], string> = { regola: 'scritta', parola: 'dalla descrizione', fornitore: 'dal fornitore', fic: 'dalla categoria FIC', nessuna: 'nessuna regola' };
+  const COME: Record<RigaClassificata['come'], string> = { regola: 'scritta', parola: 'dalla descrizione', fornitore: 'dal fornitore', fic: 'dalla categoria FIC', storico: 'dallo storico del fornitore', nessuna: 'nessuna regola' };
   return html`${menuAmministrazione('analisi')}
     <div class="intestazione-pagina"><div><h1>${cat.nome} · ${anno}</h1><p class="nota">${NOMI_MACRO[cat.macro]} · ${scelte.length} righe, ${euro(totale)}${chiaveF ? ' · un solo fornitore' : ''}</p></div>
       <div class="azioni non-stampare"><a class="bottone" href="/amministrazione/analisi/costi?anno=${anno}">← Costi per categoria</a></div></div>

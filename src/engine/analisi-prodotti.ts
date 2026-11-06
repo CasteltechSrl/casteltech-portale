@@ -159,6 +159,23 @@ export function classificaProdotti(prodotti: Iterable<ProdottoAnalisi>, totali: 
   return out.sort((a, b) => b.fatturato - a.fatturato || b.fatturatoPrima - a.fatturatoPrima || a.codice.localeCompare(b.codice));
 }
 
+/** I tre riquadri in cima alla classifica (Adriano 6/11/2026: "fossero dei pulsanti... sotto devi vedere l'elenco corrispondente"). */
+export type RiquadroClassifica = 'venduti' | 'calo' | 'fermi';
+export const RIQUADRI_CLASSIFICA: RiquadroClassifica[] = ['venduti', 'calo', 'fermi'];
+export const riquadroClassifica = (v: unknown): RiquadroClassifica | null => (RIQUADRI_CLASSIFICA as string[]).includes(String(v ?? '')) ? (v as RiquadroClassifica) : null;
+/** Regole dei riquadri: venduti = fatturato nell'anno; in calo forte = −30 % o più su almeno 1.000 € dell'anno prima; fermi = nessuna consegna da MESI_FERMO mesi. */
+export const RIQUADRI_REGOLE: Record<RiquadroClassifica, (p: RigaClassificaProdotto) => boolean> = {
+  venduti: p => p.fatturato > 0,
+  calo: p => p.variazione != null && p.variazione <= -30 && p.fatturatoPrima >= 1000,
+  fermi: p => p.fermo && (p.fatturato > 0 || p.fatturatoPrima > 0),
+};
+/** Quanti prodotti in ogni riquadro, contati su tutta la classifica (il filtro scelto non cambia i numeri). */
+export const contaRiquadri = (classifica: RigaClassificaProdotto[]): Record<RiquadroClassifica, number> =>
+  Object.fromEntries(RIQUADRI_CLASSIFICA.map(r => [r, classifica.filter(RIQUADRI_REGOLE[r]).length])) as Record<RiquadroClassifica, number>;
+/** La classifica filtrata dal riquadro scelto (nessuno = tutta). */
+export const filtraRiquadro = (classifica: RigaClassificaProdotto[], riquadro: RiquadroClassifica | null): RigaClassificaProdotto[] =>
+  riquadro ? classifica.filter(RIQUADRI_REGOLE[riquadro]) : classifica;
+
 export interface RigaAnnoScheda extends StatAnnoProdotto {
   variazione: number | null; variazionePezzi: number | null; pesoCliente: number | null; pesoTotale: number | null; ordini: number | null;
 }

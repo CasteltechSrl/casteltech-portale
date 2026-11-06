@@ -12,7 +12,8 @@ import { chiaveCodice } from '../engine/componenti-clienti.js';
 import { leggiFatturaEsteraConIa, leggiFogliTempiConIa, leggiOrdineConIa, type Parte } from './lettura-ordini-ia.js';
 import { collegaFatturaEstera, descriviCaricata, fatturaEsteraGiaCaricata } from './autofatture-servizio.js';
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
-import { righeDaFoglio, type RigaScansione } from '../engine/fogli-tempi.js';
+import { righeDaFoglio, type FoglioLetto, type RigaScansione } from '../engine/fogli-tempi.js';
+import { fineLavorazioneDaScansione, leggiFineLavorazione } from '../engine/flusso.js';
 import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { collegaDdtRicevuto } from './ddt-ricevuti-servizio.js';
@@ -174,8 +175,19 @@ async function leggiScheda(parti: Parte[], numeri: string[], oggi: string): Prom
     })());
     const mappa = new Map([...catalogo, ...(t?.fasi ?? [])]);
     commesse.push({ numero: n, commessaId: t?.id ?? null, righe: righeDaFoglio(fs, mappa, oggi) });
+    // riquadro FINE LAVORAZIONE compilato a penna (flusso di produzione, Adriano 6/11/2026): la commessa lo prende subito, senza doppioni
+    if (t?.id) for (const f of fs) if (f.fine_lavorazione) await applicaFineLavorazioneLetta(t.id, f.fine_lavorazione);
   }
   return { tipoDocumento: 'scheda_produzione', commesse };
+}
+
+async function applicaFineLavorazioneLetta(commessaId: number, letto: NonNullable<FoglioLetto['fine_lavorazione']>): Promise<void> {
+  const c = await q1<{ quantita: number; fine_lavorazione: unknown }>(`SELECT quantita, fine_lavorazione FROM commesse WHERE id = $1`, [commessaId]);
+  if (!c) return;
+  const e = fineLavorazioneDaScansione(letto, leggiFineLavorazione(c.fine_lavorazione), c.quantita, new Date().toISOString());
+  if (!e.aggiunta) return;
+  await q(`UPDATE commesse SET fine_lavorazione = $2, stato = CASE WHEN stato = 'aperta' THEN 'in_produzione' ELSE stato END, aggiornato_il = now() WHERE id = $1`,
+    [commessaId, JSON.stringify(e.righe)]);
 }
 
 /** Il rientro della commessa è stato salvato con le righe lette: quando tutte le commesse sono fatte l'acquisizione è confermata. */

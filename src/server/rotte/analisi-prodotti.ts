@@ -14,7 +14,7 @@ import { menuAmministrazione } from './cruscotto-amministrazione.js';
 import { analisiClienti } from '../../engine/analisi.js';
 import { causaleDaFatturare } from '../../engine/ddt.js';
 import {
-  classificaProdotti, margineMedioConsuntivi, riepilogoProdotti, schedaProdotto, totaliFatturato, visioneClienti, MESI_FERMO,
+  classificaProdotti, contaRiquadri, filtraRiquadro, margineMedioConsuntivi, riepilogoProdotti, riquadroClassifica, schedaProdotto, totaliFatturato, visioneClienti, MESI_FERMO,
   type DatiExtraCliente, type ProdottoAnalisi, type RigaVisioneCliente,
 } from '../../engine/analisi-prodotti.js';
 import {
@@ -45,21 +45,26 @@ async function datiClassifica(req: Request) {
   const anno = annoScelto(req, annoOggi);
   const cliente = String(req.query.cliente ?? '').trim() || null;
   const cerca = String(req.query.cerca ?? '').trim().toUpperCase();
+  const riquadro = riquadroClassifica(req.query.mostra);
   const [righe, fatture, clienti] = await Promise.all([righeVendite(), fattureTutte(), clientiConVendite()]);
   const prodotti = riepilogoProdotti(righe);
   let classifica = classificaProdotti(prodotti.values(), totaliFatturato(fatture), anno, oggi, cliente);
   if (cerca) classifica = classifica.filter(p => p.codice.includes(cerca) || p.descrizione.toUpperCase().includes(cerca) || p.cliente.toUpperCase().includes(cerca));
-  return { oggi, annoOggi, anno, cliente, cerca, clienti, classifica };
+  const conteggi = contaRiquadri(classifica);
+  // i riquadri in alto sono filtri: scelto uno, sotto c'è solo il suo elenco (anche nell'Excel); i numeri restano quelli di tutta la classifica
+  return { oggi, annoOggi, anno, cliente, cerca, clienti, classifica: filtraRiquadro(classifica, riquadro), tutta: classifica, conteggi, riquadro };
 }
 
 function paginaClassifica(d: Awaited<ReturnType<typeof datiClassifica>>, tutti: boolean): Raw {
-  const { anno, annoOggi, cliente, cerca, clienti, classifica } = d;
+  const { anno, annoOggi, cliente, cerca, clienti, classifica, tutta, conteggi, riquadro } = d;
   const mostra = tutti ? classifica : classifica.slice(0, 100);
   const nomeCliente = clienti.find(c => c.chiave === cliente)?.nome;
-  const totFatturato = classifica.reduce((t, p) => t + p.fatturato, 0), totPezzi = classifica.reduce((t, p) => t + p.pezzi, 0);
-  const fermi = classifica.filter(p => p.fermo && (p.fatturato > 0 || p.fatturatoPrima > 0)).length;
-  const inCalo = classifica.filter(p => p.variazione != null && p.variazione <= -30 && p.fatturatoPrima >= 1000).length;
+  const totFatturato = tutta.reduce((t, p) => t + p.fatturato, 0), totPezzi = tutta.reduce((t, p) => t + p.pezzi, 0);
   const indirizzo = (extra: string) => `/amministrazione/analisi/prodotti?anno=${anno}${cliente ? `&cliente=${encodeURIComponent(cliente)}` : ''}${cerca ? `&cerca=${encodeURIComponent(cerca)}` : ''}${extra}`;
+  // clic su un riquadro = filtro; secondo clic sullo stesso = tutta la classifica
+  const linkRiquadro = (r: 'venduti' | 'calo' | 'fermi') => (riquadro === r ? indirizzo('') : indirizzo(`&mostra=${r}`));
+  const classeRiquadro = (r: 'venduti' | 'calo' | 'fermi', extra = '') => `cifra riquadro-filtro ${extra} ${riquadro === r ? 'attivo' : ''}`;
+  const TITOLI: Record<'venduti' | 'calo' | 'fermi', string> = { venduti: 'Prodotti venduti', calo: 'Prodotti in calo forte', fermi: `Prodotti fermi da oltre ${MESI_FERMO} mesi` };
   return html`
     <div class="intestazione-pagina"><h1>Classifica dei prodotti ${anno}${nomeCliente ? html` · ${nomeCliente}` : ''}</h1>
       <div class="azioni non-stampare"><a class="bottone" href="${indirizzo('').replace('/prodotti?', '/prodotti.xlsx?')}">Excel</a> <button type="button" id="stampa">Stampa</button></div></div>
@@ -75,10 +80,12 @@ function paginaClassifica(d: Awaited<ReturnType<typeof datiClassifica>>, tutti: 
       Lotti = consegne (DDT di vendita e fatture senza DDT). Peso = quanto vale il prodotto sul fatturato del suo cliente e su tutto il fatturato dell'anno.
       Clic sul codice per la scheda del prodotto; le colonne si ordinano cliccando l'intestazione.</p>
     <div class="cifre">
-      <div class="cifra"><span>Prodotti venduti</span><b>${classifica.filter(p => p.fatturato > 0).length}</b><small>${num(totPezzi, 0)} pezzi · ${euro(totFatturato)}</small></div>
-      <div class="cifra ${inCalo ? 'allarme' : ''}"><span>In calo forte</span><b>${inCalo}</b><small>fatturato −30 % o più sull'anno prima</small></div>
-      <div class="cifra"><span>Fermi</span><b>${fermi}</b><small>nessuna consegna da oltre ${MESI_FERMO} mesi</small></div>
+      <a class="${classeRiquadro('venduti')}" href="${linkRiquadro('venduti')}"><span>Prodotti venduti</span><b>${conteggi.venduti}</b><small>${num(totPezzi, 0)} pezzi · ${euro(totFatturato)}</small></a>
+      <a class="${classeRiquadro('calo', conteggi.calo ? 'allarme' : '')}" href="${linkRiquadro('calo')}"><span>In calo forte</span><b>${conteggi.calo}</b><small>fatturato −30 % o più sull'anno prima</small></a>
+      <a class="${classeRiquadro('fermi')}" href="${linkRiquadro('fermi')}"><span>Fermi</span><b>${conteggi.fermi}</b><small>nessuna consegna da oltre ${MESI_FERMO} mesi</small></a>
     </div>
+    ${riquadro ? html`<p class="nota filtro-attivo"><b>${TITOLI[riquadro]}</b> · ${classifica.length} ${classifica.length === 1 ? 'prodotto' : 'prodotti'}.
+      <a href="${indirizzo('')}">Mostra tutta la classifica</a></p>` : html`<p class="nota">Clic su un riquadro per vedere solo quell'elenco.</p>`}
     <div class="tabella-scorre"><table class="elenco">
       <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="num">Pezzi</th><th class="num">Fatturato</th><th class="num">${anno - 1}</th><th class="num">Variazione</th>
         <th class="num">Peso cliente</th><th class="num">Peso totale</th><th class="num">Prezzo medio</th><th class="num">Lotti</th><th class="num">Lotto medio</th><th>Ultima consegna</th></tr></thead>
@@ -89,7 +96,7 @@ function paginaClassifica(d: Awaited<ReturnType<typeof datiClassifica>>, tutti: 
         <td class="num">${p.lotti || ''}</td><td class="num">${p.lottoMedio != null ? num(p.lottoMedio, 0) : ''}</td>
         <td data-valore="${p.ultimaConsegna ?? ''}">${dataIt(p.ultimaConsegna)}${p.fermo ? html` <span class="etichetta">fermo ${testoFermo(p.mesiFermo)}</span>` : ''}</td></tr>`)}</tbody></table></div>
     ${classifica.length > mostra.length ? html`<p class="nota">Elencati i primi ${mostra.length} di ${classifica.length}. <a href="${indirizzo('&tutti=1')}">Mostra tutti</a></p>` : ''}
-    ${!classifica.length ? html`<p class="nota">Nessun prodotto venduto in questo anno${nomeCliente ? ' a questo cliente' : ''}.</p>` : ''}`;
+    ${!classifica.length ? html`<p class="nota">${riquadro ? 'Nessun prodotto in questo riquadro' : 'Nessun prodotto venduto in questo anno'}${nomeCliente ? ' per questo cliente' : ''}.</p>` : ''}`;
 }
 
 /** Trova il prodotto della scheda: `cliente` può essere la chiave (c12, n:NOME) o il nome del cliente. */

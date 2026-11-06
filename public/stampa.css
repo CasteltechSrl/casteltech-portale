@@ -43,6 +43,10 @@ table.consumo .cons b { display: block; white-space: nowrap; min-height: 3.5mm; 
 .spedizioni td { width: 33.3%; border-top: 0; }
 .campi3, .campi2 { display: flex; justify-content: space-between; font-style: italic; font-size: 8pt; padding: 1mm 0 2mm; }
 .campi2 span:last-child { width: 60%; }
+.fine-lavorazione td { border-top: 0; }
+.fine-lavorazione .campi3 span { font-style: normal; }
+.casella { display: inline-block; width: 3.2mm; height: 3.2mm; border: 1px solid #000; vertical-align: middle; text-align: center; line-height: 3mm; font-size: 7pt; font-weight: 700; margin-right: 1mm; }
+.linea { display: inline-block; min-width: 14mm; border-bottom: 1px solid #000; padding: 0 1mm; }
 
 h3.gruppo { font-size: 9.5pt; font-style: italic; text-decoration: underline; margin: 3mm 0 1mm; break-after: avoid; display: flex; justify-content: space-between; }
 h3.gruppo span { font-weight: 400; text-decoration: none; font-size: 8.5pt; }
