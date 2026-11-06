@@ -195,9 +195,9 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
         </div>
       </details>
 
-      <h2 id="bilancino">Bilancino mensile del commercialista (punto di pareggio)</h2>
+      <h2 id="bilancino">Bilancino mensile (punto di pareggio)</h2>
       <details class="blocco">
-        <summary>Carica l'Excel del commercialista con un foglio per mese (GENNAIO, FEBBRAIO…)</summary>
+        <summary>Carica l'Excel del consulente o del commercialista con un foglio per mese (GENNAIO, FEBBRAIO…)</summary>
         <div class="stretto-form dentro-blocco">
           <p class="nota">Ogni foglio ha i conti del conto economico con il saldo progressivo dall'inizio dell'anno (conto a 8 cifre, descrizione, saldo):
             il portale calcola il valore di ogni mese e lo usa in Amministrazione → Analisi → Punto di pareggio. Ricaricare un mese lo sostituisce;
@@ -264,7 +264,7 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   r.post('/bilancino/elimina', async (req, res) => {
     const anno = Number(req.body?.anno);
     const n = Number.isInteger(anno) ? await eliminaBilancino(anno) : 0;
-    res.redirect(torna(n ? `Tolti ${n} valori del commercialista del ${anno}.` : 'Niente da togliere.', '#bilancino'));
+    res.redirect(torna(n ? `Tolti ${n} valori del bilancino del ${anno}.` : 'Niente da togliere.', '#bilancino'));
   });
   r.post('/bilanci', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
     let righe: unknown;
