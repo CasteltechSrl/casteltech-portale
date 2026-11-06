@@ -691,6 +691,15 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    consulente esterno, solo indicativo (Adriano 6/11/2026): nelle pagine si dice "bilancino", non "commercialista". Bilancino = Excel con un foglio per mese (saldi progressivi, conti a 8 cifre; `leggiBilancino`: mese = progressivo −
    mese prima, serve il mese prima) caricato da Impostazioni → Amministrazione con l'anno; bilanci ufficiali 2019–2025 dai PDF (Project Files → analisi-pareggio) in impostazioni
    'bilanci_ufficiali'. "Verifica: commercialista contro portale" segnala differenze oltre 500 € e 5 %. Non comprende le imposte sul reddito.
+   ✅ Costi per categoria (Adriano 6/11/2026, punto 3: "leggere ogni singola fattura e attribuire la categoria", le SUE categorie; tasto in Analisi, `/amministrazione/analisi/costi` + `.xlsx`
+   + `/costi/righe?anno=&categoria=`, regole in `engine/categorie-acquisti.ts` (35 categorie in 4 macro: rivendita, consumo, lavorazioni, gestione; `classificaRiga`: parole della
+   descrizione prima, poi fornitore; `CATEGORIE_FORTI`/`DEBOLI`, fornitori generici tipo Amazon) e `engine/analisi-costi.ts` (`classificaCosti`, `costiPerAnno`, `confrontoRivendita`,
+   `riassuntoCosti`), letture in `analisi-costi-servizio.ts`, migrazione 080 `categorie_acquisti_regole`, test in `tests/categorie-acquisti.test.ts` e `tests/analisi-costi.test.ts`):
+   righe da `documenti_ricevuti_righe` (tabella del lavoro "storico acquisti riga per riga", migrazione 079; se manca o la fattura è solo PDF la fattura entra intera con la categoria FIC
+   come indizio, `categoriaDaFic`); tre anni (anno in corso: gli anni prima fermati allo stesso giorno), peso, variazione, fornitori principali; "Comprato e rivenduto" = acquisti
+   di componenti/PCB/meccanica contro pezzi fatturati × `venditaComponentiScheda`/`venditaPcbScheda` del preventivo più recente del prodotto (`riepilogo()`), costo previsto
+   (`costoAcquistoScheda`), lamine comprate contro UT-LAMINA fatturate; "Riassunto, opinione e proposte" scritto dai numeri. Regole dell'ufficio (fornitore = nome maiuscolo,
+   documento, riga; POST `/costi/regola`) vincono sulle automatiche; una categoria nuova = una voce in `CATEGORIE` (+ parole/fornitori). Le categorie restano calcolate in lettura.
 =======
    ✅ Analisi degli acquisti e tasto "Analisi" nelle anagrafiche (Adriano 6/11/2026; `engine/analisi-acquisti.ts`, letture in `analisi-acquisti-servizio.ts`, pagine in
    `rotte/analisi-acquisti.ts`, test in `tests/analisi-acquisti.test.ts`): in Anagrafiche → Prodotti / Fornitori / Componenti / Materiali ogni riga ha il tasto "Analisi"
