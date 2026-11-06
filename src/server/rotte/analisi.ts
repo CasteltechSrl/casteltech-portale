@@ -9,7 +9,7 @@ import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione, graficoMesi } from './cruscotto-amministrazione.js';
 import {
-  analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeCategoria, nomeMese, perMese, quotaPrimi, raggruppaAcquisti, variazionePct,
+  analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeMese, perMese, quotaPrimi, raggruppaAcquisti, variazionePct,
   type AcquistoAnalisi, type FatturaAnalisi, type IncassoAnalisi, type PreventivoProdotto, type RigaAnalisi,
 } from '../../engine/analisi.js';
 import { leggiImpostazioniCassa, NOMI_FINESTRE, type CodiceFinestra, type Movimento } from '../../engine/previsione-cassa.js';
@@ -18,6 +18,10 @@ import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteAnalisiProdotti } from './analisi-prodotti.js';
 import { rotteAnalisiAcquisti } from './analisi-acquisti.js';
 import { rottePareggio } from './pareggio.js';
+import { rotteAnalisiCosti } from './analisi-costi.js';
+import { classificaCosti } from '../../engine/analisi-costi.js';
+import { categoria as categoriaCosto, NOMI_MACRO } from '../../engine/categorie-acquisti.js';
+import { regoleCategorie, righeCosti } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -58,13 +62,15 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
 }
 
 /** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), fornitori e punto di pareggio (6/11/2026) e previsione di cassa. */
-export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'pareggio' | 'cassa'): Raw {
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'costi' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
     <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
     <a href="/amministrazione/analisi/clienti" class="${attiva === 'clienti' ? 'attivo' : ''}">Clienti</a>
     <a href="/amministrazione/analisi/fornitori" class="${attiva === 'fornitori' ? 'attivo' : ''}">Fornitori</a>
+    <a href="/amministrazione/analisi/acquisti" class="${attiva === 'acquisti' ? 'attivo' : ''}">Acquisti</a>
     <a href="/amministrazione/analisi/pareggio" class="${attiva === 'pareggio' ? 'attivo' : ''}">Punto di pareggio</a>
+    <a href="/amministrazione/analisi/costi" class="${attiva === 'costi' ? 'attivo' : ''}">Costi per categoria</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
 
@@ -184,6 +190,7 @@ export function rotteAnalisi() {
   r.use(rotteAnalisiProdotti());   // Prodotti e Clienti (Adriano 5/11/2026)
   r.use(rotteAnalisiAcquisti());   // Fornitori, componenti e materiali (Adriano 6/11/2026)
   r.use(rottePareggio());          // Punto di pareggio (Adriano 6/11/2026)
+  r.use(rotteAnalisiCosti());      // Costi per categoria (Adriano 6/11/2026)
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
   r.get('/cassa', async (req: Request, res) => {
@@ -218,7 +225,7 @@ export function rotteAnalisi() {
     const anno = Math.min(annoOggi, Math.max(2019, Number(req.query.anno) || annoOggi));
     const finoA = anno === annoOggi ? oggi : null;
     const periodo = { anno, finoA };
-    const d = await caricaDatiAnalisi(anno, oggi);
+    const [d, righeCosto, regole] = await Promise.all([caricaDatiAnalisi(anno, oggi), righeCosti([anno, anno - 1]), regoleCategorie()]);
 
     const fatturatoMesi = perMese(d.fatture, f => f.imponibile, anno), fatturatoPrimaMesi = perMese(d.fatture, f => f.imponibile, anno - 1);
     const acquistiMesi = perMese(d.acquisti, a => a.imponibile, anno);
@@ -228,7 +235,12 @@ export function rotteAnalisi() {
     const mesiChiusi = finoA ? Number(oggi.slice(5, 7)) - 1 : 12;
     const clienti = analisiClienti(periodo, d.fatture, d.righe, d.preventivi, d.incassi);
     const prodotti = analisiProdotti(periodo, d.righe, d.preventivi);
-    const categorie = raggruppaAcquisti(periodo, d.acquisti, a => nomeCategoria(a.categoria));
+    // Acquisti per categoria con le categorie di Casteltech (Adriano 6/11/2026: niente più "senza categoria"): le righe delle fatture dei
+    // fornitori classificate come in Costi per categoria, raggruppate per categoria con lo stesso confronto dell'anno prima
+    const classificate = classificaCosti(righeCosto, regole);
+    const categorie = raggruppaAcquisti(periodo, classificate.map(r => ({ fornitore: r.fornitore, categoria: r.categoria, tipo: 'fattura', data: r.data, imponibile: r.importo })),
+      a => a.categoria ?? 'altro');
+    const senzaRegola = raggruppaAcquisti(periodo, classificate.filter(r => r.come === 'nessuna').map(r => ({ fornitore: r.fornitore, categoria: null, tipo: 'fattura', data: r.data, imponibile: r.importo })), () => 'x')[0];
     const fornitori = raggruppaAcquisti(periodo, d.acquisti, a => a.fornitore);
     const scaduto = d.aperte.reduce((s, x) => s + x.importo, 0);
     const commenti = commentiAnalisi({ periodo, fatturato, fatturatoPrima, acquisti, acquistiPrima, mesiChiusi, fatturatoMesiChiusi: somma(fatturatoMesi, mesiChiusi),
@@ -293,9 +305,14 @@ export function rotteAnalisi() {
       ${prodotti.length > 40 ? html`<p class="nota">Elencati i primi 40 di ${prodotti.length}.</p>` : ''}
 
       <h2>Acquisti per categoria</h2>
+      <p class="nota">Le categorie di Casteltech, lette riga per riga dalle fatture dei fornitori (descrizione, fornitore, tipo di fattura e storico del fornitore).
+        Clic sulla categoria per le righe; regole e riassunto in <a href="/amministrazione/analisi/costi?anno=${anno}">Costi per categoria</a>.
+        ${senzaRegola?.importo ? html`Ancora senza una categoria sicura: ${euro(senzaRegola.importo)} in "Altre spese" (fornitori mai visti prima: si sistemano lì).` : ''}</p>
       <div class="tabella-scorre"><table class="elenco">
-        <thead><tr><th>Categoria</th><th class="num">${anno}</th><th class="num">Peso</th><th class="num">${confronto}</th><th class="num">Variazione</th></tr></thead>
-        <tbody>${categorie.map(g => html`<tr><td>${g.nome}</td><td class="num">${euro(g.importo)}</td><td class="num">${g.quota ? `${num(g.quota, 1)}%` : ''}</td>
+        <thead><tr><th>Gruppo</th><th>Categoria</th><th class="num">${anno}</th><th class="num">Peso</th><th class="num">${confronto}</th><th class="num">Variazione</th></tr></thead>
+        <tbody>${categorie.map(g => html`<tr><td>${NOMI_MACRO[categoriaCosto(g.nome).macro]}</td>
+          <td><a href="/amministrazione/analisi/costi/righe?anno=${anno}&categoria=${encodeURIComponent(g.nome)}">${categoriaCosto(g.nome).nome}</a></td>
+          <td class="num">${euro(g.importo)}</td><td class="num">${g.quota ? `${num(g.quota, 1)}%` : ''}</td>
           <td class="num">${euro(g.prima)}</td><td class="num">${pct(g.variazione)}</td></tr>`)}</tbody></table></div>
       <h2>Primi fornitori</h2>
       <div class="tabella-scorre"><table class="elenco">

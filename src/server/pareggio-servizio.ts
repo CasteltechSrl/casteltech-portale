@@ -2,13 +2,17 @@
  * Letture e caricamenti per Analisi → Punto di pareggio (Adriano 6/11/2026). Regole in `engine/pareggio.ts`.
  * - bilancino mensile del commercialista (Excel con un foglio per mese: conto, descrizione, saldo progressivo) → `conto_economico_mensile`;
  * - bilanci ufficiali (file JSON preparato dai PDF depositati) → impostazioni 'bilanci_ufficiali';
- * - mesi del portale: fatture emesse, fatture ricevute per categoria, costo del personale (totali del mese, come in Dipendenti).
+ * - mesi del portale: fatture emesse, fatture ricevute con le categorie di Casteltech (`classificaCosti`, le stesse di Analisi → Costi per
+ *   categoria, Adriano 6/11/2026: niente più "fatture senza categoria"), costo del personale (totali del mese, come in Dipendenti).
  * Tutto letto solo all'apertura della pagina (Neon).
  */
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from './db.js';
+import { classificaCosti, famigliaDiCategoriaCasteltech } from '../engine/analisi-costi.js';
+import { categoria as categoriaCosto } from '../engine/categorie-acquisti.js';
+import { regoleCategorie, righeCosti } from './analisi-costi-servizio.js';
 import {
-  chiaveMese, famigliaDiCategoria, leggiBilancino, leggiBilanciUfficiali, mesiDelPeriodo, type BilancioUfficiale, type FoglioBilancino, type MesePortale, type Periodo,
+  chiaveMese, leggiBilancino, leggiBilanciUfficiali, mesiDelPeriodo, type BilancioUfficiale, type FoglioBilancino, type MesePortale, type Periodo,
   type RigaFoglio, type VoceMese, type VocePortale,
 } from '../engine/pareggio.js';
 
@@ -23,17 +27,16 @@ export async function bilanciUfficiali(): Promise<BilancioUfficiale[]> {
   return leggiBilanciUfficiali(r?.valore).bilanci;
 }
 
-/** I mesi del periodo letti dal portale: ricavi dalle fatture, acquisti dalle fatture ricevute (per categoria), personale dalle buste paga. */
+/** I mesi del periodo letti dal portale: ricavi dalle fatture, acquisti dalle fatture ricevute (categorie di Casteltech), personale dalle buste paga. */
 export async function mesiDalPortale(periodo: Periodo): Promise<MesePortale[]> {
   const mesi = mesiDelPeriodo(periodo);
   if (!mesi.length) return [];
   const da = `${periodo.da}-01`, a = `${periodo.a}-01`;
-  const [fatture, ricevute, personale] = await Promise.all([
+  const anni = [...new Set(mesi.map(m => m.anno))];
+  const [fatture, righeRicevute, regole, personale] = await Promise.all([
     q<{ mese: string; importo: number }>(`SELECT to_char(data, 'YYYY-MM') AS mese, sum(CASE WHEN tipo = 'nota_credito' THEN -imponibile ELSE imponibile END)::float AS importo
       FROM documenti WHERE tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND numero IS NOT NULL AND data >= $1::date AND data < ($2::date + interval '1 month') GROUP BY 1`, [da, a]),
-    q<{ mese: string; categoria: string | null; importo: number }>(`SELECT to_char(data, 'YYYY-MM') AS mese, nullif(trim(coalesce(categoria, '')), '') AS categoria,
-        sum(CASE WHEN tipo = 'nota_credito' THEN -imponibile ELSE imponibile END)::float AS importo
-      FROM documenti_ricevuti WHERE data >= $1::date AND data < ($2::date + interval '1 month') GROUP BY 1, 2`, [da, a]),
+    righeCosti(anni), regoleCategorie(),
     q<{ mese: string; socio: boolean; importo: number }>(`SELECT to_char(make_date(anno, mese, 1), 'YYYY-MM') AS mese, qualifica IN ('SOCIO', 'AMMINISTRATORE', 'SOCI E COLLABORATORI') AS socio,
         sum(lordo + contributi + tfr + altri)::float AS importo
       FROM costi_personale WHERE make_date(anno, mese, 1) BETWEEN $1::date AND $2::date GROUP BY 1, 2`, [da, a]),
@@ -41,13 +44,19 @@ export async function mesiDalPortale(periodo: Periodo): Promise<MesePortale[]> {
   const out = new Map<string, VocePortale[]>(mesi.map(m => [chiaveMese(m.anno, m.mese), []]));
   const metti = (mese: string, v: VocePortale) => { const l = out.get(mese); if (l && v.importo) l.push(v); };
   for (const f of fatture) metti(f.mese, { famiglia: 'ricavi', voce: 'Fatture emesse meno note di credito (portale)', importo: f.importo });
-  const mesiConPaghe = new Set(personale.map(p => p.mese));
   for (const p of personale) metti(p.mese, p.socio ? { famiglia: 'compensi', voce: 'Compenso amministratore e contributi (note contabili)', importo: p.importo }
     : { famiglia: 'personale', voce: 'Stipendi, contributi e TFR (note contabili)', importo: p.importo });
-  for (const r of ricevute) {
-    const fam = famigliaDiCategoria(r.categoria);
-    if ((fam === 'personale' || fam === 'compensi') && mesiConPaghe.has(r.mese)) continue;   // già contati dalle buste paga
-    metti(r.mese, { famiglia: fam, voce: r.categoria ? `${r.categoria.replace(/^[A-Z]\d+[a-z]?_/, '').trim()} (fatture ricevute)` : 'Fatture ricevute senza categoria', importo: r.importo });
+  // fatture ricevute: una voce per categoria di Casteltech e mese (righe o fatture intere, come in Costi per categoria)
+  const ricevute = new Map<string, number>();
+  for (const r of classificaCosti(righeRicevute, regole)) {
+    const mese = r.data.slice(0, 7);
+    if (!out.has(mese)) continue;
+    const k = `${mese}|${r.categoria}`;
+    ricevute.set(k, (ricevute.get(k) ?? 0) + r.importo);
+  }
+  for (const [k, importo] of ricevute) {
+    const [mese, codice] = k.split('|');
+    metti(mese, { famiglia: famigliaDiCategoriaCasteltech(codice), voce: `${categoriaCosto(codice).nome} (fatture ricevute)`, importo: Math.round(importo * 100) / 100 });
   }
   return [...out].map(([k, voci]) => ({ anno: Number(k.slice(0, 4)), mese: Number(k.slice(5, 7)), voci }));
 }

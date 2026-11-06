@@ -11,6 +11,7 @@ import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoA
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { caricaBilancino, caricaBilanciUfficiali, eliminaBilancino, mesiCaricati } from '../pareggio-servizio.js';
 import { nomeMeseIt } from '../../engine/pareggio.js';
+import { caricaRigheFornitori, rileggiRigheDagliXml, statoRighe } from '../righe-fornitori-servizio.js';
 import { caricaAliquote, caricaAzienda, caricaClientiFiscali, caricaSediOperative, caricaStoricoFic, caricaCondizioniPagamento, caricaNumerazioni, salvaAzienda } from '../amministrazione-servizio.js';
 
 type Pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string) => string;
@@ -39,8 +40,8 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   const torna = (msg: string, ancora = '') => `/impostazioni/amministrazione?msg=${encodeURIComponent(msg)}${ancora}`;
 
   r.get('/', async (req, res) => {
-    const [azienda, numerazioni, aliquote, condizioni, sdi, bilancini] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
-      caricaCondizioniPagamento(), statoInvoicetronic(), mesiCaricati()]);
+    const [azienda, numerazioni, aliquote, condizioni, sdi, bilancini, righe] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
+      caricaCondizioniPagamento(), statoInvoicetronic(), mesiCaricati(), statoRighe()]);
     const annoOggi = new Date().getFullYear();
     const ricevute = sdi.ambiente ? await ultimeRicevute() : [];
     const scelta = (nome: string, valori: Record<string, string> | string[], attuale: string | null, form?: string, vuota = false) => {
@@ -195,9 +196,26 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
         </div>
       </details>
 
-      <h2 id="bilancino">Bilancino mensile del commercialista (punto di pareggio)</h2>
+      <h2 id="righe-fornitori">Righe delle fatture dei fornitori (storico riga per riga)</h2>
       <details class="blocco">
-        <summary>Carica l'Excel del commercialista con un foglio per mese (GENNAIO, FEBBRAIO…)</summary>
+        <summary>Carica il file righe_fornitori.json.gz (preparato da Claude dagli XML dell'archivio di Fatture in Cloud)</summary>
+        <div class="stretto-form dentro-blocco">
+          <p class="nota">Ogni riga di ogni fattura dei fornitori (descrizione, quantità, prezzo, codice) letta dagli XML dal 2019: serve alle schede di analisi di componenti
+            e materiali di consumo e alla ricerca "dove l'ho comprato e a quanto" (Amministrazione → Analisi → Acquisti). Le fatture che arrivano dallo SdI hanno già le righe.
+            Il file si abbina alle fatture già caricate con lo storico; ricaricarlo sostituisce le righe senza duplicarle. Le righe vengono abbinate da sole all'archivio
+            componenti (P/N o codice gestionale) e ai materiali (codice MC-… o codice del fornitore tra parentesi nella descrizione). Prima mostra un riepilogo e chiede conferma.</p>
+          <p class="nota">Oggi: ${righe ? `${righe.conRighe} fatture con le righe (${righe.righe} righe), ${righe.senzaRighe} senza` : ''}${righe?.conXml ? html`; ${righe.conXml} con l'XML nel portale ma senza righe:
+            <form method="post" action="/impostazioni/amministrazione/righe-xml" class="inline"><button class="secondario" type="submit">Leggi le righe dagli XML</button></form>` : ''}.</p>
+          <label>File <input type="file" id="file-righe-fornitori" accept=".gz,.json"></label>
+          <button class="primario" type="button" id="carica-righe-fornitori">Controlla il file</button>
+          <output id="esito-righe-fornitori"></output>
+          <button class="primario" type="button" id="conferma-righe-fornitori" hidden>Conferma e carica</button>
+        </div>
+      </details>
+
+      <h2 id="bilancino">Bilancino mensile (punto di pareggio)</h2>
+      <details class="blocco">
+        <summary>Carica l'Excel del consulente o del commercialista con un foglio per mese (GENNAIO, FEBBRAIO…)</summary>
         <div class="stretto-form dentro-blocco">
           <p class="nota">Ogni foglio ha i conti del conto economico con il saldo progressivo dall'inizio dell'anno (conto a 8 cifre, descrizione, saldo):
             il portale calcola il valore di ogni mese e lo usa in Amministrazione → Analisi → Punto di pareggio. Ricaricare un mese lo sostituisce;
@@ -264,13 +282,27 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   r.post('/bilancino/elimina', async (req, res) => {
     const anno = Number(req.body?.anno);
     const n = Number.isInteger(anno) ? await eliminaBilancino(anno) : 0;
-    res.redirect(torna(n ? `Tolti ${n} valori del commercialista del ${anno}.` : 'Niente da togliere.', '#bilancino'));
+    res.redirect(torna(n ? `Tolti ${n} valori del bilancino del ${anno}.` : 'Niente da togliere.', '#bilancino'));
   });
   r.post('/bilanci', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
     let righe: unknown;
     try { righe = leggiFile(req.body).bilanci; if (!Array.isArray(righe)) throw new Error(); }
     catch { return res.status(400).json({ errore: 'File non valido: serve bilanci_ufficiali.json.gz' }); }
     res.json(await caricaBilanciUfficiali(righe, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/righe-fornitori', express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+    let dati: { tipo?: string; documenti?: any[] };
+    try {
+      dati = leggiFile(req.body);
+      if (dati?.tipo !== 'righe_fornitori' || !Array.isArray(dati.documenti)) throw new Error();
+    } catch { return res.status(400).json({ errore: 'File non valido: serve righe_fornitori.json.gz' }); }
+    res.json(await caricaRigheFornitori(dati, { anteprima: req.query.conferma !== '1' }));
+  });
+
+  r.post('/righe-xml', async (_req, res) => {
+    const e = await rileggiRigheDagliXml();
+    res.redirect(torna(`Lette ${e.righe} righe da ${e.letti} fatture; abbinate ${e.abbinati.componenti} a componenti e ${e.abbinati.materiali} a materiali.`, '#righe-fornitori'));
   });
 
   r.post('/storico-fic', express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {

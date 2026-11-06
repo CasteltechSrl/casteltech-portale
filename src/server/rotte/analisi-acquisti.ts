@@ -3,8 +3,10 @@
  *  - /amministrazione/analisi/fornitori    classifica dei fornitori di un anno (acquisti, variazione, peso, fatture, ultima fattura, fermi) + Excel;
  *  - /amministrazione/analisi/fornitore    scheda del fornitore: acquisti anno per anno, pagamenti, categorie, ordini del portale, ultime fatture;
  *  - /amministrazione/analisi/componente   scheda del componente: acquisti anno per anno dagli ordini a fornitore, prezzo, fornitori, BOM che lo usano;
- *  - /amministrazione/analisi/materiale    scheda del materiale di consumo: acquisti anno per anno dagli ordini a fornitore.
+ *  - /amministrazione/analisi/materiale    scheda del materiale di consumo: acquisti anno per anno dagli ordini a fornitore;
+ *  - /amministrazione/analisi/acquisti     ricerca "dove l'ho comprato e a quanto" (Adriano 6/11/2026) nelle righe delle fatture dei fornitori.
  * Pulsante "Analisi" in Anagrafiche → Fornitori / Componenti / Materiali. Conti in engine/analisi-acquisti.ts, letture in analisi-acquisti-servizio.ts.
+ * Le righe delle fatture dei fornitori (storico FIC dal 2019 e SdI) stanno in documenti_ricevuti_righe: engine/righe-fattura.ts, righe-fornitori-servizio.ts.
  */
 import { Router, type Request } from 'express';
 import { layout } from '../views/layout.js';
@@ -19,6 +21,8 @@ import {
   bomDelComponente, componentePerId, fattureFornitoriTutte, fornitoreDaChiave, materialePerId, ordiniFornitore, pagamentiFornitore,
   righeAcquistoComponente, righeAcquistoMateriale, ultimeFattureFornitore, type RigaAcquistoLetta,
 } from '../analisi-acquisti-servizio.js';
+import { cercaAcquisti, comeRigheAcquisto, righeFattureComponente, righeFattureFornitore, righeFattureMateriale, statoRighe } from '../righe-fornitori-servizio.js';
+import { articoliComprati, prezzoRiga, type ArticoloComprato, type RigaAcquistoStorica } from '../../engine/righe-fattura.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro0 = (n: number | null | undefined) => (n == null ? '' : `${num(n, 0)} €`);
@@ -36,10 +40,10 @@ const nonTrovato = (req: Request, cosa: string, torna: string, testoTorna: strin
 
 /** Tabella "anno per anno" di un componente o materiale (righe degli ordini a fornitore del portale). */
 function tabellaArticolo(s: SchedaArticolo, um: string): Raw {
-  if (!s.righe.length) return html`<p class="vuoto">Nessun ordine a fornitore emesso dal portale con questo codice. Gli acquisti fatti prima in Fatture in Cloud non sono riga per riga nel portale: resta l'ultimo acquisto dell'anagrafica.</p>`;
+  if (!s.righe.length) return html`<p class="vuoto">Nessun acquisto riga per riga con questo codice: né nelle fatture dei fornitori (storico dal 2019) né negli ordini a fornitore del portale. Resta l'ultimo acquisto dell'anagrafica, se c'è.</p>`;
   return html`<div class="tabella-scorre"><table class="elenco" data-non-ordinare>
     <thead><tr><th>Anno</th><th class="num">${um}</th><th class="num">Spesa</th><th class="num">Var. spesa</th><th class="num">Prezzo medio</th><th class="num">Var. prezzo</th>
-      <th class="num">Ordini</th><th>Fornitori</th><th>Ultimo acquisto</th></tr></thead>
+      <th class="num">Documenti</th><th>Fornitori</th><th>Ultimo acquisto</th></tr></thead>
     <tbody>${s.righe.map(r => html`<tr class="${r.variazionePrezzo != null && r.variazionePrezzo >= 10 ? 'scaduta' : ''}"><td>${r.anno}</td><td class="num">${num(r.pezzi, 0)}</td>
       <td class="num">${euro(r.spesa)}</td><td class="num">${pct(r.variazioneSpesa)}</td><td class="num">${euroUnitario(r.prezzoMedio)}</td><td class="num">${pct(r.variazionePrezzo)}</td>
       <td class="num">${r.ordini}</td><td>${r.fornitori.join(', ')}</td><td>${dataIt(r.ultimoAcquisto)}</td></tr>`)}
@@ -48,14 +52,16 @@ function tabellaArticolo(s: SchedaArticolo, um: string): Raw {
     </tbody></table></div>`;
 }
 
-/** Elenco delle righe d'ordine (le ultime 40) di un componente o materiale. */
+/** Elenco delle righe d'acquisto (le ultime 60: fatture dei fornitori e ordini del portale) di un componente o materiale. */
 function tabellaRighe(righe: RigaAcquistoLetta[]): Raw {
   if (!righe.length) return html``;
-  const ultime = [...righe].reverse().slice(0, 40);
-  return html`<h2>Righe degli ordini a fornitore${righe.length > 40 ? html` <span class="nota">(le ultime 40 di ${righe.length})</span>` : ''}</h2>
+  const ordinate = [...righe].sort((x, y) => y.data.localeCompare(x.data) || y.documentoId - x.documentoId);
+  const ultime = ordinate.slice(0, 60);
+  return html`<h2>Acquisti riga per riga${righe.length > 60 ? html` <span class="nota">(gli ultimi 60 di ${righe.length})</span>` : ''}</h2>
+    <p class="nota">Fatture dei fornitori (anche lo storico di Fatture in Cloud dal 2019) e ordini a fornitore del portale non ancora fatturati; prezzo = imponibile della riga ÷ quantità.</p>
     <div class="tabella-scorre"><table class="elenco">
-      <thead><tr><th>Data</th><th>Ordine</th><th>Fornitore</th><th>Descrizione</th><th class="num">Quantità</th><th class="num">Prezzo netto</th><th class="num">Importo</th><th class="num">Arrivati</th><th>Commessa</th></tr></thead>
-      <tbody>${ultime.map(r => html`<tr><td>${dataIt(r.data)}</td><td><a href="/ordini/fornitori/${r.documentoId}">${r.numero}</a></td><td>${r.fornitore}</td><td>${r.descrizione}</td>
+      <thead><tr><th>Data</th><th>Documento</th><th>Fornitore</th><th>Descrizione</th><th class="num">Quantità</th><th class="num">Prezzo netto</th><th class="num">Importo</th><th class="num">Arrivati</th><th>Commessa</th></tr></thead>
+      <tbody>${ultime.map(r => html`<tr><td>${dataIt(r.data)}</td><td>${r.fonte === 'fattura' ? html`<a href="/amministrazione/ricevuti/${r.documentoId}">${r.quantita < 0 ? html`<span class="etichetta">NC</span> ` : ''}fattura ${r.numero}</a>` : html`<a href="/ordini/fornitori/${r.documentoId}">ordine ${r.numero}</a>`}</td><td>${r.fornitore}</td><td>${pulita(r.descrizione)}</td>
         <td class="num">${num(r.quantita, 0)}</td><td class="num">${euroUnitario(prezzoNetto(r))}</td><td class="num">${euro(r.quantita * prezzoNetto(r))}</td>
         <td class="num">${r.arrivati ? num(r.arrivati, 0) : ''}</td><td>${r.commessaId ? html`<a href="/commesse/${r.commessaId}">commessa</a>` : ''}</td></tr>`)}</tbody></table></div>`;
 }
@@ -65,14 +71,34 @@ function cifreArticolo(s: SchedaArticolo, um: string, anagrafica: { prezzo: numb
   const ultimo = s.righe[s.righe.length - 1], penultimo = s.righe[s.righe.length - 2];
   const ultimoAnagrafica = anagrafica.prezzo != null && (!s.ultimo || (anagrafica.data ?? '') > s.ultimo.data);
   return html`<div class="cifre">
-    <div class="cifra"><span>Spesa totale (portale)</span><b>${euro(s.totale.spesa)}</b><small>${s.totale.ordini ? `${num(s.totale.pezzi, 0)} ${um} in ${s.totale.ordini} ${s.totale.ordini === 1 ? 'ordine' : 'ordini'} dal ${dataIt(s.primaData)}` : 'nessun ordine a fornitore nel portale'}</small></div>
+    <div class="cifra"><span>Spesa totale</span><b>${euro(s.totale.spesa)}</b><small>${s.totale.ordini ? `${num(s.totale.pezzi, 0)} ${um} in ${s.totale.ordini} ${s.totale.ordini === 1 ? 'acquisto' : 'acquisti'} dal ${dataIt(s.primaData)}` : 'nessun acquisto riga per riga'}</small></div>
     <div class="cifra"><span>Ultimo anno ${ultimo?.anno ?? ''}</span><b>${euro(ultimo?.spesa ?? 0)}</b><small>${ultimo ? `${num(ultimo.pezzi, 0)} ${um}` : ''}${penultimo ? ` · ${pct(ultimo?.variazioneSpesa)} sul ${penultimo.anno}` : ''}</small></div>
     <div class="cifra"><span>Ultimo acquisto</span><b>${ultimoAnagrafica ? euroUnitario(anagrafica.prezzo) : s.ultimo ? euroUnitario(s.ultimo.prezzo) : '—'}</b>
       <small>${ultimoAnagrafica ? `${anagrafica.fornitore ?? ''}${anagrafica.data ? ` · ${dataIt(anagrafica.data)}` : ''}${anagrafica.quantita ? ` · ${num(anagrafica.quantita, 0)} ${um}` : ''}${anagrafica.fonte === 'manuale' ? ' · scritto a mano' : anagrafica.fonte === 'fic' ? ' · da Fatture in Cloud' : ''}`
         : s.ultimo ? `${s.ultimo.fornitore} · ${dataIt(s.ultimo.data)} · ${num(s.ultimo.quantita, 0)} ${um}` : 'mai comprato'}</small></div>
-    <div class="cifra"><span>Prezzo medio (portale)</span><b>${s.totale.prezzoMedio != null ? euroUnitario(s.totale.prezzoMedio) : '—'}</b>
+    <div class="cifra"><span>Prezzo medio</span><b>${s.totale.prezzoMedio != null ? euroUnitario(s.totale.prezzoMedio) : '—'}</b>
       <small>${s.minimo != null && s.massimo != null && s.minimo !== s.massimo ? `da ${euroUnitario(s.minimo)} a ${euroUnitario(s.massimo)}` : s.minimo != null ? 'sempre lo stesso prezzo' : ''}</small></div>
   </div>`;
+}
+
+/** Articoli trovati dalla ricerca negli acquisti, con i fornitori e i prezzi. */
+function tabellaArticoli(articoli: ArticoloComprato[]): Raw {
+  return html`<div class="tabella-scorre"><table class="elenco">
+    <thead><tr><th>Articolo</th><th>Descrizione</th><th class="num">Volte</th><th class="num">Quantità</th><th class="num">Spesa</th><th class="num">Ultimo prezzo</th><th class="num">Min – max</th><th>Dove</th></tr></thead>
+    <tbody>${articoli.slice(0, 200).map(a => html`<tr><td><b>${a.pn ?? ''}</b>${a.componenteId ? html`<br><a href="/amministrazione/analisi/componente?id=${a.componenteId}">scheda componente</a>` : ''}${a.materialeId ? html`<br><a href="/amministrazione/analisi/materiale?id=${a.materialeId}">scheda materiale</a>` : ''}</td>
+      <td>${pulita(a.descrizione).slice(0, 110)}</td><td class="num">${a.volte}</td><td class="num">${num(a.pezzi, 0)}</td><td class="num">${euro(a.spesa)}</td>
+      <td class="num">${euroUnitario(a.ultimoPrezzo)}<br><small>${a.ultimoFornitore} · ${dataIt(a.ultimaData)}</small></td>
+      <td class="num">${a.minimo != null && a.massimo != null && a.minimo !== a.massimo ? `${euroUnitario(a.minimo)} – ${euroUnitario(a.massimo)}` : ''}</td>
+      <td>${a.fornitori.slice(0, 5).map(f => html`<div><a href="${linkFornitore(f.fornitoreChiave)}">${f.fornitore}</a>: ${euroUnitario(f.ultimoPrezzo)} <small>${dataIt(f.ultimaData)}${f.volte > 1 ? ` · ${f.volte} volte` : ''}${f.minimo != null && f.ultimoPrezzo != null && f.minimo < f.ultimoPrezzo ? ` · min ${euroUnitario(f.minimo)}` : ''}</small></div>`)}${a.fornitori.length > 5 ? html`<small>e altri ${a.fornitori.length - 5}</small>` : ''}</td></tr>`)}</tbody></table></div>`;
+}
+
+/** Righe di fattura trovate, dalla più recente. */
+function tabellaRigheStoriche(righe: RigaAcquistoStorica[]): Raw {
+  return html`<div class="tabella-scorre"><table class="elenco">
+    <thead><tr><th>Data</th><th>Fattura</th><th>Fornitore</th><th>Codice</th><th>Descrizione</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Imponibile</th></tr></thead>
+    <tbody>${righe.map(r => html`<tr><td>${dataIt(r.data)}</td><td><a href="/amministrazione/ricevuti/${r.documentoId}">${r.tipo === 'nota_credito' ? html`<span class="etichetta">NC</span> ` : ''}${r.numero || 'senza n.'}</a></td>
+      <td><a href="${linkFornitore(r.fornitoreChiave)}">${r.fornitore}</a></td><td>${r.codice ?? ''}</td><td>${pulita(r.descrizione)}</td>
+      <td class="num">${r.quantita != null ? `${num(r.quantita, 0)}${r.um ? ` ${r.um}` : ''}` : ''}</td><td class="num">${euroUnitario(prezzoRiga(r))}</td><td class="num">${euro((r.tipo === 'nota_credito' ? -1 : 1) * r.imponibile)}</td></tr>`)}</tbody></table></div>`;
 }
 
 export function rotteAnalisiAcquisti() {
@@ -140,7 +166,8 @@ export function rotteAnalisiAcquisti() {
     const f = chiave ? await fornitoreDaChiave(chiave) : null;
     if (!f) { const p = nonTrovato(req, 'Fornitore', '/amministrazione/analisi/fornitori', 'Torna alla classifica dei fornitori'); return res.status(p.stato).send(p.html); }
     const oggi = oggiRoma();
-    const [tutte, pagamenti, ordini, ultime] = await Promise.all([fattureFornitoriTutte(), pagamentiFornitore(f.chiave), ordiniFornitore(f.id), ultimeFattureFornitore(f.chiave)]);
+    const [tutte, pagamenti, ordini, ultime, righeFatture] = await Promise.all([fattureFornitoriTutte(), pagamentiFornitore(f.chiave), ordiniFornitore(f.id), ultimeFattureFornitore(f.chiave), righeFattureFornitore(f.chiave)]);
+    const articoli = articoliComprati(righeFatture).sort((a, b) => b.spesa - a.spesa).slice(0, 30);
     const s = schedaFornitore(tutte.filter(x => x.fornitoreChiave === f.chiave), { totali: totaliAcquisti(tutte), oggi, pagamenti, ordini });
     const ultimo = s.righe[s.righe.length - 1], penultimo = s.righe[s.righe.length - 2];
     const haOrdini = s.righe.some(r => r.ordini > 0);
@@ -174,6 +201,13 @@ export function rotteAnalisiAcquisti() {
         <table class="elenco stretta"><thead><tr><th>Categoria</th><th class="num">Importo</th><th class="num">Peso</th></tr></thead>
           <tbody>${s.categorie.map(c => html`<tr><td>${c.categoria}</td><td class="num">${euro(c.importo)}</td><td class="num">${s.totale.acquisti > 0 ? `${num((c.importo / s.totale.acquisti) * 100, 0)}%` : ''}</td></tr>`)}</tbody></table>` : ''}
 
+      ${articoli.length ? html`<h2>Cosa compriamo da questo fornitore</h2>
+        <p class="nota">Gli articoli con più spesa nelle righe delle sue fatture (storico dal 2019${righeFatture.length >= 4000 ? ', le ultime 4.000 righe' : ''}); clic sul codice per cercarlo in tutti i fornitori.</p>
+        <div class="tabella-scorre"><table class="elenco">
+          <thead><tr><th>Articolo</th><th>Descrizione</th><th class="num">Volte</th><th class="num">Quantità</th><th class="num">Spesa</th><th class="num">Ultimo prezzo</th><th>Ultimo acquisto</th></tr></thead>
+          <tbody>${articoli.map(a => html`<tr><td>${a.pn ? html`<a href="/amministrazione/analisi/acquisti?q=${encodeURIComponent(a.pn)}">${a.pn}</a>` : ''}${a.componenteId ? html` <a class="nota" href="/amministrazione/analisi/componente?id=${a.componenteId}">scheda</a>` : ''}${a.materialeId ? html` <a class="nota" href="/amministrazione/analisi/materiale?id=${a.materialeId}">materiale</a>` : ''}</td>
+            <td>${pulita(a.descrizione).slice(0, 90)}</td><td class="num">${a.volte}</td><td class="num">${num(a.pezzi, 0)}</td><td class="num">${euro(a.spesa)}</td><td class="num">${euroUnitario(a.ultimoPrezzo)}</td><td>${dataIt(a.ultimaData)}</td></tr>`)}</tbody></table></div>` : ''}
+
       ${ordini.length ? html`<h2>Ordini a fornitore del portale · ${ordini.length}</h2>
         <div class="tabella-scorre"><table class="elenco">
           <thead><tr><th>Data</th><th>Ordine</th><th>Righe</th><th class="num">Valore</th></tr></thead>
@@ -188,27 +222,73 @@ export function rotteAnalisiAcquisti() {
     res.status(p.stato).send(p.html);
   });
 
+  // ── Ricerca negli acquisti: "dove l'ho comprato e a quanto" ──
+  async function datiRicerca(req: Request) {
+    const testo = String(req.query.q ?? '').trim().slice(0, 80);
+    const righe = testo.length >= 2 ? await cercaAcquisti(testo) : [];
+    return { testo, righe, articoli: articoliComprati(righe) };
+  }
+
+  r.get('/acquisti', async (req: Request, res) => {
+    const d = await datiRicerca(req);
+    const stato = await statoRighe();
+    const p = pagina(req, d.testo ? `Acquisti di ${d.testo}` : 'Ricerca negli acquisti', html`
+      <div class="intestazione-pagina"><h1>Dove l'ho comprato e a quanto</h1>
+        <div class="azioni non-stampare">${d.righe.length ? html`<a class="bottone" href="/amministrazione/analisi/acquisti.xlsx?q=${encodeURIComponent(d.testo)}">Excel</a> ` : ''}<button type="button" id="stampa">Stampa</button></div></div>
+      <div class="non-stampare">${menuAmministrazione('analisi')}</div>
+      ${tastiAnalisi('acquisti')}
+      <form method="get" class="cerca non-stampare">
+        <label>Componente o materiale <input type="search" name="q" value="${d.testo}" placeholder="P/N, codice o parole della descrizione (es. STM32F103, 0603 10K, pasta saldante)" size="50" autofocus></label>
+        <button class="primario">Cerca</button></form>
+      <p class="nota">Cerca nelle righe delle fatture dei fornitori: storico di Fatture in Cloud dal 2019 e fatture arrivate dallo SdI (${stato ? `${num(stato.righe, 0)} righe di ${num(stato.conRighe, 0)} fatture` : ''}).
+        Tutte le parole devono esserci; un P/N si trova anche scritto senza trattini. Prezzo = imponibile della riga ÷ quantità (note di credito in negativo).</p>
+      ${!d.testo ? '' : !d.righe.length ? html`<p class="vuoto">Nessun acquisto con "${d.testo}".</p>` : html`
+        <div class="cifre">
+          <div class="cifra"><span>Articoli trovati</span><b>${d.articoli.length}</b><small>${d.righe.length}${d.righe.length >= 3000 ? '+' : ''} righe di fattura</small></div>
+          <div class="cifra"><span>Spesa totale</span><b>${euro(d.articoli.reduce((s, a) => s + a.spesa, 0))}</b><small>dal ${dataIt(d.righe[d.righe.length - 1].data)} al ${dataIt(d.righe[0].data)}</small></div>
+          <div class="cifra"><span>Fornitori</span><b>${new Set(d.righe.map(r => r.fornitoreChiave)).size}</b><small>${[...new Set(d.righe.map(r => r.fornitore))].slice(0, 4).join(', ')}</small></div>
+        </div>
+        <h2>Per articolo</h2>
+        <p class="nota">Le righe con lo stesso componente (o P/N, codice del fornitore, descrizione) sono unite; i fornitori con l'ultimo prezzo pagato e il più basso. In cima gli acquisti più recenti.</p>
+        ${tabellaArticoli(d.articoli)}
+        <h2>Tutte le righe${d.righe.length > 300 ? html` <span class="nota">(le ultime 300 di ${d.righe.length})</span>` : ''}</h2>
+        ${tabellaRigheStoriche(d.righe.slice(0, 300))}`}`);
+    res.status(p.stato).send(p.html);
+  });
+
+  r.get('/acquisti.xlsx', async (req: Request, res) => {
+    const d = await datiRicerca(req);
+    const dati = await excelSemplice(`Acquisti ${d.testo}`.slice(0, 31), [
+      { header: 'Data', key: 'data', width: 12, formato: 'data' }, { header: 'Tipo', key: 'tipo', width: 12 }, { header: 'Numero', key: 'numero', width: 14 },
+      { header: 'Fornitore', key: 'fornitore', width: 32 }, { header: 'Codice', key: 'codice', width: 18 }, { header: 'P/N', key: 'pn', width: 20 },
+      { header: 'Descrizione', key: 'descrizione', width: 60 }, { header: 'Quantità', key: 'quantita', width: 10 }, { header: 'UM', key: 'um', width: 6 },
+      { header: 'Prezzo unitario €', key: 'prezzo', width: 14 }, { header: 'Imponibile €', key: 'imponibile', width: 14, formato: 'euro' },
+    ], d.righe.map(r => ({ ...r, tipo: r.tipo === 'nota_credito' ? 'nota di credito' : 'fattura', prezzo: prezzoRiga(r), descrizione: pulita(r.descrizione) })));
+    inviaExcel(res, nomeExcel(`acquisti-${d.testo.replace(/[^A-Za-z0-9]+/g, '-') || 'ricerca'}`), dati);
+  });
+
   // ── Scheda del componente ──
   r.get('/componente', async (req: Request, res) => {
     const id = Number(req.query.id);
     const c = Number.isInteger(id) && id > 0 ? await componentePerId(id) : undefined;
     if (!c) { const p = nonTrovato(req, 'Componente', '/anagrafiche/componenti', 'Torna ai componenti'); return res.status(p.stato).send(p.html); }
     const oggi = oggiRoma();
-    const [righe, bom] = await Promise.all([righeAcquistoComponente(c), bomDelComponente(c)]);
+    const [ordini, fatture, bom] = await Promise.all([righeAcquistoComponente(c), righeFattureComponente(c), bomDelComponente(c)]);
+    const righe = [...ordini.map(r => ({ ...r, fonte: 'ordine' as const })), ...comeRigheAcquisto(fatture)];
     const s = schedaArticolo(righe, oggi);
     const titolo = c.pn || c.codice_gestionale || c.codice_produzione || `componente ${c.id}`;
     const p = pagina(req, `Analisi ${titolo}`, html`
       <div class="intestazione-pagina"><div><h1>${titolo}</h1><p class="nota">${c.descrizione ?? ''}${c.produttore ? ` · ${c.produttore}` : ''}
         ${c.famiglia ? ` · ${c.famiglia}${FAMIGLIE[c.famiglia] ? ` ${FAMIGLIE[c.famiglia].nome}` : ''}` : ''}<br>
         ${c.codice_gestionale ? html`gestionale <b>${c.codice_gestionale}</b> · ` : ''}${c.codice_produzione ? html`produzione <b>${c.codice_produzione}</b> · ` : ''}
-        <a href="/anagrafiche/componenti?q=${encodeURIComponent(c.pn ?? c.codice_gestionale ?? '')}">Anagrafica</a>${c.pn ? html` · <a href="/quotazioni/prezzo?pn=${encodeURIComponent(c.pn)}">Miglior prezzo oggi</a>` : ''}</p></div>
+        <a href="/anagrafiche/componenti?q=${encodeURIComponent(c.pn ?? c.codice_gestionale ?? '')}">Anagrafica</a>${c.pn ? html` · <a href="/quotazioni/prezzo?pn=${encodeURIComponent(c.pn)}">Miglior prezzo oggi</a> · <a href="/amministrazione/analisi/acquisti?q=${encodeURIComponent(c.pn)}">Cerca negli acquisti</a>` : ''}</p></div>
         <div class="azioni non-stampare"><button type="button" id="stampa">Stampa</button></div></div>
       <div class="non-stampare">${menuAmministrazione('analisi')}</div>
       ${tastiAnalisi('fornitori')}
       ${cifreArticolo(s, 'pezzi', { prezzo: c.prezzo_acquisto, fornitore: c.prezzo_fornitore, data: c.prezzo_data, quantita: c.prezzo_quantita, fonte: c.prezzo_fonte })}
       <h2>Anno per anno</h2>
-      <p class="nota">Dalle righe degli ordini a fornitore emessi dal portale con questo componente (P/N, codice gestionale o di produzione): pezzi, spesa, prezzo medio pesato sui pezzi
-        e la sua variazione (riga in rosso se il prezzo sale del 10 % o più), fornitori usati, ultimo ordine.</p>
+      <p class="nota">Dalle righe delle fatture dei fornitori (storico di Fatture in Cloud dal 2019 e fatture dallo SdI) e degli ordini a fornitore del portale non ancora fatturati, con questo componente
+        (P/N, codice gestionale o di produzione): pezzi, spesa, prezzo medio pesato sui pezzi e la sua variazione (riga in rosso se il prezzo sale del 10 % o più), fornitori usati, ultimo acquisto.</p>
       ${tabellaArticolo(s, 'Pezzi')}
       ${tabellaRighe(righe)}
       <h2>Schede che lo usano · ${bom.length}</h2>
@@ -227,7 +307,8 @@ export function rotteAnalisiAcquisti() {
     const m = Number.isInteger(id) && id > 0 ? await materialePerId(id) : undefined;
     if (!m) { const p = nonTrovato(req, 'Materiale', '/anagrafiche/materiali', 'Torna ai materiali di consumo'); return res.status(p.stato).send(p.html); }
     const oggi = oggiRoma();
-    const righe = await righeAcquistoMateriale(m.codice);
+    const [ordini, fatture] = await Promise.all([righeAcquistoMateriale(m.codice), righeFattureMateriale(m.id)]);
+    const righe = [...ordini.map(r => ({ ...r, fonte: 'ordine' as const })), ...comeRigheAcquisto(fatture)];
     const s = schedaArticolo(righe, oggi);
     const um = (m.um ?? 'PZ').toUpperCase();
     const p = pagina(req, `Analisi ${m.codice}`, html`
@@ -238,8 +319,8 @@ export function rotteAnalisiAcquisti() {
       ${tastiAnalisi('fornitori')}
       ${cifreArticolo(s, um, { prezzo: m.prezzo_acquisto, fornitore: m.prezzo_fornitore, data: m.prezzo_data, quantita: m.prezzo_quantita, fonte: m.prezzo_fonte })}
       <h2>Anno per anno</h2>
-      <p class="nota">Dalle righe degli ordini a fornitore emessi dal portale con il codice ${m.codice}: quantità (${um}), spesa, prezzo medio pesato e la sua variazione
-        (riga in rosso se il prezzo sale del 10 % o più), fornitori usati, ultimo ordine.</p>
+      <p class="nota">Dalle righe delle fatture dei fornitori abbinate a questo materiale (codice ${m.codice} o i codici del fornitore scritti tra parentesi nella descrizione) e dagli ordini
+        a fornitore del portale non ancora fatturati: quantità (${um}), spesa, prezzo medio pesato e la sua variazione (riga in rosso se il prezzo sale del 10 % o più), fornitori usati, ultimo acquisto.</p>
       ${tabellaArticolo(s, um)}
       ${tabellaRighe(righe)}`);
     res.status(p.stato).send(p.html);

@@ -7,6 +7,8 @@
  *   GET  /api/claude/suggerimenti            → aperti (con ?tutti=1 anche fatti e scartati)
  *   POST /api/claude/suggerimenti/:id        → { stato?, risposta?, nota? }
  *   GET  /api/claude/storico                 → quanti documenti per tipo, anno e origine (solo numeri)
+ *   GET  /api/claude/storico/fic?anno=2026   → i documenti arrivati da Fatture in Cloud di un anno, uno per riga, con il loro fic_id
+ *                                              (allineamento con FIC, Adriano 6/11/2026: solo numeri, importi, stati e scadenze, niente nomi)
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -79,6 +81,26 @@ export function rotteApiClaude() {
       righeConCodice: await q(`SELECT d.anno, count(*)::int AS n, count(r.prodotto_id)::int AS "conProdotto" FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
         WHERE d.tipo IN ('fattura', 'nota_credito', 'ddt') AND NOT r.solo_descrizione AND coalesce(trim(r.codice), '') <> '' GROUP BY 1 ORDER BY 1`),
       ricevuti: await q(`SELECT extract(year FROM data)::int AS anno, origine, count(*)::int AS n FROM documenti_ricevuti GROUP BY 1, 2 ORDER BY 1, 2`),
+    });
+  });
+
+  // Allineamento con Fatture in Cloud (Adriano 6/11/2026, "verifica che tutti i dati presenti in FIC siano allineati"):
+  // per ogni documento emesso o ricevuto con fic_id dell'anno chiesto, numero, data, importi, stato e scadenze (importo, data, pagata il).
+  // Niente intestatari né descrizioni: serve solo a confrontare id, numeri e totali con FIC.
+  r.get('/storico/fic', async (req, res) => {
+    const anno = Number(req.query.anno) || new Date().getFullYear();
+    res.json({
+      anno,
+      documenti: await q(`SELECT d.fic_id AS "ficId", d.tipo, d.sezionale, d.numero, d.data::text, d.stato, d.sdi_stato AS "sdiStato",
+          d.imponibile::float, d.imposta::float, d.totale::float, f.fic_id AS "fatturaFicId",
+          (SELECT json_agg(json_build_object('importo', s.importo::float, 'data', s.data::text, 'pagataIl', s.pagata_il::text) ORDER BY s.data, s.id)
+             FROM documenti_scadenze s WHERE s.documento_id = d.id) AS scadenze
+        FROM documenti d LEFT JOIN documenti f ON f.id = d.fattura_id
+        WHERE d.fic_id IS NOT NULL AND d.anno = $1 ORDER BY d.tipo, d.sezionale, d.numero`, [anno]),
+      ricevuti: await q(`SELECT r.fic_id AS "ficId", r.tipo, r.numero, r.data::text, r.imponibile::float, r.imposta::float, r.totale::float, r.elettronica,
+          (SELECT json_agg(json_build_object('importo', s.importo::float, 'data', s.data::text, 'pagataIl', s.pagata_il::text) ORDER BY s.data, s.id)
+             FROM documenti_ricevuti_scadenze s WHERE s.documento_id = r.id) AS scadenze
+        FROM documenti_ricevuti r WHERE r.fic_id IS NOT NULL AND extract(year FROM r.data) = $1 ORDER BY r.data, r.id`, [anno]),
     });
   });
 

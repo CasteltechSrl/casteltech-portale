@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contabilitaPuo, controlloEliminaUtente, controlloUtente, esternoPuo, eUfficio, paginaDopoAccesso, paginaIniziale, ruoloDaModulo, vedePaghe } from '../src/engine/ruoli.js';
+import { contabilitaPuo, controlloEliminaUtente, controlloUtente, esternoPuo, eUfficio, paginaDopoAccesso, paginaIniziale, ruoloDaModulo, vedePaghe, vedeAnalisi, analisiPermessa, PERCORSO_ANALISI, DESCRIZIONI_RUOLI } from '../src/engine/ruoli.js';
 import { acquistiPerFornitore } from '../src/engine/cruscotto-amministrazione.js';
 import { layout } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
@@ -90,6 +90,7 @@ test('stipendi e buste paga: amministratore, contabilità, ufficio solo con il p
   assert.equal(contabilitaPuo('GET', '/dipendenti'), false);
   assert.equal(contabilitaPuo('GET', '/dipendenti/riservatafalsa'), false);
   assert.equal(contabilitaPuo('GET', '/amministrazione/analisi/cassa'), true);
+  assert.equal(contabilitaPuo('GET', '/amministrazione/analisi'), false);   // Analisi: solo amministratore ed esterno (6/11/2026)
   // l'esterno non vede la previsione di cassa (da lì si ricavano gli stipendi)
   assert.equal(esternoPuo('GET', '/amministrazione/analisi/cassa'), false);
   assert.equal(esternoPuo('GET', '/amministrazione/analisi/cassa.xlsx'), false);
@@ -118,4 +119,27 @@ test('Impostazioni → Utenti: solo l\'amministratore sceglie i ruoli e tocca gl
   assert.equal(controlloEliminaUtente({ chi: 'ufficio', ruoloBersaglio: 'produzione', altriAmministratoriAttivi: 1 }), null);
   assert.match(controlloEliminaUtente({ chi: 'ufficio', ruoloBersaglio: 'amministratore', altriAmministratoriAttivi: 1 })!, /Solo l'amministratore/);
   assert.match(controlloEliminaUtente({ chi: 'amministratore', ruoloBersaglio: 'amministratore', altriAmministratoriAttivi: 0 })!, /almeno un amministratore/);
+});
+
+test('Analisi riservata (Adriano 6/11/2026): solo amministratore ed esterno; l\'ufficio e la contabilità non la aprono, la cassa segue la sua regola', () => {
+  assert.equal(vedeAnalisi('amministratore'), true);
+  assert.equal(vedeAnalisi('esterno'), true);
+  assert.equal(vedeAnalisi('ufficio'), false);
+  assert.equal(vedeAnalisi('contabilita'), false);
+  assert.equal(vedeAnalisi('produzione'), false);
+  for (const p of ['/amministrazione/analisi', '/amministrazione/analisi/', '/amministrazione/analisi/prodotti', '/amministrazione/analisi/pareggio.xlsx',
+    '/amministrazione/analisi/fornitore', '/amministrazione/analisi.xlsx']) {
+    assert.equal(PERCORSO_ANALISI.test(p), true, p);
+    assert.equal(analisiPermessa('ufficio', p), false, p);
+    assert.equal(analisiPermessa('contabilita', p), false, p);
+    assert.equal(analisiPermessa('amministratore', p), true, p);
+    assert.equal(analisiPermessa('esterno', p), true, p);
+  }
+  // fuori dall'Analisi l'ufficio apre tutto come prima; la Previsione di cassa resta a chi vede le paghe (la decide la sua pagina)
+  assert.equal(analisiPermessa('ufficio', '/amministrazione'), true);
+  assert.equal(analisiPermessa('ufficio', '/amministrazione/analisifalsa'), true);
+  assert.equal(analisiPermessa('ufficio', '/amministrazione/analisi/cassa'), true);
+  assert.equal(analisiPermessa('contabilita', '/amministrazione/analisi/cassa.xlsx'), true);
+  assert.equal(esternoPuo('GET', '/amministrazione/analisi/pareggio'), true);
+  assert.match(DESCRIZIONI_RUOLI.ufficio, /Analisi/);
 });

@@ -28,7 +28,7 @@ export const FAMIGLIE: Famiglia[] = [
   { codice: 'ammortamenti', nome: 'Ammortamenti', tipo: 'fisso', spiegazione: 'quote di macchinari, attrezzature, arredi e beni immateriali' },
   { codice: 'oneri', nome: 'Imposte, tasse e altri oneri', tipo: 'fisso', spiegazione: 'bolli, registro, rifiuti, diritti camerali, sanzioni, abbuoni passivi' },
   { codice: 'finanziari', nome: 'Oneri finanziari', tipo: 'fisso', spiegazione: 'interessi su mutui e conto corrente, commissioni, oneri bancari, cambi' },
-  { codice: 'senza_categoria', nome: 'Fatture senza categoria', tipo: 'fisso', spiegazione: 'fatture dei fornitori senza categoria di costo nel portale (solo nei mesi presi dal portale)' },
+  { codice: 'senza_categoria', nome: 'Fatture senza categoria', tipo: 'fisso', spiegazione: 'fatture dei fornitori senza categoria (dal 6/11/2026 non succede più: i mesi del portale usano le categorie di Casteltech, vedi Costi per categoria)' },
 ];
 export const famiglia = (c: CodiceFamiglia): Famiglia => FAMIGLIE.find(f => f.codice === c)!;
 
@@ -225,7 +225,7 @@ export function contoEconomico(opz: {
   const fissiMedi = somma(famiglie.filter(f => f.tipo === 'fisso').map(f => f.media));
   if (!nMesi) avvisi.push('Periodo vuoto.');
   const mesiComm = mesiOut.filter(m => m.fonte === 'commercialista').length;
-  if (nMesi && !mesiComm) avvisi.push('Nessun mese del commercialista nel periodo: ricavi, acquisti e personale vengono dal portale, il resto è una stima.');
+  if (nMesi && !mesiComm) avvisi.push('Nessun mese del bilancino nel periodo: ricavi, acquisti e personale vengono dal portale, il resto è una stima.');
   return { periodo: opz.periodo, mesi: mesiOut, nMesi, famiglie, pareggio: puntoPareggio(ricaviMedi, variabiliMedi, fissiMedi), avvisi };
 }
 
@@ -233,7 +233,7 @@ function notaFamiglia(codice: CodiceFamiglia, fonti: Record<Fonte, number>, nMes
   if (!nMesi) return null;
   if (fonti.commercialista === nMesi) return null;
   const parti: string[] = [];
-  if (fonti.commercialista) parti.push(`${fonti.commercialista} ${fonti.commercialista === 1 ? 'mese' : 'mesi'} dal commercialista`);
+  if (fonti.commercialista) parti.push(`${fonti.commercialista} ${fonti.commercialista === 1 ? 'mese' : 'mesi'} dal bilancino`);
   if (fonti.portale) parti.push(`${fonti.portale} dal portale`);
   if (fonti.stima) parti.push(`${fonti.stima} stimati`);
   if (codice === 'senza_categoria') return 'fatture ricevute senza categoria: potrebbero essere materie prime o servizi';
@@ -241,20 +241,23 @@ function notaFamiglia(codice: CodiceFamiglia, fonti: Record<Fonte, number>, nMes
 }
 
 /** Stima mensile di una famiglia: media dei mesi del commercialista dello stesso anno, poi il bilancio ufficiale ÷ 12, poi i mesi del commercialista di qualsiasi anno. */
+export const MESI_PER_STIMA = 3;
 export function stimaFamiglia(fam: CodiceFamiglia, anno: number, commercialista: VoceMese[], bilanci: BilancioUfficiale[]): { importo: number; da: string } | null {
-  const mediaDa = (voci: VoceMese[]) => {
-    const mesi = new Set(voci.map(v => chiaveMese(v.anno, v.mese)));
-    if (!mesi.size) return null;
-    const tot = somma(voci.filter(v => famigliaDiConto(v.conto) === fam).map(v => v.importo));
-    return r2(tot / mesi.size);
+  // media degli ULTIMI mesi del bilancino, non di tutto l'anno: un costo finito (il leasing, terminato a luglio 2026: Adriano 6/11/2026)
+  // non deve continuare nei mesi stimati
+  const mediaDa = (voci: VoceMese[], ultimi = MESI_PER_STIMA) => {
+    const mesi = [...new Set(voci.map(v => chiaveMese(v.anno, v.mese)))].sort().slice(-ultimi);
+    if (!mesi.length) return null;
+    const tot = somma(voci.filter(v => mesi.includes(chiaveMese(v.anno, v.mese)) && famigliaDiConto(v.conto) === fam).map(v => v.importo));
+    return { importo: r2(tot / mesi.length), mesi };
   };
   const stessoAnno = commercialista.filter(v => v.anno === anno);
   const m1 = mediaDa(stessoAnno);
-  if (m1 != null) return { importo: m1, da: `media dei mesi ${anno} del commercialista` };
+  if (m1 != null) return { importo: m1.importo, da: m1.mesi.length === 1 ? `${nomeMeseIt(Number(m1.mesi[0].slice(5)))} ${anno} del bilancino` : `media ${nomeMeseIt(Number(m1.mesi[0].slice(5))).slice(0, 3)}–${nomeMeseIt(Number(m1.mesi[m1.mesi.length - 1].slice(5))).slice(0, 3)} ${anno} del bilancino` };
   const b = bilanci.find(x => x.anno === anno);
   if (b) { const v = daBilancio(b, fam); if (v != null) return { importo: r2(v / 12), da: `bilancio ${anno} ÷ 12` }; }
   const anni = [...new Set(commercialista.map(v => v.anno))].sort((x, y) => y - x);
-  for (const a of anni) { const m = mediaDa(commercialista.filter(v => v.anno === a)); if (m != null) return { importo: m, da: `media dei mesi ${a} del commercialista` }; }
+  for (const a of anni) { const m = mediaDa(commercialista.filter(v => v.anno === a)); if (m != null) return { importo: m.importo, da: `media degli ultimi mesi ${a} del bilancino` }; }
   const ultimo = [...bilanci].sort((x, y) => y.anno - x.anno)[0];
   if (ultimo) { const v = daBilancio(ultimo, fam); if (v != null) return { importo: r2(v / 12), da: `bilancio ${ultimo.anno} ÷ 12` }; }
   return null;

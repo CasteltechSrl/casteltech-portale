@@ -458,6 +458,10 @@ form.nuova-azienda input { width: 14rem; }
 .bottone .conta { font-size: .72rem; background: var(--avviso); color: var(--testo); padding: .05rem .45rem; border-radius: 99px; margin-left: .2rem; }
 a.cifra { text-decoration: none; color: inherit; }
 a.cifra:hover { border-color: var(--accento); }
+/* riquadri che filtrano l'elenco sotto (classifica dei prodotti): quello scelto è evidenziato */
+a.cifra.riquadro-filtro { cursor: pointer; border-width: 2px; }
+a.cifra.riquadro-filtro.attivo { border-color: var(--accento); background: color-mix(in srgb, var(--accento) 8%, var(--carta)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accento) 25%, transparent); }
+a.cifra.riquadro-filtro.attivo span::after { content: ' ✓'; color: var(--accento); }
 .cifra.allarme b { color: var(--negativo); }
 .scadenza { font-weight: 600; white-space: nowrap; }
 .scadenza.scaduta { color: var(--negativo); }
@@ -1017,6 +1021,17 @@ main:has(#dettagli-pareggio:not(:checked)) table.pareggio tr.riga-dettaglio { di
 table.pareggio tr.riga-totale th { text-align: left; border-top: 2px solid var(--bordo); }
 table.pareggio tr.riga-totale th.num, .elenco tr.riga-totale th.num { text-align: right; }
 .mesi-fonte { display: flex; flex-wrap: wrap; gap: .3rem; }
+/* niente scritte a capo (Adriano 6/11/2026): riquadri più larghi, numeri e mesi su una riga, voci del dettaglio più discrete */
+.cifre.cifre-pareggio { grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); }
+.cifre-pareggio .cifra span, .cifre-pareggio .cifra b { white-space: nowrap; }
+table.pareggio td.num, table.pareggio th.num, table.confronto-pareggio td.num, table.confronto-pareggio th.num, table.bilanci-pareggio td.num, table.bilanci-pareggio th.num { white-space: nowrap; }
+table.confronto-pareggio td.num small { display: block; font-size: .75rem; }
+table.pareggio tr.riga-famiglia th small { text-transform: none; letter-spacing: 0; }
+table.bilanci-pareggio { font-size: .88rem; }
+table.bilanci-pareggio td, table.bilanci-pareggio th { padding-left: .45rem; padding-right: .45rem; }
+table.pareggio td.nowrap, table.confronto-pareggio td.nowrap, table.bilanci-pareggio td.nowrap { white-space: nowrap; }
+form.cerca.cerca-pareggio label { white-space: nowrap; display: inline-flex; align-items: center; gap: .3rem; }
+form.cerca.cerca-pareggio input[name="ipotesi"] { width: 7rem; }
 td.negativo { color: var(--negativo); font-weight: 600; }
 
 /* Flusso di produzione nel cruscotto (Adriano 6/11/2026): cinque finestre in cima e l'elenco della finestra aperta */
@@ -1046,3 +1061,16 @@ button.spunta:hover { filter: brightness(.96); }
 .flusso-tabella .azioni-riga { white-space: nowrap; } .flusso-tabella .azioni-riga form { display: inline; }
 button.piccolo, .bottone.piccolo { padding: .2rem .55rem; font-size: .78rem; }
 .legenda-flusso { margin: .4rem 0 0; }
+/* Analisi → Costi per categoria (Adriano 6/11/2026) */
+.riassunto-costi .commenti-analisi .nota .pallino { color: var(--tenue, #888); }
+.riassunto-costi ol { padding-left: 1.3rem; }
+table.costi-categorie { font-size: .9rem; } table.costi-categorie th:first-child { max-width: 30rem; font-weight: 600; } table.costi-categorie tr.riga-famiglia th small { display: block; white-space: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+table.costi-categorie td.fornitori { font-size: .85rem; max-width: 20rem; } table.costi-categorie td.fornitori div { white-space: nowrap; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
+table.costi-categorie td.num, table.rivendita-costi td.num, table.da-controllare-costi td.num, table.righe-costi td.num { white-space: nowrap; }
+table.costi-categorie tr.da-verificare td { background: #fff8e1; }
+table.costi-categorie tr.riga-totale th, table.costi-categorie tr.riga-totale td { border-top: 2px solid #999; font-weight: 600; }
+table.rivendita-costi th { text-align: left; font-weight: 500; }
+table.rivendita-costi tr.riga-famiglia th, table.rivendita-costi tr.riga-famiglia td { font-weight: 700; background: #f5f5f5; }
+form.in-riga { display: inline-flex; gap: .3rem; align-items: center; }
+form.in-riga select { max-width: 14rem; }
+.rosso { color: #c62828; } .verde { color: #2e7d32; }

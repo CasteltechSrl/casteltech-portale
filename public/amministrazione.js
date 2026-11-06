@@ -41,6 +41,10 @@ caricamento('sedi-fic', j => `${j.aggiornati.length} clienti con la sede operati
   + elenco('Da controllare', j.errori)
   + elenco('Non in anagrafica (non aggiunti)', j.nonInAnagrafica));
 
+caricamento('righe-fornitori', j => `${j.caricati} fatture con le righe (${j.righe} righe in tutto)${j.giaLetti ? `, di cui ${j.giaLetti} già lette prima (righe sostituite)` : ''}; ${j.senzaRighe} senza righe.`
+  + (j.anteprima ? '' : `\nAbbinate ${j.abbinati.componenti} righe a componenti dell'archivio e ${j.abbinati.materiali} a materiali di consumo.`)
+  + elenco('Fatture del file non trovate nel portale (prima carica lo storico)', j.nonTrovati));
+
 caricamento('storico-fic', j => Object.entries(j.documenti).map(([tipo, n]) => `${tipo}: ${n.nuovi} nuovi, ${n.aggiornati} aggiornati`).join('; ')
   + `; documenti ricevuti: ${j.ricevuti.nuovi} nuovi, ${j.ricevuti.aggiornati} aggiornati.`
   + `\nDa incassare: ${j.daIncassare.numero} scadenze per ${euro(j.daIncassare.importo)}. Da pagare: ${j.daPagare.numero} scadenze per ${euro(j.daPagare.importo)}.`
@@ -49,7 +53,7 @@ caricamento('storico-fic', j => Object.entries(j.documenti).map(([tipo, n]) => `
   + elenco('Intestatari non in anagrafica (documenti caricati lo stesso)', j.senzaAnagrafica)
   + elenco('Non caricati', j.errori));
 
-// Bilancino mensile del commercialista (punto di pareggio): serve l'anno del file
+// Bilancino mensile (punto di pareggio): serve l'anno del file
 caricamento('bilancino', j => `${j.mesi.length} mesi del ${j.anno} (${j.mesi.map(m => m.slice(5)).join(', ')}), ${j.conti} conti.`
   + Object.keys(j.ricavi).map(m => `\n${m}: ricavi ${euro(j.ricavi[m])}, costi ${euro(j.costi[m])}`).join('')
   + elenco('Avvisi', j.avvisi), () => {
