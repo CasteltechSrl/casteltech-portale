@@ -9,7 +9,7 @@ import { layout } from '../views/layout.js';
 import { html, num, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione, graficoMesi } from './cruscotto-amministrazione.js';
 import {
-  analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeMese, perMese, quotaPrimi, raggruppaAcquisti, variazionePct,
+  SQL_DATA_ANALISI, analisiClienti, analisiProdotti, commentiAnalisi, marginePreventivo, nomeMese, perMese, quotaPrimi, raggruppaAcquisti, variazionePct,
   type AcquistoAnalisi, type FatturaAnalisi, type IncassoAnalisi, type PreventivoProdotto, type RigaAnalisi,
 } from '../../engine/analisi.js';
 import { leggiImpostazioniCassa, NOMI_FINESTRE, type CodiceFinestra, type Movimento } from '../../engine/previsione-cassa.js';
@@ -32,14 +32,15 @@ const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato')`;
 export async function caricaDatiAnalisi(anno: number, oggi: string) {
   const unAnnoFa = `${Number(oggi.slice(0, 4)) - 1}${oggi.slice(4)}`;
   const [fatture, righe, preventivi, acquisti, incassi, aperte] = await Promise.all([
-    q<FatturaAnalisi>(`SELECT ${NOME_CLIENTE} AS cliente, d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
-      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-      WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND extract(year FROM d.data)::int IN ($1::int, $1::int - 1)`, [anno]),
-    q<RigaAnalisi>(`SELECT upper(trim(r.codice)) AS codice, max(r.descrizione) AS descrizione, ${NOME_CLIENTE} AS cliente, d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data,
+    // Note di credito collegate a una fattura: contano nel mese della fattura stornata (SQL_DATA_ANALISI)
+    q<FatturaAnalisi>(`SELECT ${NOME_CLIENTE} AS cliente, d.tipo, to_char(${SQL_DATA_ANALISI}, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
+      FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN documenti o ON o.id = d.documento_origine_id
+      WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND extract(year FROM ${SQL_DATA_ANALISI})::int IN ($1::int, $1::int - 1)`, [anno]),
+    q<RigaAnalisi>(`SELECT upper(trim(r.codice)) AS codice, max(r.descrizione) AS descrizione, ${NOME_CLIENTE} AS cliente, d.tipo, to_char(${SQL_DATA_ANALISI}, 'YYYY-MM-DD') AS data,
         sum(r.quantita)::float AS quantita, sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo
-      FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+      FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN documenti o ON o.id = d.documento_origine_id
       WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND coalesce(trim(r.codice), '') <> ''
-        AND r.acconto_id IS NULL AND extract(year FROM d.data)::int IN ($1::int, $1::int - 1)
+        AND r.acconto_id IS NULL AND extract(year FROM ${SQL_DATA_ANALISI})::int IN ($1::int, $1::int - 1)
       GROUP BY 1, 3, 4, 5, d.id`, [anno]),
     q<{ codice: string; totali: any }>(`SELECT DISTINCT ON (upper(p.codice)) upper(p.codice) AS codice, pr.risultato->'totali' AS totali
       FROM preventivi pr JOIN prodotti_revisioni rv ON rv.id = pr.revisione_id JOIN prodotti p ON p.id = rv.prodotto_id
@@ -276,7 +277,7 @@ export function rotteAnalisi() {
         : html`<p class="nota">Pochi dati per un commento.</p>`}
       <p class="nota">Sono indicazioni calcolate sui numeri: le scelte restano tue e del commercialista.</p>
       <h2>Fatturato per mese</h2>
-      ${ciSonoNote ? html`<p class="nota">Fatturato = fatture meno le note di credito del mese (il grafico per mese di Fatture in Cloud mostra solo le fatture).</p>` : ''}
+      ${ciSonoNote ? html`<p class="nota">Fatturato = fatture meno le note di credito (il grafico per mese di Fatture in Cloud mostra solo le fatture). Una nota di credito collegata a una fattura conta nel mese della fattura stornata; le altre nel mese della nota.</p>` : ''}
       <p class="legenda"><span class="campione fatturato"></span> ${anno} <span class="campione anno-prima"></span> ${anno - 1}</p>
       <div class="tabella-scorre grafico">${graficoMesi(fatturatoMesi, fatturatoPrimaMesi, ['fatturato', 'anno-prima'], [String(anno), String(anno - 1)])}</div>
       <div class="tabella-scorre"><table class="elenco">

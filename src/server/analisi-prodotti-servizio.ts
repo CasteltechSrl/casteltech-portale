@@ -6,7 +6,7 @@ import { q, q1 } from './db.js';
 import { calcola, datiDaRiga, leggiPreventivo } from './preventivi-servizio.js';
 import { fasiCommessa, rilevazioniCommessa } from './commesse-servizio.js';
 import { tempiRealiPerFase } from '../engine/consuntivo.js';
-import { marginePreventivo } from '../engine/analisi.js';
+import { SQL_DATA_ANALISI, marginePreventivo } from '../engine/analisi.js';
 import { consuntivoLotto, type ConsuntivoLotto, type FatturaCliente, type RigaVenditaProdotto } from '../engine/analisi-prodotti.js';
 
 export const NOME_CLIENTE_SQL = `coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '(senza nome)')`;
@@ -15,23 +15,26 @@ const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato')`;
 
 /** Righe di fatture, note di credito e DDT con un codice prodotto, di tutti gli anni. */
 export function righeVendite(): Promise<RigaVenditaProdotto[]> {
-  return q<RigaVenditaProdotto>(`SELECT d.tipo, d.id AS "documentoId", d.anno, to_char(d.data, 'YYYY-MM-DD') AS data,
+  // Note di credito collegate a una fattura: anno e data della fattura stornata (SQL_DATA_ANALISI)
+  return q<RigaVenditaProdotto>(`SELECT d.tipo, d.id AS "documentoId", extract(year FROM ${SQL_DATA_ANALISI})::int AS anno, to_char(${SQL_DATA_ANALISI}, 'YYYY-MM-DD') AS data,
       ${CHIAVE_CLIENTE_SQL} AS "clienteChiave", d.cliente_id AS "clienteId", ${NOME_CLIENTE_SQL} AS cliente,
       r.codice, r.descrizione, p.descrizione AS "descrizioneAnagrafica", r.prodotto_id AS "prodottoId", r.quantita::float AS quantita,
       CASE WHEN d.tipo = 'ddt' THEN 0 ELSE round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)::float END AS importo,
       d.dati_trasporto->>'causale' AS causale, r.ddt_id AS "ddtId",
       (d.tipo = 'fattura' AND EXISTS (SELECT 1 FROM documenti_righe x WHERE x.documento_id = d.id AND x.solo_descrizione AND x.descrizione ~* '^\\s*DDT')) AS "citaDdt"
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN prodotti p ON p.id = r.prodotto_id
+      LEFT JOIN documenti o ON o.id = d.documento_origine_id
     WHERE d.tipo IN ('fattura', 'nota_credito', 'ddt') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione
       AND coalesce(trim(r.codice), '') <> '' AND r.acconto_id IS NULL
-    ORDER BY d.data, d.id, r.posizione`);
+    ORDER BY 4, d.id, r.posizione`);
 }
 
 /** Fatture e note di credito emesse di tutti gli anni (imponibile del documento). */
 export function fattureTutte(): Promise<FatturaCliente[]> {
-  return q<FatturaCliente>(`SELECT ${CHIAVE_CLIENTE_SQL} AS "clienteChiave", ${NOME_CLIENTE_SQL} AS cliente, d.tipo, d.anno, to_char(d.data, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
-    FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
-    WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL ORDER BY d.data`);
+  return q<FatturaCliente>(`SELECT ${CHIAVE_CLIENTE_SQL} AS "clienteChiave", ${NOME_CLIENTE_SQL} AS cliente, d.tipo, extract(year FROM ${SQL_DATA_ANALISI})::int AS anno,
+      to_char(${SQL_DATA_ANALISI}, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
+    FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN documenti o ON o.id = d.documento_origine_id
+    WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL ORDER BY 5`);
 }
 
 /** DDT emessi degli ultimi anni (data e causale): servono per l'ultima consegna di ogni cliente. */

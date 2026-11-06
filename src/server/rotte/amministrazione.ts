@@ -37,6 +37,7 @@ import {
   creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
+import { controlloStorno } from '../../engine/analisi.js';
 import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
@@ -206,6 +207,20 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
           <button class="pericolo">Elimina bozza</button></form>
       </div>
     </div>`}`;
+}
+
+/** Nota di credito emessa senza fattura collegata: menu con le fatture emesse del cliente (non dopo la nota) per dire quale storna. */
+async function riquadroStorno(d: { id: number; cliente_id: number; data: string }) {
+  const fatture = await q<{ id: number; numero: number; sezionale: string | null; data: string; totale: number }>(
+    `SELECT id, numero, sezionale, data::text AS data, totale::float AS totale FROM documenti
+     WHERE tipo = 'fattura' AND cliente_id = $1 AND numero IS NOT NULL AND stato NOT IN ('bozza', 'annullato', 'scartato') AND data <= $2
+     ORDER BY data DESC, numero DESC LIMIT 60`, [d.cliente_id, d.data]);
+  if (!fatture.length) return '';
+  return html`<form method="post" action="/amministrazione/documenti/${d.id}/storna" class="riquadro-storno">
+    <label>Storna la fattura <select name="fattura_id" required><option value="">— scegli —</option>
+      ${fatture.map(f => html`<option value="${f.id}">n. ${numeroCompleto(f.numero, f.sezionale ?? undefined)} del ${data(f.data)} · ${euro(f.totale)}</option>`)}</select></label>
+    <button>Collega</button>
+    <span class="nota">Serve all'Analisi: la nota di credito conta nel mese della fattura stornata (es. nota di febbraio su una fattura di dicembre).</span></form>`;
 }
 
 export function rotteAmministrazione() {
@@ -711,6 +726,25 @@ export function rotteAmministrazione() {
     res.redirect(`/amministrazione/documenti/${fattura}?msg=${encodeURIComponent('Fattura preparata con le righe del DDT: controlla prezzi e pagamento (in fondo puoi aggiungere altri DDT del cliente), poi Emetti.')}`);
   });
 
+  // Nota di credito emessa (anche da Fatture in Cloud) senza fattura collegata: "Storna la fattura n. …" (Adriano 6/11/2026,
+  // NC 2/2026 JOX su una fattura del dicembre 2025). Nell'Analisi la nota conta poi nel mese della fattura stornata.
+  r.post('/documenti/:id/storna', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const nota = await q1(`SELECT tipo, stato, cliente_id, data::text AS data, documento_origine_id FROM documenti WHERE id = $1`, [id]);
+    if (!nota) return res.status(404).send('Documento non trovato');
+    if (req.body?.togli === '1') {
+      await q(`UPDATE documenti SET documento_origine_id = NULL WHERE id = $1 AND tipo = 'nota_credito'`, [id]);
+      return res.redirect(conMessaggio(`/amministrazione/documenti/${id}`, 'Collegamento alla fattura tolto.'));
+    }
+    const fid = Number(req.body?.fattura_id);
+    const fattura = fid ? await q1(`SELECT tipo, stato, cliente_id, numero, data::text AS data FROM documenti WHERE id = $1`, [fid]) : null;
+    const errore = controlloStorno(nota, fattura, nota.data);
+    if (errore) return res.redirect(conMessaggio(`/amministrazione/documenti/${id}`, errore));
+    await q(`UPDATE documenti SET documento_origine_id = $2 WHERE id = $1`, [id, fid]);
+    res.redirect(conMessaggio(`/amministrazione/documenti/${id}`, 'Fattura collegata: nell\'Analisi la nota di credito conta nel mese della fattura stornata.'));
+  });
+
   // "Segna come inviato" per un documento mandato da fuori del portale (posta, PEC, a mano) o "Togli il segno" (Adriano 4/11/2026)
   r.post('/documenti/:id/segna-inviato', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
@@ -739,12 +773,14 @@ export function rotteAmministrazione() {
       <div class="intestazione-pagina"><h1>${titolo}</h1><div class="azioni"><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
         ${d.origine === 'fic' ? html`<span class="etichetta">da Fatture in Cloud</span>` : ''}</div></div>
       <p><strong>${intestatario}</strong> · ${data(d.data)}
-        ${d.origine_numero ? html` · ${d.tipo_sdi === 'TD05' ? 'aumenta' : 'storna'} la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>` : ''}
+        ${d.origine_numero ? html` · ${d.tipo_sdi === 'TD05' ? 'aumenta' : 'storna'} la fattura <a href="/amministrazione/documenti/${d.documento_origine_id}">n. ${numeroCompleto(d.origine_numero, d.origine_sezionale)} del ${data(d.origine_data)}</a>${
+          d.tipo === 'nota_credito' && d.stato !== 'bozza' ? html` <form method="post" action="/amministrazione/documenti/${id}/storna" class="in-linea" data-conferma="Togliere il collegamento alla fattura stornata?"><input type="hidden" name="togli" value="1"><button class="link">togli</button></form>` : ''}` : ''}
         ${d.ricevuto_id ? html` · ${TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi} sulla <a href="/amministrazione/ricevuti/${d.ricevuto_id}">fattura del fornitore n. ${d.ricevuto_numero} del ${data(d.ricevuto_data)}</a>` : ''}
         ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>`
           : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>
       ${!['bozza', 'annullato'].includes(d.stato) ? riquadroInvio(d, { segna: d.tipo === 'autofattura' ? undefined : `/amministrazione/documenti/${id}/segna-inviato`,
-        cosa: NOMI[d.tipo]?.uno ?? 'documento' }) : ''}`;
+        cosa: NOMI[d.tipo]?.uno ?? 'documento' }) : ''}
+      ${d.tipo === 'nota_credito' && d.stato !== 'bozza' && !d.documento_origine_id && d.cliente_id ? await riquadroStorno(d) : ''}`;
 
     // DDT emesso: "Modifica" finché non è in una fattura già allo SdI (Adriano 2/11/2026)
     const bloccoModifica = d.tipo === 'ddt' && d.stato !== 'bozza' ? await bloccoDdt(id) : null;
