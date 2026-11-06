@@ -13,6 +13,7 @@
  *  - `riassuntoCosti`: le frasi del riassunto, l'opinione e le proposte, dai numeri.
  */
 import { categoria, classificaRiga, CATEGORIE, NOMI_MACRO, rigaDaIgnorare, type Macro } from './categorie-acquisti.js';
+import type { CodiceFamiglia } from './pareggio.js';
 
 export interface RigaCosto {
   /** id della riga (documenti_ricevuti_righe) oppure null se è la fattura intera (senza righe lette) */
@@ -31,7 +32,7 @@ export interface RigaCosto {
 
 export interface RegolaCategoria { tipo: 'fornitore' | 'riga' | 'documento'; chiave: string; categoria: string }
 
-export type Come = 'regola' | 'parola' | 'fornitore' | 'fic' | 'nessuna';
+export type Come = 'regola' | 'parola' | 'fornitore' | 'fic' | 'storico' | 'nessuna';
 export interface RigaClassificata extends RigaCosto { anno: number; categoria: string; macro: Macro; come: Come; accessoria: boolean }
 
 /** La chiave del fornitore nelle regole: il nome in maiuscolo senza spazi doppi (vale anche per chi non è in anagrafica). */
@@ -50,8 +51,33 @@ const DA_FIC: [RegExp, string][] = [
 ];
 export const categoriaDaFic = (c: string | null | undefined): string | null => DA_FIC.find(([re]) => re.test(nomeFic(c)))?.[1] ?? null;
 
-/** Ogni riga prende la sua categoria: prima le regole scritte dall'ufficio, poi parole e fornitore (`classificaRiga`). */
+/**
+ * Ogni riga prende la sua categoria: prima le regole scritte dall'ufficio, poi parole e fornitore (`classificaRiga`), poi la categoria di
+ * Fatture in Cloud della fattura, infine lo STORICO del fornitore (Adriano 6/11/2026: "in base al tipo di fattura, allo storico e a che cosa
+ * è stato acquistato"): una riga che nessuna regola riconosce prende la categoria in cui va la maggior parte (in euro) delle altre righe
+ * dello stesso fornitore. Resta "nessuna" solo quando del fornitore non si sa proprio niente.
+ */
 export function classificaCosti(righe: RigaCosto[], regole: RegolaCategoria[]): RigaClassificata[] {
+  const out = classificaConRegole(righe, regole);
+  // storico del fornitore: la categoria che pesa di più tra le righe già riconosciute (regole, parole, fornitore, FIC)
+  const storico = new Map<string, Map<string, number>>();
+  for (const r of out) {
+    if (r.come === 'nessuna') continue;
+    const m = storico.get(r.fornitoreChiave) ?? new Map<string, number>();
+    m.set(r.categoria, (m.get(r.categoria) ?? 0) + Math.abs(r.importo));
+    storico.set(r.fornitoreChiave, m);
+  }
+  for (const r of out) {
+    if (r.come !== 'nessuna') continue;
+    const m = storico.get(r.fornitoreChiave);
+    if (!m?.size) continue;
+    const [cat] = [...m].sort((a, b) => b[1] - a[1])[0];
+    r.categoria = cat; r.macro = categoria(cat).macro; r.come = 'storico'; r.accessoria = false;
+  }
+  return out;
+}
+
+function classificaConRegole(righe: RigaCosto[], regole: RegolaCategoria[]): RigaClassificata[] {
   const perFornitore = new Map<string, string>(), perRiga = new Map<string, string>(), perDocumento = new Map<string, string>();
   for (const r of regole) (r.tipo === 'fornitore' ? perFornitore : r.tipo === 'riga' ? perRiga : perDocumento).set(r.tipo === 'fornitore' ? chiaveFornitore(r.chiave) : r.chiave, r.categoria);
   const out: RigaClassificata[] = [];
@@ -63,11 +89,27 @@ export function classificaCosti(righe: RigaCosto[], regole: RegolaCategoria[]): 
     // fattura senza righe: la descrizione del documento più la categoria di FIC (le sue parole contano come la descrizione)
     const descrizione = r.rigaId == null ? `${r.descrizione} ${nomeFic(r.categoriaFic)}`.trim() : r.descrizione;
     const e = classificaRiga({ fornitore: r.fornitore, descrizione, codici: r.codici, importo: r.importo });
-    const fic = e.come === 'nessuna' && r.rigaId == null ? categoriaDaFic(r.categoriaFic) : null;
+    const fic = e.come === 'nessuna' ? categoriaDaFic(r.categoriaFic) : null;   // anche per una riga: il tipo della fattura aiuta
     if (fic) { out.push({ ...r, anno, categoria: fic, macro: categoria(fic).macro, come: 'fic', accessoria: false }); continue; }
     out.push({ ...r, anno, categoria: e.categoria, macro: e.macro, come: e.come, accessoria: !!e.accessoria });
   }
   return out;
+}
+
+/**
+ * La famiglia del Punto di pareggio di una categoria di Casteltech (così anche i mesi presi dal portale usano le categorie di Adriano,
+ * niente più "fatture senza categoria"): rivendita e consumo = materie (variabili); lavorazioni e spese di gestione = servizi;
+ * affitto e leasing = godimento; banca = oneri finanziari; bolli e imposte = oneri; attrezzature e macchine = investimenti, che nel
+ * conto economico entrano come ammortamenti (stimati dal bilancino), non come costo del mese.
+ */
+export function famigliaDiCategoriaCasteltech(codice: string): CodiceFamiglia {
+  const c = categoria(codice);
+  if (c.macro === 'rivendita' || c.macro === 'consumo') return 'materie';
+  if (c.codice === 'affitto' || c.codice === 'leasing') return 'godimento';
+  if (c.codice === 'banca') return 'finanziari';
+  if (c.codice === 'imposte') return 'oneri';
+  if (c.codice === 'attrezzature') return 'ammortamenti';
+  return 'servizi';
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;

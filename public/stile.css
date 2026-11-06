@@ -458,6 +458,10 @@ form.nuova-azienda input { width: 14rem; }
 .bottone .conta { font-size: .72rem; background: var(--avviso); color: var(--testo); padding: .05rem .45rem; border-radius: 99px; margin-left: .2rem; }
 a.cifra { text-decoration: none; color: inherit; }
 a.cifra:hover { border-color: var(--accento); }
+/* riquadri che filtrano l'elenco sotto (classifica dei prodotti): quello scelto è evidenziato */
+a.cifra.riquadro-filtro { cursor: pointer; border-width: 2px; }
+a.cifra.riquadro-filtro.attivo { border-color: var(--accento); background: color-mix(in srgb, var(--accento) 8%, var(--carta)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accento) 25%, transparent); }
+a.cifra.riquadro-filtro.attivo span::after { content: ' ✓'; color: var(--accento); }
 .cifra.allarme b { color: var(--negativo); }
 .scadenza { font-weight: 600; white-space: nowrap; }
 .scadenza.scaduta { color: var(--negativo); }

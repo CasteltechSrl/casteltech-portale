@@ -699,6 +699,12 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    di componenti/PCB/meccanica contro pezzi fatturati × `venditaComponentiScheda`/`venditaPcbScheda` del preventivo più recente del prodotto (`riepilogo()`), costo previsto
    (`costoAcquistoScheda`), lamine comprate contro UT-LAMINA fatturate; "Riassunto, opinione e proposte" scritto dai numeri. Regole dell'ufficio (fornitore = nome maiuscolo,
    documento, riga; POST `/costi/regola`) vincono sulle automatiche; una categoria nuova = una voce in `CATEGORIE` (+ parole/fornitori). Le categorie restano calcolate in lettura.
+   Niente più "senza categoria" (Adriano 6/11/2026, "in base al tipo di fattura, allo storico e a che cosa è stato acquistato"): in `classificaCosti` la categoria FIC
+   aiuta anche le righe (come 'fic') e poi vale lo STORICO del fornitore (come 'storico' = la categoria che pesa di più tra le sue altre righe riconosciute); resta 'nessuna'
+   solo un fornitore mai visto. Le stesse categorie in Andamento → "Acquisti per categoria" (`rotte/analisi.ts`, link alle righe) e nel Punto di pareggio per i mesi del portale
+   (`mesiDalPortale` → `famigliaDiCategoriaCasteltech`: rivendita/consumo = materie, affitto/leasing = godimento, banca = finanziari, imposte = oneri, attrezzature = ammortamenti,
+   resto = servizi); la famiglia `senza_categoria` non si usa più. Analisi → Prodotti: i riquadri Venduti / In calo forte / Fermi sono filtri (`?mostra=venduti|calo|fermi`,
+   `RIQUADRI_REGOLE`/`filtraRiquadro`/`contaRiquadri` in `engine/analisi-prodotti.ts`, anche nell'Excel; conteggi sempre su tutta la classifica).
    ✅ Analisi degli acquisti e tasto "Analisi" nelle anagrafiche (Adriano 6/11/2026; `engine/analisi-acquisti.ts`, letture in `analisi-acquisti-servizio.ts`, pagine in
    `rotte/analisi-acquisti.ts`, test in `tests/analisi-acquisti.test.ts`): in Anagrafiche → Prodotti / Fornitori / Componenti / Materiali ogni riga ha il tasto "Analisi"
    (`linkAnalisi…` in `engine/analisi-acquisti.ts`; sparisce da solo per i profili che non aprono l'Analisi, `link-profilo`).

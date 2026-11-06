@@ -91,3 +91,31 @@ test('guida: costi per categoria, comprato e rivenduto', () => {
   for (const q of ['costi per categoria', 'quanto spendo di stagno', 'guadagno sulla rivendita dei componenti'])
     assert.ok(cercaGuida(q).slice(0, 3).some(r => r.argomento.id === 'costi-categoria'), q);
 });
+
+test('costi: una riga senza regola prende la categoria dallo storico del fornitore (quella che pesa di più), il tipo di fattura FIC aiuta anche le righe', () => {
+  const c = classificaCosti([
+    riga({ rigaId: 1, fornitore: 'Rossi Srl', descrizione: 'resistenza smd 0603 10k', importo: 100, data: '2026-02-01' }),
+    riga({ rigaId: 2, fornitore: 'Rossi Srl', descrizione: 'lamina serigrafica', importo: 50, data: '2026-02-01' }),
+    riga({ rigaId: 3, fornitore: 'Rossi Srl', descrizione: 'art. 4471/B', importo: 70, data: '2026-03-01' }),            // nessuna parola: storico → componenti (100 > 50)
+    riga({ rigaId: 4, fornitore: 'Mai Visto Snc', descrizione: 'art. 12', importo: 30, data: '2026-03-01', categoriaFic: 'B7_Trasporti' }),   // riga: la categoria FIC decide
+    riga({ rigaId: 5, fornitore: 'Sconosciuto', descrizione: 'art. 13', importo: 20, data: '2026-03-01' }),                // davvero senza niente
+  ], []);
+  assert.deepEqual(c.map(r => [r.categoria, r.come]), [['componenti', 'parola'], ['lamine', 'parola'], ['componenti', 'storico'], ['trasporti', 'fic'], ['altro', 'nessuna']]);
+  assert.equal(c[2].macro, 'rivendita');
+  assert.deepEqual(fornitoriDaControllare(c).map(f => f.nome), ['Sconosciuto']);
+});
+
+test('costi: famiglia del punto di pareggio per ogni categoria di Casteltech', async () => {
+  const { famigliaDiCategoriaCasteltech } = await import('../src/engine/analisi-costi.js');
+  const { CATEGORIE } = await import('../src/engine/categorie-acquisti.js');
+  assert.equal(famigliaDiCategoriaCasteltech('componenti'), 'materie');
+  assert.equal(famigliaDiCategoriaCasteltech('stagno'), 'materie');
+  assert.equal(famigliaDiCategoriaCasteltech('affitto'), 'godimento');
+  assert.equal(famigliaDiCategoriaCasteltech('leasing'), 'godimento');
+  assert.equal(famigliaDiCategoriaCasteltech('banca'), 'finanziari');
+  assert.equal(famigliaDiCategoriaCasteltech('imposte'), 'oneri');
+  assert.equal(famigliaDiCategoriaCasteltech('attrezzature'), 'ammortamenti');
+  assert.equal(famigliaDiCategoriaCasteltech('energia'), 'servizi');
+  assert.equal(famigliaDiCategoriaCasteltech('montaggi_esterni'), 'servizi');
+  for (const c of CATEGORIE) assert.notEqual(famigliaDiCategoriaCasteltech(c.codice), 'senza_categoria');
+});
