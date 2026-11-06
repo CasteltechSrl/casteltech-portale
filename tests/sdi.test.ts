@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import {
-  STATI_SDI, ambienteDaChiave, conNumero, firmaWebhookValida, messaggioErroreApi, numeroDiProva, numeroNellXml, numeroNonValido, statoPiuAvanti, testoErrori,
+  STATI_SDI, ambienteDaChiave, conNumero, firmaWebhookValida, messaggioErroreApi, numeroDiProva, numeroNellXml, numeroNonValido, passaggioChiaveReale, statoPiuAvanti, testoErrori,
 } from '../src/engine/sdi.js';
 
 test('SdI: la chiave di Invoicetronic decide prova o reale', () => {
@@ -69,4 +69,15 @@ test('SdI: il numero di prova cambia solo in DatiGeneraliDocumento', () => {
   assert.ok(x.includes('<NumeroDDT>219</NumeroDDT>') && x.includes('<NumeroREA>190591</NumeroREA>'));
   assert.equal(numeroNellXml(xmlConNumero('0')), '0');
   assert.throws(() => conNumero('<a/>', '1'));
+});
+
+test('SdI: passaggio alla chiave reale, passi fatti e da fare', () => {
+  const prova = passaggioChiaveReale({ ambiente: 'prova', webhookCollegato: true });
+  assert.equal(prova.length, 4);
+  assert.deepEqual(prova.map(p => p.fatto), [true, false, false, false]);   // con la chiave di prova il webhook collegato non conta
+  const reale = passaggioChiaveReale({ ambiente: 'reale', webhookCollegato: false });
+  assert.deepEqual(reale.map(p => p.fatto), [true, true, false, false]);
+  const tutto = passaggioChiaveReale({ ambiente: 'reale', webhookCollegato: true });
+  assert.deepEqual(tutto.map(p => p.fatto), [true, true, true, false]);
+  assert.ok(reale[1].testo.includes('INVOICETRONIC_API_KEY') && reale[1].testo.includes('ik_live_'));
 });

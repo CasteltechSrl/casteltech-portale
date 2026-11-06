@@ -98,3 +98,22 @@ export function conNumero(xml: string, numero: string): string {
   if (!RE_NUMERO_DOC.test(xml)) throw new Error('Nell\'XML manca il numero del documento.');
   return xml.replace(RE_NUMERO_DOC, (_t, a: string, _n: string, c: string) => a + numero + c);
 }
+
+/**
+ * Passaggio dalla chiave di prova a quella reale (Adriano 6/11/2026: codice destinatario 7HD37X0 registrato all'Agenzia delle Entrate).
+ * Elenco dei passi con "fatto" sì/no, per il riquadro di Impostazioni → Amministrazione: cosa deve fare Adriano e cosa manca.
+ */
+export type PassoPassaggio = { testo: string; fatto: boolean; dove?: string };
+export function passaggioChiaveReale(stato: { ambiente: Ambiente | null; webhookCollegato: boolean }): PassoPassaggio[] {
+  const reale = stato.ambiente === 'reale';
+  return [
+    { testo: 'Codice destinatario 7HD37X0 registrato sul sito dell\'Agenzia delle Entrate (Fatture e Corrispettivi → Registrazione dell\'indirizzo telematico).', fatto: true },
+    { testo: 'Chiave reale di Invoicetronic (comincia con ik_live_) presa da invoicetronic.com → accedi → API keys e messa su Render '
+      + '(servizio casteltech-portale → Environment → INVOICETRONIC_API_KEY → Save: il portale si riavvia da solo).',
+      fatto: reale, dove: 'https://dashboard.render.com' },
+    { testo: 'Esiti e fatture ricevute collegati con la chiave reale (pulsante "Collega esiti e fatture ricevute" qui sotto: si rifà per ogni chiave).',
+      fatto: reale && stato.webhookCollegato },
+    { testo: 'Fatture dei fornitori arrivate dal 6/11 prese con "Scarica dallo SdI" in Amministrazione → Fatture fornitori (poi arrivano da sole).',
+      fatto: false, dove: '/amministrazione/ricevuti' },
+  ];
+}
