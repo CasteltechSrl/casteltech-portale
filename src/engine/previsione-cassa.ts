@@ -14,7 +14,9 @@
  */
 import { scadenzaVersamentoIva } from './registri-iva.js';
 
-export interface RataAperta { cliente: string; numero: string; scadenza: string; importo: number }
+export interface RataAperta { id?: number; cliente: string; numero: string; scadenza: string; importo: number }
+/** Rate anticipate dalla banca (engine/anticipi.ts): RiBa = già accreditate al 100 %, bonifico = all'incasso la banca riprende la quota anticipata. */
+export interface AnticipiCassa { perRata: Map<number, { tipo: 'bonifico' | 'riba'; anticipato: number }>; daRientrare: { numero: string; data: string; importo: number }[] }
 export interface IncassoStorico { cliente: string; dataFattura: string; scadenza: string; incassata: string; importo: number }
 export interface PagamentoAperto { fornitore: string; numero: string; scadenza: string; importo: number }
 /** Uscita di ogni mese. `chiave` (stipendi, f24, iva, altro) serve a non contarla due volte con un'uscita vera dello stesso mese. */
@@ -43,6 +45,8 @@ export interface Previsione {
   finestre: Finestra[]; movimenti: Movimento[]; clienti: RitardoCliente[];
   puntoMinimo: { data: string; cassa: number } | null; puntoMinimoBasso: { data: string; cassa: number } | null;
   rischi: Rischio[];
+  /** rate RiBa già accreditate (non entrano più) e quote dei bonifici che la banca riprende all'incasso */
+  anticipi: { riba: number; bonifico: number; daRientrare: number };
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -110,7 +114,7 @@ export function dateUscita(u: Pick<UscitaFissa, 'chiave' | 'giorno'>, oggi: stri
 
 export function previsioneCassa(x: {
   oggi: string; saldo: Saldo | null; rate: RataAperta[]; storico: IncassoStorico[]; pagamenti: PagamentoAperto[];
-  fisse: UscitaFissa[]; puntuali: UscitaPuntuale[]; minimoPagamenti?: number;
+  fisse: UscitaFissa[]; puntuali: UscitaPuntuale[]; minimoPagamenti?: number; anticipi?: AnticipiCassa;
 }): Previsione {
   const { oggi } = x, minimo = x.minimoPagamenti ?? 3;
   const st = ritardiIncasso(x.storico);
@@ -123,13 +127,29 @@ export function previsioneCassa(x: {
     const c = st.perCliente.get(cliente);
     return c && c.n >= minimo ? c.somma / c.peso : st.media;
   };
+  const anticipi = { riba: 0, bonifico: 0, daRientrare: 0 };
   for (const r of x.rate) {
+    const a = r.id != null ? x.anticipi?.perRata.get(r.id) : undefined;
+    // RiBa al salvo buon fine: la banca l'ha già accreditata, alla scadenza non entra altro (Adriano 7/11/2026)
+    if (a?.tipo === 'riba') { anticipi.riba += r.importo; continue; }
     const rit = ritardoUsato(r.cliente);
     const prevista = piuGiorni(r.scadenza, Math.round(rit));
     const data = prevista < oggi ? oggi : prevista;
     movimenti.push({ data, finestra: finestraDi(data, oggi), tipo: 'incasso', nome: r.cliente, riferimento: r.numero, importo: r2(r.importo),
       scadenza: r.scadenza, ritardo: Math.round(rit), scaduta: r.scadenza < oggi });
+    // bonifico anticipato (80 %): quando il cliente paga la banca riprende l'anticipo, resta il 20 %
+    if (a?.tipo === 'bonifico' && a.anticipato > 0) {
+      anticipi.bonifico += a.anticipato;
+      movimenti.push({ data, finestra: finestraDi(data, oggi), tipo: 'uscita', nome: `Rientro anticipo fattura ${r.numero} (${r.cliente})`, riferimento: r.numero,
+        importo: -r2(a.anticipato), scadenza: r.scadenza });
+    }
     aperto.set(r.cliente, (aperto.get(r.cliente) ?? 0) + r.importo);
+  }
+  // anticipi di fatture già incassate che la banca non ha ancora ripreso
+  for (const d of x.anticipi?.daRientrare ?? []) {
+    anticipi.daRientrare += d.importo;
+    movimenti.push({ data: oggi, finestra: finestraDi(oggi, oggi), tipo: 'uscita', nome: `Rientro anticipo fattura ${d.numero} (già incassata, anticipo del ${dataIt(d.data)} ancora aperto)`,
+      riferimento: d.numero, importo: -r2(d.importo) });
   }
   // ── fornitori ──
   for (const p of x.pagamenti) {
@@ -190,7 +210,8 @@ export function previsioneCassa(x: {
   }).sort((a, b) => b.aperto - a.aperto);
 
   const previsione: Previsione = { oggi, saldo: x.saldo, banda, ritardoGenerale: Math.round(st.media * 10) / 10,
-    giorniMediIncasso: st.giorniMedi == null ? null : Math.round(st.giorniMedi), finestre, movimenti, clienti, puntoMinimo, puntoMinimoBasso, rischi: [] };
+    giorniMediIncasso: st.giorniMedi == null ? null : Math.round(st.giorniMedi), finestre, movimenti, clienti, puntoMinimo, puntoMinimoBasso, rischi: [],
+    anticipi: { riba: r2(anticipi.riba), bonifico: r2(anticipi.bonifico), daRientrare: r2(anticipi.daRientrare) } };
   previsione.rischi = rischiCassa(previsione, x.fisse, minimo);
   return previsione;
 }

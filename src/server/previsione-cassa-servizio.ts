@@ -6,9 +6,11 @@ import { q, q1 } from './db.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE } from '../engine/cruscotto-amministrazione.js';
 import { numeroRegistro, periodoDa } from '../engine/registri-iva.js';
 import { caricaLiquidazioniMensili } from './registri-iva-servizio.js';
+import { contiConSaldo, fidoAnticipi } from './banca-servizio.js';
+import { fattureAnticipate } from '../engine/anticipi.js';
 import {
   leggiImpostazioniCassa, mediaUltimi, meseAnno, piuGiorni, previsioneCassa, usciteFisse,
-  type ImpostazioniCassa, type IncassoStorico, type PagamentoAperto, type RataAperta, type UscitaPuntuale, type ValoriAutomatici,
+  type AnticipiCassa, type ImpostazioniCassa, type IncassoStorico, type PagamentoAperto, type RataAperta, type UscitaPuntuale, type ValoriAutomatici,
 } from '../engine/previsione-cassa.js';
 
 const NOME_CLIENTE = `coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '(senza nome)')`;
@@ -44,7 +46,8 @@ export async function caricaPrevisione(oggi: string) {
   const unAnnoFa = piuGiorni(oggi, -365);
   const [imp, rate, storico, pagamenti, f24, f24Storico, stipendi, ivaDati] = await Promise.all([
     impostazioniCassa(),
-    q<RataAperta & { numero_doc: number; sezionale: string }>(`SELECT ${NOME_CLIENTE} AS cliente, d.numero AS numero_doc, d.sezionale,
+    q<RataAperta & { numero_doc: number; sezionale: string; id: number; data_doc: string; modalita: string | null; tipo_doc: string }>(`SELECT s.id, ${NOME_CLIENTE} AS cliente, d.numero AS numero_doc, d.sezionale,
+        to_char(d.data, 'YYYY-MM-DD') AS data_doc, s.modalita, d.tipo AS tipo_doc,
         (${SQL_DATA_DA_INCASSARE})::text AS scadenza, (${SQL_IMPORTO_DA_INCASSARE})::float AS importo
       FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE s.pagata_il IS NULL AND d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} ORDER BY 4`),
@@ -78,10 +81,23 @@ export async function caricaPrevisione(oggi: string) {
     ...f24.map(f => ({ chiave: 'f24', voce: `F24 paghe di ${meseAnno(f.anno, f.mese)} (letto)`, data: f.scadenza, importo: f.totale })),
     ...(ivaDati.puntuale && imp.iva == null ? [ivaDati.puntuale] : []),
   ];
-  const saldo = imp.saldo != null ? { importo: imp.saldo, data: imp.dataSaldo ?? oggi } : null;
+  // banca (Adriano 7/11/2026): saldo del conto ordinario dai movimenti caricati, se più recente di quello scritto qui; fatture anticipate dai conti tecnici
+  const [conti, movTecnici] = await Promise.all([contiConSaldo(),
+    q<{ data: string; importo: number; descrizione: string; conto: string }>(`SELECT to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo, descrizione, conto
+      FROM banca_movimenti WHERE data >= $1`, [piuGiorni(oggi, -400)])]);
+  const tecnici = new Set(conti.filter(c => c.tipo === 'anticipo').map(c => c.numero));
+  const { anticipate, daRientrare } = fattureAnticipate(movTecnici.filter(m => tecnici.has(m.conto)),
+    rate.filter(r => r.tipo_doc === 'fattura' && r.importo > 0).map(r => ({ id: r.id, numero: String(r.numero_doc), dataDoc: r.data_doc, scadenza: r.scadenza.slice(0, 10),
+      importo: r.importo, riba: r.modalita === 'MP12' })), oggi);
+  const anticipi: AnticipiCassa = { perRata: new Map(anticipate.flatMap(a => a.rate.map(r => [r.id, { tipo: a.tipo, anticipato: r.anticipato }] as const))), daRientrare };
+  const ordinario = conti.find(c => c.tipo === 'ordinario' && c.saldoOggi != null);
+  const dataBanca = ordinario?.ultimo || ordinario?.saldoData || null;
+  const saldo = ordinario && dataBanca && (imp.saldo == null || !imp.dataSaldo || dataBanca >= imp.dataSaldo)
+    ? { importo: ordinario.saldoOggi as number, data: dataBanca }
+    : imp.saldo != null ? { importo: imp.saldo, data: imp.dataSaldo ?? oggi } : null;
   const previsione = previsioneCassa({
-    oggi, saldo, storico, pagamenti, fisse, puntuali, minimoPagamenti: imp.minimoPagamenti,
-    rate: rate.map(r => ({ cliente: r.cliente, numero: numeroRegistro(r.numero_doc, r.sezionale), scadenza: r.scadenza.slice(0, 10), importo: r.importo })),
+    oggi, saldo, storico, pagamenti, fisse, puntuali, minimoPagamenti: imp.minimoPagamenti, anticipi,
+    rate: rate.map(r => ({ id: r.id, cliente: r.cliente, numero: numeroRegistro(r.numero_doc, r.sezionale), scadenza: r.scadenza.slice(0, 10), importo: r.importo })),
   });
-  return { previsione, impostazioni: imp, auto, fisse };
+  return { previsione, impostazioni: imp, auto, fisse, anticipate, conti, fidoAnticipi: await fidoAnticipi() };
 }
