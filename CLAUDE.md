@@ -771,6 +771,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Saldo banca scritto a mano (impostazioni 'previsione_cassa'; la banca non è collegata). Banda ± sugli incassi = deviazione ritardo ÷ giorni medi fattura→incasso,
    max 50 % (30 % senza storico); punto più basso giorno per giorno; "Da sapere" (`rischiCassa`); Excel dei movimenti. Letta solo all'apertura (Neon).
    Riservata (`vedeCassa` in `rotte/analisi.ts`, `PERCORSO_CASSA` fuori per l'esterno): solo chi `vedePaghe`; stipendi il 10 del mese (Adriano 3/11/2026).
+   ✅ Bollo addebitato al cliente (Adriano 7/11/2026, "attivalo e addebitalo al cliente"; `addebitaBollo`/`rigaBollo`/`ALIQUOTA_BOLLO` in `engine/amministrazione.ts`,
+   test in `tests/bollo-addebitato.test.ts`): bollo dovuto (righe senza IVA soggette > 77,47 €) = riga virtuale "Rivalsa imposta di bollo" 2 € N1 escluso art. 15 (gruppo
+   ESCLUSO15) in fondo a XML, stampa e PDF, dentro imponibile/totale/scadenze (`calcolaTotali(..., { addebita })`); NON sulle note di credito né negli acconti scalati
+   (DatiBollo sì, totale no); registri IVA dalle righe la usano solo se i totali salvati la comprendono. Cruscotto: F24 del bollo tra le scadenze (`scadenzeFiscali(oggi, 35, trimestri)`).
    ✅ Spese, bollo, lettere d'intento (Adriano 31/10/2026, fase 1; `engine/fiscale.ts`, `rotte/fiscale.ts`, test `tests/fiscale.test.ts`): spese senza fattura elettronica
    (`/amministrazione/spese`: scontrini, affitto, polizze…, in `documenti_ricevuti` con elettronica=false, origine 'manuale', categoria = tipo; fuori dal registro IVA se
    senza IVA; si eliminano solo le manuali); bollo virtuale per trimestre (`/amministrazione/bollo`, `bolloPerTrimestre`: codici 2521–2524, 31/5, 30/9, 30/11, fine

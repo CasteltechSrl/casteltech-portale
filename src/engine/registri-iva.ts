@@ -111,7 +111,10 @@ export function riepilogoDocumento(d: DatiDocumentoIva, aliquote: Aliquota[]): {
   const imponibile = Number(d.imponibile) || 0, imposta = Number(d.imposta) || 0;
   let voci = riepilogoDaXml(d.xml);
   if (!voci.length && d.righe?.some(r => !r.solo_descrizione)) {
-    const t = calcolaTotali(d.righe, aliquote, d.aliquotaPredefinita || 'IVA22');
+    // bollo addebitato (riga N1, dal 7/11/2026) solo se il documento salvato lo comprende: i vecchi e lo storico FIC non l'avevano
+    const senza = calcolaTotali(d.righe, aliquote, d.aliquotaPredefinita || 'IVA22', { addebita: false });
+    const con = calcolaTotali(d.righe, aliquote, d.aliquotaPredefinita || 'IVA22');
+    const t = con.rigaBollo && Math.abs(con.imponibile - imponibile) <= 0.02 ? con : senza;
     if (!t.errori.length) voci = t.riepilogo.map(daVoceRiepilogo);
     if (d.splitPayment) voci = voci.map(v => (v.percentuale > 0 ? { ...v, codice: `${v.codice} split payment`, splitPayment: true } : v));
   }

@@ -69,13 +69,32 @@ export function importoRiga(r: RigaDocumento): number {
 }
 
 export interface VoceRiepilogo { aliquota: string; percentuale: number; natura: string | null; riferimento_normativo: string | null; imponibile: number; imposta: number }
-export interface Totali { riepilogo: VoceRiepilogo[]; imponibile: number; imposta: number; bollo: number; totale: number; errori: string[] }
+export interface Totali {
+  riepilogo: VoceRiepilogo[]; imponibile: number; imposta: number; bollo: number; totale: number; errori: string[];
+  /** Riga del bollo addebitato al cliente (N1, escluso art. 15), da mettere in fondo alle righe di XML, stampa e PDF; null se non c'è. */
+  rigaBollo?: RigaBollo | null;
+}
+
+/** Codice dell'aliquota del bollo addebitato (N1, escluso art. 15 D.P.R. 633/72). */
+export const ALIQUOTA_BOLLO = 'ESCLUSO15';
+export const DESCRIZIONE_BOLLO = 'Rivalsa imposta di bollo (assolta in modo virtuale ai sensi del D.M. 17/06/2014)';
+export interface RigaBollo { codice: string; descrizione: string; quantita: number; um: string; prezzo: number; sconto: number; aliquota_iva: string; solo_descrizione: false; bollo: true }
+
+/**
+ * Bollo addebitato al cliente (Adriano 7/11/2026, "attivalo e addebitalo al cliente"): sulle fatture (e note di debito) il bollo
+ * da 2 € diventa una riga "Rivalsa imposta di bollo" non imponibile N1 (escluso art. 15), entra nell'imponibile e nel totale.
+ * Sulle note di credito no: il bollo resta di Casteltech (DatiBollo nell'XML, niente riga, non nel totale).
+ */
+export function addebitaBollo(tipo: string | null | undefined): boolean {
+  return tipo !== 'nota_credito';
+}
 
 /**
  * Totali del documento. Le righe senza aliquota usano quella predefinita (di solito IVA22).
- * Il bollo, se dovuto, si aggiunge al totale (lo paga il cliente, come d'uso).
+ * Il bollo, se dovuto, con `addebita` (predefinito) diventa una riga N1 a carico del cliente: entra nel riepilogo, nell'imponibile e nel totale;
+ * senza (note di credito, acconti scalati) resta solo `bollo` (DatiBollo) e non tocca i totali.
  */
-export function calcolaTotali(righe: RigaDocumento[], aliquote: Aliquota[], predefinita = 'IVA22'): Totali {
+export function calcolaTotali(righe: RigaDocumento[], aliquote: Aliquota[], predefinita = 'IVA22', opzioni: { addebita?: boolean } = {}): Totali {
   const perCodice = new Map(aliquote.map(a => [a.codice, a]));
   const gruppi = new Map<string, VoceRiepilogo>();
   const errori: string[] = [];
@@ -91,11 +110,21 @@ export function calcolaTotali(righe: RigaDocumento[], aliquote: Aliquota[], pred
     gruppi.set(codice, g);
     if (a.soggetta_bollo && !(Number(a.percentuale) > 0)) baseBollo += importo;
   });
+  const bollo = arrotonda2(baseBollo) > SOGLIA_BOLLO ? IMPORTO_BOLLO : 0;
+  let rigaBollo: RigaBollo | null = null;
+  if (bollo && opzioni.addebita !== false) {
+    // la riga del bollo non conta per la soglia (calcolata prima): va nel gruppo N1 art. 15, anche se l'aliquota non è in tabella
+    const a = perCodice.get(ALIQUOTA_BOLLO);
+    const g = gruppi.get(ALIQUOTA_BOLLO) ?? { aliquota: ALIQUOTA_BOLLO, percentuale: 0, natura: a?.natura ?? 'N1',
+      riferimento_normativo: a?.riferimento_normativo ?? 'Escluso art. 15 D.P.R. 633/72', imponibile: 0, imposta: 0 };
+    g.imponibile = arrotonda2(g.imponibile + bollo);
+    gruppi.set(ALIQUOTA_BOLLO, g);
+    rigaBollo = { codice: '', descrizione: DESCRIZIONE_BOLLO, quantita: 1, um: '', prezzo: bollo, sconto: 0, aliquota_iva: ALIQUOTA_BOLLO, solo_descrizione: false, bollo: true };
+  }
   const riepilogo = [...gruppi.values()].map(g => ({ ...g, imposta: arrotonda2(g.imponibile * g.percentuale / 100) }));
   const imponibile = arrotonda2(riepilogo.reduce((s, g) => s + g.imponibile, 0));
   const imposta = arrotonda2(riepilogo.reduce((s, g) => s + g.imposta, 0));
-  const bollo = arrotonda2(baseBollo) > SOGLIA_BOLLO ? IMPORTO_BOLLO : 0;
-  return { riepilogo, imponibile, imposta, bollo, totale: arrotonda2(imponibile + imposta + bollo), errori };
+  return { riepilogo, imponibile, imposta, bollo, totale: arrotonda2(imponibile + imposta), errori, rigaBollo };
 }
 
 /**

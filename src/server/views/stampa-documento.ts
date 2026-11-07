@@ -127,7 +127,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
     <table class="somme">
       <tr><td>Imponibile</td><td class="q">${euro(totali.imponibile)}</td></tr>
       <tr><td>IVA</td><td class="q">${euro(totali.imposta)}</td></tr>
-      ${totali.bollo ? html`<tr><td>Bollo virtuale</td><td class="q">${euro(totali.bollo)}</td></tr>` : ''}
+      ${totali.bollo && !totali.rigaBollo ? html`<tr><td>Bollo virtuale (a carico di Casteltech)</td><td class="q">${euro(totali.bollo)}</td></tr>` : ''}
       <tr class="totale"><td>Totale documento</td><td class="q">${euro(totali.totale)}</td></tr>
       ${split ? html`<tr><td>IVA versata dal cliente (split payment)</td><td class="q">- ${euro(totali.imposta)}</td></tr>
       <tr class="totale"><td>Netto da pagare</td><td class="q">${euro(importoDaIncassare(totali, true))}</td></tr>` : ''}

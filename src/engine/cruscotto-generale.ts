@@ -101,8 +101,9 @@ export interface ScadenzaFiscale { data: string; testo: string }
 /**
  * Scadenze fisse del mese che riguardano il portale, nei prossimi `giorni` giorni (sabato e domenica → lunedì dopo):
  * il 15 fatture differite (TD24) e autofatture TD17/18/19 del mese prima, il 16 versamenti F24 (IVA, ritenute dei fornitori).
+ * `bollo` (Adriano 7/11/2026): trimestri del bollo virtuale (anno in corso e anno prima, da `bolloPerTrimestre`) con importo e scadenza dell'F24.
  */
-export function scadenzeFiscali(oggi: string, giorni = 35): ScadenzaFiscale[] {
+export function scadenzeFiscali(oggi: string, giorni = 35, bollo: { trimestre: number; importo: number; codice: string; scadenza: string; anno: number }[] = []): ScadenzaFiscale[] {
   const out: ScadenzaFiscale[] = [];
   const fino = piuGiorni(oggi, giorni);
   const lavorativo = (d: string) => { const g = comeData(d).getUTCDay(); return g === 6 ? piuGiorni(d, 2) : g === 0 ? piuGiorni(d, 1) : d; };
@@ -115,6 +116,18 @@ export function scadenzeFiscali(oggi: string, giorni = 35): ScadenzaFiscale[] {
       if (d >= oggi && d <= fino) out.push({ data: d, testo: t });
     }
   }
+  // bollo: i trimestri rinviati hanno la stessa scadenza → una riga sola con la somma
+  const perScadenza = new Map<string, { importo: number; trimestri: string[]; codici: string[] }>();
+  for (const b of bollo) {
+    if (!(b.importo > 0)) continue;
+    const d = lavorativo(b.scadenza);
+    if (d < oggi || d > fino) continue;
+    const x = perScadenza.get(d) ?? { importo: 0, trimestri: [], codici: [] };
+    x.importo = Math.round((x.importo + b.importo) * 100) / 100; x.trimestri.push(`${b.trimestre}° trim. ${b.anno}`); x.codici.push(b.codice);
+    perScadenza.set(d, x);
+  }
+  for (const [d, x] of perScadenza)
+    out.push({ data: d, testo: `F24 bollo virtuale ${x.trimestri.join(' + ')}: ${x.importo.toLocaleString('it-IT', { minimumFractionDigits: 2 })} € (codice ${x.codici.join(', ')})` });
   return out.sort((a, b) => a.data.localeCompare(b.data));
 }
 

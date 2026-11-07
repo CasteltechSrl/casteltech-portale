@@ -167,7 +167,7 @@ export function rotteFiscale() {
       <div class="intestazione-pagina"><h1>Bollo virtuale · ${anno}</h1><div class="azioni non-stampare"><button type="button" id="stampa">Stampa</button></div></div>
       <div class="non-stampare">${menuAmministrazione('fiscale')}${menuFiscale('bollo')}</div>
       <form class="cerca non-stampare" method="get"><select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select><button>Mostra</button></form>
-      <p class="nota">Bollo da 2 € sulle fatture senza IVA oltre 77,47 € (es. lettera d'intento, non imponibili). Si versa con l'F24 ogni trimestre;
+      <p class="nota">Bollo da 2 € sulle fatture senza IVA oltre 77,47 € (es. lettera d'intento, non imponibili), addebitato al cliente con la riga "Rivalsa imposta di bollo" (N1). Si versa con l'F24 ogni trimestre;
         l'Agenzia mette l'importo già calcolato nel portale Fatture e corrispettivi: questi sono i conti del portale per controllarlo.</p>
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Trimestre</th><th class="num">Fatture</th><th class="num">Bollo</th><th>Codice tributo</th><th>Da versare entro</th><th></th></tr></thead>

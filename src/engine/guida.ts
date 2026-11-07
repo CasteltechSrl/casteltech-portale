@@ -1202,9 +1202,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'bollo-virtuale', area: 'amministrazione', titolo: 'Bollo virtuale sulle fatture: importo e scadenze',
-    parole: 'bollo bolli virtuale 2 euro marca da bollo trimestre trimestrale f24 codice tributo 2521 2522 2523 2524 scadenza versare 77,47',
+    parole: 'bollo bolli virtuale 2 euro marca da bollo trimestre trimestrale f24 codice tributo 2521 2522 2523 2524 scadenza versare 77,47 rivalsa addebito addebitato cliente n1 art 15',
     testo: [
-      'Sulle fatture senza IVA oltre 77,47 € (es. lettera d\'intento) c\'è il bollo da 2 €, che il portale mette da solo. Si versa con l\'F24 ogni trimestre.',
+      'Sulle fatture senza IVA oltre 77,47 € (es. lettera d\'intento, servizi a clienti esteri, voci escluse art. 15) c\'è il bollo da 2 €, che il portale mette da solo. Si versa con l\'F24 ogni trimestre.',
+      'Il bollo è addebitato al cliente (Adriano 7/11/2026): in fondo alla fattura compare da sola la riga "Rivalsa imposta di bollo" da 2 €, non imponibile N1 (escluso art. 15), già compresa nel totale, nelle scadenze, nella stampa, nel PDF e nella fattura elettronica (con DatiBollo "bollo virtuale SI"). Non serve scriverla a mano. Sulle note di credito il bollo resta a carico di Casteltech: c\'è nella fattura elettronica ma non nel totale.',
+      'Quali righe contano per il bollo si decide in Impostazioni → Amministrazione → aliquote, colonna "Bollo" (lettera d\'intento sì, cessioni UE ed esportazioni no). Nel cruscotto, tra le scadenze, compare l\'F24 del bollo nelle 5 settimane prima della data.',
       'Amministrazione → Bollo virtuale mostra per ogni trimestre quante fatture, l\'importo, il codice tributo (2521 primo trimestre, 2522, 2523, 2524) e la scadenza: 31 maggio, 30 settembre, 30 novembre e l\'ultimo giorno di febbraio dell\'anno dopo (sabato e domenica si passa al lunedì).',
       'Se il primo trimestre è sotto 5.000 € si versa con il secondo (30 settembre); se primo e secondo insieme sono sotto 5.000 € tutti e due si versano entro il 30 novembre, ognuno con il suo codice. L\'Agenzia mette l\'importo già calcolato nel portale Fatture e corrispettivi: questa pagina serve a controllarlo.',
     ],

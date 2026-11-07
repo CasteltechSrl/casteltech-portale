@@ -14,6 +14,7 @@ import { numeroCompleto } from '../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
 import { contaDifferite } from '../engine/fatture-differite.js';
+import { bolloPerTrimestre } from '../engine/fiscale.js';
 import { ordinaRiprendi, type VoceRiprendi } from '../engine/riprendi.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
@@ -145,7 +146,7 @@ export async function datiCruscottoGenerale(oggi: string) {
       sdi: sdiUltimi, sdiInAttesa: sdiConto('inviato'), ricevutiSdi: ricevutiSdi[0]?.quanti ?? 0, incassiScaduti,
     },
     sistema: {
-      scadenze: scadenzeFiscali(oggi), backup: elencoBackup()[0] ?? null, servizi: avvisoServizi(), suggerimenti: suggerimenti[0]?.quanti ?? 0,
+      scadenze: scadenzeFiscali(oggi, 35, await trimestriBollo(oggi)), backup: elencoBackup()[0] ?? null, servizi: avvisoServizi(), suggerimenti: suggerimenti[0]?.quanti ?? 0,
     },
   };
 }
@@ -184,4 +185,13 @@ export async function cosePerRiprendere(utenteId: number | null, quante = 8): Pr
       FROM pacchetti_scheda s WHERE s.creato_il > now() - interval '14 days' AND s.padre_id IS NULL AND s.preventivo_id IS NULL
     ) x ORDER BY quando DESC LIMIT 60`).catch(() => [] as VoceRiprendi[]);
   return ordinaRiprendi(voci, utenteId, quante);
+}
+
+/** Bollo virtuale dell'anno in corso e dell'anno prima (il 4° trimestre si versa a febbraio), per le scadenze del cruscotto. */
+async function trimestriBollo(oggi: string) {
+  const anno = Number(oggi.slice(0, 4));
+  const doc = await q<{ data: string; bollo: number }>(`SELECT to_char(data, 'YYYY-MM-DD') AS data, bollo::float AS bollo FROM documenti
+    WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND numero IS NOT NULL AND bollo > 0
+      AND extract(year FROM data)::int >= $1`, [anno - 1]);
+  return [anno - 1, anno].flatMap(a => bolloPerTrimestre(a, doc, oggi).map(t => ({ ...t, anno: a })));
 }

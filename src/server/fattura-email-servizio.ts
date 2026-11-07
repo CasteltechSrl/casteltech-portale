@@ -8,7 +8,7 @@ import { q, q1 } from './db.js';
 import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail } from '../engine/conferme-ordine.js';
-import { calcolaTotali } from '../engine/amministrazione.js';
+import { addebitaBollo, calcolaTotali } from '../engine/amministrazione.js';
 import { bloccoInvioCortesia, destinatarioFattura, emailFattura, nomeFilePdfFattura } from '../engine/fattura-email.js';
 import { caricaAliquote } from './amministrazione-servizio.js';
 import { pdfFattura } from './pdf-fattura.js';
@@ -24,7 +24,9 @@ export async function datiStampaFattura(id: number) {
   const attuale = d.cliente_id ? await q1<any>(`SELECT * FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
   const fotografia = d.intestatario && d.numero != null ? d.intestatario : attuale ?? {};
   const righeIva = righe.map(r => ({ ...r, aliquota_iva: r.solo_descrizione ? null : r.aliquota_iva || attuale?.aliquota_iva || 'IVA22' }));
-  const totali = calcolaTotali(righeIva, await caricaAliquote());
+  const totali = calcolaTotali(righeIva, await caricaAliquote(), 'IVA22', { addebita: addebitaBollo(d.tipo) });
+  // bollo addebitato: riga in fondo, come nell'XML
+  if (totali.rigaBollo) righeIva.push(totali.rigaBollo);
   const scadenze = await q<any>(`SELECT * FROM documenti_scadenze WHERE documento_id = $1 ORDER BY data`, [id]);
   const pagamento = d.condizione_pagamento ? await q1<any>(`SELECT * FROM condizioni_pagamento WHERE codice = $1`, [d.condizione_pagamento]) : null;
   const intento = totali.riepilogo.some(g => g.natura === 'N3.5') ? await q1<any>(d.dichiarazione_intento_id

@@ -20,7 +20,7 @@ test('FatturaPA: fattura con DDT, sconto, lettera d\'intento e bollo', () => {
   const { xml, errori, totali, nomeFile } = generaFatturaXml(FATTURA, CLIENTE_IT, AZIENDA, ALIQUOTE);
   assert.deepEqual(errori, []);
   assert.equal(nomeFile, 'IT01777320332_000YA.xml');
-  // 40 + 8,80 IVA + 406,98 non imponibile (204 × 2,10 − 5%) + 2 € di bollo
+  // 40 + 8,80 IVA + 406,98 non imponibile (204 × 2,10 − 5%) + 2 € di bollo addebitato al cliente (riga N1)
   assert.equal(totali.totale, 457.78);
   assert.deepEqual(tag(xml, 'ImportoTotaleDocumento'), ['457.78']);
   assert.deepEqual(tag(xml, 'ImportoBollo'), ['2.00']);
@@ -28,10 +28,11 @@ test('FatturaPA: fattura con DDT, sconto, lettera d\'intento e bollo', () => {
   // cita un DDT del mese prima: fattura differita (TD24)
   assert.deepEqual(tag(xml, 'TipoDocumento'), ['TD24']);
   // la riga di testo "DDT n. 195" non si ripete: diventa DatiDDT con la riga che viene da quel DDT
-  assert.deepEqual(tag(xml, 'NumeroLinea'), ['1', '2', '3']);
+  // linea 4 = rivalsa del bollo (Adriano 7/11/2026)
+  assert.deepEqual(tag(xml, 'NumeroLinea'), ['1', '2', '3', '4']);
   assert.match(xml, /<DatiDDT><NumeroDDT>195<\/NumeroDDT><DataDDT>2026-10-05<\/DataDDT><RiferimentoNumeroLinea>1<\/RiferimentoNumeroLinea><\/DatiDDT>/);
   assert.match(xml, /<AltriDatiGestionali><TipoDato>INTENTO<\/TipoDato><RiferimentoTesto>26021609544759358-000006<\/RiferimentoTesto><RiferimentoData>2026-02-16<\/RiferimentoData>/);
-  assert.deepEqual(tag(xml, 'Natura'), ['N3.5', 'N3.5']);   // riga + riepilogo
+  assert.deepEqual(tag(xml, 'Natura'), ['N3.5', 'N1', 'N3.5', 'N1']);   // righe (lettera d'intento, bollo) + riepilogo
   assert.deepEqual(tag(xml, 'IBAN'), ['IT37B0538765310000003092938']);
   assert.deepEqual(tag(xml, 'IdDocumento'), ['ORD 4924']);
   assert.deepEqual(tag(xml, 'Causale'), ['Lavorazione schede - lotto &quot;A&quot; &amp; B EUR']);
