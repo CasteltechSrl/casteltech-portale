@@ -121,7 +121,9 @@ function perContenuto(colonne: string[], dati: string[][], mappa: Partial<Record
     if (migliore) { mappa[ruolo] = migliore; usate.add(migliore); }
   };
   const tuttiInteri = (c: string) => quota(c, x => RE_INTERO.test(x)) >= 0.8;
-  scegli('designatori', c => tuttiInteri(c) ? 0 : quota(c, x => RE_DESIGNATORI.test(x)), 0.6);
+  // celle con più riferimenti ("C1, C5, C6") danno un punto in più: una colonna di codici interni tipo "CAP0038" somiglia a R1, C2
+  // ma ha sempre un solo valore per riga (BOM di Idea Automazione, colonna dei riferimenti senza titolo, 7/11/2026)
+  scegli('designatori', c => tuttiInteri(c) ? 0 : quota(c, x => RE_DESIGNATORI.test(x)) + 0.2 * quota(c, x => elencoDesignatori(x).length > 1), 0.6);
   // quantità: la colonna di numeri interi che torna con il numero di designatori (non il numero di riga)
   if (mappa.designatori) {
     const iD = colonne.indexOf(mappa.designatori);
