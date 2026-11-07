@@ -11,7 +11,7 @@ import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
 import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
-import { layout } from '../views/layout.js';
+import { layout, tastiAcquisti } from '../views/layout.js';
 import { analisiPermessa } from '../../engine/ruoli.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
 import { gruppiSolleciti, inviaSollecito, propostaSollecito, registraSollecito } from '../solleciti-servizio.js';
@@ -21,7 +21,9 @@ import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { html, data, euro, euroUnitario, num, raw, type Raw, numCampo } from '../views/html.js';
-import { MODI_PAGAMENTO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
+import { modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
+import { caricaModiPagamento } from '../modi-pagamento-servizio.js';
+import type { ModiPagamento } from '../../engine/modi-pagamento.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, acquistiPerFornitore, fattureScadute, type RataDaPagare } from '../../engine/cruscotto-amministrazione.js';
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
@@ -100,15 +102,8 @@ async function riquadroSdi(d: any, senzaErrori = true): Promise<Raw> {
     </div></section>`;
 }
 
-/** Conti già usati per incassi e pagamenti (Bper, Carta di Credito…), da proporre quando si segna una rata. */
-async function contiUsati(): Promise<string[]> {
-  const righe = await q<{ conto: string }>(`SELECT conto FROM (SELECT conto FROM documenti_scadenze UNION ALL SELECT conto FROM documenti_ricevuti_scadenze) x
-    WHERE coalesce(conto, '') <> '' GROUP BY conto ORDER BY count(*) DESC`);
-  return righe.map(r => r.conto);
-}
-
 /** Rate di un documento con "Segna incassata/pagata" (data e conto) o "annulla". */
-function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, conti: string[]): Raw {
+function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi, strumenti: conti }: ModiPagamento): Raw {
   if (!scadenze.length) return html``;
   const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
   return html`<h2>Scadenze</h2><datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
@@ -119,7 +114,7 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, conti: 
       : html`<span class="stato doc-bozza">da ${sezione === 'documenti' ? 'incassare' : 'pagare'}</span>
         <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline">
           <input type="date" name="pagata_il" value="${oggiRoma()}" required>
-          <select name="modo" required title="Come è stata ${parola}"><option value="">Modo di pagamento…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select>
+          <select name="modo" required title="Come è stata ${parola}"><option value="">Modo di pagamento…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
           <input name="conto" list="conti" placeholder="Banca (es. Bper)" title="Facoltativo: banca o conto usato" class="corto">
           <button>Segna ${parola}</button></form>`}</li>`)}</ul>`;
 }
@@ -226,7 +221,8 @@ async function riquadroStorno(d: { id: number; cliente_id: number; data: string 
 export function rotteAmministrazione() {
   const r = Router();
   const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string | string[]) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'amministrazione', contenuto, avviso, script, largo: true }));
+    // Fatture fornitori e Acquisti per mese accendono il gruppo Acquisti (Adriano 7/11/2026); indirizzi invariati
+    String(layout({ titolo, utente: req.session.utente, attiva: req.path.startsWith('/ricevuti') ? 'acquisti' : 'amministrazione', contenuto, avviso, script, largo: true }));
   const msg = (req: Request) => (req.query.msg ? String(req.query.msg) : undefined);
 
   r.get('/', async (req, res) => {
@@ -258,7 +254,7 @@ export function rotteAmministrazione() {
       <p class="nota">Le cose lasciate a metà che nessun cruscotto mostra insieme: da guardare una volta la settimana (es. il lunedì). Ogni riga porta alla pagina dove si sistema.
         Si calcola quando apri la pagina, niente controlli automatici.</p>
       ${controlli.length ? html`<p class="riepilogo-controlli">${r2.totale} ${r2.totale === 1 ? 'cosa da sistemare' : 'cose da sistemare'}${r2.urgenti ? html`, <b class="negativo">${r2.urgenti} urgenti</b>` : ''}${r2.daControllare ? html`, ${r2.daControllare} da controllare` : ''}.</p>
-        ${controlli.map(c => html`<section class="blocco controllo ${c.livello}">
+        ${controlli.map(c => html`<section class="blocco controllo ${c.livello}" id="${c.chiave}">
           <h2>${c.titolo} <span class="etichetta ${c.livello}">${NOMI[c.livello]}</span> <span class="conta">${c.righe.length}</span></h2>
           <p class="nota">${c.spiegazione}</p>
           <ul class="elenco-controllo">${c.righe.map(v => html`<li>${v.link ? html`<a href="${v.link}">${v.testo}</a>` : v.testo}${v.dettaglio ? html` <small>· ${v.dettaglio}</small>` : ''}</li>`)}</ul>
@@ -269,6 +265,7 @@ export function rotteAmministrazione() {
   // ── Crediti verso clienti (brief D, Adriano 31/10/2026): calcolati solo all'apertura della pagina, conti in engine/crediti.ts ──
   r.get('/crediti', async (req, res) => {
     const oggi = oggiRoma();
+    const { modi } = await caricaModiPagamento();
     const righe = await q<any>(`SELECT s.id, d.id AS documento_id, d.tipo, d.numero, d.sezionale, d.anno, d.data::text AS data_fattura,
         (${SQL_DATA_DA_INCASSARE})::text AS scadenza, (${SQL_IMPORTO_DA_INCASSARE})::float AS importo, s.pagata_il::text AS pagata_il, d.cliente_id,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '?') AS cliente
@@ -310,7 +307,7 @@ export function rotteAmministrazione() {
           <td><form method="post" action="/amministrazione/documenti/scadenze/${p.scadenzaId}" class="inline">
             <input type="hidden" name="torna" value="/amministrazione/crediti">
             <input type="date" name="pagata_il" value="${oggi}" required>
-            <select name="modo" required title="Come è stata incassata"><option value="">Modo di pagamento…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select>
+            <select name="modo" required title="Come è stata incassata"><option value="">Modo di pagamento…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
             <button>Segna incassata</button></form></td></tr>`)}</tbody></table></div>`
         : html`<p class="vuoto">Nessuna rata in scadenza nei prossimi 14 giorni.</p>`}
       <p class="nota">Le rate già scadute si segnano incassate dalla fattura o da Amministrazione → Fatture → Segna incassate.</p>`, msg(req)));
@@ -564,7 +561,7 @@ export function rotteAmministrazione() {
           const rate = await rateAperte(si.map(d => d.id));
           if (!rate.length) return torna(`Le fatture spuntate non hanno rate da incassare. ${esclusi}`.trim());
           const perDoc = new Map(si.map(d => [d.id, d]));
-          const conti = await contiUsati();
+          const { modi, strumenti: conti } = await caricaModiPagamento();
           return res.send(pagina(req, 'Segna incassate', html`
             <p><a href="${indietro}">← ${NOMI[tipo].tanti}</a></p>
             <h1>Segna incassate</h1>
@@ -581,7 +578,7 @@ export function rotteAmministrazione() {
               <datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
               <div class="riga-campi">
                 <label class="stretto">Incassate il <input type="date" name="pagata_il" value="${oggiRoma()}" required></label>
-                <label>Modo di pagamento <select name="modo" required><option value="">Scegli…</option>${MODI_PAGAMENTO.map(m => html`<option>${m}</option>`)}</select></label>
+                <label>Modo di pagamento <select name="modo" required><option value="">Scegli…</option>${modi.map(m => html`<option>${m}</option>`)}</select></label>
                 <label>Banca o conto (facoltativo) <input name="conto" list="conti" placeholder="es. Bper"></label>
               </div>
               <div class="barra-azioni"><span class="nota">Togli la spunta alle rate non ancora incassate. Si annulla dalla pagina della fattura.</span>
@@ -599,7 +596,7 @@ export function rotteAmministrazione() {
     const indietro = /^\/amministrazione\/documenti(\?|$)/.test(String(req.body?.torna ?? '')) ? String(req.body.torna) : '/amministrazione/documenti';
     const giorno = String(req.body?.pagata_il ?? '');
     const rate = [...new Set([req.body?.rate ?? []].flat().map(Number).filter(n => Number.isInteger(n) && n > 0))];
-    const modo = modoPagamento(req.body?.modo);
+    const modo = modoPagamento(req.body?.modo, (await caricaModiPagamento()).modi);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(giorno) || !modo) return res.redirect(conMessaggio(indietro, 'Servono la data e il modo di pagamento.'));
     const n = await segnaIncassate(rate, giorno, modo, String(req.body?.conto ?? '').trim() || null);
     res.redirect(conMessaggio(indietro, n ? `${n === 1 ? '1 rata segnata incassata' : `${n} rate segnate incassate`} il ${data(giorno)}.` : 'Nessuna rata segnata.'));
@@ -810,7 +807,7 @@ export function rotteAmministrazione() {
         ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
         ${['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && d.origine === 'portale' ? attributiEmesso(d.xml, d.attributi_xml) : ''}
         ${await riquadroSdi(d)}
-        ${elencoScadenze(scadenze, 'documenti', await contiUsati())}
+        ${elencoScadenze(scadenze, 'documenti', await caricaModiPagamento())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
           ${email ? html`<a class="bottone primario" href="#invia-email">✉ Invia per email</a>` : ''}
@@ -1120,7 +1117,7 @@ export function rotteAmministrazione() {
     const filtrato = cerca !== '' || daPagare;
     res.send(pagina(req, 'Fatture fornitori', html`
       <div class="intestazione-pagina"><h1>Amministrazione</h1></div>
-      ${menuAmministrazione('ricevuti')}
+      ${tastiAcquisti('/amministrazione/ricevuti')}
       <div class="barra-filtro">
         <form class="filtro-elenco" method="get">
           <label>Anno<select name="anno" ${daPagare ? raw('disabled title="Con «Solo da pagare» si vedono tutti gli anni"') : ''}>${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select></label>
@@ -1185,7 +1182,7 @@ export function rotteAmministrazione() {
     const nomeFornitore = fornitore ? righe.find(r => r.chiave === fornitore)?.nome : null;
     res.send(pagina(req, `Acquisti per mese ${anno}`, html`
       <div class="intestazione-pagina"><h1>Acquisti per fornitore e mese · ${anno}</h1></div>
-      ${menuAmministrazione('ricevuti')}
+      ${tastiAcquisti('/amministrazione/ricevuti/mesi')}
       <form class="cerca" method="get">
         <select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
         <button>Mostra</button> <a href="/amministrazione/ricevuti?anno=${anno}">Elenco delle fatture fornitori →</a>
@@ -1241,7 +1238,7 @@ export function rotteAmministrazione() {
           + `al fornitore si paga il netto, la ritenuta la versa Casteltech con F24 (codice tributo 1040 per i professionisti) `
           + (tutte ? `entro il ${data(scadenzaF24(pagate[pagate.length - 1]))}.` : 'entro il 16 del mese dopo il pagamento.');
       })()}</p>` : ''}
-      ${elencoScadenze(scadenze, 'ricevuti', await contiUsati())}
+      ${elencoScadenze(scadenze, 'ricevuti', await caricaModiPagamento())}
       ${d.xml ? html`<p><a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : ''}
       ${d.origine === 'manuale' && !d.elettronica ? html`<form method="post" action="/amministrazione/spese/${id}/elimina" data-conferma="Eliminare questa spesa?"><button class="pericolo">Elimina la spesa</button></form>` : ''}`, msg(req)));
   });
@@ -1259,8 +1256,9 @@ export function rotteAmministrazione() {
     const annulla = req.body.annulla === '1';
     const giorno = String(req.body.pagata_il ?? '');
     if (!annulla && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) return res.redirect(req.get('referer') ?? '/amministrazione');
+    const { modi } = annulla ? { modi: [] as string[] } : await caricaModiPagamento();
     const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3, modo = $4 WHERE id = $1 RETURNING documento_id`,
-      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null, annulla ? null : modoPagamento(req.body.modo)]);
+      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null, annulla ? null : modoPagamento(req.body.modo, modi)]);
     const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
     // fattura tutta incassata: le sue note di credito aperte si chiudono come "Compensato con fattura"
     const compensate = s && sezione === 'documenti' && !annulla ? await compensaNoteCredito([s.documento_id]) : 0;

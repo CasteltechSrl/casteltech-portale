@@ -1078,3 +1078,10 @@ form.in-riga select { max-width: 14rem; }
 /* Passaggio alla chiave reale di Invoicetronic (Impostazioni → Amministrazione, 6/11/2026) */
 .passi-passaggio li.fatto { color: #2e7d32; }
 .passi-passaggio li.da-fare { font-weight: 600; }
+
+/* Controlli settimanali nel cruscotto, sotto "Da fare oggi" (Adriano 7/11/2026) */
+.controlli-cruscotto details.controllo { margin: .35rem 0; padding: .3rem .6rem; background: var(--carta); border-radius: var(--raggio); }
+.controlli-cruscotto details.controllo summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.controlli-cruscotto details.controllo .conta { background: var(--accento-chiaro); color: var(--accento); border-radius: 999px; padding: .05rem .55rem; font-size: .85rem; }
+.controlli-cruscotto details.controllo > .nota { margin: .3rem 0 0; }
+@media (max-width: 700px) { .controlli-cruscotto .elenco-controllo { columns: 1; } }

@@ -143,7 +143,7 @@ function amministrazioneOContabilita(req: Request, res: Response, next: NextFunc
 
 // ── Login ──
 const tentativi = new Map<string, { n: number; fino: number }>();
-const paginaLogin = (errore?: string, torna = '/') => String(layout({
+const paginaLogin = (errore?: string, torna = '/', operatore?: string) => String(layout({
   titolo: 'Accesso', avviso: errore,
   contenuto: html`
   <form method="post" action="/login" class="scheda-login">
@@ -152,9 +152,10 @@ const paginaLogin = (errore?: string, torna = '/') => String(layout({
     <label>Email <input name="email" type="email" autocomplete="username" required autofocus></label>
     <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
     <button class="primario">Entra</button>
+    <p class="nota">Reparto: ${operatore ? html`<a href="/r">continua come ${operatore} →</a>` : html`<a href="/r/accesso">entra con sigla e PIN →</a>`}</p>
   </form>`,
 }));
-app.get('/login', (req, res) => res.send(paginaLogin(undefined, String(req.query.torna ?? '/'))));
+app.get('/login', (req, res) => res.send(paginaLogin(undefined, String(req.query.torna ?? '/'), req.session.operatore?.sigla)));
 app.post('/login', async (req, res) => {
   // tentativi contati per indirizzo + email (chi cambia indirizzo non riparte da zero sulla stessa email); le voci scadute si tolgono
   for (const [k, v] of tentativi) if (v.fino <= Date.now()) tentativi.delete(k);
@@ -183,8 +184,10 @@ app.post('/login', async (req, res) => {
 });
 app.post('/esci', (req, res) => req.session.destroy(() => res.redirect('/login')));
 
+// pagina iniziale = cruscotto (Adriano 7/11/2026): chi non è entrato va al login (poi al cruscotto), anche se il browser ricorda
+// una sigla del reparto; il reparto si apre dal QR, da /r o dal link sotto il login
 app.get('/', (req, res) => {
-  if (!req.session.utente) return res.redirect(req.session.operatore ? '/r' : '/login');
+  if (!req.session.utente) return res.redirect('/login');
   res.redirect(paginaIniziale(req.session.utente.ruolo));
 });
 // la produzione lavora dalle pagine del reparto (telefono/tablet)

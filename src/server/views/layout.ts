@@ -18,9 +18,9 @@ export interface Utente { id: number; nome: string; ruolo: Ruolo }
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti'], ['Componenti clienti', '/anagrafiche/componenti-clienti'], ['Materiali di consumo', '/anagrafiche/materiali']] },
   { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Documenti dei clienti', '/preventivi/documenti'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme'], ['Ordini da e-mail e PDF', '/ordini/acquisire']] },
-  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
+  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti']] },
-  { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['DDT', '/amministrazione/documenti?tipo=ddt'], ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'], ['Fatture differite (DDT da fatturare)', '/amministrazione/differite'], ['Crediti verso clienti', '/amministrazione/crediti'], ['Solleciti incassi', '/amministrazione/solleciti'], ['Controlli settimanali', '/amministrazione/controlli'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Spese senza fattura elettronica', '/amministrazione/spese'], ['Bollo virtuale', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'], ['Analisi', '/amministrazione/analisi']] },
+  { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['DDT', '/amministrazione/documenti?tipo=ddt'], ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'], ['Fatture differite (DDT da fatturare)', '/amministrazione/differite'], ['Crediti verso clienti', '/amministrazione/crediti'], ['Solleciti incassi', '/amministrazione/solleciti'], ['Controlli settimanali', '/amministrazione/controlli'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Spese senza fattura elettronica', '/amministrazione/spese'], ['Bollo virtuale', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'], ['Analisi', '/amministrazione/analisi']] },
   { chiave: 'qualita', nome: 'Qualità', voci: [['Cruscotto della qualità', '/qualita'], ['Non conformità e reclami', '/qualita/non_conformita'], ['Strumenti e tarature', '/qualita/strumenti'], ['Piano delle manutenzioni', '/qualita/manutenzioni'], ['Verifiche ESD', '/qualita/esd'], ['Documenti del sistema', '/qualita/documenti'], ['Formazione', '/qualita/formazione'], ['Audit', '/qualita/audit'], ['Rischi e opportunità', '/qualita/rischi'], ['Codifica dei difetti', '/qualita/difetti']] },
   // Dipendenti (Adriano 1/11/2026): costo del personale, nota spese, persone; buste paga nell'area riservata con password
   { chiave: 'dipendenti', nome: 'Dipendenti', voci: [['Costo del personale', '/dipendenti'], ['Nota spese', '/dipendenti/note-spese'], ['Persone e auto', '/dipendenti/persone'], ['Buste paga (riservato)', '/dipendenti/riservata']] },
@@ -43,6 +43,15 @@ export const MENU_CONTABILITA: [string, string][] = [
   ['VIES', '/amministrazione/vies'], ['Crediti', '/amministrazione/crediti'], ['Solleciti', '/amministrazione/solleciti'], ['Controlli', '/amministrazione/controlli'],
   ['Previsione di cassa', '/amministrazione/analisi/cassa'], ['Buste paga', '/dipendenti/riservata'],   // niente Analisi: solo amministratore ed esterno (6/11/2026)
 ];
+
+/**
+ * Tasti in cima alle pagine degli Acquisti che stanno ancora sotto /amministrazione (Fatture fornitori, Acquisti per mese):
+ * Adriano 7/11/2026, "Fatture fornitori" va negli Acquisti accanto a ordini e DDT. Gli indirizzi non cambiano.
+ */
+export function tastiAcquisti(attivo: string) {
+  const voci = MENU_GRUPPI.find(g => g.chiave === 'acquisti')!.voci;
+  return html`<nav class="tasti-sezione">${voci.map(([t, h]) => html`<a href="${h}" class="${h === attivo ? 'attivo' : ''}">${t}</a>`)}</nav>`;
+}
 
 export const gruppoAttivo = (attiva: string | undefined) => (attiva ? GRUPPO_DI[attiva] ?? attiva : '');
 
