@@ -35,7 +35,11 @@ test('FatturaPA: fattura con DDT, sconto, lettera d\'intento e bollo', () => {
   assert.deepEqual(tag(xml, 'Natura'), ['N3.5', 'N1', 'N3.5', 'N1']);   // righe (lettera d'intento, bollo) + riepilogo
   assert.deepEqual(tag(xml, 'IBAN'), ['IT37B0538765310000003092938']);
   assert.deepEqual(tag(xml, 'IdDocumento'), ['ORD 4924']);
-  assert.deepEqual(tag(xml, 'Causale'), ['Lavorazione schede - lotto &quot;A&quot; &amp; B EUR']);
+  // causale scritta + nota delle condizioni (interessi di mora, riserva di proprietà: Adriano 7/11/2026), pezzi da max 200 caratteri
+  const causali = tag(xml, 'Causale');
+  assert.equal(causali[0], 'Lavorazione schede - lotto &quot;A&quot; &amp; B EUR');
+  assert.match(causali.join(' '), /interessi di mora del D\.Lgs\. 231\/2002/);
+  assert.match(causali.join(' '), /art\. 1523 c\.c\./);
 });
 
 test('FatturaPA: nota di credito UE, cliente con PEC, rate RiBa', () => {

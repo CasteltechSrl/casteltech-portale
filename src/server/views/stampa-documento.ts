@@ -9,6 +9,7 @@ import { VERSIONE } from './layout.js';
 import { indirizzoSu } from '../../engine/ddt.js';
 import { importoRiga, numeroCompleto, type Totali } from '../../engine/amministrazione.js';
 import { importoDaIncassare, nomeTipoSdi } from '../../engine/tipi-fattura.js';
+import { noteDdt, notaFattura } from '../../engine/condizioni.js';
 
 const righeTesto = (s: string | null | undefined) => String(s ?? '').split('\n').filter(Boolean).map(r => html`${r}<br>`);
 
@@ -52,6 +53,7 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
       : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}</td><td class="um">${r.um ?? ''}</td><td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td></tr>`)}</tbody>
   </table>
   <table class="griglia piede-ddt"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+    <tr><td colspan="4" class="note-ddt">${noteDdt(t.causale).map(n => html`<p>${n}</p>`)}</td></tr>
     <tr><td><div class="etic">Aspetto esteriore dei beni</div><div class="val">${t.aspetto ?? ''}</div></td>
       <td><div class="etic">N. colli</div><div class="val">${t.colli ?? ''}</div></td>
       <td><div class="etic">Peso</div><div class="val">${t.peso ?? ''}</div></td>
@@ -137,6 +139,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
   ${split ? html`<p class="nota-stampa">Scissione dei pagamenti (split payment) art. 17-ter D.P.R. 633/72: l'IVA è versata dal cliente all'Erario.</p>` : ''}
   ${d.esigibilita_iva === 'D' ? html`<p class="nota-stampa">IVA ad esigibilità differita (art. 6, comma 5, D.P.R. 633/72).</p>` : ''}
   ${totali.bollo ? html`<p class="nota-stampa">Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.</p>` : ''}
+  ${d.tipo === 'fattura' ? html`<p class="nota-stampa nota-condizioni">${notaFattura()}</p>` : ''}
   ${d.tipo === 'fattura' ? html`<table class="griglia"><colgroup><col class="meta"><col class="meta"></colgroup>
     <tr><td><div class="etic">Pagamento</div><div class="val">${pagamento?.descrizione ?? ''}</div>
         ${scadenze.length ? html`<div class="indirizzo-stampa">${scadenze.map(x => html`Scadenza ${data(x.data)}: ${euro(Number(x.importo))}<br>`)}</div>` : ''}</td>

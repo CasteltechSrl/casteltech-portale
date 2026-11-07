@@ -5,6 +5,7 @@
  * Fatto sul server con pdf-lib (come DDT e preventivi), perché la stampa del browser non si può allegare.
  */
 import { readFile } from 'node:fs/promises';
+import { notaFattura } from '../engine/condizioni.js';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { euro, euroUnitario, num } from './views/html.js';
@@ -167,6 +168,7 @@ export async function pdfFattura(x: DatiPdfFattura): Promise<Buffer> {
   if (split) note.push("Scissione dei pagamenti (split payment) art. 17-ter D.P.R. 633/72: l'IVA è versata dal cliente all'Erario.");
   if (d.esigibilita_iva === 'D') note.push('IVA ad esigibilità differita (art. 6, comma 5, D.P.R. 633/72).');
   if (totali.bollo) note.push('Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.');
+  if (d.tipo === 'fattura') note.push(notaFattura());   // mora, riserva di proprietà, condizioni, privacy (Adriano 7/11/2026)
   const somme: [string, string, boolean][] = [['Imponibile', euro(totali.imponibile), false], ['IVA', euro(totali.imposta), false]];
   if (totali.bollo && !totali.rigaBollo) somme.push(['Bollo virtuale (a carico di Casteltech)', euro(totali.bollo), false]);
   somme.push(['Totale documento', euro(totali.totale), true]);
