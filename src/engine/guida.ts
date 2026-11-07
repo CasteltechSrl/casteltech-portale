@@ -683,15 +683,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'banca-movimenti', area: 'amministrazione', titolo: 'Banca: estratto conto e abbinamento con le fatture',
-    parole: 'banca bper estratto conto movimenti cbi excel csv abbinamento abbina incassi pagamenti bonifico riconciliazione home banking commissioni f24 categoria',
+    parole: 'banca bper estratto conto movimenti cbi excel csv saldo fido sconfinamento conto tecnico anticipo rientro abbinamento abbina incassi pagamenti bonifico riconciliazione home banking commissioni f24 categoria',
     testo: [
       'Amministrazione → Banca. Da BPER Banking Business scarichi i movimenti del conto in formato CBI (meglio) oppure Excel .xlsx o CSV e li carichi con "Carica l\'estratto conto". Un periodo ricaricato non raddoppia: i movimenti già presenti si saltano.',
       'Per ogni movimento il portale propone le fatture: le entrate si abbinano alle fatture emesse da incassare, le uscite alle fatture dei fornitori da pagare. Cerca lo stesso importo, poi il numero della fattura e il nome del cliente o fornitore nella descrizione del bonifico; riconosce anche un bonifico che paga più fatture dello stesso cliente e l\'accredito di una distinta RiBa intera.',
       'Le proposte sicure sono già spuntate; quelle da controllare (per esempio due fatture con lo stesso importo) no. "Conferma le righe spuntate" segna le fatture incassate o pagate alla data del movimento, con il modo (bonifico o RiBa) e il conto. I movimenti senza fattura (commissioni, F24, stipendi, carta…) prendono una categoria proposta, che si cambia dal menu.',
       '"a mano" apre il movimento: si spuntano una o più rate (la somma deve fare l\'importo) oppure si sceglie la categoria. "Annulla" in fondo alla pagina rimette il movimento da abbinare e le fatture tornano da incassare o pagare.',
+      'BPER: Rapporti CBI → Tutti i movimenti → esporta in CSV. Il file contiene tutti i conti insieme (colonna Rapporto): il portale mette ogni movimento sul suo conto. Il conto ordinario e i conti tecnici di anticipo (RiBa, anticipo Italia, anticipo estero) si vedono nel riquadro Conti con saldo di oggi, sconfinamento e disponibile.',
+      'Nel riquadro Conti si scrivono una volta nome, tipo (ordinario o anticipo), saldo a una data (per esempio quello dell\'estratto conto del 31/12) e fido: il saldo di oggi = quel saldo + i movimenti caricati dopo. Il fido anticipi (per esempio 100.000 €) vale per tutti i conti di anticipo insieme: la riga in fondo dice quanto è usato e quanto resta.',
+      'Anticipi e rientri ("ANTICIPO SU DOCUMENTI", "RIENTRO ANTICIPO", i movimenti dei conti tecnici) non si abbinano mai alle fatture: la fattura è incassata quando arriva il bonifico del cliente o l\'accredito della distinta RiBa. Prendono la categoria "Anticipo fatture / RiBa".',
       'Il collegamento diretto con la banca (open banking PSD2) verrà dopo: l\'abbinamento resterà lo stesso.',
     ],
-    passi: ['Scarica da BPER i movimenti in formato CBI, Excel o CSV.', 'Amministrazione → Banca → "Carica l\'estratto conto", scegli il file e premi Carica.', 'Controlla le proposte, spunta e premi "Conferma le righe spuntate".'],
+    passi: ['Scarica da BPER i movimenti (Tutti i movimenti → CSV), oppure CBI o Excel.', 'Amministrazione → Banca → "Carica l\'estratto conto", scegli il file e premi Carica.', 'Controlla le proposte, spunta e premi "Conferma le righe spuntate".'],
     pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti']],
   },
   {

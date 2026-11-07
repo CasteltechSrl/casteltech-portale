@@ -12,6 +12,9 @@
  *   GET  /api/claude/documentazione?anno=    → prodotti venduti nell'anno con le revisioni dei documenti già caricate (Adriano 6/11/2026)
  *   POST /api/claude/documentazione          → { cliente, codice, riassunto, revisione?, cartella?, note?, sostituisci? } = revisione dalle cartelle del Drive
  *   GET  /api/claude/spazio                  → spazio occupato su Neon per tabella
+ *   GET  /api/claude/banca                   → conti con il saldo di oggi, movimenti caricati per conto e stato (Adriano 7/11/2026)
+ *   POST /api/claude/banca/conti             → { conti: [{numero, nome, tipo, saldoData, saldo, fido}], fidoAnticipi? }
+ *   POST /api/claude/banca/movimenti         → { nome, base64, conto? } = estratto conto (CSV/CBI/Excel) mandato da Adriano, senza doppioni
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
@@ -23,6 +26,8 @@ import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
+import { caricaMovimenti, contiConSaldo, fidoAnticipi, leggiEstrattoConto, salvaConti } from '../banca-servizio.js';
+import { dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
 let chiaveInMemoria: string | null | undefined;
@@ -162,6 +167,30 @@ export function rotteApiClaude() {
           (SELECT string_agg(d.numero::text || ' (' || d.stato || ')', ', ') FROM documenti d WHERE d.ordine_id = o.id AND d.tipo = 'conferma_ordine') AS conferme
         FROM ordini o LEFT JOIN ordini_righe r ON r.ordine_id = o.id WHERE o.numero >= 9001 GROUP BY o.id ORDER BY o.anno, o.numero`),
     });
+  });
+
+  // Banca (Adriano 7/11/2026): Claude carica l'estratto conto mandato da Adriano nel progetto e scrive i conti (nomi, tipo, saldo dell'estratto conto, fido).
+  // Nessun abbinamento da qui: le fatture le conferma l'ufficio nella pagina Banca.
+  r.get('/banca', async (_req, res) => {
+    res.json({ conti: await contiConSaldo(), fidoAnticipi: await fidoAnticipi(),
+      movimenti: await q(`SELECT conto, stato, count(*)::int AS quanti, min(data)::text AS dal, max(data)::text AS al FROM banca_movimenti GROUP BY 1, 2 ORDER BY 1, 2`) });
+  });
+  r.post('/banca/conti', async (req, res) => {
+    const b = req.body ?? {};
+    if (!Array.isArray(b.conti)) return res.status(400).json({ errore: 'Serve conti: [{numero, nome, tipo, saldoData, saldo, fido}].' });
+    const conti: ContoBanca[] = b.conti.map((c: any) => ({ numero: numeroConto(c.numero), nome: String(c.nome ?? '').toUpperCase().slice(0, 60) || numeroConto(c.numero),
+      tipo: c.tipo === 'anticipo' ? 'anticipo' : 'ordinario', saldoData: dataDa(c.saldoData), saldo: typeof c.saldo === 'number' ? c.saldo : null,
+      fido: typeof c.fido === 'number' ? c.fido : null }));
+    await salvaConti(conti, typeof b.fidoAnticipi === 'number' ? b.fidoAnticipi : undefined);
+    res.json({ ok: true, conti: await contiConSaldo() });
+  });
+  r.post('/banca/movimenti', async (req, res) => {
+    const b = req.body ?? {};
+    const nome = String(b.nome ?? '').trim();
+    if (!nome || typeof b.base64 !== 'string') return res.status(400).json({ errore: 'Servono nome e base64 del file.' });
+    const letti = await leggiEstrattoConto(nome, Buffer.from(b.base64, 'base64'));
+    if (letti.errore) return res.status(400).json({ errore: letti.errore });
+    res.json({ formato: letti.formato, letti: letti.movimenti.length, ...(await caricaMovimenti(letti.movimenti, String(b.conto ?? ''), nome)) });
   });
 
   r.get('/spazio', async (_req, res) => {
