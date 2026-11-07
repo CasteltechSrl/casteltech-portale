@@ -72,7 +72,8 @@ export function riassuntoDaAnalisi(
 // ───────────────────────────── revisione ─────────────────────────────
 
 /** "Rev.C", "RevA", "rev 2026-M3", "_V4", "V1.0.7", "r2", "R03", "Rev_B": il pezzo dopo l'etichetta, senza l'estensione del file. */
-const RE_REVISIONE = /(?:^|[\s_\-.(\[])(?:REV(?:ISION[E]?)?|VERSION[E]?|VER|V|R)[\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}|[A-Z][0-9]?)(?=$|[\s_\-.)\]/\\])/i;
+// La lettera da sola ("Rev.C") vale solo dopo REV/VER: "RX8 PLUS" è il nome della scheda, non la revisione "X8" (Idea SL_0107, 7/11/2026).
+const RE_REVISIONE = /(?:^|[\s_\-.(\[])(?:(?:REV(?:ISION[E]?)?|VERSION[E]?|VER)[\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}|[A-Z][0-9]?)|[VR][\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}))(?=$|[\s_\-.)\]/\\])/i;
 
 /** "GA-634r2", "GA944r2": la "r" attaccata al codice, seguita da una o due cifre. */
 const RE_REVISIONE_ATTACCATA = /(?<=\d)R(\d{1,2})(?=$|[\s_\-.)\]/\\])/i;
@@ -87,7 +88,7 @@ export function revisioneDaNomi(nomi: string[]): { revisione: string; fonte: str
     for (const pezzo of pezzi) {
       const m = RE_REVISIONE.exec(pezzo) ?? RE_REVISIONE_ATTACCATA.exec(pezzo);
       if (!m) continue;
-      const rev = pulisciRevisione(m[1]).replace(/[.\-]+$/, '');
+      const rev = pulisciRevisione(m[1] ?? m[2]).replace(/[.\-]+$/, '');
       if (!rev || /^\d{4}$/.test(rev) && Number(rev) > 1990) continue;  // "V2026" è un anno, non una revisione
       return { revisione: rev, fonte: `nome "${pezzo}"` };
     }
