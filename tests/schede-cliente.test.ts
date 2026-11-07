@@ -579,3 +579,24 @@ test('BOM OrCAD con un riferimento per riga (Selea): la quantità del gruppo con
   assert.ok(!testi.some(t => t.includes('BOM riga 2: quantità 3')), testi.join(' | '));
   assert.ok(testi.some(t => t.includes('quantità 2 ma 1 riferimenti')), testi.join(' | '));
 });
+
+test('pick and place KiCad "PnP_…_front.txt" senza colonna del lato: lato dal nome (front = TOP, back = BOT)', () => {
+  const testo = 'Ref Val Package PosX PosY Rot\nC1 100n C_0402 10.0 20.0 0\nR1 10k R_0402 12.0 22.0 90\n';
+  assert.ok(leggiPickPlace('PnP_SG V07.1_front.txt', testo).posizioni.every(p => p.lato === 'TOP'));
+  assert.ok(leggiPickPlace('PnP_SG V07.1_back.txt', testo).posizioni.every(p => p.lato === 'BOT'));
+});
+
+test('valore della BOM con l\'unità staccata ("68 nF", "1 uF") uguale al pick and place "68n", "1u"', () => {
+  assert.ok(stessoComponente({ pn: '06033C683JAT2A', valore: '68 nF' }, '68n CAPACITOR_0603'));
+  assert.ok(stessoComponente({ pn: 'CL10B105KA8NNNC', valore: '1 uF' }, '1u CAPACITOR_0603'));
+  assert.ok(!stessoComponente({ pn: 'CL10B105KA8NNNC', valore: '1 uF' }, '10u CAPACITOR_0603'));
+});
+
+test('pick and place con case e impronte nel testo (SOD323, DO-214AB, …SPAZIATURA3.5MM): non sono un altro codice produttore', () => {
+  assert.ok(stessoComponente({ pn: 'MM3Z4V7T1G', valore: 'zener 4.7v' }, '4.7v SOD323'));
+  assert.ok(stessoComponente({ pn: 'EEH-AZA1H680B', valore: '68 uF' }, '68u THT_CAPACITOR_D5MM_SPAZIATURA3.5MM'));
+  assert.ok(stessoComponente({ pn: 'CRCW06038K20FKTABC', valore: '8.2 kOhm' }, '8.2K RESISTOR_0603'));
+  assert.ok(stessoComponente({ pn: 'SM104033004FE', valore: '3 MegOhm' }, '3M THT_RESISTOR_SLIM-MOX_C22.86MM'));
+  assert.ok(stessoComponente({ pn: 'MBRS4201T3G', valore: 'schottky rectifiers diode' }, ' DO-214AB'));
+  assert.ok(!stessoComponente({ pn: 'LTST-C191KRKT', valore: 'LED' }, 'LTST-S270KRKT LED_0603'));
+});

@@ -42,12 +42,12 @@ export function leggiLato(testo: string | undefined): Lato | null {
   return null;
 }
 
-/** Lato dal nome del file (Selea, file separati per lato). */
+/** Lato dal nome del file (Selea, file separati per lato; KiCad di Euroautomations "PnP_…_front" e "_back"). */
 function latoDaNome(nome: string): { lato: Lato | null; tht: boolean } {
   const n = nome.toUpperCase().replace(/\.[^.]+$/, '');
   const tht = /(^|[_\-\s.])(TH|THT|PTH)([_\-\s.]|$)/.test(n);
-  if (/(^|[_\-\s.(])(BOT|BOTTOM|BOTTOMLAYER|LATO ?B)([_\-\s.)]|$)/.test(n)) return { lato: 'BOT', tht };
-  if (/(^|[_\-\s.(])(TOP|TOPLAYER|LATO ?A)([_\-\s.)]|$)/.test(n)) return { lato: 'TOP', tht };
+  if (/(^|[_\-\s.(])(BOT|BOTTOM|BOTTOMLAYER|BACK|LATO ?B)([_\-\s.)]|$)/.test(n)) return { lato: 'BOT', tht };
+  if (/(^|[_\-\s.(])(TOP|TOPLAYER|FRONT|LATO ?A)([_\-\s.)]|$)/.test(n)) return { lato: 'TOP', tht };
   return { lato: null, tht };
 }
 
