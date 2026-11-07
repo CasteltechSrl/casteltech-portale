@@ -9,8 +9,8 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
-import { CATEGORIE_MOVIMENTO, SOGLIA_SICURA, abiCabDaIban, controlliEffetto, type RataAperta } from '../../engine/banca.js';
-import { abbinaMovimento, annullaDistinta, annullaMovimento, caricaMovimenti, codiceSia, creaDistinta, distinte, effettoDa, eliminaMovimento,
+import { CATEGORIE_MOVIMENTO, SOGLIA_SICURA, abiCabDaIban, controlliEffetto, importoDa, dataDa, nomeConto, type ContoBanca, type RataAperta } from '../../engine/banca.js';
+import { abbinaMovimento, contiBanca, contiConSaldo, fidoAnticipi, salvaConti, annullaDistinta, annullaMovimento, caricaMovimenti, codiceSia, creaDistinta, distinte, effettoDa, eliminaMovimento,
   leggiEstrattoConto, movimentiDaAbbinare, movimento, rateAperte, rateDaAnticipare, registraMovimento, salvaCodiceSia } from '../banca-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -31,34 +31,65 @@ const scritturaRate = (rate: RataAperta[]) => rate.map(r => `${r.tipo}:${r.id}`)
 const testoRata = (r: RataAperta) => html`<a href="${r.tipo === 'emessa' ? `/amministrazione/documenti/${r.documentoId}` : `/amministrazione/ricevuti/${r.documentoId}`}">
   ${r.tipo === 'emessa' ? 'Fatt.' : 'Fatt. forn.'} ${r.numero || 's.n.'}</a> del ${data(r.dataDoc)} · ${r.controparte} · scad. ${data(r.scadenza)} · ${euro(r.importo)}`;
 
+/** Conti della banca con il saldo di oggi (saldo dell'estratto conto + movimenti caricati dopo) e quanto resta dell'affidamento. */
+function sezioneConti(conti: Awaited<ReturnType<typeof contiConSaldo>>, fidoAnticipi: number | null): Raw {
+  if (!conti.length) return html``;
+  // l'affidamento per gli anticipi è uno solo per tutti i conti d'anticipo (Adriano: 100k di anticipo fatture di qualsiasi genere)
+  const anticipi = conti.filter(c => c.tipo === 'anticipo');
+  const usati = anticipi.every(c => c.saldoOggi != null) ? Math.round(anticipi.reduce((t, c) => t + (c.saldoOggi ?? 0), 0) * 100) / 100 : null;
+  return html`<h2>Conti</h2>
+    <form method="post" action="/amministrazione/banca/conti"><div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th>Conto</th><th>Nome</th><th>Tipo</th><th>Saldo dell'estratto conto al</th><th class="num">Saldo</th><th class="num">Fido / affidamento</th>
+        <th>Movimenti fino al</th><th class="num">Saldo di oggi</th><th class="num">Disponibile</th></tr></thead>
+      <tbody>${conti.map(c => html`<tr><td>${c.numero}</td>
+        <td><input name="nome_${c.numero}" value="${c.nome}" class="maiuscolo" size="22"></td>
+        <td><select name="tipo_${c.numero}"><option value="ordinario">conto corrente</option><option value="anticipo" ${c.tipo === 'anticipo' ? raw('selected') : ''}>anticipo (tecnico)</option></select></td>
+        <td><input type="date" name="saldo_data_${c.numero}" value="${c.saldoData ?? ''}"></td>
+        <td class="num"><input name="saldo_${c.numero}" value="${c.saldo != null ? String(c.saldo).replace('.', ',') : ''}" inputmode="decimal" size="10"></td>
+        <td class="num"><input name="fido_${c.numero}" value="${c.fido != null ? String(c.fido).replace('.', ',') : ''}" inputmode="decimal" size="10"></td>
+        <td>${c.ultimo ? data(c.ultimo) : ''}</td>
+        <td class="${(c.saldoOggi ?? 0) < 0 ? 'num negativo' : 'num'}">${c.saldoOggi != null ? euro(c.saldoOggi) : ''}</td>
+        <td class="num">${c.tipo === 'ordinario' && c.disponibile != null ? euro(c.disponibile) : ''}</td></tr>`)}
+      ${anticipi.length ? html`<tr><td colspan="5"><strong>Anticipi, tutti i conti d'anticipo insieme</strong></td>
+        <td class="num"><input name="fido_anticipi" value="${fidoAnticipi != null ? String(fidoAnticipi).replace('.', ',') : ''}" inputmode="decimal" size="10"></td><td></td>
+        <td class="num negativo">${usati != null ? euro(usati) : ''}</td>
+        <td class="num">${usati != null && fidoAnticipi != null ? euro(fidoAnticipi + usati) : ''}</td></tr>` : ''}</tbody></table></div>
+      <p class="nota">Saldo: scrivi il saldo finale di un estratto conto (es. al 31/12) con la sua data; il portale aggiunge i movimenti caricati dopo.
+        Sui conti d'anticipo i movimenti non si abbinano mai alle fatture (l'incasso vero arriva sul conto corrente). Disponibile = saldo + fido; per gli anticipi un solo affidamento per tutti i conti d'anticipo (riga in fondo).</p>
+      <div class="barra-azioni"><button>Salva i conti</button></div></form>`;
+}
+
 export function rotteBanca() {
   const r = Router();
 
   // ───────────── movimenti ─────────────
   r.get('/', async (req, res) => {
-    const [daAbbinare, fatti, conti] = await Promise.all([
+    const [daAbbinare, fatti, conti, elencoConti] = await Promise.all([
       movimentiDaAbbinare(),
       q<any>(`SELECT id, conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo, descrizione, stato, categoria, rate, confermato_da
         FROM banca_movimenti WHERE stato <> 'da_abbinare' ORDER BY data DESC, id DESC LIMIT 200`),
       q<{ conto: string; quanti: number; dal: string; al: string }>(`SELECT conto, count(*)::int AS quanti, to_char(min(data), 'YYYY-MM-DD') AS dal, to_char(max(data), 'YYYY-MM-DD') AS al
         FROM banca_movimenti GROUP BY conto ORDER BY conto`),
+      contiConSaldo(),
     ]);
+    const nome = (n: string) => nomeConto(n, elencoConti);
     const sicuri = daAbbinare.filter(x => (x.proposta?.punteggio ?? 0) >= SOGLIA_SICURA).length;
     res.send(pagina(req, 'Banca', html`
       <div class="intestazione-pagina"><h1>Banca</h1></div>
       ${menuAmministrazione('banca')}${tasti('movimenti')}
       <details class="blocco" ${conti.length ? '' : raw('open')}><summary><strong>Carica l'estratto conto</strong>
-        ${conti.map(c => html` · ${c.conto}: ${c.quanti} movimenti dal ${data(c.dal)} al ${data(c.al)}`)}</summary>
-        <p class="nota">Da BPER Banking Business scarica i movimenti del conto in formato <strong>CBI</strong> (consigliato) oppure Excel (.xlsx) o CSV, e caricali qui.
-          Puoi ricaricare anche un periodo che si sovrappone: i movimenti già caricati non si ripetono.</p>
+        ${conti.map(c => html` · ${nome(c.conto)}: ${c.quanti} movimenti dal ${data(c.dal)} al ${data(c.al)}`)}</summary>
+        <p class="nota">Da BPER Banking Business: Rapporti CBI → <strong>Tutti i movimenti</strong> → esporta in <strong>CSV</strong> (tutti i conti insieme: il portale
+          li divide da solo con la colonna Rapporto), oppure il file CBI o Excel di un conto. Puoi ricaricare anche un periodo che si sovrappone: i movimenti già caricati non si ripetono.</p>
         <div class="riga-campi">
-          <label class="stretto">Conto <input id="conto-banca" value="BPER" class="maiuscolo"></label>
+          <label class="stretto">Conto (se il file non lo dice) <input id="conto-banca" value="BPER" class="maiuscolo"></label>
           <label class="largo">File <input type="file" id="file-acquisizioni" multiple accept=".txt,.cbi,.csv,.xlsx,.dat"></label>
         </div>
         <div class="barra-azioni"><button type="button" class="primario" id="avvia-acquisizioni" data-url="/amministrazione/banca/carica">Carica</button>
           <span id="esito-acquisizioni" class="nota"></span></div>
       </details>
 
+      ${sezioneConti(elencoConti, await fidoAnticipi())}
       <h2>Da abbinare (${daAbbinare.length})</h2>
       ${daAbbinare.length ? html`
         <p class="nota">Entrate → fatture emesse da incassare, uscite → fatture dei fornitori da pagare. Il portale cerca lo stesso importo, poi il numero della fattura
@@ -67,10 +98,10 @@ export function rotteBanca() {
         <form method="post" action="/amministrazione/banca/conferma">
           <div class="barra-azioni"><button class="primario">Conferma le righe spuntate</button></div>
           <div class="tabella-scorre limitata"><table class="elenco">
-            <thead><tr><th data-non-ordinare></th><th>Data</th><th class="num">Importo</th><th>Descrizione</th><th>Proposta</th><th></th></tr></thead>
+            <thead><tr><th data-non-ordinare></th><th>Data</th><th>Conto</th><th class="num">Importo</th><th>Descrizione</th><th>Proposta</th><th></th></tr></thead>
             <tbody>${daAbbinare.map(({ m, proposta, categoria }) => html`<tr class="${proposta && proposta.punteggio >= SOGLIA_SICURA ? '' : 'da-controllare'}">
               <td><input type="checkbox" name="ok" value="${m.id}" ${proposta && proposta.punteggio >= SOGLIA_SICURA ? raw('checked') : ''}></td>
-              <td>${data(m.data)}</td><td class="${importoClasse(m.importo)}">${euro(m.importo)}</td>
+              <td>${data(m.data)}</td><td>${nome(m.conto)}</td><td class="${importoClasse(m.importo)}">${euro(m.importo)}</td>
               <td><span class="nota taglia" title="${m.descrizione}">${m.descrizione}</span></td>
               <td>${proposta ? html`<input type="hidden" name="rate_${m.id}" value="${scritturaRate(proposta.rate)}">
                   ${proposta.rate.map(x => html`<div>${testoRata(x)}</div>`)}<div class="nota">${proposta.motivo}</div>`
@@ -81,8 +112,8 @@ export function rotteBanca() {
 
       <h2>Già abbinati e registrati</h2>
       ${fatti.length ? html`<div class="tabella-scorre limitata"><table class="elenco">
-        <thead><tr><th>Data</th><th class="num">Importo</th><th>Descrizione</th><th>Categoria</th><th>Fatture</th><th>Da</th><th></th></tr></thead>
-        <tbody>${fatti.map(m => html`<tr><td>${data(m.data)}</td><td class="${importoClasse(m.importo)}">${euro(m.importo)}</td>
+        <thead><tr><th>Data</th><th>Conto</th><th class="num">Importo</th><th>Descrizione</th><th>Categoria</th><th>Fatture</th><th>Da</th><th></th></tr></thead>
+        <tbody>${fatti.map(m => html`<tr><td>${data(m.data)}</td><td>${nome(m.conto)}</td><td class="${importoClasse(m.importo)}">${euro(m.importo)}</td>
           <td><span class="nota taglia" title="${m.descrizione}">${m.descrizione}</span></td><td>${m.categoria ?? ''}</td><td>${(m.rate ?? []).length || ''}</td>
           <td>${m.confermato_da ?? ''}</td>
           <td><form method="post" action="/amministrazione/banca/movimento/${m.id}/annulla" class="inline"
@@ -100,6 +131,18 @@ export function rotteBanca() {
     if (!letti.movimenti.length) return res.status(400).json({ errore: `nessun movimento trovato nel file (${letti.formato})` });
     const { nuovi, gia } = await caricaMovimenti(letti.movimenti, conto, nome);
     res.json({ stato: `${letti.formato}: ${nuovi} movimenti nuovi${gia ? `, ${gia} già caricati` : ''}` });
+  });
+
+  r.post('/conti', async (req, res) => {
+    const vecchi = await contiBanca();
+    const b = req.body ?? {};
+    const conti: ContoBanca[] = vecchi.map(c => {
+      const v = (k: string) => String(b[`${k}_${c.numero}`] ?? '').trim();
+      return { numero: c.numero, nome: v('nome').toUpperCase() || c.nome, tipo: v('tipo') === 'anticipo' ? 'anticipo' : 'ordinario',
+        saldoData: dataDa(v('saldo_data')), saldo: importoDa(v('saldo')), fido: importoDa(v('fido')) };
+    });
+    await salvaConti(conti, importoDa(String(b.fido_anticipi ?? '')));
+    res.redirect(vaiA('', 'Conti salvati.'));
   });
 
   r.post('/conferma', async (req, res) => {

@@ -811,4 +811,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    stesso importo + numero fattura (`citaNumero`) + nome (`somiglianzaNome`) + data; più rate dello stesso cliente; distinta RiBa intera; ≥ `SOGLIA_SICURA` = già spuntata.
    Conferma = rate pagate alla data del movimento con modo e conto; senza fattura = `CATEGORIE_MOVIMENTO` (`categoriaProposta`); "Annulla" riapre. RiBa: `/amministrazione/banca/anticipi`,
    file CBI (`generaRiba`: IB/14/20/30/40/50/51/70/EF, 120 caratteri) con codice SIA (impostazioni 'banca') e IBAN del cliente in `banca_appoggio`; Excel per l'anticipo con bonifico.
-   ⬜ Provare con un estratto conto vero di BPER (formato CBI/Excel da confermare); poi open banking PSD2 (servizio da scegliere).
+   Conti veri (Adriano 7/11/2026): CSV BPER "Tutti i movimenti" (`Societa';Banca;Rapporto;Contabile;Valuta;Cau.;Descrizione;Importo;Div.`) con tutti i rapporti insieme →
+   `Movimento.rapporto` (`numeroConto`), `banca_movimenti.conto` = numero del rapporto; conti in impostazioni 'banca' (`conti`: nome, tipo ordinario/anticipo, saldo a una data, fido;
+   `fidoAnticipi` unico per i conti tecnici), riquadro Conti con saldo di oggi (`saldoConto`) e disponibile; conto nuovo nel file = aggiunto da solo (`contoNuovo`).
+   Anticipi/rientri (`MAI_FATTURA`) e conti di anticipo (`contoTecnico`) mai abbinati a fatture; giroconto = solo distinta intera. API: GET/POST `/api/claude/banca[/conti|/movimenti]`.
+   Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). ⬜ Poi open banking PSD2 (servizio da scegliere).

@@ -19,7 +19,8 @@ export interface Movimento {
   valuta: string | null;   // data valuta
   importo: number;         // + entrata, − uscita
   descrizione: string;
-  causale: string | null;  // causale ABI/CBI (2 caratteri) se il file la dà
+  causale: string | null;  // causale ABI/CBI (2 caratteri) o causale interna della banca (BPER: 4 caratteri) se il file la dà
+  rapporto?: string | null; // conto del movimento quando il file ne ha più d'uno (CSV di BPER: colonna Rapporto = IBAN)
 }
 
 const pulisci = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -102,7 +103,8 @@ export function movimentiDaTabella(righe: string[][], italiano = true): { movime
   for (let i = 0; i < Math.min(righe.length, 40); i++) {
     const intest = (righe[i] ?? []).map(norm);
     const cData = (() => {
-      const preferita = trova(intest, /^data\b.*(contab|operaz|registr|movim)|^data$/, /valuta/);
+      // BPER "Tutti i movimenti" → CSV: colonne Contabile e Valuta (Adriano 7/11/2026)
+      const preferita = trova(intest, /^data\b.*(contab|operaz|registr|movim)|^data$|^contabile$/, /valuta/);
       return preferita >= 0 ? preferita : trova(intest, /^data|^date$/, /valuta/);
     })();
     if (cData < 0) continue;
@@ -111,7 +113,9 @@ export function movimentiDaTabella(righe: string[][], italiano = true): { movime
     const cDare = trova(intest, /dare|addebit|uscit|^debit/);
     const cAvere = trova(intest, /avere|accredit|entrat|^credit/);
     const cSegno = trova(intest, /^segno$|^d\/c$|^dare\/avere$/);
-    const cDescr = intest.map((h, k) => (/descriz|causale|dettagli|operazione|beneficiario|ordinante|riferiment/.test(h) && k !== cData && k !== cValuta ? k : -1)).filter(k => k >= 0);
+    const cCausale = trova(intest, /^cau(\.|s\.?)?$|^causale abi$|^cod(ice)?\.? ?causale/);
+    const cRapporto = trova(intest, /^rapporto$|^iban$|^conto$|^conto corrente$|^numero conto$/);
+    const cDescr = intest.map((h, k) => (/descriz|causale|dettagli|operazione|beneficiario|ordinante|riferiment/.test(h) && k !== cData && k !== cValuta && k !== cCausale ? k : -1)).filter(k => k >= 0);
     if (cImporto < 0 && (cDare < 0 || cAvere < 0)) continue;
     const movimenti: Movimento[] = [];
     for (const r of righe.slice(i + 1)) {
@@ -129,7 +133,8 @@ export function movimentiDaTabella(righe: string[][], italiano = true): { movime
       }
       if (importo == null || importo === 0) continue;
       movimenti.push({ data, valuta: cValuta >= 0 ? dataDa(r[cValuta]) : null, importo,
-        descrizione: pulisci(cDescr.map(k => r[k]).filter(v => pulisci(v)).join(' · ')), causale: null });
+        descrizione: pulisci(cDescr.map(k => r[k]).filter(v => pulisci(v)).join(' · ')), causale: cCausale >= 0 ? pulisci(r[cCausale]) || null : null,
+        ...(cRapporto >= 0 && pulisci(r[cRapporto]) ? { rapporto: numeroConto(r[cRapporto]) } : {}) });
     }
     return { movimenti };
   }
@@ -143,11 +148,42 @@ export function movimentiDaTabella(righe: string[][], italiano = true): { movime
 export function chiaviMovimenti(movimenti: Movimento[], conto: string): string[] {
   const visti = new Map<string, number>();
   return movimenti.map(m => {
-    const base = `${conto.toUpperCase()}|${m.data}|${m.importo.toFixed(2)}|${norm(m.descrizione).replace(/[^a-z0-9]/g, '').slice(0, 60)}`;
+    const base = `${(m.rapporto ?? conto).toUpperCase()}|${m.data}|${m.importo.toFixed(2)}|${norm(m.descrizione).replace(/[^a-z0-9]/g, '').slice(0, 60)}`;
     const n = visti.get(base) ?? 0;
     visti.set(base, n + 1);
     return `${base}|${n}`;
   });
+}
+
+// ───────────────────────────── conti ─────────────────────────────
+
+/** Numero del conto senza zeri davanti: da IBAN ("IT37B0538765310000003092938" → "3092938") o da numero ("000003092938"). */
+export function numeroConto(v: unknown): string {
+  const s = String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
+  const iban = s.match(/^IT\d{2}[A-Z]\d{10}([A-Z0-9]{12})$/);
+  return (iban ? iban[1] : s).replace(/^0+(?=.)/, '');
+}
+
+/**
+ * Conti della banca (impostazioni 'banca'.conti): nome, tipo (ordinario = c/c dove passano incassi e pagamenti; anticipo = conto tecnico
+ * dell'anticipo fatture/RiBa), saldo di riferimento a una data (dall'estratto conto) e affidamento. Saldo di oggi = riferimento + movimenti dopo quella data.
+ */
+export interface ContoBanca { numero: string; nome: string; tipo: 'ordinario' | 'anticipo'; saldoData: string | null; saldo: number | null; fido: number | null }
+
+export function nomeConto(numero: string, conti: ContoBanca[]): string {
+  return conti.find(c => c.numero === numero)?.nome ?? numero;
+}
+
+/** Conto nuovo visto in un file: ordinario se è l'IBAN dell'azienda, altrimenti conto tecnico d'anticipo. */
+export function contoNuovo(numero: string, ibanAzienda: string): ContoBanca {
+  const ordinario = !!ibanAzienda && numeroConto(ibanAzienda) === numero;
+  return { numero, nome: ordinario ? `BPER c/c ${numero}` : `BPER anticipo ${numero}`, tipo: ordinario ? 'ordinario' : 'anticipo', saldoData: null, saldo: null, fido: null };
+}
+
+/** Saldo di oggi del conto: saldo di riferimento + movimenti con data successiva. Null senza riferimento. */
+export function saldoConto(c: ContoBanca, movimenti: { data: string; importo: number }[]): number | null {
+  if (c.saldo == null || !c.saldoData) return null;
+  return Math.round((c.saldo + movimenti.filter(m => m.data > c.saldoData!).reduce((s, m) => s + m.importo, 0)) * 100) / 100;
 }
 
 // ───────────────────────────── abbinamento ─────────────────────────────
@@ -226,6 +262,13 @@ function sommaEsatta(rate: RataAperta[], totale: number): RataAperta[] | null {
   return migliore ? (migliore as number[]).map(i => elenco[i]) : null;
 }
 
+/**
+ * Movimenti che non sono mai l'incasso o il pagamento di una fattura, anche se l'importo torna: l'anticipo della banca
+ * ("ANTICIPO SU DOCUMENTI FT 45" = proprio l'importo della fattura 45), il rientro dell'anticipo, competenze, bolli, commissioni.
+ * L'incasso vero è il bonifico del cliente ("BONIFICO o/c: SELEA ... FT 53").
+ */
+export const MAI_FATTURA = /anticipo su documenti|rientro anticipo|^competenze|giroconto competenze|imposta di bollo|^commissioni|interessi a debito/;
+
 /** Soglia da cui la proposta è "sicura" (spuntata già nella pagina). */
 export const SOGLIA_SICURA = 75;
 
@@ -234,7 +277,10 @@ export const SOGLIA_SICURA = 75;
  * 1) distinta RiBa intera con lo stesso totale; 2) una rata con lo stesso importo (la migliore per numero, nome, data);
  * 3) più rate della stessa controparte (citata nella descrizione) che fanno l'importo. Null se nessuna rata torna con l'importo.
  */
-export function proponiAbbinamento(m: Movimento, rate: RataAperta[]): Proposta | null {
+export function proponiAbbinamento(m: Movimento, rate: RataAperta[], opz: { contoTecnico?: boolean } = {}): Proposta | null {
+  // conti tecnici (anticipo RiBa / Italia / estero) e movimenti della banca: mai una fattura (Adriano 7/11/2026)
+  if (opz.contoTecnico || MAI_FATTURA.test(norm(m.descrizione))) return null;
+  const soloDistinta = /^giroconto/.test(norm(m.descrizione));
   const tipo = m.importo > 0 ? 'emessa' : 'ricevuta';
   const importo = Math.abs(m.importo);
   const candidate = rate.filter(r => r.tipo === tipo && r.importo > 0);
@@ -247,6 +293,7 @@ export function proponiAbbinamento(m: Movimento, rate: RataAperta[]): Proposta |
         return { rate: gruppo, punteggio: /riba|ri\.ba|effett|sbf|s\.b\.f|portafoglio/i.test(m.descrizione) ? 95 : 85, motivo: `totale della distinta RiBa n. ${id}` };
     }
   }
+  if (soloDistinta) return null;   // giroconto dal conto anticipo RiBa: solo una distinta intera
   // 2) una rata con lo stesso importo
   const stesse = candidate.filter(r => ugualeAlCentesimo(r.importo, importo))
     .map(r => ({ r, ...punteggioRata(m, r) })).sort((a, b) => b.punti - a.punti || a.r.scadenza.localeCompare(b.r.scadenza));
@@ -276,18 +323,21 @@ export function proponiAbbinamento(m: Movimento, rate: RataAperta[]): Proposta |
 // ───────────────────────────── categorie dei movimenti senza fattura ─────────────────────────────
 
 export const CATEGORIE_MOVIMENTO = ['Incasso fattura', 'Pagamento fattura', 'Commissioni e spese bancarie', 'Interessi', 'Imposte e contributi (F24)',
-  'Stipendi', 'Carta / POS', 'Leasing e noleggi', 'Finanziamenti e mutui', 'Anticipo fatture / RiBa', 'Giroconto', 'Utenze', 'Assicurazioni',
+  'Stipendi', 'Carta / POS', 'Pedaggi e carburante', 'Leasing e noleggi', 'Finanziamenti e mutui', 'Anticipo fatture / RiBa', 'Giroconto', 'Utenze', 'Assicurazioni',
   'Altre entrate', 'Altre uscite'] as const;
 
+// in ordine: vince la prima regola (provate sui movimenti BPER 2026: "GIROCONTO COMPETENZE SPESE ED ONERI" è un giroconto,
+// "RIENTRO ANTICIPO/FINANZIAMENTO" è anticipo, "COMPETENZE ... INTERESSI A DEBITO" sono interessi)
 const REGOLE_CATEGORIA: [RegExp, string][] = [
+  [/giroconto|giro conto|trasferimento tra/, 'Giroconto'],
+  [/anticipo su documenti|rientro anticipo|anticipo fatt|\bsbf\b|s\.b\.f|presentazione effett|ri\.?ba\b|effetti/, 'Anticipo fatture / RiBa'],
+  [/mutuo|finanziament|rata prest|prestito/, 'Finanziamenti e mutui'],
   [/\bf24\b|delega|agenzia.?entrate|\binps\b|\binail\b|tribut/, 'Imposte e contributi (F24)'],
   [/stipend|emolument|retribuz|\bpaghe\b|cedolin/, 'Stipendi'],
   [/interess/, 'Interessi'],
   [/commission|spese|canone|imposta di bollo|\bbollo\b|competenze|oneri/, 'Commissioni e spese bancarie'],
+  [/viacard|telepass|autostrad|carburant|benzina|gasolio/, 'Pedaggi e carburante'],
   [/leasing|noleggio|locazione finanz/, 'Leasing e noleggi'],
-  [/mutuo|finanziament|rata prest|prestito/, 'Finanziamenti e mutui'],
-  [/anticip|\bsbf\b|s\.b\.f|presentazione effett|distinta|ri\.?ba/, 'Anticipo fatture / RiBa'],
-  [/giroconto|giro conto|trasferimento tra/, 'Giroconto'],
   [/\bpos\b|carta|bancomat|pagobancomat|visa|mastercard/, 'Carta / POS'],
   [/enel|\bhera\b|\biren\b|\ba2a\b|\bgas\b|energia|telecom|\btim\b|vodafone|fastweb|wind|acqua/, 'Utenze'],
   [/assicuraz|polizza|unipol|generali|allianz|\baxa\b/, 'Assicurazioni'],

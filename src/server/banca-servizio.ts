@@ -4,7 +4,7 @@
 import { q, q1, transazione } from './db.js';
 import { leggiFileBom } from './codifica-servizio.js';
 import { testoDaFile } from '../engine/componenti-clienti.js';
-import { abiCabDaIban, chiaviMovimenti, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
+import { abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
   categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
 const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.numero IS NOT NULL`;
@@ -26,13 +26,56 @@ export async function leggiEstrattoConto(nome: string, dati: Buffer): Promise<{ 
   catch (e) { return { movimenti: [], formato: 'Excel', errore: `File Excel non leggibile: ${(e as Error).message}` }; }
 }
 
-/** Scrive i movimenti nuovi (quelli già caricati hanno la stessa chiave e si saltano). */
+async function impostazioniBanca(): Promise<{ sia?: string; conti?: ContoBanca[] }> {
+  return (await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'banca'`))?.valore ?? {};
+}
+async function salvaImpostazioniBanca(parte: Record<string, unknown>): Promise<void> {
+  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('banca', $1::jsonb)
+    ON CONFLICT (chiave) DO UPDATE SET valore = impostazioni.valore || $1::jsonb, aggiornato_il = now()`, [JSON.stringify(parte)]);
+}
+const ibanAzienda = async () => String((await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore?.iban ?? '');
+
+/** Conti della banca (nome, tipo, saldo di riferimento, fido). */
+export async function contiBanca(): Promise<ContoBanca[]> {
+  return (await impostazioniBanca()).conti ?? [];
+}
+export async function salvaConti(conti: ContoBanca[], fidoAnticipi?: number | null): Promise<void> {
+  await salvaImpostazioniBanca(fidoAnticipi === undefined ? { conti } : { conti, fidoAnticipi });
+}
+/** Affidamento per gli anticipi fatture (uno per tutti i conti d'anticipo). */
+export async function fidoAnticipi(): Promise<number | null> {
+  const v = (await impostazioniBanca() as any).fidoAnticipi;
+  return typeof v === 'number' ? v : null;
+}
+
+/** Conti con il saldo di oggi (riferimento + movimenti caricati dopo) e l'ultimo movimento caricato. */
+export async function contiConSaldo() {
+  const [conti, mov] = await Promise.all([contiBanca(),
+    q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo FROM banca_movimenti`)]);
+  return conti.map(c => {
+    const suoi = mov.filter(m => m.conto === c.numero);
+    const saldo = saldoConto(c, suoi);
+    return { ...c, movimenti: suoi.length, ultimo: suoi.reduce((u, m) => (m.data > u ? m.data : u), ''), saldoOggi: saldo,
+      disponibile: saldo != null && c.fido != null ? Math.round((saldo + c.fido) * 100) / 100 : null };
+  });
+}
+
+/**
+ * Scrive i movimenti nuovi (quelli già caricati hanno la stessa chiave e si saltano). Conto del movimento = numero del conto dal file
+ * (CSV di BPER con più conti) oppure quello scelto nella pagina; "BPER" o vuoto = il conto dell'IBAN dell'azienda. I conti nuovi entrano nell'elenco dei conti.
+ */
 export async function caricaMovimenti(movimenti: Movimento[], conto: string, file: string): Promise<{ nuovi: number; gia: number }> {
-  const chiavi = chiaviMovimenti(movimenti, conto);
+  const iban = await ibanAzienda();
+  const scelto = !conto || conto.toUpperCase() === 'BPER' ? numeroConto(iban) || 'BPER' : numeroConto(conto);
+  const conMov = movimenti.map(m => ({ ...m, rapporto: m.rapporto ?? scelto }));
+  const chiavi = chiaviMovimenti(conMov, scelto);
   const inseriti = await q<{ id: number }>(`INSERT INTO banca_movimenti (conto, data, valuta, importo, descrizione, causale, chiave, file)
-    SELECT $1, m.data, m.valuta, m.importo, m.descrizione, m.causale, m.chiave, $2
-    FROM jsonb_to_recordset($3::jsonb) AS m(data date, valuta date, importo numeric, descrizione text, causale text, chiave text)
-    ON CONFLICT (chiave) DO NOTHING RETURNING id`, [conto, file, JSON.stringify(movimenti.map((m, i) => ({ ...m, chiave: chiavi[i] })))]);
+    SELECT m.rapporto, m.data, m.valuta, m.importo, m.descrizione, m.causale, m.chiave, $1
+    FROM jsonb_to_recordset($2::jsonb) AS m(rapporto text, data date, valuta date, importo numeric, descrizione text, causale text, chiave text)
+    ON CONFLICT (chiave) DO NOTHING RETURNING id`, [file, JSON.stringify(conMov.map((m, i) => ({ ...m, chiave: chiavi[i] })))]);
+  const conti = await contiBanca();
+  const nuovi = [...new Set(conMov.map(m => m.rapporto!))].filter(n => !conti.some(c => c.numero === n));
+  if (nuovi.length) await salvaConti([...conti, ...nuovi.map(n => contoNuovo(n, iban))]);
   return { nuovi: inseriti.length, gia: movimenti.length - inseriti.length };
 }
 
@@ -70,8 +113,9 @@ export async function movimento(id: number): Promise<MovimentoDb | null> {
 
 /** Movimenti da abbinare con la proposta (rate) o la categoria proposta. Ogni rata è proposta a un solo movimento (il più sicuro). */
 export async function movimentiDaAbbinare(): Promise<{ m: MovimentoDb; proposta: Proposta | null; categoria: string }[]> {
-  const [movimenti, rate] = await Promise.all([q<MovimentoDb>(`${SELECT_MOV} WHERE stato = 'da_abbinare' ORDER BY data, id`), rateAperte()]);
-  const proposte = movimenti.map(m => ({ m, proposta: proponiAbbinamento(m, rate) }));
+  const [movimenti, rate, conti] = await Promise.all([q<MovimentoDb>(`${SELECT_MOV} WHERE stato = 'da_abbinare' ORDER BY data, id`), rateAperte(), contiBanca()]);
+  const tecnici = new Set(conti.filter(c => c.tipo === 'anticipo').map(c => c.numero));
+  const proposte = movimenti.map(m => ({ m, proposta: proponiAbbinamento(m, rate, { contoTecnico: tecnici.has(m.conto) }) }));
   // la stessa rata non va a due movimenti: tiene il punteggio più alto
   const usate = new Map<string, number>();
   for (const [i, p] of proposte.entries()) for (const r of p.proposta?.rate ?? []) {
@@ -105,9 +149,10 @@ export async function abbinaMovimento(id: number, scelte: { tipo: 'emessa' | 'ri
   const somma = aperte.reduce((s, r) => s + r.importo, 0);
   if (!forza && Math.abs(somma - Math.abs(m.importo)) >= 0.005) return `Le rate scelte fanno ${somma.toFixed(2)} €, il movimento ${Math.abs(m.importo).toFixed(2)} €.`;
   const modo = modoDi(m, aperte.some(r => r.riba || r.distintaId));
+  const conto = nomeConto(m.conto, await contiBanca());
   await transazione(async c => {
     const tabella = tipo === 'emessa' ? 'documenti_scadenze' : 'documenti_ricevuti_scadenze';
-    await c.query(`UPDATE ${tabella} SET pagata_il = $2, modo = $3, conto = $4 WHERE id = ANY($1) AND pagata_il IS NULL`, [ids, m.data, modo, m.conto]);
+    await c.query(`UPDATE ${tabella} SET pagata_il = $2, modo = $3, conto = $4 WHERE id = ANY($1) AND pagata_il IS NULL`, [ids, m.data, modo, conto]);
     await c.query(`UPDATE banca_movimenti SET stato = 'abbinato', categoria = $2, rate = $3, confermato_il = now(), confermato_da = $4 WHERE id = $1`,
       [id, tipo === 'emessa' ? 'Incasso fattura' : 'Pagamento fattura', JSON.stringify(scelte), utente]);
   });
@@ -141,13 +186,11 @@ export async function eliminaMovimento(id: number): Promise<boolean> {
 // ───────────────────────────── RiBa ─────────────────────────────
 
 export async function codiceSia(): Promise<string> {
-  return String((await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'banca'`))?.valore?.sia ?? '');
+  return String((await impostazioniBanca()).sia ?? '');
 }
 
 export async function salvaCodiceSia(sia: string): Promise<void> {
-  const v = sia.toUpperCase().replace(/\s/g, '').slice(0, 5);
-  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('banca', jsonb_build_object('sia', $1::text))
-    ON CONFLICT (chiave) DO UPDATE SET valore = impostazioni.valore || jsonb_build_object('sia', $1::text), aggiornato_il = now()`, [v]);
+  await salvaImpostazioniBanca({ sia: sia.toUpperCase().replace(/\s/g, '').slice(0, 5) });
 }
 
 export interface RataAnticipo {

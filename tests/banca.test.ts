@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abiCabDaIban, categoriaProposta, chiaviMovimenti, citaNumero, controlliCreditore, controlliEffetto, dataDa, generaRiba, ibanValido, importoDa,
+import { abiCabDaIban, categoriaProposta, chiaviMovimenti, contoNuovo, numeroConto, saldoConto, citaNumero, controlliCreditore, controlliEffetto, dataDa, generaRiba, ibanValido, importoDa,
   leggiCbi, movimentiDaTabella, proponiAbbinamento, SOGLIA_SICURA, type Movimento, type RataAperta } from '../src/engine/banca.js';
 import { cercaGuida } from '../src/engine/guida.js';
 import { MENU_GRUPPI } from '../src/server/views/layout.js';
@@ -164,4 +164,53 @@ test('banca: nel menu Amministrazione e nella guida', () => {
   assert.ok(voci.includes('/amministrazione/banca/anticipi'));
   assert.ok(cercaGuida('estratto conto banca').length > 0);
   assert.ok(cercaGuida('riba file cbi').length > 0);
+});
+
+test('banca: CSV "Tutti i movimenti" di BPER con più conti (colonna Rapporto) e causale interna', () => {
+  const righe = [
+    ["Societa'", 'Banca', 'Rapporto', 'Contabile', 'Valuta', 'Cau.', 'Descrizione', 'Importo', 'Div.'],
+    ['AAAAA', 'BPER', 'IT37B0538765310000003092938', '04/06/2026', '04/06/2026', '4848', 'BONIFICO o/c: ALFA S.R.L. ABI-CAB: 01234-56789 A FAVORE DI CASTELTECH PAG. FATT. 28 DEL 27 03 2026', '2.007,00', 'EUR'],
+    ['AAAAA', 'BPER', 'IT16W0538765310000003106080', '04/11/2026', '04/11/2026', '4754', 'ANTICIPO SU DOCUMENTI FT. 108 + 98 ', '-10.732,80', 'EUR'],
+  ];
+  const { movimenti } = movimentiDaTabella(righe);
+  assert.equal(movimenti.length, 2);
+  assert.deepEqual(movimenti.map(m => [m.data, m.rapporto, m.causale, m.importo]),
+    [['2026-06-04', '3092938', '4848', 2007], ['2026-11-04', '3106080', '4754', -10732.8]]);
+  assert.ok(!movimenti[0].descrizione.includes('4848'));
+  // stesso movimento su due conti = due chiavi diverse
+  const k = chiaviMovimenti([{ ...movimenti[0] }, { ...movimenti[0], rapporto: '3106080' }], 'BPER');
+  assert.notEqual(k[0], k[1]);
+});
+
+test('banca: anticipo e rientro della banca non sono mai l\'incasso della fattura, i conti d\'anticipo nemmeno', () => {
+  const rate = [rata({ id: 45, numero: '45', importo: 12155.64, controparte: 'CABLESTEEL SRL' })];
+  assert.equal(proponiAbbinamento(mov(12155.64, 'ANTICIPO SU DOCUMENTI ANTICIPO SU FATTURA 45'), rate), null);
+  assert.equal(proponiAbbinamento(mov(12155.64, 'RIENTRO ANTICIPO/FINANZIAMENTO CABLESTEEL SRL N 45/2026'), rate), null);
+  assert.equal(proponiAbbinamento(mov(12155.64, 'BONIFICO CABLESTEEL'), rate, { contoTecnico: true }), null);
+  assert.deepEqual(proponiAbbinamento(mov(12155.64, 'BONIFICO o/c: CABLESTEEL SRL DOC. N. 45 DEL 30/04/2026'), rate)!.rate.map(r => r.id), [45]);
+  // giroconto dal conto anticipo RiBa: solo una distinta intera
+  assert.equal(proponiAbbinamento(mov(12155.64, 'GIROCONTO GIROCONTO DAL FIL. 00258 /CONTO 000003106071'), rate), null);
+});
+
+test('banca: categorie sui movimenti tipici di BPER', () => {
+  const c = (d: string, i = -10) => categoriaProposta({ descrizione: d, importo: i });
+  assert.equal(c('GIROCONTO COMPETENZE COMPETENZE SPESE ED ONERI - AL C/C 0258/03092938', 100), 'Giroconto');
+  assert.equal(c('RIENTRO ANTICIPO/FINANZIAMENTO FT 98 + 108'), 'Anticipo fatture / RiBa');
+  assert.equal(c('RATA PRESTITO Fin. 005/1 Scadenza del 28/03/2026 Quota capitale 1.414,27 Interessi 17,18'), 'Finanziamenti e mutui');
+  assert.equal(c('COMPETENZE DARE AUTORIZZATE IN C/C INTERESSI A DEBITO AL 31/12/2025'), 'Interessi');
+  assert.equal(c('COMPETENZE SPESE ED ONERI'), 'Commissioni e spese bancarie');
+  assert.equal(c('IMPOSTA DI BOLLO BOLLI DA OTTOBRE A DICEMBRE'), 'Commissioni e spese bancarie');
+  assert.equal(c('VIACARD ADD. VIACARD - Utente: 1'), 'Pedaggi e carburante');
+  assert.equal(c('PAGAM. DELEGA F24 AGENZIA ENTRATE'), 'Imposte e contributi (F24)');
+  assert.equal(c('DISPOSIZIONE EMOLUMENTI EUR 1.500,00'), 'Stipendi');
+});
+
+test('banca: numero del conto, conti nuovi e saldo di oggi', () => {
+  assert.equal(numeroConto('IT37B0538765310000003092938'), '3092938');
+  assert.equal(numeroConto('000003106071'), '3106071');
+  assert.equal(contoNuovo('3092938', 'IT37B0538765310000003092938').tipo, 'ordinario');
+  assert.equal(contoNuovo('3106071', 'IT37B0538765310000003092938').tipo, 'anticipo');
+  const conto = { ...contoNuovo('3092938', ''), saldoData: '2025-12-31', saldo: 100, fido: 10000 };
+  assert.equal(saldoConto(conto, [{ data: '2025-12-31', importo: 5 }, { data: '2026-01-02', importo: -150.5 }]), -50.5);
+  assert.equal(saldoConto({ ...conto, saldo: null }, []), null);
 });
