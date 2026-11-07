@@ -570,3 +570,12 @@ test('pasta saldante dai Gerber: aree delle aperture × lamina × densità (Adri
   assert.equal(s.grammi, Math.round((50 + Math.PI) * 0.12 * 4.2 / 1000 * 1000) / 1000);
   assert.equal(stimaPastaDaGerber({}), null);
 });
+
+test('BOM OrCAD con un riferimento per riga (Selea): la quantità del gruppo conta tutte le righe sotto senza quantità', () => {
+  const bom = leggiBomScheda([['Item', 'Qty', 'Ref', 'Part', 'Footprint'],
+    ['1', '3', 'C1', '100nF', '0402_CC'], ['', '', 'C2', '100nF', '0402_CC'], ['', '', 'C3', '100nF', '0402_CC'],
+    ['2', '2', 'R1', '10K', '0402_RC']]);
+  const testi = analizzaScheda({ bom: { nome: 'bom.xlsx', righe: bom.righe } }).segnalazioni.map(s => s.testo);
+  assert.ok(!testi.some(t => t.includes('BOM riga 2: quantità 3')), testi.join(' | '));
+  assert.ok(testi.some(t => t.includes('quantità 2 ma 1 riferimenti')), testi.join(' | '));
+});
