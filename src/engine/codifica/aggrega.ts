@@ -83,15 +83,27 @@ export const righeOriginali = (r: Pick<RigaDaUnire, 'n' | 'righeUnite'>) => [r.n
 
 export interface RigaPerAlternativa {
   esito: string; clienteFornisce?: boolean; pn: string | null; mpnAcquisto?: string | null; prezzoManuale?: number | null;
-  alternativaScelta?: string | null; reperibilita?: { livello: string };
-  acquisti: { scelta?: { disponibile: boolean } }[];
+  alternativaScelta?: string | null; reperibilita?: { livello: string }; famiglia?: string | null;
+  acquisti: { scelta?: { disponibile: boolean; acquisto?: { prezzo: number } } }[];
 }
 
-/** La riga ha bisogno di un'alternativa? Componente da comprare senza prezzo, non disponibile o introvabile (critico). */
+/**
+ * Passivi già prezzati (Adriano 7/11/2026): si tiene il prezzo trovato, salvo che sia sotto 0,001 € a componente
+ * (prezzo sospetto): allora si cercano le alternative come per i senza prezzo.
+ */
+export const PREZZO_MINIMO_PASSIVO = 0.001;
+
+/** Passivo con un prezzo a componente sotto `PREZZO_MINIMO_PASSIVO`. */
+export function passivoPrezzoSospetto(r: Pick<RigaPerAlternativa, 'famiglia' | 'acquisti'>): boolean {
+  if (tipoComponente(r.famiglia) !== 'passivo') return false;
+  return r.acquisti.some(x => x.scelta?.acquisto && x.scelta.acquisto.prezzo < PREZZO_MINIMO_PASSIVO);
+}
+
+/** La riga ha bisogno di un'alternativa? Componente da comprare senza prezzo, non disponibile, introvabile (critico) o passivo sotto 0,001 €. */
 export function serveAlternativa(r: RigaPerAlternativa, nonMontato = 'NON MONTATO'): boolean {
   if (r.esito === nonMontato || r.clienteFornisce || !(r.pn || r.mpnAcquisto)) return false;
   if (r.alternativaScelta || (r.prezzoManuale != null && r.prezzoManuale >= 0)) return false;
-  return r.reperibilita?.livello === 'critico' || r.acquisti.some(x => !x.scelta || !x.scelta.disponibile);
+  return r.reperibilita?.livello === 'critico' || r.acquisti.some(x => !x.scelta || !x.scelta.disponibile) || passivoPrezzoSospetto(r);
 }
 
 export interface AlternativaValutata { mpn: string; identica: boolean | null; offerte: Offerta[]; fonte: string }

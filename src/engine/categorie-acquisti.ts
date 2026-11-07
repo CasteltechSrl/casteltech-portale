@@ -105,7 +105,7 @@ const PAROLE: [RegExp, string][] = [
 const FORNITORI: [RegExp, string, boolean?][] = [
   // materiale rivenduto
   [/\btme\b|mouser|digi-?key|farnell|arrow electronics|w[uü]e?rth elektronik|redtide|cbs europe|pc components|i\.?c\.? blue|samtec|lemo|steliau|rs components|camel geco|d\.s\.e\.|rebix|gse srl|idc\b|ics industrial|mc' ?tronic|celte|startec|pietrobelli|el\.co\. elettronica|fast elettronica|fgl srl|tecnosens|conrad|electronic center|prod\.el|albe innovation|accumulatori gidi|batter fly|keers|fuocofreddo|wuerth s\.r\.l|w[uü]rth s\.r\.l|italfit magneti|cofermetal|allied international/, 'componenti'],
-  [/hts pcb|ncab|serigroup|p\.a\.c\. di bezzetto|laura nardi/, 'pcb'],
+  [/hts pcb|ncab|serigroup|p\.a\.c\. di bezzetto|laura nardi|nardi laura/, 'pcb'],
   [/tecnolab|lopar/, 'lamine'],
   [/mikecompositi|b\.m\.p\. srl|bimetal|ma\.ba\b|filippi e moletti|nuova caser/, 'meccanica'],
   // consumo
@@ -138,6 +138,14 @@ const FORNITORI: [RegExp, string, boolean?][] = [
   [/itacall/, 'commerciale'],
 ];
 
+/**
+ * Fornitori che fanno due cose diverse: la riga va nella seconda categoria se la descrizione ha una di quelle parole.
+ * Laura Nardi (Adriano 7/11/2026): a volte vende PCB, a volte fa consulenza/progettazione.
+ */
+const FORNITORI_DOPPI: [RegExp, RegExp, string][] = [
+  [/laura nardi|nardi laura/, /progettaz|consulen|svilupp|\blayout\b|sbrogli|disegn|\bschem|prototip|\bore\b|\bassistenza\b|\bmodific/i, 'progettazione'],
+];
+
 /** Con un fornitore noto e specializzato solo queste parole cambiano categoria: "nastro" in una riga di componenti o "trasporto" in una bolletta non contano. */
 const CATEGORIE_FORTI = new Set(['imposte', 'banca', 'dogane', 'leasing', 'affitto', 'lamine', 'stagno', 'chimici', 'ricambi_saldatura', 'manutenzioni', 'attrezzature', 'assicurazioni']);
 /** Parole che valgono solo senza un fornitore noto: "montaggio" lo scrivono anche il gommista e il negozio online. */
@@ -157,6 +165,8 @@ export function classificaRiga(r: RigaDaClassificare): Esito {
   const fornitore = regola?.[1], generico = !!regola?.[2];   // generico = negozio che vende di tutto (Amazon): decidono le parole
   // spese accessorie (trasporto, imballo, bollo) di un fornitore di materiale: restano nella categoria del fornitore
   if (fornitore && ACCESSORIA.test(d)) return { categoria: fornitore, macro: categoria(fornitore).macro, come: 'fornitore', accessoria: true };
+  const doppio = FORNITORI_DOPPI.find(([re, parole]) => re.test(f) && parole.test(d));
+  if (doppio) return { categoria: doppio[2], macro: categoria(doppio[2]).macro, come: 'parola' };
   const parola = PAROLE.find(([re]) => re.test(d))?.[1];
   const vale = parola && (!fornitore ? true : generico ? !CATEGORIE_DEBOLI.has(parola) : CATEGORIE_FORTI.has(parola));
   if (parola && vale) return { categoria: parola, macro: categoria(parola).macro, come: 'parola' };

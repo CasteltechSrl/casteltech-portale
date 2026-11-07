@@ -12,6 +12,8 @@
  *   GET  /api/claude/documentazione?anno=    → prodotti venduti nell'anno con le revisioni dei documenti già caricate (Adriano 6/11/2026)
  *   POST /api/claude/documentazione          → { cliente, codice, riassunto, revisione?, cartella?, note?, sostituisci? } = revisione dalle cartelle del Drive
  *   GET  /api/claude/spazio                  → spazio occupato su Neon per tabella
+ *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
+ *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -148,6 +150,18 @@ export function rotteApiClaude() {
       cartella: typeof b.cartella === 'string' ? b.cartella.slice(0, 500) : null, note: typeof b.note === 'string' ? b.note.slice(0, 500) : null });
     res.json({ ok: true, prodotto: p, id: esito.id, revisione: esito.revisione,
       confronto: esito.confronto && esito.precedente ? testoConfronto(esito.confronto, esito.precedente.revisione, esito.revisione) : null });
+  });
+
+  r.get('/caricamenti', async (_req, res) => {
+    res.json({
+      sediOperative: await q1(`SELECT count(*) FILTER (WHERE sede_operativa_diversa)::int AS "clientiConSede", count(*)::int AS clienti FROM clienti`),
+      componentiClienti: await q(`SELECT c.ragione_sociale AS cliente, count(*)::int AS codici, max(k.aggiornato_il) AS "ultimoAggiornamento"
+        FROM componenti_clienti k JOIN clienti c ON c.id = k.cliente_id GROUP BY c.ragione_sociale ORDER BY 2 DESC`),
+      ordiniEmail: await q(`SELECT o.anno, o.numero, o.cliente_nome AS cliente,
+          count(*) FILTER (WHERE r.tipo = 'scheda')::int AS schede, count(*) FILTER (WHERE r.tipo = 'scheda' AND r.prodotto_id IS NULL)::int AS "schedeSenzaProdotto",
+          (SELECT string_agg(d.numero::text || ' (' || d.stato || ')', ', ') FROM documenti d WHERE d.ordine_id = o.id AND d.tipo = 'conferma_ordine') AS conferme
+        FROM ordini o LEFT JOIN ordini_righe r ON r.ordine_id = o.id WHERE o.numero >= 9001 GROUP BY o.id ORDER BY o.anno, o.numero`),
+    });
   });
 
   r.get('/spazio', async (_req, res) => {

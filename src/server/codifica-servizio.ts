@@ -31,7 +31,7 @@ import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuov
 import { alternativeDaConfermare, componentiDaVerificare } from '../engine/alternative-cliente.js';
 import { controllaNuovoCase, type ValoriArchivio } from '../engine/codifica/valori-tabella.js';
 import { CASE_DAL_PORTALE, impostaCaseDalPortale, type CasePortale } from '../engine/codifica/aggiunte.js';
-import { alternativaAutomatica, righeOriginali, serveAlternativa, tipoComponente, unisciPerPn } from '../engine/codifica/aggrega.js';
+import { alternativaAutomatica, passivoPrezzoSospetto, righeOriginali, serveAlternativa, tipoComponente, unisciPerPn } from '../engine/codifica/aggrega.js';
 
 export const ESITI = {
   DB: 'IN DATABASE', DB_INC: 'IN DATABASE - DA COMPLETARE', DB_FATTO: 'IN DATABASE - COMPLETATO', DB_PROD: 'IN DATABASE (stesso codice)',
@@ -777,15 +777,24 @@ async function alternativeRighe(righe: RigaBom[], forza?: boolean, soloCache?: b
     decidiAlternativa(r, qta, trovate.length);
   }
   // ancora senza niente: ricerca su internet con l'IA (Adriano 5/11/2026: codice incompleto, dove si compra, criticità)
-  await ricercaSulWeb(daCercare.filter(x => !x.r.alternativaScelta && !x.r.alternativaProposta), forza);
+  await ricercaSulWeb(daCercare.filter(x => !x.r.alternativaScelta && !x.r.alternativaProposta).filter(x => !soloPrezzoBasso(x.r)), forza);
   for (const r of righe) r.note = unico(r.note);
 }
+
+/** Passivo trovato e disponibile, cercato solo perché costa meno di 0,001 € a componente (Adriano 7/11/2026). */
+const soloPrezzoBasso = (r: RigaBom) => r.reperibilita?.livello !== 'critico' && r.acquisti.every(x => x.scelta?.disponibile) && passivoPrezzoSospetto(r);
 
 /** Con le alternative trovate decide: equivalente da sola (passivi e non attivi), compatibile da confermare, o solo note. */
 function decidiAlternativa(r: RigaBom, qta: number, trovate: number) {
   const pnRiga = r.pn ?? r.mpnAcquisto;
   const problema = r.reperibilita?.livello === 'critico' ? 'non si trova' : r.acquisti.some(x => !x.scelta) ? 'è senza prezzo' : 'non è disponibile';
   r.note = r.note.filter(x => !/^(P\/N non trovato: prezzo del compatibile|\d+ alternative? trovat|nessuna alternativa trovata|alternativa equivalente:)/.test(x));
+  // passivo con prezzo sotto 0,001 € ma disponibile (Adriano 7/11/2026): le alternative si mostrano nella riga, il prezzo trovato resta
+  if (soloPrezzoBasso(r)) {
+    r.note = r.note.filter(x => !x.startsWith('prezzo sotto 0,001 €'));
+    r.note.push(`prezzo sotto 0,001 € a componente, da controllare: ${trovate ? `${trovate === 1 ? '1 alternativa trovata' : `${trovate} alternative trovate`}, scegli dalla riga se serve` : 'nessuna alternativa trovata'}`);
+    return;
+  }
   // passivi e non attivi con le stesse caratteristiche: si compra il più economico disponibile, senza conferma (Adriano 5/11/2026)
   const auto = r.alternativaRifiutata ? null : alternativaAutomatica(r.famiglia, r.alternative ?? [], qta, FONTI_ALTERNATIVA.MANO);
   if (auto) {

@@ -66,3 +66,12 @@ test('righe senza valore ignorate; riepilogo per gruppo e categoria con le note 
   assert.equal(r.macro.find(m => m.macro === 'rivendita')?.quota, 77.78);
   assert.deepEqual(r.categorie.map(c => c.codice), ['componenti', 'pcb', 'affitto']);
 });
+
+test('Laura Nardi: PCB o progettazione secondo la riga; Federico Cetani consulenze (Adriano 7/11/2026)', () => {
+  const c = (fornitore: string, descrizione: string) => classificaRiga({ fornitore, descrizione }).categoria;
+  assert.equal(c('NARDI LAURA', 'PCB 2 strati FR4 1.6 mm ENIG'), 'pcb');
+  assert.equal(c('LAURA NARDI', 'Circuito stampato M0925-B'), 'pcb');
+  assert.equal(c('LAURA NARDI', 'Progettazione scheda controllo motore'), 'progettazione');
+  assert.equal(c('LAURA NARDI', 'Consulenza tecnica su layout'), 'progettazione');
+  assert.equal(c('CETANI FEDERICO', 'Prestazione professionale ottobre 2026'), 'consulenze_tecniche');
+});

@@ -78,6 +78,15 @@ test('serve un\'alternativa: senza prezzo, non disponibile o introvabile; non co
   assert.equal(serveAlternativa(r({ acquisti: [{}], esito: 'NON MONTATO' })), false);
 });
 
+test('passivi già prezzati: si tiene il prezzo, si cercano alternative solo sotto 0,001 € a componente (Adriano 7/11/2026)', () => {
+  const r = (prezzo: number, famiglia = 'CC') => ({ esito: 'NUOVO', pn: 'ABC123', famiglia, reperibilita: { livello: 'ok' },
+    acquisti: [{ scelta: { disponibile: true, acquisto: { prezzo } } }] });
+  assert.equal(serveAlternativa(r(0.002)), false);
+  assert.equal(serveAlternativa(r(0.001)), false);
+  assert.equal(serveAlternativa(r(0.0004)), true);
+  assert.equal(serveAlternativa(r(0.0004, 'IC')), false, 'solo i passivi');
+});
+
 test('pagina BOM: riquadro senza prezzo solo con il filtro, "Cerca alternative", colonna Riferimenti', () => {
   const v = readFileSync(new URL('../src/server/rotte/componenti.ts', import.meta.url), 'utf8');
   assert.match(v, /id="da-prezzare" hidden/);
