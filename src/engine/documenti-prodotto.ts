@@ -73,7 +73,7 @@ export function riassuntoDaAnalisi(
 
 /** "Rev.C", "RevA", "rev 2026-M3", "_V4", "V1.0.7", "r2", "R03", "Rev_B": il pezzo dopo l'etichetta, senza l'estensione del file. */
 // La lettera da sola ("Rev.C") vale solo dopo REV/VER: "RX8 PLUS" è il nome della scheda, non la revisione "X8" (Idea SL_0107, 7/11/2026).
-const RE_REVISIONE = /(?:^|[\s_\-.(\[])(?:(?:REV(?:ISION[E]?)?|VERSION[E]?|VER)[\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}|[A-Z][0-9]?)|[VR][\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}))(?=$|[\s_\-.)\]/\\])/i;
+const RE_REVISIONE = /(?:^|[\s_\-.(\[])(?:(?:REV(?:ISION[E]?)?|VERSION[E]?|VER)[\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}|(?<!VERSION|REVISION)[A-Z][0-9]?)|[VR][\s_.:\-]?([0-9][0-9A-Z.\-]{0,12}))(?=$|[\s_\-.)\]/\\])/i;
 
 /** "GA-634r2", "GA944r2": la "r" attaccata al codice, seguita da una o due cifre. */
 const RE_REVISIONE_ATTACCATA = /(?<=\d)R(\d{1,2})(?=$|[\s_\-.)\]/\\])/i;

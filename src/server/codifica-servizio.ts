@@ -15,6 +15,7 @@ import { testoCella } from '../engine/excel-celle.js';
 import { codiceWurth } from '../engine/wurth.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
+import { senzaFiltriTabelle } from '../engine/excel-filtri.js';
 import { q, q1, transazione } from './db.js';
 import { ATTR, ETICHETTE, FAMIGLIE, MAN, OK, VER, calcola, progNum, progStr, type Attr, type Attributi } from '../engine/codifica/regole.js';
 import { daColonneBom, decodificaMpn, famigliaDa } from '../engine/codifica/decoder.js';
@@ -103,7 +104,7 @@ export async function leggiFileBom(nome: string, contenuto: Buffer): Promise<str
   }
   if (n.endsWith('.xls')) throw new Error('File .xls (Excel 97-2003): salvalo come .xlsx o .csv e ricaricalo.');
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(contenuto as any);
+  try { await wb.xlsx.load(contenuto as any); } catch { await wb.xlsx.load(senzaFiltriTabelle(contenuto) as any); }
   // più fogli: si codifica quello che si chiama "BOM" (Adriano 4/11/2026), altrimenti il primo con dati
   const iBom = foglioBom(wb.worksheets.map(w => w.name));
   const ws = (iBom >= 0 && wb.worksheets[iBom].actualRowCount > 0 ? wb.worksheets[iBom] : null) ?? wb.worksheets.find(w => w.actualRowCount > 0) ?? wb.worksheets[0];

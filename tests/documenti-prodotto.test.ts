@@ -23,6 +23,8 @@ test('documentazione prodotto: revisione dai nomi di cartelle e file ("Rev.C", "
   assert.equal(revisioneDaNomi(['Gerber_V2026/top.gbr']), null);
   assert.equal(revisioneDaNomi(['SL_0107/RX8 PLUS_SL_0107_241025.xlsx']), null);  // RX8 = nome della scheda
   assert.equal(revisioneDaNomi(['Scheda_R2/bom.xlsx'])?.revisione, '2');
+  assert.equal(revisioneDaNomi(['CAMJR3_BOM_VERSIONE_XR (WPACAMJR3XR)_21092026.xlsx']), null);  // "VERSIONE_XR" non è la revisione E
+  assert.equal(revisioneDaNomi(['Scheda VERSIONE_B/bom.xlsx'])?.revisione, 'B');
   assert.deepEqual(revisioneProposta({ daFile: null, nomi: ['BOM_CSG1.xlsx'], esistenti: [] }), { revisione: '0', fonte: 'non trovata nei file: revisione 0' });
   // dai file vince sui nomi; già presente → "-2"
   assert.equal(revisioneProposta({ daFile: 'Rev. B', fonteFile: 'intestazione della BOM', nomi: ['x RevC/bom.xlsx'], esistenti: [] }).revisione, 'B');

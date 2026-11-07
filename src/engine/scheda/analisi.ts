@@ -261,9 +261,17 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   const ripetuti = new Set<string>();
   const accessori = (ing.bom?.righe ?? []).filter(r => r.accessorio);
   if (accessori.length) S('info', `${accessori.length} righe della BOM sono materiale di montaggio o documenti (dissipatori, viti, grasso, etichette, specifiche…): non sono componenti da montare.`);
-  for (const r of ing.bom?.righe ?? []) {
+  // BOM OrCAD con un riferimento per riga: la quantità sta solo sulla prima riga del gruppo, le righe sotto senza quantità
+  const righeBom = ing.bom?.righe ?? [];
+  const riferimentiDelGruppo = (i: number): number => {
+    let n = righeBom[i].designatori.length;
+    for (let j = i + 1; j < righeBom.length && righeBom[j].quantita == null; j++) n += righeBom[j].designatori.length;
+    return n;
+  };
+  for (const [i, r] of righeBom.entries()) {
     if (r.accessorio) continue;
-    if (r.quantita != null && r.designatori.length && r.quantita !== r.designatori.length && r.montato)
+    if (r.quantita != null && r.designatori.length && r.quantita !== r.designatori.length && r.montato
+      && r.quantita !== riferimentiDelGruppo(i))
       S('avviso', `BOM riga ${r.riga}: quantità ${r.quantita} ma ${r.designatori.length} riferimenti.`, r.designatori);
     for (const d of r.designatori) {
       const prima = bomPerRef.get(d);
