@@ -137,7 +137,7 @@ test('PDF ordine a fornitore con molte righe: più pagine, blocco finale solo ne
   assert.match(testo, /pagina 1 di \d+/);
 });
 
-test('PDF conferma d\'ordine al cliente: nessuna nota sulla conferma (vale solo per l\'ordine a fornitore)', async () => {
+test('PDF conferma d\'ordine al cliente: niente nota di conferma del fornitore', async () => {
   const testo = await testoPdf(await pdfConfermaOrdine({ ...datiOrdine(1), modello: undefined }));
   assert.doesNotMatch(testo, /confermarci sempre/);
   assert.match(testo, /Per accettazione del cliente/);

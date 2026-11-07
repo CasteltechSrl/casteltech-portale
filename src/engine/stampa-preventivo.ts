@@ -117,9 +117,8 @@ export function righeUnaTantum(ris: Risultato, o: { doppia: boolean; nLamine: nu
   ];
 }
 
-/** Validità dell'offerta (Adriano 5/11/2026): montaggio 30 giorni, materiale comprato da noi (componenti, PCB) 10 giorni. */
-export const VALIDITA_MONTAGGIO_GG = 30;
-export const VALIDITA_MATERIALE_GG = 10;
+import { VALIDITA_MONTAGGIO_GG, VALIDITA_MATERIALE_GG } from './condizioni.js';
+export { VALIDITA_MONTAGGIO_GG, VALIDITA_MATERIALE_GG, CONDIZIONI_GENERALI } from './condizioni.js';
 const dataPiuGiorni = (d: Date | string, gg: number) => {
   const x = new Date(d instanceof Date ? d.getTime() : String(d ?? ''));
   if (Number.isNaN(x.getTime())) return '';
@@ -144,35 +143,7 @@ export function validitaOfferta(dataPreventivo: Date | string | null | undefined
   ];
 }
 
-/**
- * Condizioni generali stampate nella seconda pagina del preventivo. Riscritte il 5/11/2026 (Adriano: "migliora le note contrattuali,
- * soprattutto la data di consegna, che non è chiarissima"): validità separata montaggio / materiale, da quando contano le settimane
- * di consegna, cosa la sposta, alternative ai codici della BOM da confermare.
- */
-export const CONDIZIONI_GENERALI = [
-  'Prezzi e validità. Prezzi in euro, IVA esclusa, franco nostro stabilimento salvo spedizione indicata. Il prezzo del montaggio vale '
-    + `${VALIDITA_MONTAGGIO_GG} giorni dalla data del preventivo. I prezzi di componenti e PCB acquistati da noi valgono ${VALIDITA_MATERIALE_GG} giorni, perché seguono `
-    + 'prezzi e disponibilità del mercato: dopo questo termine li riconfermiamo prima di accettare l\'ordine.',
-  'Ordine. Il preventivo diventa impegnativo con l\'ordine scritto del cliente o con questo documento firmato per accettazione. '
-    + 'Rispondiamo con la conferma d\'ordine, che riporta la data di consegna.',
-  'Tempi di consegna. I tempi indicati nel preventivo sono stimati in settimane lavorative ("circa"). La data che vale è quella '
-    + 'della conferma d\'ordine. Materiale del cliente (conto lavoro): le settimane contano dal giorno in cui abbiamo ricevuto tutto il materiale '
-    + 'e la documentazione completa e corretta. Materiale acquistato da noi: le settimane contano dalla conferma d\'ordine e comprendono '
-    + 'l\'arrivo del materiale nei tempi dichiarati dai distributori al momento dell\'acquisto.',
-  'Cosa sposta la consegna. Materiale incompleto, non conforme o arrivato in ritardo, ritardi dei distributori, modifiche alla BOM o alla '
-    + 'documentazione dopo l\'ordine, conferme del cliente non ancora arrivate (codici alternativi, dubbi sulla documentazione) spostano la '
-    + 'consegna dello stesso tempo. Lo comunichiamo appena lo sappiamo, con la nuova data.',
-  'Codici alternativi. Se un componente della BOM non è disponibile o ha un equivalente più conveniente, proponiamo un codice alternativo '
-    + 'con le stesse caratteristiche, elencato nel foglio in fondo al preventivo insieme ai componenti con problemi di acquisto (non trovati o con disponibilità da verificare). '
-    + 'Il codice alternativo lo acquistiamo solo dopo la conferma scritta del cliente; i componenti non quotati restano esclusi dal prezzo.',
-  'Materiale fornito dal cliente: completo, identificato e con la scorta per l\'attrezzaggio delle macchine. Non rispondiamo di componenti '
-    + 'difettosi o non conformi forniti dal cliente.',
-  'Lavorazione eseguita secondo la documentazione del cliente (BOM, file di montaggio, Gerber) e lo standard IPC-A-610 classe 2. Errori o '
-    + 'mancanze nella documentazione sono a carico del cliente.',
-  'Collaudo funzionale compreso solo se indicato. Reclami entro 8 giorni dal ricevimento della merce; la garanzia è limitata al rifacimento '
-    + 'o alla riparazione della lavorazione, esclusi danni indiretti.',
-  'Costi una tantum fatturati con il primo lotto. Per ogni controversia è competente il Foro di Piacenza.',
-];
+// Condizioni generali di fornitura: in engine/condizioni.ts (Adriano 7/11/2026), riesportate qui per chi le usava già.
 
 /**
  * Ritocchi della stampa per il cliente (Adriano, 29/10/2026), salvati sul preventivo (`preventivi.stampa`) e usati SOLO nella stampa:

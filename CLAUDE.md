@@ -120,6 +120,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   accessi sbagliati; MAI i valori dei moduli; autosalva una volta ogni 10 minuti. Utente disattivato / ruolo o password cambiati = sessioni chiuse subito
   (`chiudereSessioni`, `chiudiSessioniUtente`; reparto: PIN cambiato/tolto o operatore tolto = `chiudiSessioniOperatori`); password con `problemaPassword` (10 caratteri, non facili); login: 8 tentativi per indirizzo+email, 20 per email.
   Una rotta nuova che modifica dati è già nel registro; un'eliminazione deve avere "elimina/annulla/scarta" nell'indirizzo o nel valore di `azione`.
+- Condizioni di vendita e di acquisto (Adriano 7/11/2026, proposta in Project Files → condizioni-documenti; testi SOLO in `engine/condizioni.ts` con `REVISIONE_CONDIZIONI`,
+  PDF in `server/pdf-condizioni.ts`, test in `tests/condizioni.test.ts`): preventivo = 14 clausole + riquadro della seconda firma (artt. 1341-1342: `VESSATORIE_FORNITURA`
+  elencate una per una); conferma d'ordine = `notaConfermaOrdine` sopra le firme + pagina condizioni in coda; DDT = `noteDdt(causale)`; fattura (non NC) = `notaFattura`
+  nel PDF/stampa e nella Causale XML (`pezziCausale`); ordine a fornitore = `PAGINA_ACQUISTO`. Garanzia 12 mesi, IPC-A-610 cl. 2, Foro di Piacenza, materiale del cliente
+  rimborsato solo per quanto paga l'assicurazione, lamine del cliente. Cambiare un testo = nuova revisione (non è consulenza legale: rilettura del legale consigliata).
 - Email dagli indirizzi per funzione (Adriano 2/11/2026; `engine/mittenti-email.ts` `FUNZIONI_EMAIL`, `mittentePer(tipo)` in `server/gmail.ts`, test in `tests/mittenti-email.test.ts`):
   alias di info@ = amministrazione@ (DDT, fatture, NC, autofatture, solleciti), ordini@ (conferme d'ordine), preventivi@, acquisti@ (ordini a fornitore), produzione@.
   La delega resta su GMAIL_MITTENTE (info@); l'alias si usa nel From solo se è tra gli "Invia messaggio come" del Gmail di info@ (letti con gmail.readonly,

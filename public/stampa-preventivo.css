@@ -76,9 +76,12 @@ table.ut td { padding: .3mm 0; }
 .titoletto { margin: 4mm 0 1.2mm; }
 .note { white-space: pre-wrap; font-size: 9pt; margin: 0; }
 .spinta { flex: 1; min-height: 4mm; }
-.condizioni { font-size: 9pt; color: #222; line-height: 1.45; margin: 8mm 0 0; padding-left: 5mm; border-top: 1px solid #ccc; padding-top: 5mm; }
-.condizioni li { margin-bottom: 2.5mm; padding-left: 1mm; }
-.accetto { font-size: 9pt; margin: 8mm 0 0; }
+.condizioni { font-size: 7.6pt; color: #222; line-height: 1.32; margin: 5mm 0 0; padding-left: 5mm; border-top: 1px solid #ccc; padding-top: 3.5mm; }
+.condizioni li { margin-bottom: 1.3mm; padding-left: 1mm; }
+.accetto { font-size: 8pt; margin: 4mm 0 0; }
+.approvazione-specifica { margin-top: 4mm; border: 1px solid #999; padding: 2.5mm 3mm 3mm; break-inside: avoid; }
+.approvazione-specifica p { font-size: 7.8pt; margin: 0; }
+.approvazione-specifica .firme { margin-top: 7mm; }
 .fondo { display: grid; grid-template-columns: 1fr 62mm; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; margin-top: 4mm; break-inside: avoid; }
 .fondo > div { padding: 2.5mm 3mm; font-size: 8.5pt; line-height: 1.4; }
 .fondo .totale { border-left: 1px solid #ccc; text-align: right; }

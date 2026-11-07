@@ -10,6 +10,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { euro, euroUnitario, num } from './views/html.js';
+import { PAGINA_ACQUISTO, PAGINA_FORNITURA, notaConfermaOrdine, type PaginaCondizioni } from '../engine/condizioni.js';
+import { disegnaCondizioni } from './pdf-condizioni.js';
 import { importoRigaConferma, totaleConferma, type RigaConferma } from '../engine/conferme-ordine.js';
 
 export interface DatiPdfConferma {
@@ -27,10 +29,13 @@ export interface ModelloPdf {
   titolo: string; destinatario: string; rif: string; firma: string; piede: string; bozza: string; iban: boolean; nomeDocumento: string;
   /** nota stampata sopra le firme (Adriano 5/11/2026: come si considera confermato l'ordine a fornitore) */
   notaAccettazione?: string;
+  /** condizioni generali stampate in coda, con la seconda firma (Adriano 7/11/2026) */
+  condizioni?: PaginaCondizioni;
 }
 export const MODELLO_CONFERMA: ModelloPdf = {
   titolo: "CONFERMA D'ORDINE", destinatario: 'DESTINATARIO', rif: 'VOSTRO ORDINE', firma: 'Per accettazione del cliente', piede: "Conferma d'ordine",
   bozza: 'BOZZA - NON VALIDA COME CONFERMA', iban: true, nomeDocumento: "Conferma d'ordine",
+  notaAccettazione: notaConfermaOrdine(), condizioni: PAGINA_FORNITURA,
 };
 /** Adriano 5/11/2026: l'ordine a fornitore vale come confermato in uno di tre modi, ma una conferma la chiediamo sempre. */
 export const NOTA_ACCETTAZIONE_FORNITORE =
@@ -40,7 +45,7 @@ export const NOTA_ACCETTAZIONE_FORNITORE =
 export const MODELLO_ORDINE_FORNITORE: ModelloPdf = {
   titolo: 'ORDINE A FORNITORE', destinatario: 'FORNITORE', rif: 'VOSTRA OFFERTA', firma: 'Per accettazione del fornitore', piede: 'Ordine a fornitore',
   bozza: 'BOZZA - NON VALIDO COME ORDINE', iban: false, nomeDocumento: 'Ordine a fornitore',
-  notaAccettazione: NOTA_ACCETTAZIONE_FORNITORE,
+  notaAccettazione: NOTA_ACCETTAZIONE_FORNITORE, condizioni: PAGINA_ACQUISTO,
 };
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -161,7 +166,7 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
   const xs = colonne.reduce<number[]>((a, x, i) => [...a, i ? a[i - 1] + colonne[i - 1].l : M], []);
   const PAD = 4, DIM = 8.5, INTERLINEA = 10.5, PIEDE = M + 26;
   // spazio che le righe e le note lasciano libero in fondo a ogni pagina: il blocco finale ci sta anche se arriva all'ultima riga
-  const RISERVA = 46 + 34 + 22 + (m.notaAccettazione ? 3 * 9.5 + 6 : 0);
+  const RISERVA = 46 + 34 + 22 + (m.notaAccettazione ? aCapo(m.notaAccettazione, L - 2 * M, font, 7.5).length * 9.5 + 6 : 0);
   const testataTabella = () => {
     linea(p, M, y + 4, L - M);
     colonne.forEach((k, i) => scrivi(p, k.t, k.n ? xs[i] + k.l - PAD : xs[i] + PAD, y - 6, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: k.n }));
@@ -226,6 +231,19 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
     scrivi(p, t, x, y - 10, { f: grassetto, dim: 8 });
     if (s) scrivi(p, s, x, y - 20, { dim: 7.5, colore: GRIGIO });
   });
+
+  // ── condizioni generali in coda, con la seconda firma (Adriano 7/11/2026) ──
+  if (m.condizioni) {
+    disegnaCondizioni({ font, grassetto, nomeAzienda: d.azienda.nome, nuovaPagina: () => {
+      p = nuovaPagina();
+      if (immagine) {
+        const alto = 30, largo = immagine.width * (alto / immagine.height);
+        p.drawImage(immagine, { x: M, y: H - M - alto, width: Math.min(largo, 140), height: alto });
+      }
+      scrivi(p, d.azienda.nome, L - M, H - M - 10, { f: grassetto, dim: 10, destra: true });
+      return { p, y: H - M - 52 };
+    } }, m.condizioni, `parte integrante ${m.nomeDocumento === "Conferma d'ordine" ? "della conferma d'ordine" : "dell'ordine"} nr. ${numeroTesto} del ${dataIt(d.data)}`, { firme: true });
+  }
 
   // ── piede su ogni pagina ──
   pagine.forEach((pg, i) => {

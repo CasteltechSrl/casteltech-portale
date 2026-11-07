@@ -17,6 +17,7 @@
  * - testi solo con caratteri ammessi dallo SdI (latino di base e Latin-1): "€" → "EUR", apostrofi e trattini tipografici semplificati.
  */
 import { addebitaBollo, arrotonda2, calcolaTotali, numeroCompleto, preparaAzienda, type Aliquota, type DatiAzienda, type Totali } from './amministrazione.js';
+import { notaFattura } from './condizioni.js';
 import { controlliOrdinePa, importoDaIncassare, tipoSdiEffettivo } from './tipi-fattura.js';
 import { applicaAttributi } from './attributi-fatturapa.js';
 
@@ -61,6 +62,17 @@ export function testoXml(v: unknown, max = 1000): string {
   return proteggi(pulisci(v).slice(0, max));
 }
 /** Testo con i soli caratteri ammessi, senza protezione per l'XML. */
+/** Testo diviso in pezzi da massimo 200 caratteri senza spezzare le parole (campo Causale della FatturaPA). */
+export function pezziCausale(testo: string, max = 200): string[] {
+  const out: string[] = [];
+  let riga = '';
+  for (const parola of pulisci(testo).split(/\s+/).filter(Boolean)) {
+    const prova = riga ? `${riga} ${parola}` : parola;
+    if (prova.length <= max) riga = prova; else { if (riga) out.push(riga); riga = parola.slice(0, max); }
+  }
+  if (riga) out.push(riga);
+  return out;
+}
 function pulisci(v: unknown): string {
   let s = String(v ?? '');
   for (const [da, a] of SOSTITUZIONI) s = s.replace(da, a);
@@ -220,7 +232,9 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
     ? `<DatiRiepilogo><AliquotaIVA>${importoXml(aTesto.percentuale)}</AliquotaIVA>${el('Natura', aTesto.natura)}<ImponibileImporto>0.00</ImponibileImporto><Imposta>0.00</Imposta>`
       + (aTesto.natura ? el('RiferimentoNormativo', testoXml(aTesto.riferimento_normativo, 100)) : esigibilita) + `</DatiRiepilogo>` : '';
 
-  const causali = (pulisci(doc.causale).slice(0, 2000).match(/[\s\S]{1,200}/g) ?? []).map(c => `<Causale>${proteggi(c)}</Causale>`).join('');
+  // Causale: quella scritta sul documento + nelle fatture la nota delle condizioni (mora, riserva di proprietà; Adriano 7/11/2026)
+  const causali = [...(pulisci(doc.causale).slice(0, 2000).match(/[\s\S]{1,200}/g) ?? []),
+    ...(doc.tipo === 'fattura' ? pezziCausale(notaFattura()) : [])].map(c => `<Causale>${proteggi(c)}</Causale>`).join('');
   const pagamenti = doc.scadenze.length
     ? `<DatiPagamento><CondizioniPagamento>${doc.scadenze.length > 1 ? 'TP01' : 'TP02'}</CondizioniPagamento>`
       + doc.scadenze.map(s => `<DettaglioPagamento><ModalitaPagamento>${s.modalita}</ModalitaPagamento>`

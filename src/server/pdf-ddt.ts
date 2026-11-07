@@ -5,6 +5,7 @@
  * Fatto sul server con pdf-lib (come conferme d'ordine e ordini a fornitore), perché la stampa del browser non si può allegare.
  */
 import { readFile } from 'node:fs/promises';
+import { noteDdt } from '../engine/condizioni.js';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { num } from './views/html.js';
@@ -118,7 +119,10 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
   const colonne = [{ t: 'CODICE', l: 110 }, { t: 'DESCRIZIONE DEI BENI', l: 0 }, { t: 'U.M.', l: 40 }, { t: 'QUANTITÀ', l: 60, n: true }];
   colonne[1].l = L - 2 * M - colonne.reduce((s, c) => s + c.l, 0);
   const xs = colonne.reduce<number[]>((a, _c, i) => [...a, i ? a[i - 1] + colonne[i - 1].l : M], []);
-  const PAD = 5, DIM = 8.8, INTERLINEA = 10.8, ALTO_PIEDE = 120;
+  // condizioni sopra il piede (Adriano 7/11/2026): controllo al ricevimento, ESD, proprietà secondo la causale
+  const righeCondizioni = noteDdt(t.causale).flatMap(n => aCapo(n, L - 2 * M, font, 7));
+  const altoCondizioni = righeCondizioni.length * 8.6 + 4;
+  const PAD = 5, DIM = 8.8, INTERLINEA = 10.8, ALTO_PIEDE = 120 + altoCondizioni;
   const testata = () => {
     linea(p, M, y, L - M, NERO);
     colonne.forEach((c, i) => scrivi(p, c.t, c.n ? xs[i] + c.l - PAD : xs[i] + PAD, y - 10, { f: grassetto, dim: 6.5, colore: GRIGIO, destra: c.n }));
@@ -144,6 +148,8 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
   // ── piede: aspetto, colli, peso, inizio trasporto, vettore e firme (in fondo alla pagina) ──
   if (y - 20 < M + ALTO_PIEDE) p = nuovaPagina();
   y = M + ALTO_PIEDE - 10;
+  for (const r of righeCondizioni) { scrivi(p, r, M, y - 7, { dim: 7, colore: GRIGIO }); y -= 8.6; }
+  y -= 4;
   const inizio = t.inizio ? `${dataIt(String(t.inizio).slice(0, 10))} ore ${String(t.inizio).slice(11, 16)}` : '';
   fila([['Aspetto esteriore dei beni', t.aspetto ?? ''], ['N. colli', t.colli ?? ''], ['Peso', t.peso ?? ''], ['Data e ora inizio trasporto', inizio]]);
   casella(p, M, y, quarti * 2, 48, 'Vettore', aCapo(t.trasportatore ?? '', quarti * 2 - 10, font, 8.8).slice(0, 2));

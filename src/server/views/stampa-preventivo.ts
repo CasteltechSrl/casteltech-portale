@@ -12,9 +12,10 @@ import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import { noteDaStampare } from '../../engine/non-quotati.js';
 import {
-  VERSIONI_STAMPA, CONDIZIONI_GENERALI, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
+  VERSIONI_STAMPA, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
   type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
+import { CLAUSOLE_FORNITURA, APPROVAZIONE_FORNITURA, ACCETTAZIONE_PREVENTIVO, REVISIONE_CONDIZIONI } from '../../engine/condizioni.js';
 import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type ComponenteDaVerificare } from '../../engine/alternative-cliente.js';
 
 export interface ClienteStampa {
@@ -137,6 +138,8 @@ export function stampaPreventivo(o: {
   };
 
   const firme = html`<div class="firme"><div><b>${az.nome}</b></div><div><b>Per accettazione del cliente</b>Data, timbro e firma</div></div>`;
+  // seconda firma per le clausole vessatorie (artt. 1341-1342 c.c., Adriano 7/11/2026)
+  const firmaSpecifica = html`<div class="firme"><div></div><div><b>Per approvazione specifica del cliente</b>Data, timbro e firma</div></div>`;
   const piede = html`<footer class="piede"><span>Preventivo nr. ${numero}</span><span>${az.nome} · ${az.email} · ${az.tel}</span></footer>`;
   const indirizzoCliente = c && (c.indirizzo || c.comune) ? html`${c.indirizzo ?? ''}<br>${[c.cap, c.comune].filter(Boolean).join(' ')}${c.provincia ? ` (${c.provincia})` : ''}${c.nazione && c.nazione !== 'IT' ? ` · ${c.nazione}` : ''}` : '';
 
@@ -257,9 +260,10 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
 </section>
 ${opz.condizioni ? html`<section class="foglio seconda">
   <header class="testa"><img src="/static/logo-casteltech.png" alt="Casteltech" class="logo piccolo">
-    <div class="titolo"><b>CONDIZIONI GENERALI DI FORNITURA</b><br><small>allegate al preventivo nr. ${numero}</small></div></header>
-  <ol class="condizioni">${CONDIZIONI_GENERALI.map(x => html`<li>${x}</li>`)}</ol>
-  ${opz.firma ? html`<p class="accetto">Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.</p>${firme}` : ''}
+    <div class="titolo"><b>CONDIZIONI GENERALI DI FORNITURA</b><br><small>rev. ${REVISIONE_CONDIZIONI} · allegate al preventivo nr. ${numero}</small></div></header>
+  <ol class="condizioni">${CLAUSOLE_FORNITURA.map(x => html`<li><b>${x.titolo}.</b> ${x.testo}</li>`)}</ol>
+  ${opz.firma ? html`<p class="accetto">${ACCETTAZIONE_PREVENTIVO}</p>${firme}
+  <div class="approvazione-specifica"><p>${APPROVAZIONE_FORNITURA}</p>${firmaSpecifica}</div>` : ''}
   <div class="spinta"></div>
   ${piede}
 </section>` : ''}

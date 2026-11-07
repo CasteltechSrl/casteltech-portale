@@ -7,7 +7,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { euro, euroUnitario, num } from './views/html.js';
-import { CONDIZIONI_GENERALI, type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
+import { type RigaDocumentoPreventivo } from '../engine/stampa-preventivo.js';
+import { ACCETTAZIONE_PREVENTIVO, PAGINA_FORNITURA } from '../engine/condizioni.js';
+import { disegnaCondizioni } from './pdf-condizioni.js';
 import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type ComponenteDaVerificare } from '../engine/alternative-cliente.js';
 
 export interface DatiPdfPreventivo {
@@ -263,27 +265,10 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
 
   // ── seconda pagina: condizioni generali (e firma) ──
   if (d.condizioni) {
-    p = nuovaPagina();
-    y = H - M;
-    testata(p, y);
-    y -= 72;
-    scrivi(p, 'CONDIZIONI GENERALI DI FORNITURA', M, y, { f: grassetto, dim: 12 });
-    y -= 12;
-    scrivi(p, `allegate al preventivo nr. ${d.numero} del ${dataIt(d.data)}`, M, y, { dim: 8, colore: GRIGIO });
-    y -= 10;
-    linea(p, M, y, L - M);
-    y -= 16;
-    CONDIZIONI_GENERALI.forEach((t, i) => {
-      const righe = aCapo(t, L - 2 * M - 18, font, 9);
-      scrivi(p, `${i + 1}.`, M, y, { f: grassetto, dim: 9 });
-      for (const r of righe) { scrivi(p, r, M + 18, y, { dim: 9 }); y -= 12; }
-      y -= 5;
-    });
-    if (d.firma) {
-      y -= 8;
-      for (const r of aCapo('Il cliente dichiara di aver letto e accettato il preventivo e le presenti condizioni generali.', L - 2 * M, corsivo, 9)) { scrivi(p, r, M, y, { f: corsivo, dim: 9 }); y -= 12; }
-      firme(p, y - 40);
-    }
+    disegnaCondizioni({ font, grassetto, corsivo, nomeAzienda: d.azienda.nome,
+      nuovaPagina: () => { p = nuovaPagina(); testata(p, H - M); y = H - M - 64; return { p, y }; } },
+    PAGINA_FORNITURA, `allegate al preventivo nr. ${d.numero} del ${dataIt(d.data)}`,
+    { firme: d.firma, accettazione: ACCETTAZIONE_PREVENTIVO, firmaPrima: 'Per accettazione del cliente' });
   }
 
   // ── foglio a parte: codici alternativi da confermare e componenti con problemi di acquisto (Adriano 5/11/2026) ──
