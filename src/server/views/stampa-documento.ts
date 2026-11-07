@@ -69,7 +69,8 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
 /** Emesso dal portale e non annullato/scartato: dalla stampa si va al riquadro "Invia per email" della pagina (Adriano 4/11/2026). */
 const inviabile = (d: any) => d.numero != null && d.origine !== 'fic' && !['bozza', 'annullato', 'scartato'].includes(d.stato);
 
-export const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP12: 'RiBa' };
+/** Modalità di pagamento della FatturaPA usate dal portale (MP09 = RID, Adriano 7/11/2026). */
+export const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP09: 'RID', MP12: 'RiBa' };
 
 /**
  * Copia di cortesia di fattura o nota di credito (Adriano, 31/10/2026: PDF da mandare al cliente, dal browser con "Stampa / salva PDF").

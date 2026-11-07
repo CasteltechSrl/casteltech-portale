@@ -351,11 +351,15 @@ export function preparaRicevutoFic(x: any): { documento: RicevutoStorico | null;
   } };
 }
 
-/** Modi di pagamento di una rata (Adriano 31/10/2026), scelti quando si segna pagata o incassata; il conto (es. Bper) resta a parte. */
-export const MODI_PAGAMENTO = ['Bonifico', 'Ri.Ba.', 'Bancomat', 'Carta di credito', 'PayPal', 'Compensato con fattura', 'Stornato'] as const;
+/**
+ * Modi di pagamento di una rata (Adriano 31/10/2026), scelti quando si segna pagata o incassata; il conto (es. Bper) resta a parte.
+ * Sono i valori di partenza: l'elenco vero si modifica in Impostazioni → Amministrazione → Modi di pagamento e banche
+ * (Adriano 7/11/2026, aggiunto il RID; regole in engine/modi-pagamento.ts).
+ */
+export const MODI_PAGAMENTO = ['Bonifico', 'Ri.Ba.', 'RID', 'Bancomat', 'Carta di credito', 'PayPal', 'Compensato con fattura', 'Stornato'] as const;
 
-/** Il modo scritto nel modulo, solo se è uno di quelli previsti (maiuscole e spazi non contano); altrimenti null. */
-export function modoPagamento(valore: unknown): string | null {
+/** Il modo scritto nel modulo, solo se è uno di quelli dell'elenco (maiuscole e spazi non contano); altrimenti null. */
+export function modoPagamento(valore: unknown, elenco: readonly string[] = MODI_PAGAMENTO): string | null {
   const v = String(valore ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-  return MODI_PAGAMENTO.find(m => m.toLowerCase() === v) ?? null;
+  return elenco.find(m => m.toLowerCase().replace(/\s+/g, ' ') === v) ?? null;
 }

@@ -12,6 +12,8 @@ import { finestraValida } from '../../engine/flusso.js';
 import { datiFlusso, type DatiFlusso } from '../flusso-servizio.js';
 import { finestreFlusso } from './flusso.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
+import { elencoControlli, riepilogoControlli, type Controllo } from '../../engine/controlli.js';
+import { datiControlli } from '../controlli-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const oraRoma = () => Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hourCycle: 'h23' }));
@@ -26,11 +28,12 @@ export function rotteCruscottoGenerale() {
   r.get('/', async (req, res) => {
     const oggi = oggiRoma();
     const finestra = finestraValida(req.query.flusso);
-    const [d, riprendi, flusso] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null), datiFlusso(oggi)]);
+    const [d, riprendi, flusso, datiCtrl] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null), datiFlusso(oggi),
+      datiControlli(oggi)]);
     res.send(String(layout({
       titolo: 'Cruscotto', utente: req.session.utente, attiva: 'cruscotto', largo: true,
       avviso: req.query.msg ? String(req.query.msg) : undefined,
-      contenuto: pagina(d, oggi, req.session.utente?.nome ?? '', riprendi, { flusso, finestra, solaLettura: req.session.utente?.ruolo === 'esterno' }),
+      contenuto: pagina(d, oggi, req.session.utente?.nome ?? '', riprendi, { flusso, finestra, solaLettura: req.session.utente?.ruolo === 'esterno' }, elencoControlli(datiCtrl)),
     })));
   });
   return r;
@@ -45,7 +48,7 @@ const riquadro = (titolo: string, link: string, testoLink: string, corpo: Raw) =
   html`<section class="area"><header><h2>${titolo}</h2><a href="${link}">${testoLink} →</a></header>${corpo}</section>`;
 
 function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: VoceRiprendi[] = [],
-  flusso?: { flusso: DatiFlusso; finestra: ReturnType<typeof finestraValida>; solaLettura: boolean }): Raw {
+  flusso?: { flusso: DatiFlusso; finestra: ReturnType<typeof finestraValida>; solaLettura: boolean }, controlli?: Controllo[]): Raw {
   const c = d.cifre;
   const primoNome = nome.split(' ')[0];
   return html`
@@ -59,6 +62,8 @@ function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: 
         : html`<p class="nota">Niente in sospeso. Buon lavoro!</p>`}
       ${riprendi.length ? html`<div class="riprendi"><h3>Riprendi da dove eri</h3>
         <div class="chips">${riprendi.map(v => html`<a class="chip" href="${v.href}" title="${v.dettaglio ?? ''}"><b>${v.tipo}</b> ${v.titolo} <small class="nota">${quandoBreve(v.quando, oggi)}</small></a>`)}</div></div>` : ''}</div>
+
+    ${controlli ? sezioneControlli(controlli) : ''}
 
     <div class="cifre cifre-sei">
       <a class="cifra" href="/amministrazione"><span>Fatturato ${oggi.slice(0, 4)}</span><b>${euro(c.fatturato)}</b>
@@ -74,6 +79,29 @@ function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: 
       ${commerciale(d, oggi)}${ordini(d, oggi)}${produzione(d, oggi)}${acquisti(d)}${amministrazione(d)}${sistema(d)}
     </div>
     <p class="nota piede">Ogni numero e ogni riga portano alla pagina dove si lavora. I cruscotti di dettaglio restano in Ordini clienti e in Amministrazione.</p>`;
+}
+
+/** Righe di ogni controllo mostrate nel cruscotto; il resto nella pagina dei controlli. */
+export const RIGHE_CONTROLLO_CRUSCOTTO = 8;
+const NOMI_LIVELLO: Record<string, string> = { urgente: 'urgente', controllare: 'da controllare', normale: 'quando c\'è tempo' };
+
+/**
+ * Controlli settimanali nel cruscotto, sotto "Da fare oggi" (Adriano 7/11/2026): stessi controlli di Amministrazione → Controlli
+ * (engine/controlli.ts), un riquadro chiudibile per controllo con le prime righe; gli urgenti si aprono da soli.
+ */
+export function sezioneControlli(controlli: Controllo[]): Raw {
+  const r = riepilogoControlli(controlli);
+  return html`<section class="oggi controlli-cruscotto" id="controlli"><h3>Controlli settimanali</h3>
+    ${controlli.length ? html`<p class="nota">${r.totale} ${r.totale === 1 ? 'cosa lasciata a metà' : 'cose lasciate a metà'}${r.urgenti ? html`, <b class="negativo">${r.urgenti} urgenti</b>` : ''}${r.daControllare ? html`, ${r.daControllare} da controllare` : ''}
+      · <a href="/amministrazione/controlli">pagina completa →</a></p>
+      ${controlli.map(c => html`<details class="controllo ${c.livello}" ${c.livello === 'urgente' ? html`open` : ''}>
+        <summary><b>${c.titolo}</b> <span class="etichetta ${c.livello}">${NOMI_LIVELLO[c.livello]}</span> <span class="conta">${c.righe.length}</span></summary>
+        <p class="nota">${c.spiegazione}</p>
+        <ul class="elenco-controllo">${c.righe.slice(0, RIGHE_CONTROLLO_CRUSCOTTO).map(v => html`<li>${v.link ? html`<a href="${v.link}">${v.testo}</a>` : v.testo}${v.dettaglio ? html` <small>· ${v.dettaglio}</small>` : ''}</li>`)}</ul>
+        ${c.righe.length > RIGHE_CONTROLLO_CRUSCOTTO ? html`<p class="nota"><a href="/amministrazione/controlli#${c.chiave}">tutte le ${c.righe.length} →</a></p>` : ''}
+      </details>`)}`
+      : html`<p class="nota">Tutto a posto: nessuna cosa lasciata a metà.</p>`}
+  </section>`;
 }
 
 function commerciale(d: DatiCruscottoGenerale, oggi: string) {
@@ -146,7 +174,7 @@ function amministrazione(d: DatiCruscottoGenerale) {
     <div class="tit">Incassi scaduti più vecchi</div>
     ${elenco(x.incassiScaduti.map(s => riga(`${s.nome} · fatt. ${s.numero} · ${euro(s.importo)}`, `da ${s.giorni} gg`, { link: `/amministrazione/documenti/${s.documento_id}`, rosso: true })),
       'Nessun incasso scaduto.')}
-    <p class="nota"><a href="/amministrazione/controlli">Controlli settimanali</a> · le cose lasciate a metà (DDT vecchi, ordini senza data, prodotti senza prezzo, clienti senza SDI…)</p>`);
+    <p class="nota"><a href="#controlli">Controlli settimanali</a> · in cima, sotto "Da fare oggi"</p>`);
 }
 
 function sistema(d: DatiCruscottoGenerale) {

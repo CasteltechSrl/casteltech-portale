@@ -8,6 +8,9 @@ import { gunzipSync } from 'node:zlib';
 import { q, q1 } from '../db.js';
 import { html, raw, data as dataIt, type Raw } from '../views/html.js';
 import { CAMPI_AZIENDA, REGIMI_FISCALI, numeroCompleto, scrittaRate, type CampoAzienda } from '../../engine/amministrazione.js';
+import { MODALITA } from '../views/stampa-documento.js';
+import { caricaModiPagamento, salvaModiPagamento } from '../modi-pagamento-servizio.js';
+import { MODI_DI_SISTEMA } from '../../engine/modi-pagamento.js';
 import { collegaWebhook, statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { passaggioChiaveReale } from '../../engine/sdi.js';
 import { caricaBilancino, caricaBilanciUfficiali, eliminaBilancino, mesiCaricati } from '../pareggio-servizio.js';
@@ -30,7 +33,6 @@ const NOMI_TIPO: Record<string, string> = {
 };
 
 const NATURE = ['N1', 'N2.1', 'N2.2', 'N3.1', 'N3.2', 'N3.3', 'N3.4', 'N3.5', 'N3.6', 'N4', 'N5', 'N6.1', 'N6.2', 'N6.3', 'N6.4', 'N6.5', 'N6.6', 'N6.7', 'N6.8', 'N6.9', 'N7'];
-const MODALITA: Record<string, string> = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP12: 'RiBa' };
 const CODICE = /^[A-Z][A-Z0-9_]{1,20}$/;
 
 const numero = (v: unknown) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
@@ -41,8 +43,8 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
   const torna = (msg: string, ancora = '') => `/impostazioni/amministrazione?msg=${encodeURIComponent(msg)}${ancora}`;
 
   r.get('/', async (req, res) => {
-    const [azienda, numerazioni, aliquote, condizioni, sdi, bilancini, righe] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
-      caricaCondizioniPagamento(), statoInvoicetronic(), mesiCaricati(), statoRighe()]);
+    const [azienda, numerazioni, aliquote, condizioni, sdi, bilancini, righe, modi] = await Promise.all([caricaAzienda(), caricaNumerazioni(), caricaAliquote(),
+      caricaCondizioniPagamento(), statoInvoicetronic(), mesiCaricati(), statoRighe(), caricaModiPagamento()]);
     const annoOggi = new Date().getFullYear();
     const ricevute = sdi.ambiente ? await ultimeRicevute() : [];
     const scelta = (nome: string, valori: Record<string, string> | string[], attuale: string | null, form?: string, vuota = false) => {
@@ -156,6 +158,21 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
           <td><input type="checkbox" name="attiva" form="f-pag-nuova" checked></td>
           <td><form method="post" action="/impostazioni/amministrazione/pagamenti" id="f-pag-nuova"><button class="primario">Aggiungi</button></form></td></tr>
         </tbody></table></div>
+
+      <h2 id="modi-pagamento">Modi di pagamento e banche</h2>
+      <p class="nota">Gli elenchi che si usano quando si segna una rata incassata o pagata (fatture, fatture fornitori, Crediti, "Segna incassate").
+        Una voce per riga: per aggiungere scrivi una riga nuova, per togliere cancellala, per cambiare l'ordine sposta le righe.
+        Le rate già segnate tengono il nome di allora. ${MODI_DI_SISTEMA.join(' e ')} li usa il portale da solo e restano sempre.</p>
+      <form method="post" action="/impostazioni/amministrazione/modi-pagamento" class="blocco">
+        <div class="riga-campi">
+          <label>Modo di pagamento (obbligatorio sulla rata)
+            <textarea name="modi" rows="${Math.max(8, modi.modi.length + 2)}" title="Es. Bonifico, Ri.Ba., RID, Bancomat">${modi.modi.join('\n')}</textarea></label>
+          <label>Banca o strumento (facoltativo: con che cosa)
+            <textarea name="strumenti" rows="${Math.max(8, modi.strumenti.length + 2)}" title="Es. Bper, Credit Agricole, Carta di credito aziendale">${modi.strumenti.join('\n')}</textarea></label>
+        </div>
+        ${modi.salvato ? '' : html`<p class="nota">Elenco delle banche non ancora salvato: per ora sono quelle già scritte nelle rate, dalla più usata.</p>`}
+        <button class="primario">Salva gli elenchi</button>
+      </form>
 
       <h2 id="clienti-fic">Dati fiscali dei clienti da Fatture in Cloud</h2>
       <details class="blocco">
@@ -382,6 +399,12 @@ export function rotteImpostazioniAmministrazione(pagina: Pagina) {
     if (!(modalita in MODALITA)) return { errore: 'Modalità non valida.' };
     return { v: [String(b.descrizione ?? '').trim(), modalita, giorni, spunta(b.fine_mese), Math.trunc(numero(b.ordine || 0)) || 0, spunta(b.attiva), rate, ogni] };
   };
+  // Modi di pagamento e banche (Adriano 7/11/2026)
+  r.post('/modi-pagamento', async (req, res) => {
+    const m = await salvaModiPagamento(req.body.modi, req.body.strumenti);
+    res.redirect(torna(`Elenchi salvati: ${m.modi.length} modi di pagamento, ${m.strumenti.length} banche o strumenti.`, '#modi-pagamento'));
+  });
+
   r.post('/pagamenti/:codice', async (req, res) => {
     const { v, errore } = valoriPagamento(req.body);
     if (errore) return res.redirect(torna(`${req.params.codice}: ${errore} Non salvato.`, '#pagamenti'));

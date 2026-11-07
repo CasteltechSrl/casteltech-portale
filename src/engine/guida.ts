@@ -155,22 +155,24 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'cruscotto-generale', area: 'inizio', titolo: 'La prima pagina: il cruscotto generale',
-    parole: 'cruscotto generale homepage pagina iniziale home riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
+    parole: 'cruscotto generale homepage pagina iniziale home indirizzo link onrender controlli settimanali riepilogo da fare oggi cose importanti situazione numeri chiave colpo occhio',
     testo: [
       'Dal 31/10/2026, dopo l\'accesso, l\'ufficio arriva sul cruscotto generale. Si torna lì in ogni momento cliccando "Portale Casteltech" in alto a sinistra.',
       'Dal 6/11/2026 in cima ci sono le cinque finestre del flusso di produzione (Da acquistare, Da preparare, In produzione, Da spedire, Spedite nel mese): vedi l\'argomento "Il flusso di produzione nel cruscotto".',
       'Sotto c\'è "Da fare oggi": un pulsante per ogni cosa che aspetta qualcuno, con il numero. Rosso = urgente (fatture scartate dallo SdI, consegne in ritardo, incassi scaduti), giallo = da controllare (preventivi da validare, documenti da acquisire, pagamenti scaduti), verde = da fare (DDT da fatturare, bozze, tempi aperti dal reparto, azioni del CRM). Se la cosa è una sola, il pulsante porta direttamente lì.',
       'Sotto ci sono sei numeri chiave (fatturato dell\'anno, ordini da evadere, preventivi aperti, commesse in corso, da incassare, da pagare) e un riquadro per area: Commerciale, Ordini clienti, Produzione (con il carico delle prossime 4 settimane dal Gantt), Acquisti, Amministrazione (con gli esiti dello SdI), Promemoria e sistema (scadenze del 15 e del 16, servizi, ultimo backup, suggerimenti).',
+      'Dal 7/11/2026 subito sotto "Da fare oggi" c\'è la sezione "Controlli settimanali": le cose lasciate a metà (DDT vecchi, commesse oltre la consegna, ordini senza data, prodotti senza prezzo…), un riquadro per controllo con le prime righe; i controlli urgenti sono già aperti, gli altri si aprono con un clic. "Pagina completa" porta ad Amministrazione → Controlli settimanali.',
+      'L\'indirizzo del portale (casteltech-portale.onrender.com) apre sempre il cruscotto: se non sei entrato chiede email e password e poi ti porta lì. Un telefono o tablet del reparto che ricorda la sigla trova sotto il login il link "continua come …"; il reparto si apre anche dal QR o da /r.',
       'I dati si leggono solo quando si apre la pagina: per vederli aggiornati basta ricaricarla. I cruscotti di dettaglio restano in Ordini clienti e in Amministrazione. Il profilo Contabilità continua ad aprirsi sul cruscotto dell\'Amministrazione, il reparto sulle pagine del telefono.',
     ],
     pagine: [['/cruscotto', 'Cruscotto generale'], ['/ordini/cruscotto', 'Cruscotto ordini'], ['/amministrazione', 'Cruscotto amministrazione']],
   },
   {
     id: 'menu-gruppi', area: 'inizio', titolo: 'Il menu in alto: gruppi e tendine',
-    parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata',
+    parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
     testo: [
       'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
-      'Anagrafiche: clienti, fornitori, prodotti, componenti. Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti. Acquisti: ordini a fornitore e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, fatture dei fornitori.',
+      'Anagrafiche: clienti, fornitori, prodotti, componenti. Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
       'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
       'Più avanti arriveranno anche i gruppi Qualità e Sicurezza e ambiente.',
     ],
@@ -650,9 +652,10 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'controlli settimanali lunedì cose a metà ddt vecchi non fatturati ordini senza data consegna prodotti senza prezzo clienti senza codice sdi pec fatture fornitori senza scadenza preventivi fermi bozze commesse oltre consegna fasi aperte',
     testo: [
       'Amministrazione → Controlli settimanali raccoglie in una pagina sola, dalle più urgenti, le cose che nessun cruscotto mostra insieme: commesse aperte oltre la data di consegna; DDT da fatturare da più di 20 giorni; servizi degli ordini (lamine, programmazioni, una tantum) mai fatturati con le schede già tutte consegnate (5/11/2026: si aggiungono dalla bozza della fattura, riquadro "Servizi degli ordini non ancora fatturati"); fasi aperte dal telefono da più di 2 giorni; ordini con righe senza data di consegna; prodotti in ordine senza prezzo in anagrafica; clienti fatturati nell\'ultimo anno senza codice destinatario né PEC; fatture fornitori senza scadenza di pagamento; preventivi in bozza fermi da più di 30 giorni.',
-      'Ogni riga porta alla pagina dove si sistema (commessa, DDT, ordine, prodotto, dati fiscali del cliente, fattura del fornitore, preventivo). La pagina si calcola quando la apri: niente controlli automatici. Il link sta anche nel riquadro Amministrazione del cruscotto generale.',
+      'Ogni riga porta alla pagina dove si sistema (commessa, DDT, ordine, prodotto, dati fiscali del cliente, fattura del fornitore, preventivo). La pagina si calcola quando la apri: niente controlli automatici.',
+      'Dal 7/11/2026 gli stessi controlli sono anche nel cruscotto generale (la prima pagina), nella sezione "Controlli settimanali" subito sotto i pulsanti delle urgenze, con le prime righe di ogni controllo.',
     ],
-    passi: ['Il lunedì apri Amministrazione → Controlli settimanali.', 'Parti dalle sezioni urgenti (rosse).', 'Sistema ogni riga dalla sua pagina; ricarica per vedere cosa resta.'],
+    passi: ['Il lunedì guarda "Controlli settimanali" nel cruscotto (o apri Amministrazione → Controlli settimanali).', 'Parti dalle sezioni urgenti (rosse).', 'Sistema ogni riga dalla sua pagina; ricarica per vedere cosa resta.'],
     pagine: [['/amministrazione/controlli', 'Controlli settimanali']],
   },
   {
@@ -1116,13 +1119,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'incassi-pagamenti', area: 'amministrazione', titolo: 'Incassi, pagamenti e fatture dei fornitori',
-    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca fornitori ricevute passive cruscotto da pagare arrivate sdi scarica xml p7m',
+    parole: 'incasso incassato pagamento pagato scadenza scadute rata banca rid modi modo di pagamento metodi strumento carta bancomat conto aggiungere fornitori ricevute passive cruscotto da pagare arrivate sdi scarica xml p7m',
     testo: [
       'Il cruscotto di Amministrazione mostra fatturato e acquisti dell\'anno rispetto all\'anno prima, incassi e pagamenti aperti per urgenza (scadute, entro 7 giorni, entro 30, oltre), DDT da fatturare e bozze da finire.',
-      'Ogni rata, delle fatture emesse e di quelle dei fornitori, si segna incassata o pagata con la data, il modo di pagamento (bonifico, Ri.Ba., bancomat, carta di credito, PayPal, compensato con fattura, stornato) e, se serve, la banca o il conto (es. Bper). Le fatture dei fornitori sono in "Fatture fornitori", con il filtro "Solo da pagare"; sotto il filtro il riquadro rosso "Scadute da pagare" elenca sempre, di tutti gli anni, le fatture con rate già scadute e non pagate, la più vecchia in cima.',
+      'Ogni rata, delle fatture emesse e di quelle dei fornitori, si segna incassata o pagata con la data, il modo di pagamento (bonifico, Ri.Ba., RID, bancomat, carta di credito, PayPal, compensato con fattura, stornato) e, se serve, la banca o lo strumento (es. Bper, carta di credito aziendale). Gli elenchi dei modi e delle banche si cambiano in Impostazioni → Amministrazione → Modi di pagamento e banche: una voce per riga, si aggiunge una riga per un modo o una banca nuova (7/11/2026). Le fatture dei fornitori sono in Acquisti → Fatture fornitori, con il filtro "Solo da pagare"; sotto il filtro il riquadro rosso "Scadute da pagare" elenca sempre, di tutti gli anni, le fatture con rate già scadute e non pagate, la più vecchia in cima.',
       "Le fatture dei fornitori arrivano da sole dallo SdI (Invoicetronic): con gli esiti collegati in Impostazioni → Amministrazione → Invio allo SdI entrano appena arrivano, oppure si prendono con \"Scarica dallo SdI\" in Fatture fornitori. Il fornitore si cerca per P.IVA (se è nuovo si aggiunge all'anagrafica con nota DA VERIFICARE), le scadenze arrivano dalla fattura; quelle già caricate da Fatture in Cloud e le copie delle nostre autofatture non si ripetono.",
     ],
-    pagine: [['/amministrazione', 'Cruscotto amministrazione'], ['/amministrazione/ricevuti?da_pagare=1', 'Fatture fornitori da pagare']],
+    pagine: [['/amministrazione', 'Cruscotto amministrazione'], ['/amministrazione/ricevuti?da_pagare=1', 'Fatture fornitori da pagare'], ['/impostazioni/amministrazione#modi-pagamento', 'Modi di pagamento e banche']],
   },
   {
     id: 'impostazioni-amministrazione', area: 'amministrazione', titolo: 'Numerazioni, IVA, pagamenti e dati fiscali dei clienti',
