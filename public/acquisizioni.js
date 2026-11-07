@@ -11,7 +11,9 @@
     for (const [i, f] of files.entries()) {
       out.textContent = `Lettura di ${f.name} (${i + 1} di ${files.length})… può servire un minuto.`;
       const res = await fetch(bottone.dataset.url || '/ordini/acquisire/carica', { method: 'POST', body: f,
-        headers: { 'Content-Type': 'application/octet-stream', 'X-Nome-File': encodeURIComponent(f.name) } }).catch(() => null);
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Nome-File': encodeURIComponent(f.name),
+          // Banca: conto dei movimenti (es. BPER)
+          ...(document.getElementById('conto-banca') ? { 'X-Conto': encodeURIComponent(document.getElementById('conto-banca').value) } : {}) } }).catch(() => null);
       const j = res ? await res.json().catch(() => ({})) : {};
       esiti.push(`${f.name}: ${res && res.ok ? j.stato + (j.errore ? ` (${j.errore})` : '') : j.errore || 'errore di rete'}`);
     }

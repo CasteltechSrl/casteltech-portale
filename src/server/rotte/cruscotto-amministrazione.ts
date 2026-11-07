@@ -18,11 +18,11 @@ const MOSTRATE = 12;   // scadenze elencate per riquadro (le altre sono nei tota
  * Tasti della sezione Amministrazione. DDT, Fatture, Autofatture e Note di credito stanno qui direttamente, al posto di
  * "Documenti emessi" con le sue schede (Adriano 2/11/2026: sono i documenti che si usano di più). Indirizzi invariati.
  */
-export function menuAmministrazione(attiva: 'cruscotto' | 'ddt' | 'fattura' | 'autofattura' | 'nota_credito' | 'ricevuti' | 'registri' | 'vies' | 'analisi' | 'fiscale'): Raw {
+export function menuAmministrazione(attiva: 'cruscotto' | 'ddt' | 'fattura' | 'autofattura' | 'nota_credito' | 'ricevuti' | 'registri' | 'vies' | 'analisi' | 'fiscale' | 'banca'): Raw {
   const voci = [['cruscotto', '/amministrazione', 'Cruscotto'],
     ...SCHEDE_DOCUMENTI.map(s => [s.tipo, `/amministrazione/documenti?tipo=${s.tipo}`, s.tanti] as const),
     ['registri', '/amministrazione/registri', 'Registri IVA'],   // Fatture fornitori negli Acquisti (Adriano 7/11/2026)
-    ['vies', '/amministrazione/vies', 'Controllo VIES'], ['fiscale', '/amministrazione/spese', 'Spese, bollo, lettere d\'intento'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
+    ['banca', '/amministrazione/banca', 'Banca'], ['vies', '/amministrazione/vies', 'Controllo VIES'], ['fiscale', '/amministrazione/spese', 'Spese, bollo, lettere d\'intento'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
   return html`<nav class="tasti-sezione">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}
     <a href="/impostazioni/amministrazione">Impostazioni</a></nav>`;
 }

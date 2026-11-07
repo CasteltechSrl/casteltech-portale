@@ -29,6 +29,7 @@ import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, acquistiPerFornitore, 
 import { riquadroVies, rotteRegistriIva, rotteVies } from './registri-iva.js';
 import { rotteAnalisi } from './analisi.js';
 import { riquadroPlafond, rotteFiscale } from './fiscale.js';
+import { rotteBanca } from './banca.js';
 import { riquadroFattureEstere, rotteAutofatture } from './autofatture.js';
 import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-servizio.js';
@@ -239,6 +240,7 @@ export function rotteAmministrazione() {
       <p>L'Analisi (andamento, prodotti, clienti, fornitori, punto di pareggio) la vedono solo l'amministratore e il profilo esterno.</p>
       <p><a href="/amministrazione">← Amministrazione</a></p>` })));
   }, rotteAnalisi());
+  r.use('/banca', rotteBanca());
   r.use('/', rotteFiscale());
   r.use('/vies', rotteVies());
 

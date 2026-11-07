@@ -1,0 +1,217 @@
+/**
+ * Banca (Adriano 7/11/2026): caricamento dell'estratto conto, abbinamento con le rate, distinte RiBa. Regole in `engine/banca.ts`.
+ */
+import { q, q1, transazione } from './db.js';
+import { leggiFileBom } from './codifica-servizio.js';
+import { testoDaFile } from '../engine/componenti-clienti.js';
+import { abiCabDaIban, chiaviMovimenti, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
+  categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
+
+const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.numero IS NOT NULL`;
+
+/** Movimenti letti dal file: CBI (testo a righe fisse) oppure Excel/CSV dell'home banking. */
+export async function leggiEstrattoConto(nome: string, dati: Buffer): Promise<{ movimenti: Movimento[]; formato: string; errore?: string }> {
+  const n = nome.toLowerCase();
+  if (n.endsWith('.xls')) return { movimenti: [], formato: 'xls', errore: 'File .xls (Excel 97-2003): aprilo in Excel e salvalo come .xlsx o .csv, oppure scarica dall\'home banking il formato CBI.' };
+  if (!n.endsWith('.xlsx')) {
+    const testo = testoDaFile(dati);
+    const cbi = leggiCbi(testo);
+    if (cbi) return { movimenti: cbi, formato: 'CBI' };
+    try {
+      const righe = await leggiFileBom(n.endsWith('.csv') ? n : `${n}.csv`, Buffer.from(testo, 'utf8'));
+      return { ...movimentiDaTabella(righe, true), formato: 'CSV' };
+    } catch (e) { return { movimenti: [], formato: 'CSV', errore: (e as Error).message }; }
+  }
+  try { return { ...movimentiDaTabella(await leggiFileBom(n, dati), false), formato: 'Excel' }; }
+  catch (e) { return { movimenti: [], formato: 'Excel', errore: `File Excel non leggibile: ${(e as Error).message}` }; }
+}
+
+/** Scrive i movimenti nuovi (quelli già caricati hanno la stessa chiave e si saltano). */
+export async function caricaMovimenti(movimenti: Movimento[], conto: string, file: string): Promise<{ nuovi: number; gia: number }> {
+  const chiavi = chiaviMovimenti(movimenti, conto);
+  const inseriti = await q<{ id: number }>(`INSERT INTO banca_movimenti (conto, data, valuta, importo, descrizione, causale, chiave, file)
+    SELECT $1, m.data, m.valuta, m.importo, m.descrizione, m.causale, m.chiave, $2
+    FROM jsonb_to_recordset($3::jsonb) AS m(data date, valuta date, importo numeric, descrizione text, causale text, chiave text)
+    ON CONFLICT (chiave) DO NOTHING RETURNING id`, [conto, file, JSON.stringify(movimenti.map((m, i) => ({ ...m, chiave: chiavi[i] })))]);
+  return { nuovi: inseriti.length, gia: movimenti.length - inseriti.length };
+}
+
+/** Rate ancora aperte: delle fatture emesse (da incassare) e delle fatture dei fornitori (da pagare). */
+export async function rateAperte(): Promise<RataAperta[]> {
+  const [emesse, ricevute] = await Promise.all([
+    q<any>(`SELECT s.id, d.id AS documento_id, d.numero::text AS numero, coalesce(d.sezionale, '') AS sezionale, to_char(d.data, 'YYYY-MM-DD') AS data_doc,
+        to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita, s.riba_distinta_id,
+        coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS controparte, c.partita_iva
+      FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND ${STATI_OK}`),
+    q<any>(`SELECT s.id, d.id AS documento_id, coalesce(d.numero, '')::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data_doc,
+        to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo,
+        coalesce(f.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS controparte, f.partita_iva
+      FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+      WHERE s.pagata_il IS NULL AND d.tipo = 'fattura'`),
+  ]);
+  return [
+    ...emesse.map((r): RataAperta => ({ id: r.id, tipo: 'emessa', documentoId: r.documento_id, numero: r.sezionale ? `${r.numero}/${r.sezionale}` : r.numero,
+      dataDoc: r.data_doc, scadenza: r.scadenza, importo: r.importo, controparte: r.controparte, partitaIva: r.partita_iva,
+      riba: r.modalita === 'MP12', distintaId: r.riba_distinta_id })),
+    ...ricevute.map((r): RataAperta => ({ id: r.id, tipo: 'ricevuta', documentoId: r.documento_id, numero: r.numero, dataDoc: r.data_doc,
+      scadenza: r.scadenza, importo: r.importo, controparte: r.controparte, partitaIva: r.partita_iva })),
+  ];
+}
+
+export interface MovimentoDb extends Movimento { id: number; conto: string; stato: string; categoria: string | null; rate: { tipo: string; id: number }[]; file: string | null }
+
+const SELECT_MOV = `SELECT id, conto, to_char(data, 'YYYY-MM-DD') AS data, to_char(valuta, 'YYYY-MM-DD') AS valuta, importo::float AS importo,
+  descrizione, causale, stato, categoria, rate, file FROM banca_movimenti`;
+
+export async function movimento(id: number): Promise<MovimentoDb | null> {
+  return (await q1<MovimentoDb>(`${SELECT_MOV} WHERE id = $1`, [id])) ?? null;
+}
+
+/** Movimenti da abbinare con la proposta (rate) o la categoria proposta. Ogni rata è proposta a un solo movimento (il più sicuro). */
+export async function movimentiDaAbbinare(): Promise<{ m: MovimentoDb; proposta: Proposta | null; categoria: string }[]> {
+  const [movimenti, rate] = await Promise.all([q<MovimentoDb>(`${SELECT_MOV} WHERE stato = 'da_abbinare' ORDER BY data, id`), rateAperte()]);
+  const proposte = movimenti.map(m => ({ m, proposta: proponiAbbinamento(m, rate) }));
+  // la stessa rata non va a due movimenti: tiene il punteggio più alto
+  const usate = new Map<string, number>();
+  for (const [i, p] of proposte.entries()) for (const r of p.proposta?.rate ?? []) {
+    const k = `${r.tipo}:${r.id}`;
+    const prima = usate.get(k);
+    if (prima == null || (proposte[prima].proposta?.punteggio ?? 0) < p.proposta!.punteggio) usate.set(k, i);
+  }
+  return proposte.map((p, i) => {
+    const libera = p.proposta?.rate.every(r => usate.get(`${r.tipo}:${r.id}`) === i);
+    return { m: p.m, proposta: libera ? p.proposta : null, categoria: categoriaProposta(p.m) };
+  });
+}
+
+/** Modo di pagamento per le rate segnate dal movimento. */
+const modoDi = (m: Movimento, riba: boolean) => (riba || /riba|ri\.ba|effett/i.test(m.descrizione) ? 'Ri.Ba.' : 'Bonifico');
+
+/**
+ * Abbina il movimento alle rate (ancora aperte e della direzione giusta): le rate diventano incassate/pagate alla data del movimento,
+ * con modo e conto. La somma delle rate deve essere l'importo del movimento (al centesimo), salvo `forza` (abbinamento a mano parziale).
+ */
+export async function abbinaMovimento(id: number, scelte: { tipo: 'emessa' | 'ricevuta'; id: number }[], utente: string, forza = false): Promise<string | null> {
+  const m = await movimento(id);
+  if (!m) return 'Movimento non trovato.';
+  if (m.stato !== 'da_abbinare') return 'Movimento già abbinato o registrato.';
+  if (!scelte.length) return 'Nessuna fattura scelta.';
+  const tipo = m.importo > 0 ? 'emessa' : 'ricevuta';
+  if (scelte.some(s => s.tipo !== tipo)) return m.importo > 0 ? 'Un\'entrata si abbina solo a fatture emesse.' : 'Un\'uscita si abbina solo a fatture dei fornitori.';
+  const ids = scelte.map(s => s.id);
+  const aperte = (await rateAperte()).filter(r => r.tipo === tipo && ids.includes(r.id));
+  if (aperte.length !== ids.length) return 'Una delle rate è già stata segnata pagata: ricarica la pagina.';
+  const somma = aperte.reduce((s, r) => s + r.importo, 0);
+  if (!forza && Math.abs(somma - Math.abs(m.importo)) >= 0.005) return `Le rate scelte fanno ${somma.toFixed(2)} €, il movimento ${Math.abs(m.importo).toFixed(2)} €.`;
+  const modo = modoDi(m, aperte.some(r => r.riba || r.distintaId));
+  await transazione(async c => {
+    const tabella = tipo === 'emessa' ? 'documenti_scadenze' : 'documenti_ricevuti_scadenze';
+    await c.query(`UPDATE ${tabella} SET pagata_il = $2, modo = $3, conto = $4 WHERE id = ANY($1) AND pagata_il IS NULL`, [ids, m.data, modo, m.conto]);
+    await c.query(`UPDATE banca_movimenti SET stato = 'abbinato', categoria = $2, rate = $3, confermato_il = now(), confermato_da = $4 WHERE id = $1`,
+      [id, tipo === 'emessa' ? 'Incasso fattura' : 'Pagamento fattura', JSON.stringify(scelte), utente]);
+  });
+  return null;
+}
+
+/** Movimento senza fattura: solo la categoria. */
+export async function registraMovimento(id: number, categoria: string, utente: string): Promise<void> {
+  await q(`UPDATE banca_movimenti SET stato = 'registrato', categoria = $2, rate = '[]', confermato_il = now(), confermato_da = $3 WHERE id = $1 AND stato = 'da_abbinare'`,
+    [id, categoria, utente]);
+}
+
+/** Annulla: le rate segnate da questo movimento tornano aperte (solo se hanno ancora la data del movimento), il movimento torna da abbinare. */
+export async function annullaMovimento(id: number): Promise<void> {
+  const m = await movimento(id);
+  if (!m || m.stato === 'da_abbinare') return;
+  await transazione(async c => {
+    const emesse = m.rate.filter(r => r.tipo === 'emessa').map(r => r.id);
+    const ricevute = m.rate.filter(r => r.tipo === 'ricevuta').map(r => r.id);
+    if (emesse.length) await c.query(`UPDATE documenti_scadenze SET pagata_il = NULL, modo = NULL, conto = NULL WHERE id = ANY($1) AND pagata_il = $2`, [emesse, m.data]);
+    if (ricevute.length) await c.query(`UPDATE documenti_ricevuti_scadenze SET pagata_il = NULL, modo = NULL, conto = NULL WHERE id = ANY($1) AND pagata_il = $2`, [ricevute, m.data]);
+    await c.query(`UPDATE banca_movimenti SET stato = 'da_abbinare', categoria = NULL, rate = '[]', confermato_il = NULL, confermato_da = NULL WHERE id = $1`, [id]);
+  });
+}
+
+/** Elimina un movimento caricato per sbaglio (solo se non è abbinato). */
+export async function eliminaMovimento(id: number): Promise<boolean> {
+  return (await q(`DELETE FROM banca_movimenti WHERE id = $1 AND stato <> 'abbinato' RETURNING id`, [id])).length > 0;
+}
+
+// ───────────────────────────── RiBa ─────────────────────────────
+
+export async function codiceSia(): Promise<string> {
+  return String((await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'banca'`))?.valore?.sia ?? '');
+}
+
+export async function salvaCodiceSia(sia: string): Promise<void> {
+  const v = sia.toUpperCase().replace(/\s/g, '').slice(0, 5);
+  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('banca', jsonb_build_object('sia', $1::text))
+    ON CONFLICT (chiave) DO UPDATE SET valore = impostazioni.valore || jsonb_build_object('sia', $1::text), aggiornato_il = now()`, [v]);
+}
+
+export interface RataAnticipo {
+  id: number; documento_id: number; numero: string; data_doc: string; scadenza: string; importo: number; modalita: string;
+  cliente: string; cliente_id: number | null; partita_iva: string | null; codice_fiscale: string | null; indirizzo: string | null; cap: string | null;
+  comune: string | null; provincia: string | null; banca_appoggio: string | null; riba_distinta_id: number | null;
+}
+
+/** Rate aperte delle fatture emesse con scadenza da oggi in avanti (le RiBa e i bonifici da anticipare). */
+export async function rateDaAnticipare(): Promise<RataAnticipo[]> {
+  return q<RataAnticipo>(`SELECT s.id, d.id AS documento_id, d.numero::text || CASE WHEN coalesce(d.sezionale, '') <> '' THEN '/' || d.sezionale ELSE '' END AS numero,
+      to_char(d.data, 'YYYY-MM-DD') AS data_doc, to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita,
+      coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', '') AS cliente, c.id AS cliente_id, c.partita_iva, c.codice_fiscale,
+      c.indirizzo, c.cap, c.comune, c.provincia, c.banca_appoggio, s.riba_distinta_id
+    FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+    WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND ${STATI_OK} AND s.data >= current_date AND s.importo > 0
+    ORDER BY s.data, d.numero`);
+}
+
+export function effettoDa(r: RataAnticipo): EffettoRiba {
+  return { rataId: r.id, scadenza: r.scadenza, importo: r.importo, numeroFattura: r.numero, dataFattura: r.data_doc,
+    debitore: { nome: r.cliente, codiceFiscale: r.partita_iva || r.codice_fiscale || '', indirizzo: r.indirizzo ?? '', cap: r.cap ?? '', comune: r.comune ?? '',
+      provincia: r.provincia ?? '', iban: r.banca_appoggio, banca: abiCabDaIban(r.banca_appoggio) ? null : r.banca_appoggio } };
+}
+
+export async function creditore(): Promise<CreditoreRiba> {
+  const az = (await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
+  return { sia: await codiceSia(), ragioneSociale: az.ragione_sociale ?? '', indirizzo: az.indirizzo ?? '', cap: az.cap ?? '', comune: az.comune ?? '',
+    provincia: az.provincia ?? '', partitaIva: az.partita_iva ?? '', iban: az.iban ?? '' };
+}
+
+/** Crea la distinta RiBa con le rate scelte: errori (niente file) oppure id della distinta. */
+export async function creaDistinta(ids: number[], utente: string, oggi: string): Promise<{ id?: number; errori: string[] }> {
+  const cred = await creditore();
+  const errori = controlliCreditore(cred);
+  const rate = (await rateDaAnticipare()).filter(r => ids.includes(r.id));
+  if (!rate.length) errori.push('Nessuna rata scelta (o già incassata).');
+  for (const r of rate) {
+    if (r.riba_distinta_id) errori.push(`Fattura ${r.numero} (${r.cliente}): già nella distinta n. ${r.riba_distinta_id}.`);
+    for (const e of controlliEffetto(effettoDa(r), oggi)) errori.push(`Fattura ${r.numero} (${r.cliente}): ${e}.`);
+  }
+  if (errori.length) return { errori };
+  return transazione(async c => {
+    const nuova = (await c.query(`INSERT INTO riba_distinte (creata_da, nome_supporto, quante, totale, file) VALUES ($1, '', $2, $3, '') RETURNING id`,
+      [utente, rate.length, rate.reduce((s, r) => s + r.importo, 0)])).rows[0].id as number;
+    const supporto = `RIBA${oggi.replace(/-/g, '')}${String(nuova).padStart(4, '0')}`;
+    const file = generaRiba(cred, rate.map(effettoDa), oggi, supporto);
+    await c.query(`UPDATE riba_distinte SET nome_supporto = $2, file = $3 WHERE id = $1`, [nuova, supporto, file]);
+    await c.query(`UPDATE documenti_scadenze SET riba_distinta_id = $2 WHERE id = ANY($1)`, [rate.map(r => r.id), nuova]);
+    return { id: nuova, errori: [] };
+  });
+}
+
+export async function distinte() {
+  return q<{ id: number; creata_il: string; creata_da: string; nome_supporto: string; quante: number; totale: number; annullata: boolean; incassate: number }>(
+    `SELECT r.id, to_char(r.creata_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') AS creata_il, r.creata_da, r.nome_supporto, r.quante, r.totale::float AS totale, r.annullata,
+       (SELECT count(*)::int FROM documenti_scadenze s WHERE s.riba_distinta_id = r.id AND s.pagata_il IS NOT NULL) AS incassate
+     FROM riba_distinte r ORDER BY r.id DESC LIMIT 50`);
+}
+
+/** Annulla la distinta (la banca non l'ha presa): le rate si possono rimettere in un'altra distinta. */
+export async function annullaDistinta(id: number): Promise<void> {
+  await transazione(async c => {
+    await c.query(`UPDATE riba_distinte SET annullata = true WHERE id = $1`, [id]);
+    await c.query(`UPDATE documenti_scadenze SET riba_distinta_id = NULL WHERE riba_distinta_id = $1 AND pagata_il IS NULL`, [id]);
+  });
+}

@@ -682,6 +682,31 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/solleciti', 'Solleciti incassi'], ['/amministrazione', 'Cruscotto amministrazione']],
   },
   {
+    id: 'banca-movimenti', area: 'amministrazione', titolo: 'Banca: estratto conto e abbinamento con le fatture',
+    parole: 'banca bper estratto conto movimenti cbi excel csv abbinamento abbina incassi pagamenti bonifico riconciliazione home banking commissioni f24 categoria',
+    testo: [
+      'Amministrazione → Banca. Da BPER Banking Business scarichi i movimenti del conto in formato CBI (meglio) oppure Excel .xlsx o CSV e li carichi con "Carica l\'estratto conto". Un periodo ricaricato non raddoppia: i movimenti già presenti si saltano.',
+      'Per ogni movimento il portale propone le fatture: le entrate si abbinano alle fatture emesse da incassare, le uscite alle fatture dei fornitori da pagare. Cerca lo stesso importo, poi il numero della fattura e il nome del cliente o fornitore nella descrizione del bonifico; riconosce anche un bonifico che paga più fatture dello stesso cliente e l\'accredito di una distinta RiBa intera.',
+      'Le proposte sicure sono già spuntate; quelle da controllare (per esempio due fatture con lo stesso importo) no. "Conferma le righe spuntate" segna le fatture incassate o pagate alla data del movimento, con il modo (bonifico o RiBa) e il conto. I movimenti senza fattura (commissioni, F24, stipendi, carta…) prendono una categoria proposta, che si cambia dal menu.',
+      '"a mano" apre il movimento: si spuntano una o più rate (la somma deve fare l\'importo) oppure si sceglie la categoria. "Annulla" in fondo alla pagina rimette il movimento da abbinare e le fatture tornano da incassare o pagare.',
+      'Il collegamento diretto con la banca (open banking PSD2) verrà dopo: l\'abbinamento resterà lo stesso.',
+    ],
+    passi: ['Scarica da BPER i movimenti in formato CBI, Excel o CSV.', 'Amministrazione → Banca → "Carica l\'estratto conto", scegli il file e premi Carica.', 'Controlla le proposte, spunta e premi "Conferma le righe spuntate".'],
+    pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti']],
+  },
+  {
+    id: 'banca-riba', area: 'amministrazione', titolo: 'RiBa e anticipo fatture: il file per la banca',
+    parole: 'riba ri.ba ricevuta bancaria file cbi distinta anticipo fatture sbf salvo buon fine codice sia abi cab iban cliente banca appoggio portafoglio effetti',
+    testo: [
+      'Amministrazione → Banca → RiBa e anticipo fatture elenca le rate delle fatture emesse ancora da incassare con scadenza da oggi in avanti. Quelle con pagamento RiBa e i dati completi sono già spuntate.',
+      '"Crea il file RiBa (CBI)" prepara il file standard da caricare in BPER Banking Business (Incassi → Ri.Ba.). Servono il codice SIA dell\'azienda (5 caratteri, lo dà BPER: si scrive una volta in questa pagina), l\'IBAN dell\'azienda (Impostazioni → Amministrazione) e, per ogni cliente, l\'IBAN della sua banca nel campo "Banca d\'appoggio" dei Dati fiscali, più partita IVA e indirizzo. Se manca qualcosa il file non si crea e il messaggio dice cosa.',
+      'Le rate messe in una distinta mostrano il numero della distinta e non si rimettono in un\'altra. Quando la banca accredita la distinta, in Banca il movimento si abbina da solo a tutte le sue fatture. "Annulla" sulla distinta serve solo se la banca non l\'ha presa.',
+      'Anticipo fatture con bonifico: spunta le fatture e "Excel per l\'anticipo" dà l\'elenco da mandare alla banca; gli XML si scaricano da Fatture con le spunte (XML/zip).',
+    ],
+    passi: ['Scrivi il codice SIA (una volta).', 'Spunta le fatture e premi "Crea il file RiBa (CBI)".', 'Scarica il file e caricalo nell\'home banking BPER.'],
+    pagine: [['/amministrazione/banca/anticipi', 'RiBa e anticipo fatture']],
+  },
+  {
     id: 'bozze-autosalvataggio', area: 'amministrazione', titolo: 'Le bozze si salvano da sole',
     parole: 'salvataggio automatico autosave bozza salva da sola modifiche non salvate ctrl s scorciatoia perso lavoro chiudere pagina',
     testo: [
