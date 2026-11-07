@@ -307,3 +307,15 @@ test('BOM: la riga del circuito stampato (PCB) non è un componente; "PCB mount"
   assert.equal(rigaPcb({ designatori: 'J1', descrizioneBom: 'Terminal block PCB mount' }), false);
   assert.equal(rigaPcb({ designatori: 'R1', valore: '10K' }), false);
 });
+
+test('designatori: la colonna con più riferimenti per riga vince sul codice interno (BOM Idea, 7/11/2026)', () => {
+  const colonne = ['CODICE', 'DESCRIZIONE', 'Colonna', 'QTà'];
+  const dati = [
+    ['CAP0032', 'CONDENSATORE SMD 0805 50V 1UF', 'C28, C35, C64', '3'],
+    ['CAP0038', 'CONDENSATORE SMD 0603 50V 100NF X7R', 'C1, C5, C6, C7', '4'],
+    ['BUZ0004', 'BUZZER PASSIVO SMD PKLCS1212E40A1-R1', 'U13', '1'],
+    ['CON0010', 'CONNETTORE 5 POLI', 'CN4, JP1', '2'],
+    ['RES0001', 'RESISTENZA SMD 0603 10K', 'R1, R2', '2'],
+  ];
+  assert.equal(rilevaColonne(colonne, dati).designatori, 'Colonna');
+});
