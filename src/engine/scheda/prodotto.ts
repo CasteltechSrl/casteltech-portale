@@ -52,7 +52,8 @@ const etichetta = (s: string) => s.replace(/[:=]\s*$/, '').replace(/\s+/g, ' ').
 export const pulisciRevisione = (s: string) => maiuscolo(s).replace(/^(REVISIONE|REVISION|REV\.?|VERSIONE|VERSION|VER\.?|V|R)\s*[-_.:]?\s*(?=[0-9A-Z])/, '').slice(0, 20);
 /** Codice senza l'estensione del file del CAD ("EA1002.PrjPcb" → EA1002). */
 const pulisciCodice = (s: string) => maiuscolo(s).replace(/\.(PRJPCB|PRJPCBSTRUCTURE|KICAD_PRO|KICAD_PCB|PRO|PCB|BRD|PCBDOC|SCHDOC|DSN)$/, '');
-const valido = (s: string) => !!s && s.length <= 80 && !/^(N\/?A|-+|TBD|\?+)$/i.test(s);
+// "rev?" = campo non compilato nel CAD (KiCad lo scrive così nel Gerber X2): niente revisione, non "EV?"
+const valido = (s: string) => !!s && s.length <= 80 && !/^(N\/?A|-+|TBD|\?+)$/i.test(s) && !s.includes('?');
 
 /** Intestazione della BOM: "Project: EA1002" nella stessa cella, oppure l'etichetta in una cella e il valore nella successiva. */
 function daIntestazioneBom(righe: string[][]): Partial<ProdottoNuovo> {
@@ -83,7 +84,7 @@ function daGerber(testi: string[]): Partial<ProdottoNuovo> {
   for (const t of testi) {
     const m = /%TF\.ProjectId,([^,*]*),[^,*]*,([^,*]*)\*%/.exec(t);
     if (m) {
-      const codice = pulisciCodice(m[1]), revisione = pulisciRevisione(m[2]);
+      const codice = pulisciCodice(m[1]), revisione = m[2].includes('?') ? '' : pulisciRevisione(m[2]);
       return { ...(valido(codice) ? { codice } : {}), ...(valido(revisione) ? { revisione } : {}) };
     }
   }

@@ -40,6 +40,9 @@ test('proposta: intestazione della BOM prima di Gerber, GenCAD e nomi', () => {
 test('proposta: Gerber X2, GenCAD e cartelle quando la BOM non dice niente', () => {
   const g = propostaProdotto({ nomePacchetto: 'pacchetto', nomiFile: [], gerber: ['G04 x*\n%TF.ProjectId,qx55-main,1234-abcd,rev3*%\n'] })!;
   assert.deepEqual([g.codice, g.revisione, g.descrizione], ['QX55-MAIN', '3', null]);
+  // KiCad senza revisione scrive "rev?": nessuna revisione (prima diventava "EV?")
+  const k = propostaProdotto({ nomePacchetto: 'pacchetto', nomiFile: [], gerber: ['%TF.ProjectId,UNIFIEE,1234-abcd,rev?*%\n'] })!;
+  assert.deepEqual([k.codice, k.revisione], ['UNIFIEE', null]);
   const c = propostaProdotto({ nomePacchetto: 'pacchetto', nomiFile: [],
     gencad: '$HEADER\nGENCAD 1.4\nDRAWING "C:\\\\progetti\\\\VT106.pcb"\nREVISION "B"\nUNITS MM\n$ENDHEADER\n' })!;
   assert.deepEqual([c.codice, c.revisione], ['VT106', 'B']);
