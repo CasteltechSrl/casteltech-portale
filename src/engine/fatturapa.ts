@@ -16,7 +16,7 @@
  * - cliente estero: codice destinatario XXXXXXX, P.IVA con il prefisso del paese, CAP 00000 se non italiano;
  * - testi solo con caratteri ammessi dallo SdI (latino di base e Latin-1): "€" → "EUR", apostrofi e trattini tipografici semplificati.
  */
-import { arrotonda2, calcolaTotali, numeroCompleto, preparaAzienda, type Aliquota, type DatiAzienda, type Totali } from './amministrazione.js';
+import { addebitaBollo, arrotonda2, calcolaTotali, numeroCompleto, preparaAzienda, type Aliquota, type DatiAzienda, type Totali } from './amministrazione.js';
 import { controlliOrdinePa, importoDaIncassare, tipoSdiEffettivo } from './tipi-fattura.js';
 import { applicaAttributi } from './attributi-fatturapa.js';
 
@@ -115,7 +115,7 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
   if (!vere.length) errori.push('Il documento non ha righe con un importo.');
   // le righe di solo testo prendono l'aliquota della prima riga vera (importo 0)
   const aliquotaTesto = vere[0]?.aliquota_iva || predefinita;
-  const totali = calcolaTotali(righe, aliquote, predefinita);
+  const totali = calcolaTotali(righe, aliquote, predefinita, { addebita: addebitaBollo(doc.tipo) });
   errori.push(...totali.errori);
   if (doc.tipo === 'nota_credito' && !doc.origine) errori.push('La nota di credito deve indicare la fattura che corregge.');
   if (doc.tipo === 'fattura' && doc.tipo_sdi === 'TD05' && !doc.origine) errori.push('La nota di debito deve indicare la fattura che corregge.');
@@ -169,10 +169,11 @@ export function generaFatturaXml(doc: DocumentoXml, cliente: ClienteXml, azienda
 
   // DDT citati: numero/data → linee che ne fanno parte
   const ddt = new Map<string, { numero: string; data: string; linee: number[] }>();
-  const linee = righe.map((r, i) => {
+  const linee = [...righe, ...(totali.rigaBollo ? [totali.rigaBollo as RigaXml] : [])].map((r, i) => {
     const n = i + 1;
     const codice = r.solo_descrizione ? aliquotaTesto : (r.aliquota_iva || predefinita);
-    const a = perCodice.get(codice);
+    // la riga del bollo ha natura N1 anche se l'aliquota ESCLUSO15 non è in tabella: si prende dal riepilogo
+    const a: { percentuale: number; natura: string | null } | undefined = perCodice.get(codice) ?? totali.riepilogo.find(g => g.aliquota === codice);
     if (r.ddt) {
       const k = `${r.ddt.numero}|${r.ddt.data}`;
       if (!ddt.has(k)) ddt.set(k, { ...r.ddt, linee: [] });
@@ -288,7 +289,7 @@ export function generaAutofatturaXml(doc: AutofatturaXml, fornitore: FornitoreXm
   const perCodice = new Map(aliquote.map(a => [a.codice, a]));
   const righe = doc.righe.filter(r => !r.solo_descrizione);
   if (!righe.length) errori.push('Il documento non ha righe con un importo.');
-  const totali = calcolaTotali(righe, aliquote, 'IVA22');
+  const totali = calcolaTotali(righe, aliquote, 'IVA22', { addebita: false });
   errori.push(...totali.errori);
 
   // fornitore estero

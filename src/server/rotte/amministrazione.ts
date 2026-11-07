@@ -21,7 +21,7 @@ import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { html, data, euro, euroUnitario, num, raw, type Raw, numCampo } from '../views/html.js';
-import { modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
+import { IMPORTO_BOLLO, SOGLIA_BOLLO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
 import { caricaModiPagamento } from '../modi-pagamento-servizio.js';
 import type { ModiPagamento } from '../../engine/modi-pagamento.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -429,12 +429,15 @@ export function rotteAmministrazione() {
     // riga con l'IVA "predefinita" = quella del cliente, poi 22 %: prima contava 0 %, controllo del 4/11/2026)
     const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.fattura_id, d.sdi_stato,
         d.email_a, d.email_inviata_il, d.inviato_a_mano, ${SQL_SDI_INVIATO_IL} AS sdi_inviato_il,
-        CASE WHEN d.stato = 'bozza' THEN coalesce(b.imponibile, 0) ELSE d.imponibile END AS imponibile,
-        CASE WHEN d.stato = 'bozza' THEN coalesce(b.totale, 0) ELSE d.totale END AS totale,
+        CASE WHEN d.stato = 'bozza' THEN coalesce(b.imponibile, 0) + b.bollo ELSE d.imponibile END AS imponibile,
+        CASE WHEN d.stato = 'bozza' THEN coalesce(b.totale, 0) + b.bollo ELSE d.totale END AS totale,
         coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       LEFT JOIN LATERAL (SELECT sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)) AS imponibile,
-          sum(round(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2) * (1 + coalesce(a.percentuale, 0) / 100), 2)) AS totale
+          sum(round(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2) * (1 + coalesce(a.percentuale, 0) / 100), 2)) AS totale,
+          -- bollo addebitato (7/11/2026): 2 € se le righe senza IVA soggette a bollo superano 77,47 € (non sulle note di credito)
+          CASE WHEN d.tipo <> 'nota_credito' AND coalesce(sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))
+            FILTER (WHERE a.soggetta_bollo AND coalesce(a.percentuale, 0) = 0), 0) > ${SOGLIA_BOLLO} THEN ${IMPORTO_BOLLO} ELSE 0 END AS bollo
         FROM documenti_righe r LEFT JOIN aliquote_iva a ON a.codice = coalesce(r.aliquota_iva, c.aliquota_iva, 'IVA22')
         WHERE r.documento_id = d.id AND d.stato = 'bozza' AND NOT r.solo_descrizione) b ON true
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
@@ -803,7 +806,7 @@ export function rotteAmministrazione() {
             <td class="num">${euroUnitario(x.prezzo)}</td><td class="num">${x.sconto ? `${num(x.sconto)} %` : ''}</td>
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
         </table></div>
-        ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
+        ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}${d.tipo === 'nota_credito' ? ' (a carico di Casteltech)' : ' (addebitato al cliente, compreso nell\'imponibile N1)'}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
         ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
         ${['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && d.origine === 'portale' ? attributiEmesso(d.xml, d.attributi_xml) : ''}
         ${await riquadroSdi(d)}
@@ -950,6 +953,7 @@ export function rotteAmministrazione() {
       </form>` : ''}
       <div class="blocco">
         <p class="totali-documento">Imponibile ${euro(t.imponibile)} · IVA ${euro(t.imposta)}${t.bollo ? html` · bollo ${euro(t.bollo)}` : ''} · <strong>Totale ${euro(t.totale)}</strong>
+          ${t.rigaBollo ? html`<br><span class="nota">Senza IVA oltre 77,47 €: in fondo alla fattura (XML, stampa e PDF) c'è da sola la riga "Rivalsa imposta di bollo" da ${euro(t.bollo)} (N1, escluso art. 15), già nel totale.</span>` : t.bollo ? html`<br><span class="nota">Bollo virtuale da ${euro(t.bollo)} a carico di Casteltech (nota di credito): non entra nel totale.</span>` : ''}
           ${esito.daIncassare != null && Math.abs(esito.daIncassare - t.totale) > 0.005 ? html` · da incassare ${euro(esito.daIncassare)} (split payment)` : ''}</p>
         ${errori.length ? html`<p><strong>Da sistemare prima di emettere:</strong></p><ul class="controlli errori">${errori.map(e => html`<li>${e}</li>`)}</ul>`
           : html`<p class="nota">Controlli della fattura elettronica superati: si può emettere.</p>`}

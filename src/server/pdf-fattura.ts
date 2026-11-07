@@ -168,7 +168,7 @@ export async function pdfFattura(x: DatiPdfFattura): Promise<Buffer> {
   if (d.esigibilita_iva === 'D') note.push('IVA ad esigibilità differita (art. 6, comma 5, D.P.R. 633/72).');
   if (totali.bollo) note.push('Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.');
   const somme: [string, string, boolean][] = [['Imponibile', euro(totali.imponibile), false], ['IVA', euro(totali.imposta), false]];
-  if (totali.bollo) somme.push(['Bollo virtuale', euro(totali.bollo), false]);
+  if (totali.bollo && !totali.rigaBollo) somme.push(['Bollo virtuale (a carico di Casteltech)', euro(totali.bollo), false]);
   somme.push(['Totale documento', euro(totali.totale), true]);
   if (split) somme.push(['IVA versata dal cliente (split payment)', `- ${euro(totali.imposta)}`, false], ['Netto da pagare', euro(importoDaIncassare(totali, true)), true]);
   const altoRiep = 16 + Math.max(totali.riepilogo.length * 11, somme.length * 13);

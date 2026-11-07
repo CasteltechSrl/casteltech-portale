@@ -7,7 +7,7 @@ import { destinazioneProposta } from '../engine/sede-operativa.js';
 import type pg from 'pg';
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-servizio.js';
-import { calcolaScadenze, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
+import { addebitaBollo, calcolaScadenze, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { attributiDaModulo } from '../engine/attributi-fatturapa.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
 import { righeDaModulo } from '../engine/documenti.js';
@@ -182,7 +182,8 @@ export async function scalaAcconti(id: number, accontoIds: number[]): Promise<nu
       if ((await c.query(`SELECT 1 FROM documenti_righe WHERE documento_id = $1 AND acconto_id = $2`, [id, a.id])).rowCount) continue;
       const righeAcconto = (await c.query(`SELECT quantita::float, prezzo::float, sconto::float, aliquota_iva, solo_descrizione FROM documenti_righe
         WHERE documento_id = $1`, [a.id])).rows;
-      const { riepilogo } = calcolaTotali(righeAcconto, aliquote, cliente?.aliquota_iva || 'IVA22');
+      // il bollo addebitato sull'acconto resta al cliente: non si scala
+      const { riepilogo } = calcolaTotali(righeAcconto, aliquote, cliente?.aliquota_iva || 'IVA22', { addebita: false });
       for (const r of righeStornoAcconto({ id: a.id, numero: numeroCompleto(a.numero, a.sezionale), data: a.data, riepilogo }))
         await c.query(`INSERT INTO documenti_righe (documento_id, posizione, descrizione, quantita, prezzo, aliquota_iva, acconto_id)
           VALUES ($1, $2, $3, $4, $5, $6, $7)`, [id, ++pos, r.descrizione, r.quantita, r.prezzo, r.aliquota_iva, r.acconto_id]);
@@ -365,7 +366,7 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const aliquote: Aliquota[] = await caricaAliquote();
   const azienda = await caricaAzienda();
   const predefinita = cliente?.aliquota_iva || 'IVA22';
-  const totali = calcolaTotali(righe.map((r: any) => ({ ...r, aliquota_iva: r.aliquota_iva })), aliquote, predefinita);
+  const totali = calcolaTotali(righe.map((r: any) => ({ ...r, aliquota_iva: r.aliquota_iva })), aliquote, predefinita, { addebita: addebitaBollo(d.tipo) });
   // split payment: il cliente paga imponibile + bollo, l'IVA la versa lui
   const daIncassare = importoDaIncassare(totali, !!cliente?.split_payment);
   const scadenze = d.condizione_pagamento && daIncassare > 0
