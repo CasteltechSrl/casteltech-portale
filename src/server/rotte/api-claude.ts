@@ -15,6 +15,10 @@
  *   GET  /api/claude/banca                   → conti con il saldo di oggi, movimenti caricati per conto e stato (Adriano 7/11/2026)
  *   POST /api/claude/banca/conti             → { conti: [{numero, nome, tipo, saldoData, saldo, fido}], fidoAnticipi? }
  *   POST /api/claude/banca/movimenti         → { nome, base64, conto? } = estratto conto (CSV/CBI/Excel) mandato da Adriano, senza doppioni
+ *   GET  /api/claude/banca/dati?dal=         → movimenti, rate aperte, rate già pagate non ancora confermate da un movimento, IBAN dei clienti
+ *   POST /api/claude/banca/decisioni         → { abbina: [{id, rate: [{tipo, id, gia?}]}], registra: [{id, categoria}] } = abbinamento fatto da Claude
+ *                                              (Adriano 7/11/2026: "non riesci a capirlo tu incrociando fatture, acquisti, stipendi?"), confermato_da 'Claude'
+ *   POST /api/claude/banca/iban              → { clienti: [{id, iban}] } = banca d'appoggio dei clienti RiBa (solo dove manca)
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
@@ -26,8 +30,8 @@ import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
-import { caricaMovimenti, contiConSaldo, fidoAnticipi, leggiEstrattoConto, salvaConti } from '../banca-servizio.js';
-import { dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
+import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente } from '../banca-servizio.js';
+import { CATEGORIE_MOVIMENTO, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
 let chiaveInMemoria: string | null | undefined;
@@ -170,7 +174,7 @@ export function rotteApiClaude() {
   });
 
   // Banca (Adriano 7/11/2026): Claude carica l'estratto conto mandato da Adriano nel progetto e scrive i conti (nomi, tipo, saldo dell'estratto conto, fido).
-  // Nessun abbinamento da qui: le fatture le conferma l'ufficio nella pagina Banca.
+  // Abbinamento da qui solo con /banca/decisioni (Adriano 7/11/2026 sera: lo fa Claude incrociando fatture, acquisti, stipendi).
   r.get('/banca', async (_req, res) => {
     res.json({ conti: await contiConSaldo(), fidoAnticipi: await fidoAnticipi(),
       movimenti: await q(`SELECT conto, stato, count(*)::int AS quanti, min(data)::text AS dal, max(data)::text AS al FROM banca_movimenti GROUP BY 1, 2 ORDER BY 1, 2`) });
@@ -191,6 +195,38 @@ export function rotteApiClaude() {
     const letti = await leggiEstrattoConto(nome, Buffer.from(b.base64, 'base64'));
     if (letti.errore) return res.status(400).json({ errore: letti.errore });
     res.json({ formato: letti.formato, letti: letti.movimenti.length, ...(await caricaMovimenti(letti.movimenti, String(b.conto ?? ''), nome)) });
+  });
+
+  r.get('/banca/dati', async (req, res) => {
+    const dal = dataDa(req.query.dal) ?? '2026-01-01';
+    const [movimenti, aperte, pagate, clienti] = await Promise.all([
+      q(`SELECT id, conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo, descrizione, causale, stato, categoria, rate FROM banca_movimenti ORDER BY data, id`),
+      rateAperte(), ratePagateLibere(undefined, dal), clientiIban()]);
+    res.json({ movimenti, aperte, pagate, clienti });
+  });
+  r.post('/banca/decisioni', async (req, res) => {
+    const b = req.body ?? {};
+    let abbinati = 0, registrati = 0;
+    const errori: string[] = [];
+    for (const a of Array.isArray(b.abbina) ? b.abbina : []) {
+      const scelte = (Array.isArray(a.rate) ? a.rate : []).map((x: any) => ({ tipo: x.tipo === 'ricevuta' ? 'ricevuta' as const : 'emessa' as const, id: Number(x.id), gia: !!x.gia }));
+      const e = await abbinaMovimento(Number(a.id), scelte, 'Claude');
+      if (e) errori.push(`${a.id}: ${e}`); else abbinati++;
+    }
+    for (const x of Array.isArray(b.registra) ? b.registra : []) {
+      if (!(CATEGORIE_MOVIMENTO as readonly string[]).includes(x.categoria)) { errori.push(`${x.id}: categoria ${x.categoria}?`); continue; }
+      await registraMovimento(Number(x.id), x.categoria, 'Claude');
+      registrati++;
+    }
+    res.json({ abbinati, registrati, errori });
+  });
+  r.post('/banca/iban', async (req, res) => {
+    const esiti: Record<string, number> = {};
+    for (const c of Array.isArray(req.body?.clienti) ? req.body.clienti : []) {
+      const e = await salvaIbanCliente(Number(c.id), String(c.iban ?? ''));
+      esiti[e] = (esiti[e] ?? 0) + 1;
+    }
+    res.json(esiti);
   });
 
   r.get('/spazio', async (_req, res) => {

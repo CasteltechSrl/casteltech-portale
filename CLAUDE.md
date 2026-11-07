@@ -815,4 +815,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `Movimento.rapporto` (`numeroConto`), `banca_movimenti.conto` = numero del rapporto; conti in impostazioni 'banca' (`conti`: nome, tipo ordinario/anticipo, saldo a una data, fido;
    `fidoAnticipi` unico per i conti tecnici), riquadro Conti con saldo di oggi (`saldoConto`) e disponibile; conto nuovo nel file = aggiunto da solo (`contoNuovo`).
    Anticipi/rientri (`MAI_FATTURA`) e conti di anticipo (`contoTecnico`) mai abbinati a fatture; giroconto = solo distinta intera. API: GET/POST `/api/claude/banca[/conti|/movimenti]`.
+   Abbinamento fatto da Claude (Adriano 7/11/2026 sera, "non riesci a capirlo tu?"): GET `/api/claude/banca/dati` (movimenti, rate aperte, `ratePagateLibere` = rate già pagate
+   dallo storico FIC non ancora confermate da un movimento, IBAN clienti) → analisi fuori dal portale → POST `/banca/decisioni` (confermato_da 'Claude'); rata già pagata = `gia: true`
+   nel movimento: non cambia data/modo e "Annulla" non la riapre. POST `/banca/iban` = banca d'appoggio dei clienti (`salvaIbanCliente`: solo dove manca un IBAN valido).
    Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). ⬜ Poi open banking PSD2 (servizio da scegliere).
