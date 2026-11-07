@@ -10,7 +10,7 @@
  *   GET  /api/claude/storico/fic?anno=2026   → i documenti arrivati da Fatture in Cloud di un anno, uno per riga, con il loro fic_id
  *                                              (allineamento con FIC, Adriano 6/11/2026: solo numeri, importi, stati e scadenze, niente nomi)
  *   GET  /api/claude/documentazione?anno=    → prodotti venduti nell'anno con le revisioni dei documenti già caricate (Adriano 6/11/2026)
- *   POST /api/claude/documentazione          → { cliente, codice, riassunto, revisione?, cartella?, note? } = revisione dalle cartelle del Drive
+ *   POST /api/claude/documentazione          → { cliente, codice, riassunto, revisione?, cartella?, note?, sostituisci? } = revisione dalle cartelle del Drive
  *   GET  /api/claude/spazio                  → spazio occupato su Neon per tabella
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
@@ -19,7 +19,7 @@ import { q, q1 } from '../db.js';
 import { chiaveGiusta } from '../../engine/gmail.js';
 import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
-import { prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
+import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
@@ -139,6 +139,10 @@ export function rotteApiClaude() {
     if (!cliente || !codice || !b.riassunto || !Array.isArray(b.riassunto.componenti)) return res.status(400).json({ errore: 'Servono cliente, codice e riassunto.' });
     const p = await trovaProdotto(cliente, codice);
     if (!p) return res.status(404).json({ errore: `Prodotto ${codice} di ${cliente} non trovato in anagrafica (o più di uno).` });
+    // "sostituisci": id di una revisione dello stesso prodotto letta male (es. BOM .xls non letta la prima volta), tolta prima di salvare quella nuova
+    const sostituisci = Number(b.sostituisci);
+    if (Number.isInteger(sostituisci) && sostituisci > 0 && !(await eliminaRevisione(p.id, sostituisci)))
+      return res.status(404).json({ errore: `Revisione ${sostituisci} del prodotto ${codice} non trovata.` });
     const esito = await salvaRevisione({ prodottoId: p.id, riassunto: b.riassunto, revisione: typeof b.revisione === 'string' ? b.revisione : null,
       nomi: Array.isArray(b.nomi) ? b.nomi.map(String) : undefined, caricatoDa: 'Claude', origine: 'drive',
       cartella: typeof b.cartella === 'string' ? b.cartella.slice(0, 500) : null, note: typeof b.note === 'string' ? b.note.slice(0, 500) : null });
