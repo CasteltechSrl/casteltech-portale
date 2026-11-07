@@ -46,6 +46,11 @@ test('proposta: Gerber X2, GenCAD e cartelle quando la BOM non dice niente', () 
   const c = propostaProdotto({ nomePacchetto: 'pacchetto', nomiFile: [],
     gencad: '$HEADER\nGENCAD 1.4\nDRAWING "C:\\\\progetti\\\\VT106.pcb"\nREVISION "B"\nUNITS MM\n$ENDHEADER\n' })!;
   assert.deepEqual([c.codice, c.revisione], ['VT106', 'B']);
+  // PADS: REVISION = data dell'esportazione, non una revisione (Univac EA1002, 7/11/2026)
+  const e = propostaProdotto({ nomePacchetto: 'EA1002-0_impianti_30-07-2026', nomiFile: [],
+    gencad: '$HEADER\nGENCAD 1.4\nDRAWING "EA1002-0.pcb"\nREVISION "2026-07-30 12:34:55"\n$ENDHEADER\n' })!;
+  assert.notEqual(e.revisione, '2026-07-30 12:34:55');
+  assert.ok(!/2026/.test(e.revisione ?? ''));
   const d = propostaProdotto({ nomePacchetto: 'scheda nuova', nomiFile: ['XA2001-1 impianti/top.gbr', 'XA2001-1 impianti/bom.csv'] })!;
   assert.deepEqual([d.codice, d.revisione], ['XA2001', '1']);
   assert.match(d.fonti.codice!, /cartella/);
