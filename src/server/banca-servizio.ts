@@ -102,7 +102,51 @@ export async function rateAperte(): Promise<RataAperta[]> {
   ];
 }
 
-export interface MovimentoDb extends Movimento { id: number; conto: string; stato: string; categoria: string | null; rate: { tipo: string; id: number }[]; file: string | null }
+/**
+ * Rate già segnate incassate/pagate (di solito dallo storico di Fatture in Cloud) che nessun movimento ha ancora confermato:
+ * il movimento della banca le "spunta" senza cambiarle (Adriano 7/11/2026: gennaio–ottobre senza abbinare tutto a mano).
+ */
+export async function ratePagateLibere(tipo?: 'emessa' | 'ricevuta', dal = '2000-01-01'): Promise<(RataAperta & { pagataIl: string; modo: string | null; conto: string | null })[]> {
+  const prese = await q<{ tipo: string; id: number }>(`SELECT x->>'tipo' AS tipo, (x->>'id')::int AS id FROM banca_movimenti, jsonb_array_elements(rate) x WHERE stato = 'abbinato'`);
+  const occupate = new Set(prese.map(p => `${p.tipo}:${p.id}`));
+  const [emesse, ricevute] = await Promise.all([
+    tipo === 'ricevuta' ? [] : q<any>(`SELECT s.id, d.id AS documento_id, d.numero::text AS numero, coalesce(d.sezionale, '') AS sezionale, to_char(d.data, 'YYYY-MM-DD') AS data_doc,
+        to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita, to_char(s.pagata_il, 'YYYY-MM-DD') AS pagata_il, s.modo, s.conto,
+        coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS controparte, c.partita_iva
+      FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+      WHERE s.pagata_il >= $1 AND d.tipo = 'fattura' AND ${STATI_OK}`, [dal]),
+    tipo === 'emessa' ? [] : q<any>(`SELECT s.id, d.id AS documento_id, coalesce(d.numero, '')::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data_doc,
+        to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, to_char(s.pagata_il, 'YYYY-MM-DD') AS pagata_il, s.modo, s.conto,
+        coalesce(f.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS controparte, f.partita_iva
+      FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+      WHERE s.pagata_il >= $1 AND d.tipo = 'fattura'`, [dal]),
+  ]);
+  return [
+    ...emesse.map(r => ({ id: r.id, tipo: 'emessa' as const, documentoId: r.documento_id, numero: r.sezionale ? `${r.numero}/${r.sezionale}` : r.numero,
+      dataDoc: r.data_doc, scadenza: r.scadenza, importo: r.importo, controparte: r.controparte, partitaIva: r.partita_iva, riba: r.modalita === 'MP12',
+      pagataIl: r.pagata_il, modo: r.modo, conto: r.conto })),
+    ...ricevute.map(r => ({ id: r.id, tipo: 'ricevuta' as const, documentoId: r.documento_id, numero: r.numero, dataDoc: r.data_doc, scadenza: r.scadenza,
+      importo: r.importo, controparte: r.controparte, partitaIva: r.partita_iva, pagataIl: r.pagata_il, modo: r.modo, conto: r.conto })),
+  ].filter(r => !occupate.has(`${r.tipo}:${r.id}`));
+}
+
+/** Clienti con l'IBAN della banca d'appoggio (per le RiBa). */
+export async function clientiIban(): Promise<{ id: number; ragione_sociale: string; partita_iva: string | null; banca_appoggio: string | null }[]> {
+  return q(`SELECT id, ragione_sociale, partita_iva, banca_appoggio FROM clienti ORDER BY ragione_sociale`);
+}
+
+/** Scrive l'IBAN della banca d'appoggio del cliente solo se manca o non è un IBAN valido (quello scritto dall'ufficio non si tocca). */
+export async function salvaIbanCliente(id: number, iban: string): Promise<'scritto' | 'gia' | 'non valido' | 'cliente?'> {
+  const pulito = iban.replace(/\s+/g, '').toUpperCase();
+  if (!abiCabDaIban(pulito)) return 'non valido';
+  const c = await q1<{ banca_appoggio: string | null }>(`SELECT banca_appoggio FROM clienti WHERE id = $1`, [id]);
+  if (!c) return 'cliente?';
+  if (c.banca_appoggio && abiCabDaIban(c.banca_appoggio.replace(/\s+/g, ''))) return 'gia';
+  await q(`UPDATE clienti SET banca_appoggio = $2 WHERE id = $1`, [id, pulito]);
+  return 'scritto';
+}
+
+export interface MovimentoDb extends Movimento { id: number; conto: string; stato: string; categoria: string | null; rate: { tipo: string; id: number; gia?: boolean }[]; file: string | null }
 
 const SELECT_MOV = `SELECT id, conto, to_char(data, 'YYYY-MM-DD') AS data, to_char(valuta, 'YYYY-MM-DD') AS valuta, importo::float AS importo,
   descrizione, causale, stato, categoria, rate, file FROM banca_movimenti`;
@@ -136,23 +180,28 @@ const modoDi = (m: Movimento, riba: boolean) => (riba || /riba|ri\.ba|effett/i.t
  * Abbina il movimento alle rate (ancora aperte e della direzione giusta): le rate diventano incassate/pagate alla data del movimento,
  * con modo e conto. La somma delle rate deve essere l'importo del movimento (al centesimo), salvo `forza` (abbinamento a mano parziale).
  */
-export async function abbinaMovimento(id: number, scelte: { tipo: 'emessa' | 'ricevuta'; id: number }[], utente: string, forza = false): Promise<string | null> {
+export async function abbinaMovimento(id: number, scelte: { tipo: 'emessa' | 'ricevuta'; id: number; gia?: boolean }[], utente: string, forza = false): Promise<string | null> {
   const m = await movimento(id);
   if (!m) return 'Movimento non trovato.';
   if (m.stato !== 'da_abbinare') return 'Movimento già abbinato o registrato.';
   if (!scelte.length) return 'Nessuna fattura scelta.';
   const tipo = m.importo > 0 ? 'emessa' : 'ricevuta';
   if (scelte.some(s => s.tipo !== tipo)) return m.importo > 0 ? 'Un\'entrata si abbina solo a fatture emesse.' : 'Un\'uscita si abbina solo a fatture dei fornitori.';
-  const ids = scelte.map(s => s.id);
+  const ids = scelte.filter(s => !s.gia).map(s => s.id);
   const aperte = (await rateAperte()).filter(r => r.tipo === tipo && ids.includes(r.id));
   if (aperte.length !== ids.length) return 'Una delle rate è già stata segnata pagata: ricarica la pagina.';
-  const somma = aperte.reduce((s, r) => s + r.importo, 0);
+  // rate già segnate pagate prima (storico di Fatture in Cloud): il movimento le conferma, la rata non cambia
+  const giaIds = scelte.filter(s => s.gia).map(s => s.id);
+  const gia = giaIds.length ? (await ratePagateLibere(tipo)).filter(r => giaIds.includes(r.id)) : [];
+  if (gia.length !== giaIds.length) return 'Una delle rate già pagate è collegata a un altro movimento.';
+  const somma = [...aperte, ...gia].reduce((s, r) => s + r.importo, 0);
   if (!forza && Math.abs(somma - Math.abs(m.importo)) >= 0.005) return `Le rate scelte fanno ${somma.toFixed(2)} €, il movimento ${Math.abs(m.importo).toFixed(2)} €.`;
   const modo = modoDi(m, aperte.some(r => r.riba || r.distintaId));
   const conto = nomeConto(m.conto, await contiBanca());
   await transazione(async c => {
     const tabella = tipo === 'emessa' ? 'documenti_scadenze' : 'documenti_ricevuti_scadenze';
-    await c.query(`UPDATE ${tabella} SET pagata_il = $2, modo = $3, conto = $4 WHERE id = ANY($1) AND pagata_il IS NULL`, [ids, m.data, modo, conto]);
+    if (ids.length) await c.query(`UPDATE ${tabella} SET pagata_il = $2, modo = $3, conto = $4 WHERE id = ANY($1) AND pagata_il IS NULL`, [ids, m.data, modo, conto]);
+    if (gia.length) await c.query(`UPDATE ${tabella} SET conto = $2 WHERE id = ANY($1) AND coalesce(conto, '') = ''`, [giaIds, conto]);
     await c.query(`UPDATE banca_movimenti SET stato = 'abbinato', categoria = $2, rate = $3, confermato_il = now(), confermato_da = $4 WHERE id = $1`,
       [id, tipo === 'emessa' ? 'Incasso fattura' : 'Pagamento fattura', JSON.stringify(scelte), utente]);
   });
@@ -170,8 +219,9 @@ export async function annullaMovimento(id: number): Promise<void> {
   const m = await movimento(id);
   if (!m || m.stato === 'da_abbinare') return;
   await transazione(async c => {
-    const emesse = m.rate.filter(r => r.tipo === 'emessa').map(r => r.id);
-    const ricevute = m.rate.filter(r => r.tipo === 'ricevuta').map(r => r.id);
+    // le rate già pagate prima del movimento (gia) restano pagate
+    const emesse = m.rate.filter(r => r.tipo === 'emessa' && !r.gia).map(r => r.id);
+    const ricevute = m.rate.filter(r => r.tipo === 'ricevuta' && !r.gia).map(r => r.id);
     if (emesse.length) await c.query(`UPDATE documenti_scadenze SET pagata_il = NULL, modo = NULL, conto = NULL WHERE id = ANY($1) AND pagata_il = $2`, [emesse, m.data]);
     if (ricevute.length) await c.query(`UPDATE documenti_ricevuti_scadenze SET pagata_il = NULL, modo = NULL, conto = NULL WHERE id = ANY($1) AND pagata_il = $2`, [ricevute, m.data]);
     await c.query(`UPDATE banca_movimenti SET stato = 'da_abbinare', categoria = NULL, rate = '[]', confermato_il = NULL, confermato_da = NULL WHERE id = $1`, [id]);
