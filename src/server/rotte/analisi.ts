@@ -81,6 +81,29 @@ const scritto = (n: number | null) => (n == null ? '' : String(n).replace('.', '
 const conSegno = (n: number) => (n > 0 ? `+${euro(n)}` : euro(n));
 const NOMI_TIPO: Record<Movimento['tipo'], string> = { incasso: 'Incasso', pagamento: 'Fornitore', uscita: 'Uscita fissa' };
 
+/** Fatture anticipate dalla banca (Adriano 7/11/2026): RiBa al 100 % già accreditate, bonifici all'80 % che la banca riprende all'incasso. */
+function sezioneAnticipi(d: Awaited<ReturnType<typeof caricaPrevisione>>): Raw {
+  const { anticipate, conti, fidoAnticipi: fido, previsione: p } = d;
+  const tecnici = conti.filter(c => c.tipo === 'anticipo');
+  if (!tecnici.length && !anticipate.length) return raw('');
+  const usato = -tecnici.reduce((s, c) => s + (c.saldoOggi ?? 0), 0);
+  const tipo = { riba: 'RiBa (100 %)', bonifico: 'Bonifico (80 %)' };
+  return html`<h2>Fatture anticipate dalla banca</h2>
+    <p class="nota">Le RiBa al salvo buon fine sono già state accreditate per intero: alla scadenza non entra altro e non sono tra gli incassi.
+      I bonifici sono anticipati all'80 %: quando il cliente paga entra il 100 % e la banca riprende l'anticipo, quindi negli incassi c'è la fattura intera
+      e tra le uscite il "Rientro anticipo". Ricavate dai movimenti dei conti di anticipo caricati in <a href="/amministrazione/banca">Banca</a>.</p>
+    <div class="cifre">
+      <div class="cifra"><span>RiBa già accreditate</span><b>${euro(p.anticipi.riba)}</b><small>non entrano più alla scadenza</small></div>
+      <div class="cifra"><span>Anticipo sui bonifici</span><b>${euro(p.anticipi.bonifico + p.anticipi.daRientrare)}</b><small>la banca lo riprende all'incasso</small></div>
+      ${fido != null ? html`<div class="cifra ${usato > fido * 0.9 ? 'allarme' : ''}"><span>Fido anticipi</span><b>${euro(fido - usato)}</b><small>disponibile: usati ${euro(usato)} su ${euro(fido)}</small></div>` : ''}
+    </div>
+    ${anticipate.length ? html`<div class="tabella-scorre"><table class="elenco">
+      <thead><tr><th>Fattura</th><th>Tipo</th><th>Anticipata il</th><th>Scadenze</th><th class="num">Da incassare</th><th class="num">Anticipato</th></tr></thead>
+      <tbody>${anticipate.map(a => html`<tr><td>${a.numero}</td><td>${tipo[a.tipo]}</td><td>${dataIt(a.data)}</td>
+        <td>${a.rate.map(r => dataIt(r.scadenza)).join(', ')}</td><td class="num">${euroCent(a.rate.reduce((s, r) => s + r.importo, 0))}</td>
+        <td class="num">${euroCent(a.anticipato)}</td></tr>`)}</tbody></table></div>` : ''}`;
+}
+
 function paginaCassa(req: Request, d: Awaited<ReturnType<typeof caricaPrevisione>>): Raw {
   const { previsione: p, impostazioni: i, auto } = d;
   const sola = !eUfficio(req.session.utente?.ruolo);
@@ -120,6 +143,8 @@ function paginaCassa(req: Request, d: Awaited<ReturnType<typeof caricaPrevisione
     <h2>Da sapere</h2>
     ${p.rischi.length ? html`<ul class="commenti-analisi">${p.rischi.map(x => html`<li class="${LIVELLO[x.livello]}"><span class="pallino" aria-hidden="true">${ICONE[x.livello]}</span>
       <div>${x.testo}${x.link ? html` <a href="${x.link[0]}">${x.link[1]} →</a>` : ''}</div></li>`)}</ul>` : html`<p class="nota">Niente di particolare.</p>`}
+
+    ${sezioneAnticipi(d)}
 
     <h2>Per finestra</h2>
     <div class="tabella-scorre"><table class="elenco">

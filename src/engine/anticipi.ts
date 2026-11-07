@@ -1,0 +1,103 @@
+/**
+ * Fatture anticipate dalla banca (Adriano 7/11/2026): "le RiBa sono anticipate al 100%, i bonifici all'80%,
+ * così sappiamo quello che ci viene anticipato e quello che ci arriva quando incassiamo".
+ *
+ * Si ricavano dai movimenti dei conti tecnici di anticipo (BPER):
+ * - bonifico (anticipo Italia / estero): "ANTICIPO SU DOCUMENTI FT. 108 + 98" apre l'anticipo delle fatture citate,
+ *   "RIENTRO ANTICIPO/FINANZIAMENTO ... N 81/2026" o "FT. 80 + 74" lo chiude. Quota anticipata = 80 % di quanto resta da incassare.
+ *   Quando il cliente paga, sul conto arriva il 100 % e la banca riprende la quota anticipata: resta il 20 %.
+ * - RiBa al salvo buon fine: "ACCREDITO RIBA AL SBF" sul conto anticipo RiBa, un accredito per effetto con il suo importo.
+ *   La rata è già stata accreditata al 100 %: alla scadenza non arriva altro (salvo insoluto).
+ */
+
+export interface MovimentoAnticipo { data: string; importo: number; descrizione: string; conto: string }
+export interface RataDaIncassare { id: number; numero: string; dataDoc: string; scadenza: string; importo: number; riba?: boolean }
+
+/** Quota anticipata dalla banca sui bonifici (Adriano 7/11/2026). */
+export const QUOTA_BONIFICO = 0.8;
+
+const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Numeri di fattura citati: "FT. 108 + 98", "ft. 95/2026", "FT.155 DEL 30.12.25", "N 81/2026", "FATT. 119", "fatture 41 e 42". */
+export function numeriCitati(descrizione: string): string[] {
+  let d = norm(descrizione)
+    .replace(/\bdel\s*\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, ' ')    // date
+    .replace(/\d{1,2}[./]\d{1,2}[./]\d{2,4}/g, ' ')
+    .replace(/(\d+)\s*\/\s*20\d\d/g, '$1 ')                     // 95/2026 → 95
+    .replace(/\b20\d\d\b/g, ' ');
+  // solo la parte dopo la parola chiave (anticipo su documenti / rientro anticipo/finanziamento)
+  d = d.replace(/^.*?(anticipo su documenti|rientro anticipo\/finanziamento)/, '');
+  const numeri = [...d.matchAll(/(?:^|[^a-z0-9])(\d{1,4})(?:\.?bis)?(?=[^0-9]|$)/g)].map(x => String(Number(x[1])));
+  return [...new Set(numeri.filter(n => n !== '0'))];
+}
+
+export const eAnticipo = (descrizione: string) => /anticipo su documenti/.test(norm(descrizione));
+export const eRientro = (descrizione: string) => /rientro anticipo/.test(norm(descrizione));
+export const eAccreditoRiba = (descrizione: string) => /accredito riba al sbf/.test(norm(descrizione));
+
+export interface Anticipata {
+  numero: string;
+  tipo: 'bonifico' | 'riba';
+  data: string;                 // data dell'anticipo (o dell'accredito RiBa)
+  rate: { id: number; scadenza: string; importo: number; anticipato: number }[];
+  anticipato: number;           // quota anticipata ancora aperta (che la banca riprende all'incasso)
+  pagata: boolean;              // fattura già incassata ma anticipo non ancora rientrato
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Fatture oggi anticipate. `movimenti` = movimenti dei conti tecnici di anticipo; `rate` = rate ancora da incassare.
+ * Bonifico: ultima citazione della fattura = anticipo → anticipata (80 % del residuo; se la fattura non ha più rate aperte, l'anticipo
+ * è ancora da rientrare: la banca lo riprenderà). RiBa: rate RiBa aperte con lo stesso importo di un "ACCREDITO RIBA AL SBF" arrivato prima della scadenza.
+ */
+export function fattureAnticipate(movimenti: MovimentoAnticipo[], rate: RataDaIncassare[], oggi: string): { anticipate: Anticipata[]; daRientrare: { numero: string; data: string; importo: number }[] } {
+  const ordinati = [...movimenti].sort((a, b) => a.data.localeCompare(b.data));
+  // bonifico: ultimo evento per numero di fattura
+  const ultimo = new Map<string, { tipo: 'anticipo' | 'rientro'; data: string; importo: number; quante: number }>();
+  for (const m of ordinati) {
+    const anticipo = eAnticipo(m.descrizione), rientro = eRientro(m.descrizione);
+    if (!anticipo && !rientro) continue;
+    const numeri = numeriCitati(m.descrizione);
+    for (const n of numeri) ultimo.set(n, { tipo: anticipo ? 'anticipo' : 'rientro', data: m.data, importo: Math.abs(m.importo), quante: numeri.length });
+    // la banca a volte scrive nel rientro un numero sbagliato (es. "N 2" per l'anticipo della FT 5): un rientro con lo stesso importo
+    // di un anticipo di una sola fattura ancora aperto lo chiude
+    if (rientro) for (const [n, e] of ultimo)
+      if (e.tipo === 'anticipo' && e.quante === 1 && !numeri.includes(n) && Math.abs(e.importo - Math.abs(m.importo)) < 0.005) { ultimo.set(n, { ...e, tipo: 'rientro', data: m.data }); break; }
+  }
+  const perNumero = new Map<string, RataDaIncassare[]>();
+  for (const r of rate) {
+    const n = String(Number(String(r.numero).replace(/\/.*$/, '')));
+    // stesso numero in anni diversi: vale la fattura più recente
+    const gia = perNumero.get(n);
+    if (gia && gia[0].dataDoc > r.dataDoc) continue;
+    perNumero.set(n, gia && gia[0].dataDoc === r.dataDoc ? [...gia, r] : [r]);
+  }
+  const anticipate: Anticipata[] = [];
+  const daRientrare: { numero: string; data: string; importo: number }[] = [];
+  for (const [n, e] of ultimo) {
+    if (e.tipo !== 'anticipo') continue;
+    const aperte = (perNumero.get(n) ?? []).filter(r => r.dataDoc <= e.data);
+    if (!aperte.length) {
+      // fattura già incassata (o non trovata) e anticipo non rientrato: se l'anticipo era di una sola fattura si sa l'importo
+      if (e.quante === 1) daRientrare.push({ numero: n, data: e.data, importo: r2(e.importo) });
+      continue;
+    }
+    const rateA = aperte.map(r => ({ id: r.id, scadenza: r.scadenza, importo: r.importo, anticipato: r2(r.importo * QUOTA_BONIFICO) }));
+    anticipate.push({ numero: n, tipo: 'bonifico', data: e.data, rate: rateA, anticipato: r2(rateA.reduce((s, r) => s + r.anticipato, 0)), pagata: false });
+  }
+  // RiBa al salvo buon fine: ogni accredito è un effetto
+  const accrediti = ordinati.filter(m => eAccreditoRiba(m.descrizione) && m.importo > 0);
+  const prese = new Set<number>();
+  for (const a of accrediti) {
+    // prima le rate RiBa, poi le altre con lo stesso importo (in anagrafica il pagamento a volte non dice RiBa)
+    const r = rate.filter(x => !prese.has(x.id) && Math.abs(x.importo - a.importo) < 0.005 && x.scadenza >= a.data && x.dataDoc <= a.data)
+      .sort((x, y) => Number(!!y.riba) - Number(!!x.riba) || x.scadenza.localeCompare(y.scadenza))[0];
+    if (!r) continue;
+    prese.add(r.id);
+    anticipate.push({ numero: String(r.numero), tipo: 'riba', data: a.data, rate: [{ id: r.id, scadenza: r.scadenza, importo: r.importo, anticipato: r.importo }],
+      anticipato: r.importo, pagata: false });
+  }
+  void oggi;
+  return { anticipate: anticipate.sort((a, b) => a.data.localeCompare(b.data)), daRientrare };
+}
