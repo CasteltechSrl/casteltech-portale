@@ -800,3 +800,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    (`INIZIO_DDT_DA_FATTURARE`). Archivio FIC (PDF emessi, XML/PDF fornitori, elenchi) in Project Files → archivio-fic, fuori dal repository.
    (conferme d'ordine: vedi 4c)
    ordini a fornitore, Gmail, banca BPER, accesso del commercialista, note spese (dopo il 10/11).
+   ✅ Banca (Adriano 7/11/2026, scelta "prima file, poi PSD2"; migrazione 082 `banca_movimenti` + `riba_distinte` + `documenti_scadenze.riba_distinta_id`, regole in
+   `engine/banca.ts`, letture in `banca-servizio.ts`, pagine in `rotte/banca.ts` = `/amministrazione/banca`, test in `tests/banca.test.ts`): estratto conto BPER caricato
+   (CBI RH `leggiCbi`, Excel/CSV `movimentiDaTabella`; chiave data|importo|descrizione|n = niente doppioni), `proponiAbbinamento`: entrate → rate emesse, uscite → rate ricevute;
+   stesso importo + numero fattura (`citaNumero`) + nome (`somiglianzaNome`) + data; più rate dello stesso cliente; distinta RiBa intera; ≥ `SOGLIA_SICURA` = già spuntata.
+   Conferma = rate pagate alla data del movimento con modo e conto; senza fattura = `CATEGORIE_MOVIMENTO` (`categoriaProposta`); "Annulla" riapre. RiBa: `/amministrazione/banca/anticipi`,
+   file CBI (`generaRiba`: IB/14/20/30/40/50/51/70/EF, 120 caratteri) con codice SIA (impostazioni 'banca') e IBAN del cliente in `banca_appoggio`; Excel per l'anticipo con bonifico.
+   ⬜ Provare con un estratto conto vero di BPER (formato CBI/Excel da confermare); poi open banking PSD2 (servizio da scegliere).
