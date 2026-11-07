@@ -199,6 +199,8 @@ export function numeroPassivo(s: string): number | null {
   return base * (m[2] === 'M' && !m[4] && /^\d+M\d*$/.test(t) ? 1e6 : mult[m[2]]);
 }
 
+const RE_CASE_IMPRONTA = /^(SOD|SOT|SOIC|SOP|SO|TO|DO|QFN|QFP|LQFP|TQFP|TSSOP|SSOP|MSOP|DFN|SON|SMA|SMB|SMC|DPAK|D2PAK|BGA|LGA|HC49|CAPACITOR|RESISTOR|RESISTENZA|SPAZIATURA)[-\w.]*$/i;
+
 /** BOM e pick and place parlano dello stesso componente? Basta che uno contenga il P/N o il valore dell'altro. */
 export function stessoComponente(bom: { pn: string; valore: string }, testoPp: string): boolean {
   const pp = pulisci(testoPp);
@@ -206,15 +208,26 @@ export function stessoComponente(bom: { pn: string; valore: string }, testoPp: s
   if (/EXPOSED ?PAD|THERMAL ?PAD/i.test(testoPp)) return true; // piazzola del corpo (es. connettori Corticale DB-04): non è un valore
   const pn = pulisci(bom.pn);
   if (pn.length >= 4 && (pp.includes(pn) || pn.includes(pp))) return true;
+  // nomi di case e impronte (SOD323, DO-214AB, THT_CAPACITOR_D5MM_SPAZIATURA3.5MM) non sono codici produttore
+  if (RE_CASE_IMPRONTA.test(testoPp.trim()) && !/\s/.test(testoPp.trim())) return true; // il pick and place dice solo il case (valore vuoto)
+  // una parola del P/N della BOM nel pick and place (T2N7002BK,LM(T contro "T2N7002BK,LM SOT23-3") = stesso componente
+  const tokPp0 = pezzi(testoPp);
+  if (pezzi(bom.pn).some(t => t.length >= 4 && /\d/.test(t) && /[A-Z]/.test(t) && tokPp0.includes(t))) return true;
+  // parola del valore con una cifra uguale a una del pick and place ("zener 4.7v" e "4.7v SOD323", "varistore V25S750")
+  if (pezzi(bom.valore).some(t => t.length >= 2 && /\d/.test(t) && tokPp0.includes(t))) return true;
   // il pick and place scrive un altro codice produttore (es. LED LTST-S270KRKT contro LTST-C191KRKT in BOM): componente diverso
-  const sembraPn = (t: string) => t.length >= 6 && /\d/.test(t) && /[A-Z]/.test(t) && numeroPassivo(t) == null && !/^\d+(MM|MIL|V|VAC|VDC|W|MW|PPM|TOL)$/.test(t);
+  const sembraPn = (t: string) => !RE_CASE_IMPRONTA.test(t) && !/\dMM$|MM\d/.test(t) && t.length >= 6 && /\d/.test(t) && /[A-Z]/.test(t) && numeroPassivo(t) == null && !/^\d+(MM|MIL|V|VAC|VDC|W|MW|PPM|TOL)$/.test(t);
   if (pn.length >= 6 && /\d/.test(pn) && /[A-Z]/.test(pn) && pezzi(testoPp).some(sembraPn)) return false;
   const val = pulisci(bom.valore);
   if (val.length >= 3 && (pp.includes(val) || val.includes(pp))) return true;
   const primo = pezzi(bom.valore)[0] ?? '';
   const tokPp = pezzi(testoPp);
   if (primo.length >= 2 && tokPp.includes(primo)) return true;
-  const nb = numeroPassivo(primo), np = numeroPassivo(tokPp.find(t => numeroPassivo(t) != null) ?? '');
+  // "68 nF", "1 uF", "10 K" (valore e unità separati, BOM di Euroautomations) = 68nF, 1uF, 10K
+  const [p0 = '', p1 = ''] = pezzi(bom.valore.replace(/(\d),(\d)/g, '$1.$2'));
+  const unita = p1.replace(/^MEG(OHMS?)?$/, 'M').replace(/^([KMG])OHMS?$/, '$1').replace(/^(OHMS?|Ω)$/, '');
+  const unito = /^\d+(\.\d+)?$/.test(p0) && /^([PNUMKGR]|[PNUM]?[FH]|)$/.test(unita) && p1 ? numeroPassivo(p0 + unita) : null;
+  const nb = unito ?? numeroPassivo(primo), np = numeroPassivo(tokPp.find(t => numeroPassivo(t) != null) ?? '');
   if (nb != null && np != null) return Math.abs(nb - np) <= Math.abs(nb) * 1e-6;
   // parole del P/N (es. "KEYELCO 1287-ST" e "…KEYSTONE_1287-ST")
   const tokPn = pezzi(bom.pn).filter(t => t.length >= 4 && /\d/.test(t));
