@@ -99,7 +99,9 @@ function daGenCad(testo: string | null | undefined): Partial<ProdottoNuovo> {
   // il DRAWING è spesso il percorso del file del CAD: si tiene solo il nome, senza estensione
   const disegno = maiuscolo(campo('DRAWING').split(/[\\/]/).pop()!.replace(/\.[A-Z0-9]{2,5}$/i, ''));
   const revisione = pulisciRevisione(campo('REVISION'));
-  return { ...(valido(disegno) ? { codice: disegno } : {}), ...(valido(revisione) && !/^0+(\.0+)?$/.test(campo('REVISION')) ? { revisione } : {}) };
+  // PADS scrive in REVISION la data dell'esportazione ("2026-07-30 12:34:55", Univac EA1002, 7/11/2026): non è una revisione
+  const eData = /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}(\s|$)/.test(campo('REVISION').trim());
+  return { ...(valido(disegno) ? { codice: disegno } : {}), ...(valido(revisione) && !eData && !/^0+(\.0+)?$/.test(campo('REVISION')) ? { revisione } : {}) };
 }
 
 /**
