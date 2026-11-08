@@ -54,6 +54,8 @@ import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
+import { anticipiFatture } from '../banca-servizio.js';
+import { segnoAnticipo, type AnticipoFattura } from '../../engine/anticipi.js';
 import { segnaDocumentoInviato } from '../invii-servizio.js';
 import { INVIATO_TITOLO, SQL_SDI_INVIATO_IL } from '../../engine/invii.js';
 import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, motivoEscluso, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
@@ -104,6 +106,17 @@ async function riquadroSdi(d: any, senzaErrori = true): Promise<Raw> {
 }
 
 /** Rate di un documento con "Segna incassata/pagata" (data e conto) o "annulla". */
+/** Fattura anticipata dalla banca (Adriano 8/11/2026): quando, quanto, rientro o scadenza della RiBa. */
+function riquadroAnticipo(a: AnticipoFattura[] | undefined): Raw {
+  if (!a?.length) return html``;
+  return html`<h2>Anticipata dalla banca</h2><ul class="scadenze">${a.map(x => x.tipo === 'riba'
+    ? html`<li>RiBa al salvo buon fine: accreditata il ${data(x.data)}${x.importo != null ? html` (<strong>${euro(x.importo)}</strong>, 100 %)` : ''}, scadenza della rata ${x.scadenza ? data(x.scadenza) : ''}${
+      x.scadenza && x.scadenza >= new Date().toISOString().slice(0, 10) ? ' (se il cliente non paga torna indietro come insoluto)' : ''}</li>`
+    : html`<li>Anticipo con bonifico del ${data(x.data)}${x.importo != null ? html`: <strong>${euro(x.importo)}</strong>` : ''}${
+      x.insieme.length ? html` (insieme alle fatture ${x.insieme.join(', ')})` : ''} · ${x.rientro ? html`rientrato il ${data(x.rientro)}` : x.incassata ? html`fattura incassata, rientro non riconosciuto nei movimenti` : html`<strong>ancora aperto</strong>: la banca lo riprende all'incasso`}</li>`)}</ul>
+    <p class="nota">Ricavato dai movimenti dei conti di anticipo caricati in Amministrazione → Banca.</p>`;
+}
+
 function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi, strumenti: conti }: ModiPagamento): Raw {
   if (!scadenze.length) return html``;
   const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
@@ -445,6 +458,13 @@ export function rotteAmministrazione() {
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
         AND ($3 = '' OR coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
       ORDER BY d.numero IS NOT NULL, d.data DESC, d.numero DESC NULLS FIRST`, [tipo, anno, cerca]);
+    // fatture anticipate dalla banca, RiBa o bonifico (Adriano 8/11/2026): colonna "Anticipo" e filtro
+    const anticipi = tipo === 'fattura' ? await anticipiFatture(righe.filter(d => d.numero != null).map(d => d.id)) : new Map();
+    const filtroAnticipo = tipo === 'fattura' ? String(req.query.anticipo ?? '') : '';
+    if (filtroAnticipo) {
+      const tenere = righe.filter(d => (anticipi.get(d.id) ?? []).some((a: { tipo: string }) => filtroAnticipo === 'tutte' || a.tipo === filtroAnticipo));
+      righe.splice(0, righe.length, ...tenere);
+    }
     const pag = paginata(righe, req.query as Record<string, unknown>);
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti ORDER BY anno DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
@@ -468,12 +488,15 @@ export function rotteAmministrazione() {
         <input type="hidden" name="tipo" value="${tipo}">
         <select name="anno">${anni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select>
         <input name="q" value="${cerca}" placeholder="Cliente o numero">
+        ${tipo === 'fattura' ? html`<select name="anticipo" title="Fatture anticipate dalla banca (dai movimenti dei conti di anticipo)">
+          ${[['', 'Tutte le fatture'], ['tutte', 'Solo anticipate'], ['riba', 'Anticipate RiBa'], ['bonifico', 'Anticipate con bonifico']]
+            .map(([v, t]) => html`<option value="${v}" ${v === filtroAnticipo ? raw('selected') : ''}>${t}</option>`)}</select>` : ''}
         <button>Cerca</button>
       </form>
       ${tipo === 'autofattura' ? await riquadroFattureEstere(spunte) : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
-        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th><th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
+        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th>${tipo === 'fattura' ? html`<th title="Anticipata dalla banca: RiBa al salvo buon fine o anticipo con bonifico (80 %)">Anticipo</th>` : ''}<th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
         <tbody>${pag.righe.map(d => html`<tr>
           ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
@@ -482,6 +505,7 @@ export function rotteAmministrazione() {
           <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
+          ${tipo === 'fattura' ? (() => { const a = segnoAnticipo(anticipi.get(d.id)); return html`<td>${a ? html`<span class="etichetta" title="${a.titolo}">${a.testo}</span>` : ''}</td>`; })() : ''}
           <td data-valore="${d.email_inviata_il ? new Date(d.email_inviata_il).toISOString() : d.sdi_inviato_il ? new Date(d.sdi_inviato_il).toISOString() : ''}">${d.stato === 'bozza' ? '' : segnoInvioElenco(d)}</td>
         </tr>`)}</tbody></table></div>${pag.barra}${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
       [...(tipo === 'autofattura' ? ['acquisizioni.js'] : []), ...(spunte ? ['elenco.js'] : [])]));
@@ -812,6 +836,7 @@ export function rotteAmministrazione() {
         ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
         ${['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && d.origine === 'portale' ? attributiEmesso(d.xml, d.attributi_xml) : ''}
         ${await riquadroSdi(d)}
+        ${d.tipo === 'fattura' ? riquadroAnticipo((await anticipiFatture([id])).get(id)) : ''}
         ${elencoScadenze(scadenze, 'documenti', await caricaModiPagamento())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}

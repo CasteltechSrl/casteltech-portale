@@ -4,6 +4,7 @@
 import { q, q1, transazione } from './db.js';
 import { leggiFileBom } from './codifica-servizio.js';
 import { testoDaFile } from '../engine/componenti-clienti.js';
+import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi } from '../engine/anticipi.js';
 import { abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
   categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
@@ -307,4 +308,31 @@ export async function annullaDistinta(id: number): Promise<void> {
     await c.query(`UPDATE riba_distinte SET annullata = true WHERE id = $1`, [id]);
     await c.query(`UPDATE documenti_scadenze SET riba_distinta_id = NULL WHERE riba_distinta_id = $1 AND pagata_il IS NULL`, [id]);
   });
+}
+
+/**
+ * Fatture anticipate dalla banca, anche già incassate (Adriano 8/11/2026): movimenti dei conti di anticipo contro le fatture emesse.
+ * `ids` = solo queste fatture (elenco, pagina della fattura). Calcolato in lettura, niente tabelle.
+ */
+export async function anticipiFatture(ids?: number[]): Promise<Map<number, AnticipoFattura[]>> {
+  if (ids && !ids.length) return new Map();
+  const tecnici = (await contiBanca()).filter(c => c.tipo === 'anticipo').map(c => c.numero);
+  if (!tecnici.length) return new Map();
+  const movimenti = await q<{ data: string; importo: number; descrizione: string; conto: string }>(`SELECT to_char(data, 'YYYY-MM-DD') AS data,
+      importo::float AS importo, descrizione, conto FROM banca_movimenti WHERE conto = ANY($1)`, [tecnici]);
+  if (!movimenti.length) return new Map();
+  const dal = movimenti.reduce((m, x) => (x.data < m ? x.data : m), '9999');
+  const righe = await q<{ id: number; numero: number; data: string; sid: number | null; scadenza: string | null; importo: number | null; modalita: string | null; pagata: string | null }>(
+    `SELECT d.id, d.numero, to_char(d.data, 'YYYY-MM-DD') AS data, s.id AS sid, to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita, to_char(s.pagata_il, 'YYYY-MM-DD') AS pagata
+      FROM documenti d LEFT JOIN documenti_scadenze s ON s.documento_id = d.id
+      WHERE d.tipo = 'fattura' AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.data >= $1::date - 365`, [dal]);
+  const fatture = new Map<number, FatturaPerAnticipi>();
+  for (const r of righe) {
+    const f = fatture.get(r.id) ?? { id: r.id, numero: String(r.numero), data: r.data, rate: [] };
+    if (r.sid && r.scadenza && r.importo != null) f.rate.push({ id: r.sid, scadenza: r.scadenza, importo: r.importo, riba: r.modalita === 'MP12', pagata: r.pagata });
+    fatture.set(r.id, f);
+  }
+  const tutte = anticipiDelleFatture(movimenti, [...fatture.values()]);
+  if (!ids) return tutte;
+  return new Map(ids.filter(id => tutte.has(id)).map(id => [id, tutte.get(id)!]));
 }

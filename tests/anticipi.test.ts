@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fattureAnticipate, numeriCitati, QUOTA_BONIFICO, type MovimentoAnticipo } from '../src/engine/anticipi.js';
+import { anticipiDelleFatture, fattureAnticipate, numeriCitati, QUOTA_BONIFICO, segnoAnticipo, type MovimentoAnticipo } from '../src/engine/anticipi.js';
 import { previsioneCassa } from '../src/engine/previsione-cassa.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -55,4 +55,33 @@ test('anticipi: bonifico all\'80 %, rientro, numero sbagliato della banca, RiBa 
 
 test('anticipi: la guida spiega le fatture anticipate', () => {
   assert.ok(cercaGuida('fatture anticipate riba 80').some(a => a.argomento.id === 'banca-riba'));
+});
+
+// Adriano 8/11/2026: nell'elenco delle fatture si vede quali sono state anticipate, anche quelle già incassate (dati inventati)
+test('anticipi: storico fattura per fattura (bonifico con rientro, rientro senza numero, RiBa, incassata senza rientro)', () => {
+  const mov: MovimentoAnticipo[] = [
+    { data: '2026-03-06', importo: -9000, descrizione: 'ANTICIPO SU DOCUMENTI FT.14 +20', conto: 'b' },
+    { data: '2026-03-16', importo: -2000, descrizione: 'ANTICIPO SU DOCUMENTI FT.23', conto: 'b' },
+    { data: '2026-04-02', importo: 5000, descrizione: 'RIENTRO ANTICIPO/FINANZIAMENTO ROSSI SRL N 14', conto: 'b' },
+    { data: '2026-04-27', importo: 2000, descrizione: 'RIENTRO ANTICIPO/FINANZIAMENTO RIENTRO SU ANT FATTURA IN SCADENZA30.04.26', conto: 'b' },
+    { data: '2026-03-10', importo: 1234.5, descrizione: 'ACCREDITO RIBA AL SBF LOTTO: PRG. 0003 NUM.EFF. 00001', conto: 'r' },
+  ];
+  const fatture = [
+    { id: 1, numero: '14', data: '2026-02-28', rate: [{ id: 11, scadenza: '2026-03-31', importo: 6250, pagata: '2026-03-31' }] },
+    { id: 2, numero: '20', data: '2026-02-28', rate: [{ id: 21, scadenza: '2026-03-31', importo: 5000, pagata: '2026-03-31' }] },
+    { id: 3, numero: '23', data: '2026-03-16', rate: [{ id: 31, scadenza: '2026-04-30', importo: 2500, pagata: null }] },
+    { id: 4, numero: '14', data: '2025-02-28', rate: [{ id: 41, scadenza: '2025-03-31', importo: 6250, pagata: '2025-03-31' }] },
+    { id: 5, numero: '9', data: '2026-02-10', rate: [{ id: 51, scadenza: '2026-04-30', importo: 1234.5, riba: true, pagata: null }] },
+  ];
+  const a = anticipiDelleFatture(mov, fatture);
+  assert.equal(a.get(1)![0].rientro, '2026-04-02');                 // fattura del 2026, non quella del 2025 con lo stesso numero
+  assert.deepEqual(a.get(1)![0].insieme, ['20']);
+  assert.equal(a.has(4), false);
+  assert.equal(a.get(2)![0].rientro, null);
+  assert.equal(a.get(2)![0].incassata, true);                       // incassata, rientro non riconosciuto
+  assert.equal(a.get(3)![0].rientro, '2026-04-27');                 // rientro senza numero: stesso importo dell'anticipo
+  assert.equal(a.get(5)![0].tipo, 'riba');
+  assert.equal(a.get(5)![0].scadenza, '2026-04-30');
+  assert.equal(segnoAnticipo(a.get(5))!.testo, 'RiBa');
+  assert.match(segnoAnticipo(a.get(2))!.titolo, /incassata/);
 });
