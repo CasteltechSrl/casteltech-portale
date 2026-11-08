@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { abiCabDaIban, categoriaProposta, chiaviMovimenti, contoNuovo, numeroConto, saldoConto, citaNumero, controlliCreditore, controlliEffetto, dataDa, generaRiba, ibanValido, importoDa,
-  leggiCbi, movimentiDaTabella, proponiAbbinamento, SOGLIA_SICURA, type Movimento, type RataAperta } from '../src/engine/banca.js';
+  leggiCbi, movimentiDaTabella, proponiAbbinamento, rataMancante, SOGLIA_SICURA, type Movimento, type RataAperta } from '../src/engine/banca.js';
 import { cercaGuida } from '../src/engine/guida.js';
 import { MENU_GRUPPI } from '../src/server/views/layout.js';
 
@@ -213,4 +213,13 @@ test('banca: numero del conto, conti nuovi e saldo di oggi', () => {
   const conto = { ...contoNuovo('3092938', ''), saldoData: '2025-12-31', saldo: 100, fido: 10000 };
   assert.equal(saldoConto(conto, [{ data: '2025-12-31', importo: 5 }, { data: '2026-01-02', importo: -150.5 }]), -50.5);
   assert.equal(saldoConto({ ...conto, saldo: null }, []), null);
+});
+
+// 8/11/2026: fattura arrivata da FIC senza rate → una rata col totale alla data della fattura, così il bonifico si abbina
+test('banca: rata per la fattura emessa che non ne ha', () => {
+  assert.deepEqual(rataMancante({ tipo: 'fattura', stato: 'consegnato', numero: 52, data: '2026-05-20', totale: 1202.43, rate: 0 }),
+    { data: '2026-05-20', importo: 1202.43, modalita: 'MP05' });
+  assert.equal(rataMancante({ tipo: 'fattura', stato: 'consegnato', numero: 52, data: '2026-05-20', totale: 1202.43, rate: 1 }), null);
+  assert.equal(rataMancante({ tipo: 'fattura', stato: 'bozza', numero: null, data: '2026-05-20', totale: 100, rate: 0 }), null);
+  assert.equal(rataMancante({ tipo: 'nota_credito', stato: 'emesso', numero: 3, data: '2026-05-20', totale: 100, rate: 0 }), null);
 });

@@ -273,6 +273,16 @@ export const MAI_FATTURA = /anticipo su documenti|rientro anticipo|^competenze|g
 export const SOGLIA_SICURA = 75;
 
 /**
+ * Fattura emessa senza rate (8/11/2026: FT 52/2026 di Plantbit arrivata da FIC senza scadenze, il bonifico non trovava nulla da abbinare):
+ * una sola rata = totale della fattura alla data del documento, bonifico. Nessuna rata se la fattura ne ha già o non è emessa.
+ */
+export function rataMancante(f: { tipo: string; stato: string; numero: number | null; data: string; totale: number | null; rate: number }):
+  { data: string; importo: number; modalita: string } | null {
+  if (f.tipo !== 'fattura' || f.numero == null || ['bozza', 'annullato', 'scartato'].includes(f.stato) || f.rate > 0 || !f.totale || f.totale <= 0) return null;
+  return { data: f.data, importo: Math.round(f.totale * 100) / 100, modalita: 'MP05' };
+}
+
+/**
  * Proposta di abbinamento di un movimento con le rate aperte. Entrate → rate emesse, uscite → rate ricevute.
  * 1) distinta RiBa intera con lo stesso totale; 2) una rata con lo stesso importo (la migliore per numero, nome, data);
  * 3) più rate della stessa controparte (citata nella descrizione) che fanno l'importo. Null se nessuna rata torna con l'importo.
