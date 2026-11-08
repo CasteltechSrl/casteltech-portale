@@ -18,6 +18,7 @@
  *   GET  /api/claude/banca/dati?dal=         → movimenti, rate aperte, rate già pagate non ancora confermate da un movimento, IBAN dei clienti
  *   POST /api/claude/banca/decisioni         → { abbina: [{id, rate: [{tipo, id, gia?}]}], registra: [{id, categoria}] } = abbinamento fatto da Claude
  *                                              (Adriano 7/11/2026: "non riesci a capirlo tu incrociando fatture, acquisti, stipendi?"), confermato_da 'Claude'
+ *   POST /api/claude/banca/rata-mancante     → { anno, numero } = una rata (totale alla data) per la fattura emessa che non ne ha
  *   POST /api/claude/banca/iban              → { clienti: [{id, iban}] } = banca d'appoggio dei clienti RiBa (solo dove manca)
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
@@ -30,7 +31,7 @@ import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
-import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente } from '../banca-servizio.js';
+import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante } from '../banca-servizio.js';
 import { CATEGORIE_MOVIMENTO, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
@@ -219,6 +220,9 @@ export function rotteApiClaude() {
       registrati++;
     }
     res.json({ abbinati, registrati, errori });
+  });
+  r.post('/banca/rata-mancante', async (req, res) => {
+    res.json(await aggiungiRataMancante(Number(req.body?.anno), Number(req.body?.numero)));
   });
   r.post('/banca/iban', async (req, res) => {
     const esiti: Record<string, number> = {};

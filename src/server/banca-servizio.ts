@@ -5,7 +5,7 @@ import { q, q1, transazione } from './db.js';
 import { leggiFileBom } from './codifica-servizio.js';
 import { testoDaFile } from '../engine/componenti-clienti.js';
 import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi } from '../engine/anticipi.js';
-import { abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
+import { rataMancante, abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
   categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
 const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.numero IS NOT NULL`;
@@ -335,4 +335,18 @@ export async function anticipiFatture(ids?: number[]): Promise<Map<number, Antic
   const tutte = anticipiDelleFatture(movimenti, [...fatture.values()]);
   if (!ids) return tutte;
   return new Map(ids.filter(id => tutte.has(id)).map(id => [id, tutte.get(id)!]));
+}
+
+/** Aggiunge la rata a una fattura emessa che non ne ha (vedi `rataMancante`). Risposta: id della rata nuova, o il motivo. */
+export async function aggiungiRataMancante(anno: number, numero: number): Promise<{ id: number } | { errore: string }> {
+  const f = await q1<{ id: number; tipo: string; stato: string; numero: number; data: string; totale: number | null; rate: number }>(
+    `SELECT d.id, d.tipo, d.stato, d.numero, to_char(d.data, 'YYYY-MM-DD') AS data, d.totale::float AS totale,
+       (SELECT count(*)::int FROM documenti_scadenze s WHERE s.documento_id = d.id) AS rate
+     FROM documenti d WHERE d.tipo = 'fattura' AND d.anno = $1 AND d.numero = $2 AND coalesce(d.sezionale, '') = '' LIMIT 1`, [anno, numero]);
+  if (!f) return { errore: 'fattura non trovata' };
+  const r = rataMancante(f);
+  if (!r) return { errore: f.rate ? 'la fattura ha già le sue rate' : 'fattura non adatta (bozza, annullata o senza totale)' };
+  const nuova = await q1<{ id: number }>(`INSERT INTO documenti_scadenze (documento_id, data, importo, modalita) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [f.id, r.data, r.importo, r.modalita]);
+  return { id: nuova!.id };
 }

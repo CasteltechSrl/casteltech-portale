@@ -820,7 +820,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Anticipi/rientri (`MAI_FATTURA`) e conti di anticipo (`contoTecnico`) mai abbinati a fatture; giroconto = solo distinta intera. API: GET/POST `/api/claude/banca[/conti|/movimenti]`.
    Abbinamento fatto da Claude (Adriano 7/11/2026 sera, "non riesci a capirlo tu?"): GET `/api/claude/banca/dati` (movimenti, rate aperte, `ratePagateLibere` = rate già pagate
    dallo storico FIC non ancora confermate da un movimento, IBAN clienti) → analisi fuori dal portale → POST `/banca/decisioni` (confermato_da 'Claude'); rata già pagata = `gia: true`
-   nel movimento: non cambia data/modo e "Annulla" non la riapre. POST `/banca/iban` = banca d'appoggio dei clienti (`salvaIbanCliente`: solo dove manca un IBAN valido).
+   nel movimento: non cambia data/modo e "Annulla" non la riapre. POST `/banca/rata-mancante` {anno, numero} = una rata (totale alla data) per la fattura emessa arrivata da FIC senza rate (`rataMancante`, FT 52/2026 Plantbit). POST `/banca/iban` = banca d'appoggio dei clienti (`salvaIbanCliente`: solo dove manca un IBAN valido).
    Fatture anticipate nell'elenco (Adriano 8/11/2026, "guardando le fatture voglio capire quelle anticipate con bonifico o RiBa"; `anticipiDelleFatture`/`segnoAnticipo` in
    `engine/anticipi.ts`, `anticipiFatture` in `banca-servizio.ts`, test in `tests/anticipi.test.ts`): Fatture → colonna "Anticipo" + filtro `?anticipo=tutte|riba|bonifico`,
    riquadro "Anticipata dalla banca" nella fattura; anche fatture già incassate (bonifico: anticipo → rientro, rientro senza numero = stesso importo o 80 % della fattura;
