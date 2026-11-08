@@ -48,13 +48,18 @@ export function troppiInvii(registro: Map<string, number[]>, ip: string, adesso 
   return false;
 }
 
-export interface Contatto { nome: string; cognome: string; email: string; oggetto: string; messaggio: string; privacy: boolean; lingua: 'it' | 'en' }
+export interface Contatto { nome: string; cognome: string; email: string; telefono: string; oggetto: string; messaggio: string; privacy: boolean; lingua: 'it' | 'en' }
 
-/** Modulo Contatti del sito (campi come nel vecchio WordPress: your-name, your-surname, your-email, your-subject, your-message). */
+/**
+ * Modulo Contatti del sito. Due versioni dei nomi dei campi:
+ *  - vecchio WordPress: your-name, your-surname, your-email, your-subject, your-message;
+ *  - sito nuovo (Adriano 8/11/2026): nome, email, telefono, motivo, messaggio.
+ */
 export function leggiContatto(c: Record<string, unknown>): { contatto: Contatto; errori: string[] } {
   const contatto: Contatto = {
-    nome: campo(c['your-name'], 100), cognome: campo(c['your-surname'], 100), email: campo(c['your-email'], 200).toLowerCase(),
-    oggetto: campo(c['your-subject'], 200), messaggio: campo(c['your-message'], 5000).replace(/\r\n/g, '\n'),
+    nome: campo(c['your-name'] ?? c.nome, 100), cognome: campo(c['your-surname'], 100), email: campo(c['your-email'] ?? c.email, 200).toLowerCase(),
+    telefono: campo(c.telefono, 40), oggetto: campo(c['your-subject'] ?? c.motivo, 200),
+    messaggio: campo(c['your-message'] ?? c.messaggio, 5000).replace(/\r\n/g, '\n'),
     privacy: !!campo(c['checkbox-361[]'] ?? c['checkbox-361'] ?? c.privacy), lingua: campo(c.lingua) === 'en' ? 'en' : 'it',
   };
   const errori: string[] = [];
@@ -69,7 +74,8 @@ export function testoContatto(c: Contatto): { oggetto: string; testo: string } {
   return {
     oggetto: `Sito casteltech.net – Contatto: ${c.oggetto || `${c.nome} ${c.cognome}`.trim()}`,
     testo: [`Messaggio dal modulo Contatti del sito${c.lingua === 'en' ? ' (versione inglese)' : ''}.`, '',
-      `Nome: ${`${c.nome} ${c.cognome}`.trim()}`, `Email: ${c.email}`, `Oggetto: ${c.oggetto || '—'}`, '', c.messaggio, '',
+      `Nome: ${`${c.nome} ${c.cognome}`.trim()}`, `Email: ${c.email}`, ...(c.telefono ? [`Telefono: ${c.telefono}`] : []),
+      `Oggetto: ${c.oggetto || '—'}`, '', c.messaggio, '',
       'Per rispondere basta "Rispondi": la risposta va al mittente.'].join('\n'),
   };
 }
@@ -87,9 +93,28 @@ export const CAMPI_PREVENTIVO: [string, string][] = [
   ['totaleComponenti', 'Totale componenti'], ['your-note', 'Note'],
 ];
 
-export interface RichiestaPreventivo { azienda: string; email: string; righe: [string, string][]; note: string; privacy: boolean; lingua: 'it' | 'en' }
+export interface RichiestaPreventivo {
+  /** Nome che identifica chi chiede: ragione sociale dell'azienda, oppure nome e cognome del privato. */
+  azienda: string; email: string; righe: [string, string][]; note: string; privacy: boolean; lingua: 'it' | 'en';
+  /** Solo dal sito nuovo: azienda o privato, cosa chiede (es. "Stampa 3D, Progettazione elettronica") e i dati di contatto. */
+  privato?: boolean; tipi?: string; contatti?: [string, string][];
+}
+
+/**
+ * Domande e risposte del preventivo guidato del sito nuovo: la pagina le manda già con l'etichetta, come JSON
+ * [["Produzione di schede elettroniche · Quantità per lotto", "200"], ...]. Si accettano solo coppie di testi, al massimo 80.
+ */
+export function righeDaJson(json: unknown): [string, string][] {
+  let lista: unknown;
+  try { lista = JSON.parse(String(json ?? '')); } catch { return []; }
+  if (!Array.isArray(lista)) return [];
+  return lista.slice(0, 80).filter(r => Array.isArray(r) && r.length === 2)
+    .map(r => [campo(r[0], 150), campo(String(r[1] ?? '').replace(/\r\n/g, '\n').split('\n').map(x => x.trim()).join(' / '), 3000)] as [string, string])
+    .filter(([k, v]) => k && v);
+}
 
 export function leggiPreventivo(c: Record<string, unknown>): { richiesta: RichiestaPreventivo; errori: string[] } {
+  if (c.cliente_tipo !== undefined) return leggiPreventivoGuidato(c);
   const righe = CAMPI_PREVENTIVO.filter(([k]) => k !== 'your-note')
     .map(([k, etichetta]) => [etichetta, campo(c[k], 200)] as [string, string]).filter(([, v]) => v);
   const richiesta: RichiestaPreventivo = {
@@ -104,18 +129,77 @@ export function leggiPreventivo(c: Record<string, unknown>): { richiesta: Richie
   return { richiesta, errori };
 }
 
+/**
+ * Preventivo guidato del sito nuovo (Adriano 7/11/2026): chi chiede può essere un'azienda o un privato.
+ * Campi: cliente_tipo (azienda | privato), ragione_sociale (obbligatoria solo per l'azienda), piva, nome, email, telefono,
+ * citta, contatto_preferito, tipi (cosa chiede), righe_json (domande e risposte), privacy.
+ */
+function leggiPreventivoGuidato(c: Record<string, unknown>): { richiesta: RichiestaPreventivo; errori: string[] } {
+  const privato = campo(c.cliente_tipo) === 'privato';
+  const ragione = privato ? '' : campo(c.ragione_sociale, 200), nome = campo(c.nome, 120);
+  const contatti: [string, string][] = ([
+    ['Cliente', privato ? 'Privato' : 'Azienda'], ['Ragione sociale', ragione], ['Partita IVA', privato ? '' : campo(c.piva, 30)],
+    [privato ? 'Nome' : 'Referente', nome], ['Email', campo(c.email, 200).toLowerCase()], ['Telefono', campo(c.telefono, 40)],
+    ['Città', campo(c.citta, 100)], ['Preferisce essere contattato', campo(c.contatto_preferito, 40)],
+  ] as [string, string][]).filter(([, v]) => v);
+  const richiesta: RichiestaPreventivo = {
+    azienda: privato ? nome : ragione, email: campo(c.email, 200).toLowerCase(), righe: righeDaJson(c.righe_json), note: '',
+    privacy: !!campo(c.privacy), lingua: campo(c.lingua) === 'en' ? 'en' : 'it', privato, tipi: campo(c.tipi, 300), contatti,
+  };
+  const errori: string[] = [];
+  if (!privato && !ragione) errori.push('ragione_sociale');
+  if (!nome) errori.push('nome');
+  if (!emailValida(richiesta.email)) errori.push('email');
+  if (!richiesta.privacy) errori.push('privacy');
+  return { richiesta, errori };
+}
+
 /** Testo della richiesta: va nell'email a info@ e nel pacchetto dei Documenti dei clienti (come il testo di un'email). */
 export function testoPreventivo(r: RichiestaPreventivo, file: string[]): { oggetto: string; testo: string } {
   return {
-    oggetto: `Sito casteltech.net – Richiesta preventivo: ${r.azienda}`,
+    oggetto: `Sito casteltech.net – Richiesta preventivo: ${r.azienda}${r.privato ? ' (privato)' : ''}`,
     testo: [`Richiesta dal modulo "Richiedi un preventivo" del sito${r.lingua === 'en' ? ' (versione inglese)' : ''}.`, '',
+      ...(r.contatti?.length ? [...r.contatti.map(([k, v]) => `${k}: ${v}`), ''] : []),
+      ...(r.tipi ? [`Richiesta: ${r.tipi}`, ''] : []),
       ...r.righe.map(([k, v]) => `${k}: ${v}`), '', ...(r.note ? ['Note:', r.note, ''] : []),
       file.length ? `File allegati: ${file.join(', ')}` : 'Nessun file allegato.'].join('\n'),
   };
 }
 
-/** Nome del pacchetto nei Documenti dei clienti: "SITO – AZIENDA" in maiuscolo come le anagrafiche. */
-export const nomePacchettoSito = (azienda: string) => `SITO – ${azienda.toUpperCase()}`.slice(0, 120);
+/** Nome del pacchetto nei Documenti dei clienti: "SITO – AZIENDA" (o "SITO – PRIVATO – NOME COGNOME") in maiuscolo come le anagrafiche. */
+export const nomePacchettoSito = (azienda: string, privato = false) => `SITO – ${privato ? 'PRIVATO – ' : ''}${azienda.toUpperCase()}`.slice(0, 120);
+
+export interface Candidatura { nome: string; email: string; telefono: string; area: string; messaggio: string; privacy: boolean }
+
+/** Modulo "Lavora con noi" del sito nuovo: nome, email, telefono, area, messaggio, privacy (+ un curriculum allegato). */
+export function leggiCandidatura(c: Record<string, unknown>): { candidatura: Candidatura; errori: string[] } {
+  const candidatura: Candidatura = {
+    nome: campo(c.nome, 120), email: campo(c.email, 200).toLowerCase(), telefono: campo(c.telefono, 40), area: campo(c.area, 100),
+    messaggio: campo(c.messaggio, 5000).replace(/\r\n/g, '\n'), privacy: !!campo(c.privacy),
+  };
+  const errori: string[] = [];
+  if (!candidatura.nome) errori.push('nome');
+  if (!emailValida(candidatura.email)) errori.push('email');
+  if (!candidatura.privacy) errori.push('privacy');
+  return { candidatura, errori };
+}
+
+export function testoCandidatura(c: Candidatura, cv: string | null): { oggetto: string; testo: string } {
+  return {
+    oggetto: `Sito casteltech.net – Candidatura: ${c.nome}`,
+    testo: ['Candidatura dal modulo "Lavora con noi" del sito.', '', `Nome: ${c.nome}`, `Email: ${c.email}`,
+      ...(c.telefono ? [`Telefono: ${c.telefono}`] : []), `Area: ${c.area || '—'}`, '', c.messaggio || '(nessun messaggio)', '',
+      cv ? `Curriculum allegato: ${cv}` : 'Nessun curriculum allegato.', '', 'Per rispondere basta "Rispondi": la risposta va a chi si è candidato.'].join('\n'),
+  };
+}
+
+/** Tipo del file per l'allegato dell'email (curriculum): pochi tipi, il resto come file generico. */
+export function tipoFile(nome: string): string {
+  const est = nome.toLowerCase().split('.').pop() ?? '';
+  return ({ pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    odt: 'application/vnd.oasis.opendocument.text', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' } as Record<string, string>)[est]
+    ?? 'application/octet-stream';
+}
 
 /** Nome di file sicuro (niente cartelle, niente caratteri strani), come lo vede il pacchetto. */
 export function nomeFileSicuro(nome: string): string {

@@ -53,7 +53,9 @@ services:
         sync: false
 
   # Sito casteltech.net (Adriano, 2/11/2026: da WordPress su Noamweb a pagine statiche, gratis su Render).
-  # Pagine in sito/pubblico; i moduli Contatti e Preventivo li riceve il portale (/api/sito/..., src/server/rotte/sito.ts).
+  # Dall'8/11/2026 è il sito nuovo: una sola pagina (sito/pubblico/index.html) con le sezioni dopo il "#", immagini in sito/pubblico/img.
+  # I moduli Contatti, Preventivo e Candidatura li riceve il portale (/api/sito/..., src/server/rotte/sito.ts).
+  # La copia del vecchio WordPress resta in sito/vecchio-wordpress (non pubblicata).
   - type: web
     name: casteltech-sito
     runtime: static
@@ -67,14 +69,14 @@ services:
       - path: /wp-content/*
         name: Cache-Control
         value: public, max-age=2592000
-      - path: /wp-includes/*
+      - path: /img/*
         name: Cache-Control
         value: public, max-age=2592000
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
     routes:
-      # indirizzi di WordPress che non esistono più: alla pagina iniziale (rimando permanente, non si perde posizionamento)
+      # indirizzi di WordPress che non esistono più: alla pagina iniziale (le vecchie pagine hanno una paginetta di rimando, sito/strumenti/rimandi.py)
       - type: redirect
         source: /index.php
         destination: /

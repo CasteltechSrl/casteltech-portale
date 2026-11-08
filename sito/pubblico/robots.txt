@@ -1,4 +1,4 @@
 User-agent: *
-Disallow: /informativa-clienti-e-fornitori
+Allow: /
 
-Sitemap: https://www.casteltech.net/sitemap_index.xml
+Sitemap: https://www.casteltech.net/sitemap.xml

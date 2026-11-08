@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  leggiContatto, leggiPreventivo, nomeFileSicuro, nomePacchettoSito, origineSitoAmmessa, sembraRobot, testoContatto, testoPreventivo, troppiInvii,
+  leggiCandidatura, leggiContatto, leggiPreventivo, nomeFileSicuro, nomePacchettoSito, origineSitoAmmessa, sembraRobot, testoCandidatura,
+  testoContatto, testoPreventivo, tipoFile, troppiInvii,
 } from '../src/engine/sito.js';
 
 test('sito: moduli accettati solo da casteltech.net e dall\'anteprima su Render', () => {
@@ -69,4 +70,61 @@ test('sito: nomi dei file caricati senza cartelle né caratteri pericolosi', () 
   assert.equal(nomeFileSicuro('../../etc/passwd'), 'passwd');
   assert.equal(nomeFileSicuro('a<b>.zip'), 'a_b_.zip');
   assert.equal(nomeFileSicuro(''), 'file');
+});
+
+test('sito nuovo: preventivo guidato di un\'azienda con domande e risposte già etichettate', () => {
+  const { richiesta, errori } = leggiPreventivo({
+    cliente_tipo: 'azienda', ragione_sociale: 'Selea srl', piva: '01234567890', nome: 'Mario Rossi', email: 'Tecnico@Selea.it',
+    telefono: '0523 000000', citta: 'Piacenza', contatto_preferito: 'Per telefono', privacy: 'on',
+    tipi: 'Produzione di schede elettroniche, Stampa 3D',
+    righe_json: JSON.stringify([['Produzione di schede elettroniche · Quantità per lotto', '200'], ['Stampa 3D · Materiale', 'Versione ESD'],
+      ['vuota', ''], ['troppi', 'elementi', 'x'], 'testo']),
+  });
+  assert.deepEqual(errori, []);
+  assert.equal(richiesta.azienda, 'Selea srl');
+  assert.equal(richiesta.email, 'tecnico@selea.it');
+  assert.deepEqual(richiesta.righe, [['Produzione di schede elettroniche · Quantità per lotto', '200'], ['Stampa 3D · Materiale', 'Versione ESD']]);
+  const { oggetto, testo } = testoPreventivo(richiesta, ['gerber.zip']);
+  assert.equal(oggetto, 'Sito casteltech.net – Richiesta preventivo: Selea srl');
+  assert.match(testo, /Cliente: Azienda/);
+  assert.match(testo, /Partita IVA: 01234567890/);
+  assert.match(testo, /Referente: Mario Rossi/);
+  assert.match(testo, /Richiesta: Produzione di schede elettroniche, Stampa 3D/);
+  assert.match(testo, /Stampa 3D · Materiale: Versione ESD/);
+  assert.match(testo, /File allegati: gerber\.zip/);
+  assert.deepEqual(leggiPreventivo({ cliente_tipo: 'azienda' }).errori, ['ragione_sociale', 'nome', 'email', 'privacy']);
+});
+
+test('sito nuovo: un privato non deve scrivere la ragione sociale; pacchetto "SITO – PRIVATO – NOME"', () => {
+  const { richiesta, errori } = leggiPreventivo({
+    cliente_tipo: 'privato', ragione_sociale: 'ignorata', nome: 'Luca Bianchi', email: 'luca@esempio.it', privacy: 'on', righe_json: 'non json',
+  });
+  assert.deepEqual(errori, []);
+  assert.equal(richiesta.azienda, 'Luca Bianchi');
+  assert.deepEqual(richiesta.righe, []);
+  const { oggetto, testo } = testoPreventivo(richiesta, []);
+  assert.match(oggetto, /Luca Bianchi \(privato\)/);
+  assert.match(testo, /Cliente: Privato/);
+  assert.doesNotMatch(testo, /ignorata|Ragione sociale/);
+  assert.equal(nomePacchettoSito(richiesta.azienda, richiesta.privato), 'SITO – PRIVATO – LUCA BIANCHI');
+});
+
+test('sito nuovo: Contatti con i nomi dei campi nuovi e telefono', () => {
+  const { contatto, errori } = leggiContatto({ motivo: 'Prenota una visita', nome: 'Anna Verdi', email: 'anna@esempio.it', telefono: '333 1234567', messaggio: 'Ciao', privacy: 'on' });
+  assert.deepEqual(errori, []);
+  const { oggetto, testo } = testoContatto(contatto);
+  assert.match(oggetto, /Contatto: Prenota una visita/);
+  assert.match(testo, /Telefono: 333 1234567/);
+});
+
+test('sito nuovo: candidatura con curriculum', () => {
+  const { candidatura, errori } = leggiCandidatura({ nome: 'Paolo Neri', email: 'paolo@esempio.it', area: 'Collaudo e rework', messaggio: 'Disponibile da subito', privacy: 'on' });
+  assert.deepEqual(errori, []);
+  const { oggetto, testo } = testoCandidatura(candidatura, 'cv.pdf');
+  assert.match(oggetto, /Candidatura: Paolo Neri/);
+  assert.match(testo, /Area: Collaudo e rework/);
+  assert.match(testo, /Curriculum allegato: cv\.pdf/);
+  assert.equal(tipoFile('CV.PDF'), 'application/pdf');
+  assert.equal(tipoFile('x.exe'), 'application/octet-stream');
+  assert.deepEqual(leggiCandidatura({}).errori, ['nome', 'email', 'privacy']);
 });
