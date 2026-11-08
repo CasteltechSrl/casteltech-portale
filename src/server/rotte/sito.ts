@@ -3,8 +3,10 @@
  * Senza sessione e senza chiave: li usano i visitatori del sito. Regole in engine/sito.ts.
  *
  *  - POST /api/sito/contatto   → email a info@ con "Rispondi" verso chi ha scritto.
- *  - POST /api/sito/preventivo → pacchetto nei Documenti dei clienti ("SITO – AZIENDA") con il testo della richiesta e i file
- *                                utili (stessa scelta del pulsante di Gmail), analisi dopo la risposta, email a info@ con il link.
+ *  - POST /api/sito/preventivo → pacchetto nei Documenti dei clienti ("SITO – AZIENDA", o "SITO – PRIVATO – NOME") con il testo
+ *                                della richiesta e i file utili (stessa scelta del pulsante di Gmail), analisi dopo la risposta,
+ *                                email a info@ con il link. Accetta il modulo del vecchio WordPress e il preventivo guidato del sito nuovo.
+ *  - POST /api/sito/candidatura → email a info@ con il curriculum allegato (modulo "Lavora con noi" del sito nuovo, 8/11/2026).
  *
  * Arrivano come multipart (FormData del browser) da public/moduli.js del sito: va montato PRIMA dei lettori da 2 MB (index.ts).
  * Contro i robot: casella trappola, tempo minimo di compilazione, 5 invii all'ora per indirizzo; niente database per i rifiuti.
@@ -17,7 +19,8 @@ import { messaggioEmail } from '../../engine/conferme-ordine.js';
 import { analizzaPacchetto, aggiungiFile, creaPacchetto, scegliFileDaCaricare, sincronizzaVersioni } from '../schede-cliente-servizio.js';
 import { clientePerMittente } from './gmail.js';
 import {
-  leggiContatto, leggiPreventivo, nomeFileSicuro, nomePacchettoSito, origineSitoAmmessa, sembraRobot, testoContatto, testoPreventivo, troppiInvii,
+  leggiCandidatura, leggiContatto, leggiPreventivo, nomeFileSicuro, nomePacchettoSito, origineSitoAmmessa, sembraRobot, testoCandidatura,
+  testoContatto, testoPreventivo, tipoFile, troppiInvii,
 } from '../../engine/sito.js';
 
 const registroInvii = new Map<string, number[]>();
@@ -45,9 +48,9 @@ async function leggiModulo(req: Request): Promise<{ campi: Record<string, string
 
 function ipDi(req: Request) { return req.ip ?? req.socket.remoteAddress ?? '?'; }
 
-async function avvisaInfo(oggetto: string, testo: string, rispondiA: string) {
+async function avvisaInfo(oggetto: string, testo: string, rispondiA: string, allegato?: { nome: string; mime: string; dati: Buffer }) {
   const ufficio = mittenteGmail();
-  const messaggio = messaggioEmail({ da: `"Sito Casteltech" <${ufficio}>`, a: [ufficio], oggetto, testo })
+  const messaggio = messaggioEmail({ da: `"Sito Casteltech" <${ufficio}>`, a: [ufficio], oggetto, testo, allegato })
     .replace(/^(From: [^\r\n]*\r\n)/, `$1Reply-To: ${rispondiA}\r\n`);
   await inviaGmail(messaggio);
 }
@@ -76,7 +79,7 @@ export function rotteSito() {
       const { richiesta, errori } = leggiPreventivo(campi);
       if (errori.length) return res.status(400).json({ errore: 'campi', campi: errori });
       const { oggetto, testo } = testoPreventivo(richiesta, file.map(f => f.nome));
-      const id = await creaPacchetto({ nome: nomePacchettoSito(richiesta.azienda), clienteId: await clientePerMittente(richiesta.email), utenteId: null });
+      const id = await creaPacchetto({ nome: nomePacchettoSito(richiesta.azienda, richiesta.privato), clienteId: await clientePerMittente(richiesta.email), utenteId: null });
       const email = { mittente: `${richiesta.azienda} <${richiesta.email}>`, oggetto, data: new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }), testo, messaggioId: '' };
       await q(`UPDATE pacchetti_scheda SET email = $2 WHERE id = $1`, [id, JSON.stringify(email)]);
       const scelta = await scegliFileDaCaricare(id, file.map(f => ({ nome: f.nome, byte: f.dati.length })));
@@ -92,6 +95,20 @@ export function rotteSito() {
       if (gmailConfigurato()) avvisaInfo(oggetto, `${testo}\n\nNel portale: ${link}`, richiesta.email).catch(e => console.error('avviso preventivo dal sito', e));
       res.json({ ok: true });
     } catch (e) { console.error('modulo preventivo del sito', e); res.status(502).json({ errore: 'invio' }); }
+  });
+
+  r.post('/candidatura', express.raw({ type: () => true, limit: '12mb' }), async (req, res) => {
+    try {
+      const { campi, file } = await leggiModulo(req);
+      if (sembraRobot(campi) || troppiInvii(registroInvii, ipDi(req))) return res.json({ ok: true });
+      const { candidatura, errori } = leggiCandidatura(campi);
+      if (errori.length) return res.status(400).json({ errore: 'campi', campi: errori });
+      if (!gmailConfigurato()) return res.status(503).json({ errore: 'invio' });
+      const cv = file[0] ?? null;   // un solo allegato per email: il primo file
+      const { oggetto, testo } = testoCandidatura(candidatura, cv?.nome ?? null);
+      await avvisaInfo(oggetto, testo, candidatura.email, cv ? { nome: cv.nome, mime: tipoFile(cv.nome), dati: cv.dati } : undefined);
+      res.json({ ok: true });
+    } catch (e) { console.error('modulo candidatura del sito', e); res.status(502).json({ errore: 'invio' }); }
   });
 
   return r;

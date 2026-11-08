@@ -192,7 +192,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
 - Ogni push su `main` viene pubblicato da Render in automatico (render.yaml): lavora su un ramo se la modifica è grossa.
 - Sito casteltech.net (Adriano 2/11/2026): pagine statiche in `sito/pubblico` (Static Site `casteltech-sito` su Render, gratis; prima WordPress su Noamweb),
   vedi `sito/LEGGIMI.md`. Moduli Contatti/Preventivo → portale (`rotte/sito.ts`, `engine/sito.ts`, test in `tests/sito.test.ts`): email a info@ e pacchetto "SITO – AZIENDA"
-  nei Documenti dei clienti. Cambiare un testo = modificare l'HTML IT ed EN; non cambiare gli indirizzi delle pagine (posizionamento su Google).
+  nei Documenti dei clienti. Dall'8/11/2026 (Adriano) è il SITO NUOVO: una sola pagina `sito/pubblico/index.html` con sezioni dopo il "#", solo in italiano,
+  immagini in `sito/pubblico/img`; il vecchio WordPress resta in `sito/vecchio-wordpress` (non pubblicato) e i vecchi indirizzi rimandano alle sezioni
+  (`sito/strumenti/rimandi.py`). Preventivo guidato: azienda o privato, domande per tipo di lavoro in `righe_json`, pacchetto "SITO – PRIVATO – NOME" per i privati;
+  candidatura `/api/sito/candidatura` con il CV allegato all'email. Testi del sito: SPI e AOI (mai "in linea"), niente saldatura stagno-piombo, Casteltech S.r.l.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
 ## Database su Neon (piano gratuito)

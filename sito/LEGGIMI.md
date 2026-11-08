@@ -1,19 +1,30 @@
 # Sito casteltech.net
 
-Dal 2/11/2026 (Adriano) il sito non è più un WordPress su Noamweb: sono pagine statiche pubblicate da Render
-("Static Site" `casteltech-sito` in `render.yaml`, gratis), copiate dal WordPress con lo stesso aspetto, gli stessi
-indirizzi, titoli e descrizioni (niente posizionamento perso su Google).
+Pubblicato da Render come pagine statiche ("Static Site" `casteltech-sito` in `render.yaml`, gratis): la cartella pubblicata è `pubblico/`.
 
-- `pubblico/` = il sito così com'è pubblicato. Le pagine sono `pubblico/<pagina>/index.html` (italiano) e `pubblico/en/<pagina>/index.html` (inglese).
-- `pubblico/moduli.js` = moduli Contatti e Richiedi un preventivo: li manda al portale (`/api/sito/contatto`, `/api/sito/preventivo`,
-  `src/server/rotte/sito.ts`, regole in `src/engine/sito.ts`). Contatti → email a info@; preventivo → pacchetto "SITO – AZIENDA" nei Documenti dei clienti.
-- `pubblico/sitemap_index.xml`, `page-sitemap.xml`, `robots.txt` = mappa del sito per Google (stessi nomi del vecchio Yoast).
-- `strumenti/prepara_sito.py` = come è stato fatto: copia con `wget --mirror --page-requisites` del sito vero, poi lo script toglie
-  WordPress (wp-json, emoji, Contact Form 7, reCAPTCHA), rende gli indirizzi relativi (tranne canonical/hreflang/og:url) e rifà le sitemap.
-  Dopo lo script va ricopiato `moduli.js` in `pubblico/`.
+## Il sito nuovo (dall'8/11/2026, Adriano)
 
-Per cambiare un testo: si modifica l'HTML della pagina (italiano e inglese). Ogni modifica in `sito/` pubblica solo il sito, non il portale.
-Restano dal vecchio sito: Google Analytics / Tag Manager, il banner cookie di Iubenda e la mappa di Google.
+- `pubblico/index.html` = tutto il sito in una sola pagina: le sezioni sono dopo il "#" (`/#produzione`, `/#preventivo`, `/#contatti`, …).
+  Testi, sezioni e moduli stanno nello script della pagina (oggetto `P`: una funzione per sezione; `CONFIG` in alto = telefono, email, indirizzi del portale).
+  Per cambiare un testo si modifica direttamente `index.html`. Tre ambienti grafici: "Fabbrica" (produzione), "Dal 1976" (azienda, persone), "Hub" (preventivo, stampa 3D).
+- `pubblico/img/` = immagini (foto di repertorio Unsplash/Pexels, uso commerciale libero; illustrazioni generate). Niente foto aziendali finché non si rifanno.
+- Moduli → portale (`src/server/rotte/sito.ts`, regole in `src/engine/sito.ts`, test in `tests/sito.test.ts`):
+  - Preventivo guidato (`/api/sito/preventivo`): azienda o privato, cosa serve (schede, progettazione, prodotto finito, stampa 3D, cablaggi, rework, altro),
+    domande guidate per ogni voce (arrivano già come "domanda: risposta" in `righe_json`), fino a 10 file / 40 MB → pacchetto "SITO – AZIENDA"
+    (o "SITO – PRIVATO – NOME") nei Documenti dei clienti + email a info@.
+  - Contatti (`/api/sito/contatto`) → email a info@. Candidatura (`/api/sito/candidatura`) → email a info@ con il curriculum allegato.
+- Cookie: banner di Iubenda (stesso account del vecchio sito); Google Analytics e la mappa di Google partono solo dopo il consenso.
+- `pubblico/<vecchio-indirizzo>/index.html` = rimandi dai vecchi indirizzi del WordPress (italiano e inglese) alla sezione giusta,
+  rifatti da `strumenti/rimandi.py`. I PDF delle informative restano agli stessi indirizzi in `pubblico/wp-content/uploads/`.
 
-Dominio: casteltech.net è registrato tramite Google (posta Google Workspace). Per passare a Render si cambiano solo i record del sito
-(www e casteltech.net) verso Render; i record MX della posta non si toccano.
+## Il vecchio sito
+
+`vecchio-wordpress/` = la copia statica del WordPress (2/11/2026, con `moduli.js` e `strumenti/prepara_sito.py`), conservata ma non pubblicata.
+Per tornare indietro basta rimettere `staticPublishPath: ./sito/vecchio-wordpress` in `render.yaml`.
+Copia completa del WordPress originale: Google Drive → 01_LAVORO/CASTELTECH/16_Backup.
+
+## Dominio
+
+casteltech.net: i nameserver sono ancora di Noamweb (DNS gestito dal pannello Noamweb), la posta è su Google Workspace (record MX di Google: non toccarli).
+Per passare a Render si aggiungono i domini nel servizio `casteltech-sito` e si cambiano solo i record del sito (casteltech.net e www) come indica Render.
+Prima di chiudere Noamweb bisogna spostare la gestione del DNS (nameserver) altrove, con tutti i record: MX e TXT di Google, verifica Microsoft, SPF.
