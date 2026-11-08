@@ -85,7 +85,7 @@ function spuntaForm(riga: number, gruppo: string, chiave: string, testo: string,
     <button class="spunta ${fatta ? (opz.auto && !firma ? 'auto' : 'si') : opz.manca ? 'manca' : ''} ${opz.cls ?? ''}" title="${titolo}">${fatta ? '✓' : '☐'} ${testo}</button></form>`;
 }
 
-function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLettura: boolean): Raw {
+export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLettura: boolean): Raw {
   const def = FINESTRE.find(x => x.chiave === f)!;
   const torna = `/cruscotto?flusso=${f}`;
   const righe = d.perFinestra[f];

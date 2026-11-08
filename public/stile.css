@@ -1085,3 +1085,36 @@ form.in-riga select { max-width: 14rem; }
 .controlli-cruscotto details.controllo .conta { background: var(--accento-chiaro); color: var(--accento); border-radius: 999px; padding: .05rem .55rem; font-size: .85rem; }
 .controlli-cruscotto details.controllo > .nota { margin: .3rem 0 0; }
 @media (max-width: 700px) { .controlli-cruscotto .elenco-controllo { columns: 1; } }
+
+/* Cruscotto a fasce per ambito (Adriano 8/11/2026, proposta A): nome dell'ambito grande a sinistra, riquadri tutti uguali, dettaglio sotto la fascia */
+.fascia { --amb: var(--accento); display: grid; grid-template-columns: 14rem minmax(0, 1fr); background: var(--carta); border: 1px solid var(--bordo); border-radius: 10px; margin: .8rem 0; overflow: hidden; }
+.fascia .ambito { grid-row: span 2; margin: 0; background: var(--amb); color: #fff; font-size: 1.15rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; display: flex; align-items: center; padding: .8rem 1rem; line-height: 1.2; }
+.fascia-oggi { --amb: #b3261e; } .fascia-produzione { --amb: #0f6b5c; } .fascia-commerciale { --amb: #1d4ed8; } .fascia-ordini { --amb: #6d28d9; }
+.fascia-acquisti { --amb: #b45309; } .fascia-amministrazione { --amb: #334155; } .fascia-controlli { --amb: #9a3412; } .fascia-sistema { --amb: #5f6b66; }
+.fascia .riquadri { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: .6rem; padding: .7rem; }
+.fascia .riquadro { border: 1px solid var(--bordo); border-top: 4px solid var(--amb); border-radius: 8px; display: flex; flex-direction: column; min-height: 7rem; min-width: 0; }
+.fascia .riquadro .corpo { flex: 1; padding: .55rem .75rem .2rem; text-decoration: none; color: var(--testo); display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.fascia .riquadro h3 { margin: 0; font-size: .98rem; font-weight: 650; line-height: 1.25; }
+.fascia .riquadro b { font-size: 1.75rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.fascia .riquadro small { color: var(--tenue); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fascia .riquadro .piede { display: flex; justify-content: space-between; gap: .5rem; padding: .15rem .75rem .45rem; font-size: .82rem; }
+.fascia .riquadro .piede a { text-decoration: none; font-weight: 600; } .fascia .riquadro .piede a:hover { text-decoration: underline; }
+.fascia .riquadro:hover, .fascia .riquadro.aperto { background: var(--accento-chiaro); border-color: var(--amb); }
+.fascia .riquadro.urgente b { color: var(--negativo); } .fascia .riquadro.controllare b { color: #a16207; }
+.fascia .dettaglio-fascia { grid-column: 2; border-top: 2px solid var(--amb); padding: .7rem 1rem 1rem; min-width: 0; }
+.fascia .dettaglio-fascia ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
+.fascia .dettaglio-fascia li { display: flex; justify-content: space-between; gap: .6rem; padding: .32rem 0; border-top: 1px solid #eef0ee; }
+.fascia .dettaglio-fascia li > a, .fascia .dettaglio-fascia li > span:first-child { color: var(--testo); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fascia .dettaglio-fascia li span.d { color: var(--tenue); white-space: nowrap; } .fascia .dettaglio-fascia li.ritardo span.d { color: var(--negativo); font-weight: 600; }
+.fascia .dettaglio-fascia .tit { font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--tenue); font-weight: 650; margin: .2rem 0 .3rem; }
+.fascia .dettaglio-fascia .elenco-controllo li { display: list-item; border: 0; padding: .1rem 0; }
+.fascia .dettaglio-fascia .controlli-cruscotto { margin: 0; border: 0; padding: 0; }
+.fascia .colonne-dettaglio { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+.fascia .settimane { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; }
+.fascia .settimane a { background: var(--sfondo); border-radius: 6px; padding: .35rem; text-align: center; font-size: .78rem; color: var(--tenue); text-decoration: none; }
+.fascia .settimane a b { display: block; font-size: 1rem; color: var(--testo); } .fascia .settimane a.piena b { color: var(--negativo); }
+@media (max-width: 760px) {
+  .fascia { grid-template-columns: 1fr; } .fascia .ambito { grid-row: auto; padding: .5rem .8rem; }
+  .fascia .dettaglio-fascia { grid-column: 1; } .fascia .colonne-dettaglio { grid-template-columns: 1fr; }
+  .fascia .riquadri { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
