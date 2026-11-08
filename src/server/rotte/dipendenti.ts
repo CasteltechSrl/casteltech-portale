@@ -18,7 +18,7 @@ import {
   TIPI_PAGHE, TIPI_RISERVATI, MINUTI_SBLOCCO, controllaPasswordPaghe, costoAzienda, kmRiga, nomeMeseMaiuscolo, riepilogoAnno,
   rigaNotaDaModulo, rimborsoRiga, sbloccoValido, tabellaCosti, tipoDocumentoPaghe, totaliNotaSpese, type TipoPaghe,
 } from '../../engine/dipendenti.js';
-import { vedePaghe } from '../../engine/ruoli.js';
+import { chiedePasswordRiservata, vedePaghe } from '../../engine/ruoli.js';
 import { caricaStoricoCedolini, caricaStoricoCosti, importaModuloKm, leggiDocumentoPaghe, registraDocumentoPaghe, totaliNoteAnno } from '../dipendenti-servizio.js';
 import { totaliCedolini } from '../../engine/cedolini.js';
 
@@ -56,6 +56,7 @@ const menuRiservata = (req: Request) => (req.session.utente?.ruolo === 'contabil
 async function riservataAperta(req: Request): Promise<boolean> {
   const u = await utenteCompleto(req);
   if (!u || !vedePaghe(u)) return false;
+  if (!chiedePasswordRiservata(u.ruolo)) return true;     // password solo per ufficio e produzione (Adriano 8/11/2026)
   if (!sbloccoValido(req.session.pagheSbloccate, Date.now())) return false;
   req.session.pagheSbloccate = Date.now();
   return true;
@@ -487,7 +488,7 @@ export function rotteDipendenti() {
     if (!ammesso) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
       <p class="avviso">Area riservata: cedolini e costi per persona li vedono solo l'amministratore, la contabilità e chi ha il permesso dell'amministratore. Il costo totale del mese è in
         <a href="/dipendenti">Costo del personale</a>.</p>`));
-    if (!impostata) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
+    if (!impostata && chiedePasswordRiservata(u!.ruolo)) return res.send(pagina(req, 'Buste paga', html`<div class="intestazione-pagina"><h1>🔒 Buste paga</h1></div>${menuRiservata(req)}
       ${admin ? html`<p>Prima volta: scegli la password delle buste paga (almeno 8 caratteri con lettere e numeri). È diversa da quella per entrare nel portale: chi non la conosce non apre i cedolini anche se usa il tuo computer.</p>
         <form method="post" action="/dipendenti/riservata/password" class="blocco"><div class="riga-campi">
           <label>Nuova password <input type="password" name="nuova" required minlength="8" autocomplete="new-password"></label>
@@ -517,7 +518,7 @@ export function rotteDipendenti() {
     const elencoAnni = [...new Set([annoOggi(), ...anni.map(a => a.anno)])].sort((a, b) => b - a);
     res.send(pagina(req, 'Buste paga', html`
       <div class="intestazione-pagina"><h1>🔒 Buste paga · ${anno}</h1>
-        <form method="post" action="/dipendenti/riservata/chiudi" class="inline sempre-attivo"><button>Chiudi l'area riservata</button></form></div>
+        ${chiedePasswordRiservata(u!.ruolo) ? html`<form method="post" action="/dipendenti/riservata/chiudi" class="inline sempre-attivo"><button>Chiudi l'area riservata</button></form>` : ''}</div>
       ${menuRiservata(req)}
       <form class="cerca" method="get"><select name="anno">${elencoAnni.map(a => html`<option ${a === anno ? raw('selected') : ''}>${a}</option>`)}</select><button>Mostra</button></form>
       ${tabellaBuste(anno, buste)}
@@ -548,14 +549,14 @@ export function rotteDipendenti() {
         I mesi già letti dal portale dai documenti arrivati o corretti a mano non si toccano.</p>
       <div class="blocco"><input type="file" id="file-storico" accept=".gz,.json"> <button class="primario" id="avvia-storico">Carica lo storico</button> <span id="esito-storico" class="nota"></span></div>`}
       ${admin ? html`<h2>Chi può aprire le buste paga</h2>
-        <p class="nota">Le aprono gli amministratori, la contabilità (commercialista) e gli utenti dell'ufficio con la spunta; tutti devono scrivere la password delle buste paga.
+        <p class="nota">Le aprono gli amministratori, la contabilità (commercialista) e gli utenti dell'ufficio con la spunta. Solo gli utenti dell'ufficio scrivono la password delle buste paga (Adriano 8/11/2026); la stessa password apre la Banca all'ufficio.
           Le stesse persone vedono gli stipendi nella Previsione di cassa.</p>
         <form method="post" action="/dipendenti/riservata/permessi" class="blocco">
           ${(utenti as any[]).map(x => html`<label class="spunta"><input type="checkbox" name="paghe" value="${x.id}" ${x.paghe ? raw('checked') : ''}> ${x.nome} (${x.email})</label>`)}
           ${(utenti as any[]).length ? html`<div class="barra-azioni"><button>Salva i permessi</button></div>` : html`<p class="vuoto">Non ci sono altri utenti dell'ufficio.</p>`}</form>
-        <h2>Cambia la password delle buste paga</h2>
+        <h2>${impostata ? 'Cambia la password' : 'Scegli la password'} delle buste paga e della Banca (per l'ufficio)</h2>
         <form method="post" action="/dipendenti/riservata/password" class="blocco"><div class="riga-campi">
-          <label>Password attuale <input type="password" name="attuale" required autocomplete="off"></label>
+          ${impostata ? html`<label>Password attuale <input type="password" name="attuale" required autocomplete="off"></label>` : ''}
           <label>Nuova <input type="password" name="nuova" required minlength="8" autocomplete="new-password"></label>
           <label>Ripeti <input type="password" name="ripeti" required minlength="8" autocomplete="new-password"></label></div>
           <div class="barra-azioni"><button>Cambia</button></div></form>` : ''}

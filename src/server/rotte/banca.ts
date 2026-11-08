@@ -4,7 +4,12 @@
  * Regole in `engine/banca.ts`, letture e scritture in `banca-servizio.ts`. Montate su /amministrazione/banca.
  */
 import express, { Router, type Request } from 'express';
-import { q } from '../db.js';
+import bcrypt from 'bcryptjs';
+import { q, q1 } from '../db.js';
+import { chiedePasswordRiservata } from '../../engine/ruoli.js';
+import { MINUTI_SBLOCCO, sbloccoValido } from '../../engine/dipendenti.js';
+
+declare module 'express-session' { interface SessionData { bancaSbloccata?: number } }
 import { layout } from '../views/layout.js';
 import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -61,6 +66,37 @@ function sezioneConti(conti: Awaited<ReturnType<typeof contiConSaldo>>, fidoAnti
 
 export function rotteBanca() {
   const r = Router();
+
+  // ───────────── password per l'ufficio (Adriano 8/11/2026) ─────────────
+  // Banca protetta per ufficio e produzione con la password delle buste paga; amministratore, contabilità ed esterno entrano senza.
+  // Aperta per MINUTI_SBLOCCO minuti, ogni pagina vista la tiene aperta.
+  const tentativi = new Map<number, { n: number; fino: number }>();
+  r.post('/sblocca', async (req, res) => {
+    const id = req.session.utente?.id ?? 0;
+    const t = tentativi.get(id);
+    if (t && t.n >= 5 && t.fino > Date.now()) return res.redirect(vaiA('', 'Troppi tentativi: riprova tra 15 minuti.'));
+    const p = await q1<{ valore: { hash: string } }>(`SELECT valore FROM impostazioni WHERE chiave = 'paghe_password'`);
+    if (!p || !(await bcrypt.compare(String(req.body?.password ?? ''), p.valore.hash))) {
+      tentativi.set(id, { n: (t && t.fino > Date.now() ? t.n : 0) + 1, fino: Date.now() + 15 * 60_000 });
+      return res.redirect(vaiA('', 'Password non corretta.'));
+    }
+    tentativi.delete(id);
+    req.session.bancaSbloccata = Date.now();
+    res.redirect('/amministrazione/banca');
+  });
+  r.post('/chiudi', (req, res) => { delete req.session.bancaSbloccata; res.redirect('/amministrazione'); });
+  r.use(async (req, res, next) => {
+    if (!chiedePasswordRiservata(req.session.utente?.ruolo)) return next();
+    if (sbloccoValido(req.session.bancaSbloccata, Date.now())) { req.session.bancaSbloccata = Date.now(); return next(); }
+    if (req.method !== 'GET') return res.status(403).send('Banca chiusa: scrivi di nuovo la password.');
+    const impostata = await q1(`SELECT 1 FROM impostazioni WHERE chiave = 'paghe_password'`);
+    res.status(403).send(pagina(req, 'Banca', html`<div class="intestazione-pagina"><h1>🔒 Banca</h1></div>
+      ${impostata ? html`<form method="post" action="/amministrazione/banca/sblocca" class="scheda-login sempre-attivo">
+        <p>La Banca è riservata: scrivi la password (la stessa delle buste paga). Si richiude da sola dopo ${MINUTI_SBLOCCO} minuti senza aprire pagine.</p>
+        <label>Password <input type="password" name="password" required autofocus autocomplete="off"></label>
+        <button class="primario">Apri</button></form>`
+        : html`<p class="avviso">La password non è ancora stata scelta: la sceglie l'amministratore in Dipendenti → Buste paga.</p>`}`, msg(req)));
+  });
 
   // ───────────── movimenti ─────────────
   r.get('/', async (req, res) => {

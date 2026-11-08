@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contabilitaPuo, controlloEliminaUtente, controlloUtente, esternoPuo, eUfficio, paginaDopoAccesso, paginaIniziale, ruoloDaModulo, vedePaghe, vedeAnalisi, analisiPermessa, PERCORSO_ANALISI, DESCRIZIONI_RUOLI } from '../src/engine/ruoli.js';
+import { contabilitaPuo, controlloEliminaUtente, controlloUtente, esternoPuo, eUfficio, paginaDopoAccesso, paginaIniziale, ruoloDaModulo, vedePaghe, vedeAnalisi, chiedePasswordRiservata, analisiPermessa, PERCORSO_ANALISI, DESCRIZIONI_RUOLI } from '../src/engine/ruoli.js';
 import { acquistiPerFornitore } from '../src/engine/cruscotto-amministrazione.js';
 import { layout } from '../src/server/views/layout.js';
 import { html } from '../src/server/views/html.js';
@@ -142,4 +142,12 @@ test('Analisi riservata (Adriano 6/11/2026): solo amministratore ed esterno; l\'
   assert.equal(analisiPermessa('contabilita', '/amministrazione/analisi/cassa.xlsx'), true);
   assert.equal(esternoPuo('GET', '/amministrazione/analisi/pareggio'), true);
   assert.match(DESCRIZIONI_RUOLI.ufficio, /Analisi/);
+});
+
+// Adriano 8/11/2026: Banca e buste paga con password solo per ufficio e produzione
+test('password delle aree riservate: solo ufficio e produzione', () => {
+  assert.equal(chiedePasswordRiservata('ufficio'), true);
+  assert.equal(chiedePasswordRiservata('produzione'), true);
+  for (const r of ['amministratore', 'contabilita', 'esterno']) assert.equal(chiedePasswordRiservata(r), false, r);
+  assert.equal(chiedePasswordRiservata(undefined), false);
 });

@@ -136,34 +136,43 @@ export function anticipiDelleFatture(movimenti: MovimentoAnticipo[], fatture: Fa
 
   const totaleFattura = new Map(fatture.map(f => [f.id, f.rate.reduce((t, r) => t + r.importo, 0)]));
   const ordinati = [...movimenti].sort((a, b) => a.data.localeCompare(b.data));
-  const aperti: { fattura: number; a: AnticipoFattura }[] = [];
+  type Gruppo = { totale: number; rientrato: number };   // un movimento di anticipo, anche di più fatture
+  const aperti: { fattura: number; a: AnticipoFattura; g: Gruppo }[] = [];
   for (const m of ordinati) {
     const anticipo = eAnticipo(m.descrizione), rientro = eRientro(m.descrizione);
     if (!anticipo && !rientro) continue;
     const numeri = numeriCitati(m.descrizione);
     if (anticipo) {
+      const g: Gruppo = { totale: Math.abs(m.importo), rientrato: 0 };
       for (const n of numeri) {
         const f = trova(n, m.data);
         if (!f) continue;
         const a: AnticipoFattura = { tipo: 'bonifico', data: m.data, importo: numeri.length === 1 ? r2(Math.abs(m.importo)) : null,
           insieme: numeri.filter(x => x !== n), rientro: null, scadenza: null, incassata: false };
         aggiungi(f.id, a);
-        aperti.push({ fattura: f.id, a });
+        aperti.push({ fattura: f.id, a, g });
       }
       continue;
     }
-    let chiusi = 0;
+    const importo = Math.abs(m.importo);
+    const toccati = new Set<Gruppo>();
     for (const n of numeri) {
       const f = trova(n, m.data);
       const ap = f && [...aperti].reverse().find(x => x.fattura === f.id && !x.a.rientro);
-      if (ap) { ap.a.rientro = m.data; chiusi++; }
+      if (ap) { ap.a.rientro = m.data; toccati.add(ap.g); }
     }
-    if (!chiusi) {
-      // numero sbagliato o assente ("RIENTRO SU ANT FATTURA IN SCADENZA 30.04.26"): stesso importo dell'anticipo, o 80 % della fattura
-      const ap = aperti.find(x => !x.a.rientro && x.a.importo != null && Math.abs(x.a.importo - Math.abs(m.importo)) < 0.005)
-        ?? aperti.find(x => !x.a.rientro && Math.abs(r2(totaleFattura.get(x.fattura)! * QUOTA_BONIFICO) - Math.abs(m.importo)) < 0.015);
-      if (ap) ap.a.rientro = m.data;
+    if (!toccati.size) {
+      // numero sbagliato o assente ("RIENTRO SU ANT FATTURA IN SCADENZA 30.04.26", "GALILEO … N 18" per la FT 20 anticipata con la 14):
+      // stesso importo dell'anticipo, quanto resta di un anticipo di più fatture (già rientrato in parte, o tolto l'80 % delle altre), o 80 % della fattura
+      const unaSola = (x: typeof aperti[number]) => aperti.filter(y => y.g === x.g && !y.a.rientro).length === 1;
+      const ap = aperti.find(x => !x.a.rientro && x.a.importo != null && Math.abs(x.a.importo - importo) < 0.005)
+        ?? aperti.find(x => !x.a.rientro && x.a.importo == null && unaSola(x) && x.g.rientrato > 0 && Math.abs(x.g.totale - x.g.rientrato - importo) < 0.015)
+        ?? aperti.find(x => !x.a.rientro && x.a.importo == null
+          && Math.abs(x.g.totale - aperti.filter(y => y.g === x.g && y !== x).reduce((t, y) => t + totaleFattura.get(y.fattura)! * QUOTA_BONIFICO, 0) - importo) < 0.015)
+        ?? aperti.find(x => !x.a.rientro && Math.abs(r2(totaleFattura.get(x.fattura)! * QUOTA_BONIFICO) - importo) < 0.015);
+      if (ap) { ap.a.rientro = m.data; toccati.add(ap.g); }
     }
+    for (const g of toccati) g.rientrato = r2(g.rientrato + importo / toccati.size);
   }
   for (const { fattura, a } of aperti) {
     const f = fatture.find(x => x.id === fattura);
