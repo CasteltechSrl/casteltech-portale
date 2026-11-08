@@ -18,7 +18,7 @@ RIMANDI = {
 PAGINA = """<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <title>Casteltech</title>
-<link rel="canonical" href="https://www.casteltech.net/">
+<link rel="canonical" href="https://casteltech.net/">
 <meta http-equiv="refresh" content="0; url=/#{sezione}">
 <script>location.replace('/#{sezione}');</script>
 </head><body><p><a href="/#{sezione}">Vai alla pagina</a></p></body></html>

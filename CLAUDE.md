@@ -195,7 +195,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   nei Documenti dei clienti. Dall'8/11/2026 (Adriano) è il SITO NUOVO: una sola pagina `sito/pubblico/index.html` con sezioni dopo il "#", solo in italiano,
   immagini in `sito/pubblico/img`; il vecchio WordPress resta in `sito/vecchio-wordpress` (non pubblicato) e i vecchi indirizzi rimandano alle sezioni
   (`sito/strumenti/rimandi.py`). Preventivo guidato: azienda o privato, domande per tipo di lavoro in `righe_json`, pacchetto "SITO – PRIVATO – NOME" per i privati;
-  candidatura `/api/sito/candidatura` con il CV allegato all'email. Testi del sito: SPI e AOI (mai "in linea"), niente saldatura stagno-piombo, Casteltech S.r.l.
+  candidatura `/api/sito/candidatura` con il CV allegato all'email. Indirizzo principale https://casteltech.net/ (dall'8/11/2026 il DNS punta a Render, www rimanda lì): canonical e sitemap senza www. Testi del sito: SPI e AOI (mai "in linea"), niente saldatura stagno-piombo, Casteltech S.r.l.
 - Dati reali (dump del vecchio portale, export clienti) non vanno mai nel repository.
 
 ## Database su Neon (piano gratuito)

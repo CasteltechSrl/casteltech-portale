@@ -27,4 +27,6 @@ Copia completa del WordPress originale: Google Drive → 01_LAVORO/CASTELTECH/16
 
 casteltech.net: i nameserver sono ancora di Noamweb (DNS gestito dal pannello Noamweb), la posta è su Google Workspace (record MX di Google: non toccarli).
 Per passare a Render si aggiungono i domini nel servizio `casteltech-sito` e si cambiano solo i record del sito (casteltech.net e www) come indica Render.
+Fatto l'8/11/2026: A casteltech.net = 216.24.57.1, CNAME www = casteltech-sito.onrender.com; su Render www rimanda a casteltech.net,
+quindi l'indirizzo principale (canonical, sitemap, robots) è https://casteltech.net/ senza www.
 Prima di chiudere Noamweb bisogna spostare la gestione del DNS (nameserver) altrove, con tutti i record: MX e TXT di Google, verifica Microsoft, SPF.
