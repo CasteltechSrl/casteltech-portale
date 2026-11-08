@@ -821,4 +821,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Abbinamento fatto da Claude (Adriano 7/11/2026 sera, "non riesci a capirlo tu?"): GET `/api/claude/banca/dati` (movimenti, rate aperte, `ratePagateLibere` = rate già pagate
    dallo storico FIC non ancora confermate da un movimento, IBAN clienti) → analisi fuori dal portale → POST `/banca/decisioni` (confermato_da 'Claude'); rata già pagata = `gia: true`
    nel movimento: non cambia data/modo e "Annulla" non la riapre. POST `/banca/iban` = banca d'appoggio dei clienti (`salvaIbanCliente`: solo dove manca un IBAN valido).
+   Fatture anticipate nell'elenco (Adriano 8/11/2026, "guardando le fatture voglio capire quelle anticipate con bonifico o RiBa"; `anticipiDelleFatture`/`segnoAnticipo` in
+   `engine/anticipi.ts`, `anticipiFatture` in `banca-servizio.ts`, test in `tests/anticipi.test.ts`): Fatture → colonna "Anticipo" + filtro `?anticipo=tutte|riba|bonifico`,
+   riquadro "Anticipata dalla banca" nella fattura; anche fatture già incassate (bonifico: anticipo → rientro, rientro senza numero = stesso importo o 80 % della fattura;
+   fattura incassata senza rientro riconosciuto = detto così). Calcolato in lettura dai movimenti dei conti di anticipo.
    Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). ⬜ Poi open banking PSD2 (servizio da scegliere).

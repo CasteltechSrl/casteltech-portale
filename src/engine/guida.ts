@@ -699,13 +699,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'banca-riba', area: 'amministrazione', titolo: 'RiBa e anticipo fatture: il file per la banca',
-    parole: 'riba ri.ba ricevuta bancaria file cbi distinta anticipo fatture anticipate anticipata 80 100 rientro previsione cassa fido sbf salvo buon fine codice sia abi cab iban cliente banca appoggio portafoglio effetti',
+    parole: 'riba ri.ba ricevuta bancaria file cbi distinta anticipo fatture anticipate quali fatture colonna elenco anticipata 80 100 rientro previsione cassa fido sbf salvo buon fine codice sia abi cab iban cliente banca appoggio portafoglio effetti',
     testo: [
       'Amministrazione → Banca → RiBa e anticipo fatture elenca le rate delle fatture emesse ancora da incassare con scadenza da oggi in avanti. Quelle con pagamento RiBa e i dati completi sono già spuntate.',
       '"Crea il file RiBa (CBI)" prepara il file standard da caricare in BPER Banking Business (Incassi → Ri.Ba.). Servono il codice SIA dell\'azienda (5 caratteri, lo dà BPER: si scrive una volta in questa pagina), l\'IBAN dell\'azienda (Impostazioni → Amministrazione) e, per ogni cliente, l\'IBAN della sua banca nel campo "Banca d\'appoggio" dei Dati fiscali, più partita IVA e indirizzo. Se manca qualcosa il file non si crea e il messaggio dice cosa.',
       'Le rate messe in una distinta mostrano il numero della distinta e non si rimettono in un\'altra. Quando la banca accredita la distinta, in Banca il movimento si abbina da solo a tutte le sue fatture. "Annulla" sulla distinta serve solo se la banca non l\'ha presa.',
       'Anticipo fatture con bonifico: spunta le fatture e "Excel per l\'anticipo" dà l\'elenco da mandare alla banca; gli XML si scaricano da Fatture con le spunte (XML/zip).',
       'Fatture anticipate nella previsione di cassa (Analisi → Previsione di cassa): il portale le riconosce dai movimenti dei conti di anticipo. Le RiBa al salvo buon fine sono anticipate al 100 %: già accreditate, alla scadenza non entra altro. I bonifici sono anticipati all\'80 %: quando il cliente paga entra la fattura intera e la banca riprende l\'anticipo, quindi resta il 20 %. Un anticipo di una fattura già incassata che la banca non ha ancora ripreso compare come uscita di oggi. In alto il fido anticipi ancora disponibile.',
+      'Quali fatture sono state anticipate (Amministrazione → Fatture): colonna "Anticipo" con RiBa o bonifico (passa il mouse per le date) e il menu accanto a Cerca per vedere solo le anticipate, solo RiBa o solo bonifico. Nella pagina della fattura il riquadro "Anticipata dalla banca" dice quando, quanto e se la banca ha già ripreso l\'anticipo. Vale anche per le fatture già incassate.',
     ],
     passi: ['Scrivi il codice SIA (una volta).', 'Spunta le fatture e premi "Crea il file RiBa (CBI)".', 'Scarica il file e caricalo nell\'home banking BPER.'],
     pagine: [['/amministrazione/banca/anticipi', 'RiBa e anticipo fatture']],

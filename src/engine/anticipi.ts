@@ -101,3 +101,94 @@ export function fattureAnticipate(movimenti: MovimentoAnticipo[], rate: RataDaIn
   void oggi;
   return { anticipate: anticipate.sort((a, b) => a.data.localeCompare(b.data)), daRientrare };
 }
+
+/**
+ * Storico degli anticipi fattura per fattura (Adriano 8/11/2026, "guardando le fatture voglio capire quelle anticipate con bonifico o RiBa"):
+ * anche le fatture già incassate. Bonifico: ogni "ANTICIPO SU DOCUMENTI" apre un anticipo per le fatture citate (stesso numero, data della
+ * fattura entro l'anno prima dell'anticipo, la più recente), il "RIENTRO ANTICIPO" che le cita lo chiude (numero sbagliato della banca:
+ * chiude l'anticipo aperto di una sola fattura con lo stesso importo). RiBa: ogni "ACCREDITO RIBA AL SBF" = una rata con lo stesso importo,
+ * fattura emessa prima, scadenza dopo l'accredito (entro 200 giorni), prima le rate RiBa.
+ */
+export interface FatturaPerAnticipi {
+  id: number; numero: string; data: string;
+  rate: { id: number; scadenza: string; importo: number; riba?: boolean; pagata?: string | null }[];
+}
+export interface AnticipoFattura {
+  tipo: 'bonifico' | 'riba';
+  data: string;                 // giorno dell'anticipo (o dell'accredito RiBa)
+  importo: number | null;       // anticipato dalla banca (bonifico con più fatture insieme: non si sa per ognuna)
+  insieme: string[];            // altre fatture dello stesso anticipo
+  rientro: string | null;       // bonifico: giorno in cui la banca l'ha ripreso
+  scadenza: string | null;      // RiBa: scadenza della rata anticipata
+  incassata: boolean;           // bonifico non rientrato ma fattura già tutta incassata: il rientro non si riconosce nei movimenti
+}
+
+const piuGiorni = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+const numeroBase = (n: string) => String(Number(String(n).replace(/\/.*$/, '')));
+
+export function anticipiDelleFatture(movimenti: MovimentoAnticipo[], fatture: FatturaPerAnticipi[]): Map<number, AnticipoFattura[]> {
+  const esito = new Map<number, AnticipoFattura[]>();
+  const aggiungi = (id: number, a: AnticipoFattura) => esito.set(id, [...(esito.get(id) ?? []), a]);
+  const perNumero = new Map<string, FatturaPerAnticipi[]>();
+  for (const f of fatture) { const n = numeroBase(f.numero); perNumero.set(n, [...(perNumero.get(n) ?? []), f]); }
+  const trova = (n: string, giorno: string) => (perNumero.get(n) ?? [])
+    .filter(f => f.data <= giorno && f.data >= piuGiorni(giorno, -365)).sort((a, b) => b.data.localeCompare(a.data))[0];
+
+  const totaleFattura = new Map(fatture.map(f => [f.id, f.rate.reduce((t, r) => t + r.importo, 0)]));
+  const ordinati = [...movimenti].sort((a, b) => a.data.localeCompare(b.data));
+  const aperti: { fattura: number; a: AnticipoFattura }[] = [];
+  for (const m of ordinati) {
+    const anticipo = eAnticipo(m.descrizione), rientro = eRientro(m.descrizione);
+    if (!anticipo && !rientro) continue;
+    const numeri = numeriCitati(m.descrizione);
+    if (anticipo) {
+      for (const n of numeri) {
+        const f = trova(n, m.data);
+        if (!f) continue;
+        const a: AnticipoFattura = { tipo: 'bonifico', data: m.data, importo: numeri.length === 1 ? r2(Math.abs(m.importo)) : null,
+          insieme: numeri.filter(x => x !== n), rientro: null, scadenza: null, incassata: false };
+        aggiungi(f.id, a);
+        aperti.push({ fattura: f.id, a });
+      }
+      continue;
+    }
+    let chiusi = 0;
+    for (const n of numeri) {
+      const f = trova(n, m.data);
+      const ap = f && [...aperti].reverse().find(x => x.fattura === f.id && !x.a.rientro);
+      if (ap) { ap.a.rientro = m.data; chiusi++; }
+    }
+    if (!chiusi) {
+      // numero sbagliato o assente ("RIENTRO SU ANT FATTURA IN SCADENZA 30.04.26"): stesso importo dell'anticipo, o 80 % della fattura
+      const ap = aperti.find(x => !x.a.rientro && x.a.importo != null && Math.abs(x.a.importo - Math.abs(m.importo)) < 0.005)
+        ?? aperti.find(x => !x.a.rientro && Math.abs(r2(totaleFattura.get(x.fattura)! * QUOTA_BONIFICO) - Math.abs(m.importo)) < 0.015);
+      if (ap) ap.a.rientro = m.data;
+    }
+  }
+  for (const { fattura, a } of aperti) {
+    const f = fatture.find(x => x.id === fattura);
+    if (!a.rientro && f?.rate.length && f.rate.every(r => r.pagata)) a.incassata = true;
+  }
+
+  const prese = new Set<number>();
+  const rate = fatture.flatMap(f => f.rate.map(r => ({ ...r, fattura: f.id, dataDoc: f.data })));
+  for (const a of ordinati.filter(m => eAccreditoRiba(m.descrizione) && m.importo > 0)) {
+    const r = rate.filter(x => !prese.has(x.id) && Math.abs(x.importo - a.importo) < 0.005 && x.scadenza >= a.data
+        && x.scadenza <= piuGiorni(a.data, 200) && x.dataDoc <= a.data)
+      .sort((x, y) => Number(!!y.riba) - Number(!!x.riba) || x.scadenza.localeCompare(y.scadenza))[0];
+    if (!r) continue;
+    prese.add(r.id);
+    aggiungi(r.fattura, { tipo: 'riba', data: a.data, importo: r2(a.importo), insieme: [], rientro: null, scadenza: r.scadenza, incassata: false });
+  }
+  return esito;
+}
+
+/** Testo breve per l'elenco: "RiBa", "bonifico", "bonifico (rientrato)". */
+export function segnoAnticipo(a: AnticipoFattura[] | undefined): { testo: string; titolo: string } | null {
+  if (!a?.length) return null;
+  const tipi = [...new Set(a.map(x => x.tipo === 'riba' ? 'RiBa' : 'bonifico'))];
+  const dataIt = (d: string) => d.split('-').reverse().join('/');
+  return { testo: tipi.join(' + '), titolo: a.map(x => x.tipo === 'riba'
+    ? `RiBa anticipata il ${dataIt(x.data)}${x.importo != null ? ` (${x.importo.toFixed(2).replace('.', ',')} €)` : ''}, scadenza ${x.scadenza ? dataIt(x.scadenza) : ''}`
+    : `Anticipo con bonifico del ${dataIt(x.data)}${x.rientro ? `, rientrato il ${dataIt(x.rientro)}` : x.incassata ? ', fattura incassata (rientro non riconosciuto)' : ', ancora aperto'}`).join('; ') };
+}
