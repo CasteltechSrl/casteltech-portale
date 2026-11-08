@@ -85,3 +85,18 @@ test('anticipi: storico fattura per fattura (bonifico con rientro, rientro senza
   assert.equal(segnoAnticipo(a.get(5))!.testo, 'RiBa');
   assert.match(segnoAnticipo(a.get(2))!.titolo, /incassata/);
 });
+
+// FT 20 anticipata insieme alla 14: la banca riprende la parte della 20 con un altro nome e numero (dati inventati)
+test('anticipi: rientro con il nome sbagliato = quanto resta dell\'anticipo di più fatture', () => {
+  const mov: MovimentoAnticipo[] = [
+    { data: '2026-03-06', importo: -9000, descrizione: 'ANTICIPO SU DOCUMENTI FT.14 +20', conto: 'b' },
+    { data: '2026-03-31', importo: 1000, descrizione: 'RIENTRO ANTICIPO/FINANZIAMENTO BIANCHI SRL N 18', conto: 'b' },
+    { data: '2026-04-02', importo: 8000, descrizione: 'RIENTRO ANTICIPO/FINANZIAMENTO ROSSI SRL N 14', conto: 'b' },
+  ];
+  const a = anticipiDelleFatture(mov, [
+    { id: 1, numero: '14', data: '2026-02-28', rate: [{ id: 11, scadenza: '2026-03-31', importo: 10000, pagata: '2026-03-31' }] },
+    { id: 2, numero: '20', data: '2026-02-28', rate: [{ id: 21, scadenza: '2026-03-31', importo: 4000, pagata: '2026-03-30' }] },
+  ]);
+  assert.equal(a.get(2)![0].rientro, '2026-03-31');      // 9000 − 80 % della 14 (8000) = 1000
+  assert.equal(a.get(1)![0].rientro, '2026-04-02');
+});

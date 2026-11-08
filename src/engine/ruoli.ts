@@ -37,10 +37,16 @@ export const paginaIniziale = (ruolo: Ruolo) =>
 
 /**
  * Chi vede stipendi e buste paga (Adriano 3/11/2026): l'amministratore, la contabilità (il commercialista) e gli utenti dell'ufficio
- * con il permesso "buste paga" dato dall'amministratore. Per i cedolini serve comunque anche la password delle buste paga.
+ * con il permesso "buste paga" dato dall'amministratore. L'ufficio scrive anche la password delle buste paga (`chiedePasswordRiservata`).
  */
 export const vedePaghe = (u: { ruolo: string; paghe?: boolean | null } | null | undefined) =>
   !!u && (u.ruolo === 'amministratore' || u.ruolo === 'contabilita' || (eUfficio(u.ruolo) && !!u.paghe));
+
+/**
+ * Password delle aree riservate (Adriano 8/11/2026): la chiedono SOLO a ufficio e produzione, per le buste paga e per la Banca
+ * (Amministrazione → Banca). Amministratore, contabilità ed esterno entrano senza (chi può entrare resta deciso dalle altre regole).
+ */
+export const chiedePasswordRiservata = (ruolo: string | undefined) => ruolo === 'ufficio' || ruolo === 'produzione';
 
 /**
  * Impostazioni → Utenti (Adriano 3/11/2026): solo l'amministratore sceglie o cambia i ruoli. Gli altri dell'ufficio possono aggiungere solo

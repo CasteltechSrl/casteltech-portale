@@ -113,7 +113,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Stipendi, buste paga e previsione di cassa (da cui si ricavano gli stipendi) SOLO a chi `vedePaghe`: amministratore, contabilità, ufficio con `utenti.paghe`;
   ruolo e permesso letti dal database. Analisi riservata (Adriano 6/11/2026, `vedeAnalisi`/`analisiPermessa`/`PERCORSO_ANALISI` in `engine/ruoli.ts`, guardia su
   `/analisi` in `rotte/amministrazione.ts`): tutta Amministrazione → Analisi SOLO ad amministratore ed esterno; ufficio e contabilità ricevono 403 e non vedono i
-  link (menu filtrato con `linkPermesso` in `layout.ts`, `spegniLinkNonPermessi` ora anche per l'ufficio: i link "Analisi" spariscono); la Previsione di cassa resta a `vedePaghe`. La contabilità legge anche `/dipendenti/riservata` (password delle buste paga; form `sempre-attivo` per sblocca/chiudi).
+  link (menu filtrato con `linkPermesso` in `layout.ts`, `spegniLinkNonPermessi` ora anche per l'ufficio: i link "Analisi" spariscono); la Previsione di cassa resta a `vedePaghe`. La contabilità legge anche `/dipendenti/riservata` (senza password dall'8/11/2026: la password vale solo per ufficio e produzione, `chiedePasswordRiservata`).
 - Registro "chi ha cambiato cosa e quando" e accessi (Adriano, lista del 4/11/2026; migrazione 075 `registro_attivita`, regole in `engine/registro.ts`, scrittura in
   `registro-servizio.ts` = middleware `registraAttivita` in `index.ts`, pagina Impostazioni → Registro, test in `tests/registro.test.ts`): una riga per ogni POST riuscito
   (sezione dal percorso, azione = `azione` del modulo o ultima parola, righe = id nel percorso + `ids` spuntati; elimina/annulla/scarta = 'eliminazione'), accessi e
@@ -825,4 +825,6 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `engine/anticipi.ts`, `anticipiFatture` in `banca-servizio.ts`, test in `tests/anticipi.test.ts`): Fatture → colonna "Anticipo" + filtro `?anticipo=tutte|riba|bonifico`,
    riquadro "Anticipata dalla banca" nella fattura; anche fatture già incassate (bonifico: anticipo → rientro, rientro senza numero = stesso importo o 80 % della fattura;
    fattura incassata senza rientro riconosciuto = detto così). Calcolato in lettura dai movimenti dei conti di anticipo.
+   Password (Adriano 8/11/2026; `chiedePasswordRiservata` in `engine/ruoli.ts`, test in `tests/ruoli.test.ts`): Banca (`r.use` in testa a `rotteBanca`, POST `/banca/sblocca`,
+   sessione `bancaSbloccata`, 15 minuti) e buste paga chiedono la password delle buste paga SOLO a ufficio e produzione; amministratore, contabilità ed esterno entrano senza.
    Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). ⬜ Poi open banking PSD2 (servizio da scegliere).
