@@ -69,9 +69,9 @@ test('controlli settimanali nel cruscotto: un riquadro per controllo, urgenti ap
   assert.equal((h.match(/<li>/g) ?? []).length, 3 + RIGHE_CONTROLLO_CRUSCOTTO);
   assert.match(h, /href="\/amministrazione\/controlli#preventivi">tutte le 12 →/);
   assert.match(String(sezioneControlli([])), /Tutto a posto/);
-  // sotto "Da fare oggi", prima dei numeri chiave
+  // dall'8/11/2026 nel dettaglio della fascia CONTROLLI del cruscotto
   const src = readFileSync(new URL('../src/server/rotte/cruscotto-generale.ts', import.meta.url), 'utf8');
-  assert.ok(src.indexOf('<h3>Da fare oggi</h3>') < src.indexOf('${controlli ? sezioneControlli(controlli)') && src.indexOf('${controlli ? sezioneControlli(controlli)') < src.indexOf('<div class="cifre cifre-sei">'));
+  assert.match(src, /dettaglio: \(\) => sezioneControlli\(controlli\)/);
 });
 
 test('l\'indirizzo del portale apre il cruscotto: senza accesso si va al login (anche col reparto ricordato), poi al cruscotto', () => {

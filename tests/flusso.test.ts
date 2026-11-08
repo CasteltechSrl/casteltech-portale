@@ -127,7 +127,7 @@ test('flusso: fine lavorazione parziale e totale, anche dalla scheda scansionata
 });
 
 test('flusso: cruscotto con le cinque finestre, telefono, scheda stampata, guida', () => {
-  assert.ok(readFileSync('src/server/rotte/cruscotto-generale.ts', 'utf8').includes('finestreFlusso'));
+  assert.ok(readFileSync('src/server/rotte/cruscotto-generale.ts', 'utf8').includes('elencoFinestra(f, w.chiave'));
   assert.ok(readFileSync('src/server/rotte/reparto.ts', 'utf8').includes('fine-lavorazione'));
   assert.ok(readFileSync('src/server/rotte/commesse.ts', 'utf8').includes('FINE LAVORAZIONE'));
   assert.ok(readFileSync('src/server/lettura-ordini-ia.ts', 'utf8').includes('fine_lavorazione'));
