@@ -53,7 +53,7 @@ export function cellaDescrizione(x: { codice?: string | null; prodotto_id?: numb
  */
 export function cellaNotaRiga(x: { note?: string | null }, i: number): Raw {
   return html`<input name="righe[${i}][note]" value="${x.note ?? ''}" class="maiuscolo nota-riga-doc" maxlength="500"
-    placeholder="note per questo lotto (non vanno in anagrafica)" title="Note solo di questo documento: passano alla fattura e si stampano sotto la descrizione">`;
+    placeholder="lavorazione in più / alternativa, nota per il cliente (si stampa sotto)" title="Solo per questa riga: spiega al cliente il perché (es. prezzo diverso). Si stampa sotto la descrizione, passa alla fattura, l'anagrafica non cambia">`;
 }
 
 /**
