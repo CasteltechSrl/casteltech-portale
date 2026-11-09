@@ -57,7 +57,10 @@ test('dopo l\'accesso il commercialista va al cruscotto dell\'Amministrazione (A
   assert.equal(paginaDopoAccesso('contabilita', '/amministrazione/registri?anno=2026'), '/amministrazione/registri?anno=2026');
   assert.equal(paginaDopoAccesso('contabilita', '//sito-esterno.it'), '/amministrazione');
   assert.equal(paginaDopoAccesso('ufficio', '/'), '/cruscotto');
-  assert.equal(paginaDopoAccesso('ufficio', '/preventivi/3'), '/preventivi/3');
+  assert.equal(paginaDopoAccesso('ufficio', '/preventivi/3'), '/cruscotto'); // Adriano 9/11/2026: sempre il cruscotto
+  assert.equal(paginaDopoAccesso('amministratore', '/amministrazione/banca'), '/cruscotto');
+  assert.equal(paginaDopoAccesso('esterno', '/ordini'), '/cruscotto');
+  assert.equal(paginaDopoAccesso('produzione', '/r/c/C2026-0001'), '/r/c/C2026-0001');
   assert.equal(paginaDopoAccesso('produzione', '/'), '/r');
 });
 

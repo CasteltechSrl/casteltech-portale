@@ -118,13 +118,14 @@ export const contabilitaPuo = (metodo: string, percorso: string) =>
 
 /**
  * Dove andare dopo l'accesso (Adriano 1/11/2026: il commercialista entra direttamente nel cruscotto dell'Amministrazione).
- * Si torna alla pagina chiesta prima del login solo se il profilo la può aprire; altrimenti la pagina iniziale del profilo.
+ * Ufficio, amministratore ed esterno: sempre il cruscotto (Adriano 9/11/2026). Contabilità e reparto tornano alla pagina chiesta prima
+ * del login solo se il profilo la può aprire; altrimenti la pagina iniziale del profilo.
  */
 export function paginaDopoAccesso(ruolo: Ruolo, torna: unknown): string {
   const t = String(torna ?? '/');
+  // Adriano 9/11/2026: ufficio, amministratore ed esterno entrano SEMPRE nel cruscotto, anche se il login è partito da un'altra pagina
+  if (eUfficio(ruolo) || ruolo === 'esterno') return paginaIniziale(ruolo);
   if (!t.startsWith('/') || t.startsWith('//') || t === '/') return paginaIniziale(ruolo);
   if (ruolo === 'contabilita' && !contabilitaPuo('GET', t.split(/[?#]/)[0])) return paginaIniziale(ruolo);
-  // l'esterno non va nelle pagine del reparto (/r: sono per gli operatori con il PIN)
-  if (ruolo === 'esterno' && (!esternoPuo('GET', t.split(/[?#]/)[0]) || /^\/r(\/|\?|#|$)/.test(t))) return paginaIniziale(ruolo);
   return t;
 }
