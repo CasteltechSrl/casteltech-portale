@@ -7,6 +7,7 @@ export interface RigaModulo {
   aliquota_iva?: string; solo_descrizione?: string | boolean; ddt_id?: string | number; prodotto_id?: string | number; riga_ordine_id?: string | number;
   acconto_id?: string | number;
   fonte?: string | null; componente_id?: string | number | null; componente_cliente_id?: string | number | null;   // DDT (Adriano 2/11/2026)
+  note?: string | null;            // note del singolo lotto (Adriano 9/11/2026): non vanno in anagrafica
 }
 
 /** Numero scritto all'italiana (1.234,5) o con il punto (1234.5). */
@@ -24,6 +25,7 @@ export interface RigaBozza {
   acconto_id: number | null;       // fattura d'acconto (TD02) scalata da questa riga negativa
   fonte: string | null;            // DDT: prodotto / componente / componente_cliente / libero
   componente_id: number | null; componente_cliente_id: number | null;
+  note: string | null;             // note della riga per questo lotto (DDT → fattura), stampate sotto la descrizione
 }
 
 /** Righe del modulo → righe del documento (quelle completamente vuote si tolgono). Restituisce anche gli errori di scrittura. */
@@ -47,7 +49,24 @@ export function righeDaModulo(righe: RigaModulo[]): { righe: RigaBozza[]; errori
         acconto_id: solo ? null : Number(r.acconto_id) || null,
         fonte: solo ? null : String(r.fonte ?? '').trim() || null,
         componente_id: solo ? null : Number(r.componente_id) || null, componente_cliente_id: solo ? null : Number(r.componente_cliente_id) || null,
+        note: solo ? null : notaRiga(r.note),
       };
     });
   return { righe: out, errori };
+}
+
+// ───────────── Note per riga (Adriano 9/11/2026, DDT 222) ─────────────
+// Informazioni del singolo lotto scritte nella riga: l'anagrafica del prodotto non cambia, la fattura fatta dal DDT le riprende,
+// stampa, PDF e XML le mettono dopo la descrizione.
+
+/** Nota della riga come scritta nel modulo: spazi tolti, MAIUSCOLO come il resto delle righe, vuota = null. */
+export function notaRiga(v: unknown): string | null {
+  const t = String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+  return t ? t.slice(0, 500) : null;
+}
+
+/** Descrizione con la nota del lotto (XML e PDF): "DESCRIZIONE - NOTA"; senza nota resta la descrizione. */
+export function descrizioneConNota(descrizione: string | null | undefined, note: string | null | undefined): string {
+  const d = String(descrizione ?? '').trim(), n = String(note ?? '').trim();
+  return n ? (d ? `${d} - ${n}` : n) : d;
 }

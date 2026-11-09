@@ -105,6 +105,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   fattura / NC / ND, DDT, conferma d'ordine = menu con i soli prodotti del cliente + "+ Nuovo prodotto…" (POST `/preventivi/prodotti`) + "— senza codice —" per servizi;
   descrizione dal prodotto (sola lettura); codici vecchi non in anagrafica restano "(non in anagrafica)"; al salvataggio il codice viene dal prodotto del cliente.
   Prezzo scritto a mano diverso dal listino → "Aggiorno l'anagrafica?" (`cosaAggiornare`: lo scaglione di quella quantità, altrimenti il prezzo unico, fonte 'manuale').
+  Note per riga e codice su riga già scritta (Adriano 9/11/2026, DDT 222; migrazione 084 `documenti_righe.note`, `notaRiga`/`descrizioneConNota` in `engine/documenti.ts`,
+  `cellaNotaRiga` in `views/scelta-prodotto.ts`, test in `tests/note-righe.test.ts`): casella "note per questo lotto" sotto la descrizione in DDT, fattura, NC (non autofatture);
+  non tocca l'anagrafica, passa dal DDT alla fattura (`aggiungiDdt`), a NC e duplicati; stampata sotto la descrizione (stampa, PDF) e nell'XML "DESCRIZIONE - NOTE".
+  Codice scelto dal menu su una riga con descrizione o prezzo = riquadro `#domanda-sostituisci` (`public/documenti.js`): anche descrizione (spuntata) / anche prezzo, "Solo il codice", "Annulla".
   Ordine a fornitore: P/N proposti dall'archivio Componenti mentre si scrive (`/anagrafiche/componenti-cerca`), stessa domanda per l'ultimo acquisto. Preventivi e
   Da acquisire avevano già il menu; autofatture escluse (righe del fornitore estero).
 

@@ -420,6 +420,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/anagrafiche/prodotti', 'Anagrafiche → Prodotti'], ['/anagrafiche/componenti', 'Anagrafiche → Componenti']],
   },
 
+  {
+    id: 'note-righe-ddt', area: 'amministrazione', titolo: 'Note per riga nel DDT e codice cambiato su una riga già scritta',
+    parole: 'note nota riga righe ddt fattura lotto descrizione modificare cambiare codice sostituire sovrascrivere elenco menu prezzo matricole versione anagrafica',
+    testo: [
+      'Sotto la descrizione di ogni riga del DDT c\'è la casella "note per questo lotto": serve per le informazioni che valgono solo per quella spedizione (matricole, versione, "senza connettore", riferimento del cliente…). Si scrive in maiuscolo come il resto della riga.',
+      'Le note NON cambiano l\'anagrafica del prodotto: la descrizione resta quella di Anagrafiche → Prodotti. Si stampano sotto la descrizione nel DDT e nel PDF che parte per email.',
+      'Quando fai la fattura dal DDT ("Fattura questo DDT", "Fattura i DDT" o la scelta dei DDT nella bozza) le note passano alla riga della fattura: si vedono nella bozza (si possono ancora correggere), nella stampa, nel PDF di cortesia e nella fattura elettronica (scritte dopo la descrizione, "DESCRIZIONE - NOTE"). Anche fatture e note di credito scritte a mano hanno la stessa casella.',
+      'Se scegli un codice dal menu su una riga che ha già descrizione o prezzo, sotto le righe il portale chiede cosa sostituire: "anche la descrizione" (spuntata) e "anche il prezzo" (del listino, se c\'è), poi Applica. "Solo il codice" lascia descrizione e prezzo come erano (valgono solo in quel documento, l\'anagrafica non cambia); "Annulla" rimette il codice di prima. Su una riga vuota il codice si sceglie come sempre, senza domande.',
+    ],
+    passi: ['Apri il DDT (bozza o "Modifica DDT").', 'Scrivi le note nella casella sotto la descrizione della riga e salva.', 'Fai la fattura dal DDT: le note sono già nella riga della fattura.'],
+    pagine: [['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/amministrazione/documenti?tipo=fattura', 'Fatture']],
+  },
+
   // ── Preventivi ──
   {
     id: 'nuovo-preventivo', area: 'preventivi', titolo: 'Fare un nuovo preventivo',

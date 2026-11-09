@@ -143,7 +143,7 @@ export async function pdfFattura(x: DatiPdfFattura): Promise<Buffer> {
   testata();
   const aDestra = (s: string, i: number, yt: number, f = font) => scrivi(p, s, xs[i] + colonne[i].l - PAD, yt, { dim: DIM, destra: true, f });
   for (const r of righe) {
-    const descr = aCapo(r.descrizione ?? '', colonne[1].l - 2 * PAD, font, DIM);
+    const descr = [...aCapo(r.descrizione ?? '', colonne[1].l - 2 * PAD, font, DIM), ...(r.note ? aCapo(String(r.note), colonne[1].l - 2 * PAD, font, DIM) : [])];   // note del lotto sotto (9/11/2026)
     const codice = r.solo_descrizione ? [] : aCapo(r.codice ?? '', colonne[0].l - 2 * PAD, grassetto, DIM);
     const alto = Math.max(1, descr.length, codice.length) * INTER + 5;
     if (y - alto < PIEDE + 20) { p = nuovaPagina(); y = H - M; testata(); }

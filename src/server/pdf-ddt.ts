@@ -130,7 +130,7 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
   };
   testata();
   for (const r of righe) {
-    const descr = aCapo(r.descrizione ?? '', colonne[1].l - 2 * PAD, r.solo_descrizione ? font : font, DIM);
+    const descr = [...aCapo(r.descrizione ?? '', colonne[1].l - 2 * PAD, font, DIM), ...(r.note ? aCapo(String(r.note), colonne[1].l - 2 * PAD, font, DIM) : [])];   // note del lotto sotto (9/11/2026)
     const codice = r.solo_descrizione ? [] : aCapo(r.codice ?? '', colonne[0].l - 2 * PAD, grassetto, DIM);
     const alto = Math.max(1, descr.length, codice.length) * INTERLINEA + 6;
     if (y - alto < M + ALTO_PIEDE) { p = nuovaPagina(); y = H - M; testata(); }
