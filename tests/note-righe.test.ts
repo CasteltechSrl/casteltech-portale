@@ -46,7 +46,7 @@ test('la nota passa dal DDT alla fattura e alle stampe', () => {
   assert.match(servizio, /descrizione: descrizioneConNota\(r\.descrizione, r\.note\)/);  // XML della fattura
   assert.match(readFileSync('src/server/views/stampa-documento.ts', 'utf8'), /notaStampa\(r\)/);
   for (const f of ['src/server/pdf-ddt.ts', 'src/server/pdf-fattura.ts']) assert.match(readFileSync(f, 'utf8'), /r\.note \? aCapo/);
-  assert.match(readFileSync('db/migrazioni/084_note_righe_documenti.sql', 'utf8'), /ADD COLUMN IF NOT EXISTS note text/);
+  assert.match(readFileSync('db/migrazioni/085_note_righe_documenti.sql', 'utf8'), /ADD COLUMN IF NOT EXISTS note text/);
 });
 
 test('guida: note per riga del DDT', async () => {
