@@ -73,7 +73,8 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 ${opz.utente ? html`
 <header class="testata">
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
-  ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026) -->
+  ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026); "⌂ Cruscotto" prima voce, senza tendina (Adriano 9/11/2026) -->
+    ${eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? html`<a href="/cruscotto" class="voce-cruscotto ${opz.attiva === 'cruscotto' ? 'attiva' : ''}">⌂ Cruscotto</a>` : ''}
     ${(eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
       <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
       <div class="tendina">${permesse(g.voci).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>

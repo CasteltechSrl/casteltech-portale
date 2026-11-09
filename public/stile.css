@@ -50,7 +50,7 @@ h2 { font-size: 1.1rem; margin: 1.6rem 0 .5rem; font-weight: 650; display: flex;
 .testata:not(.menu-js) .gruppo:focus-within .tendina { display: block; }
 .testata .gruppo .tendina a { display: block; padding: .5rem .7rem; color: var(--testo); font-weight: 500; white-space: nowrap; }
 .testata .gruppo .tendina a:hover { background: var(--accento-chiaro); color: var(--accento); }
-.testata .gruppo .titolo-gruppo { display: inline-block; white-space: nowrap; }
+.testata .gruppo .titolo-gruppo, .testata nav a.voce-cruscotto { display: inline-block; white-space: nowrap; }
 .testata .gruppo .titolo-gruppo::after { content: ' ▾'; font-size: .75em; opacity: .6; }
 .utente { color: var(--tenue); font-size: .9rem; white-space: nowrap; }
 
