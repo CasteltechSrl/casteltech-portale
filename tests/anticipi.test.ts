@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { anticipiDelleFatture, fattureAnticipate, numeriCitati, QUOTA_BONIFICO, segnoAnticipo, type MovimentoAnticipo } from '../src/engine/anticipi.js';
+import { anticipiDelleFatture, fattureAnticipate, numeriCitati, QUOTA_BONIFICO, segnoAnticipo, statoIncasso, type MovimentoAnticipo } from '../src/engine/anticipi.js';
 import { previsioneCassa } from '../src/engine/previsione-cassa.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -99,4 +99,65 @@ test('anticipi: rientro con il nome sbagliato = quanto resta dell\'anticipo di p
   ]);
   assert.equal(a.get(2)![0].rientro, '2026-03-31');      // 9000 − 80 % della 14 (8000) = 1000
   assert.equal(a.get(1)![0].rientro, '2026-04-02');
+});
+
+// Controllo del 9/11/2026 (Adriano: "in anticipo secondo me mancano dei dati"): casi visti nei movimenti veri, nomi e importi inventati
+test('anticipi: fatture riconosciute dall\'importo (80 %), numero attaccato, fattura con data dopo l\'anticipo', () => {
+  assert.deepEqual(numeriCitati('ANTICIPO SU DOCUMENTI FT51 +54'), ['51', '54']);
+  assert.deepEqual(numeriCitati('RIENTRO ANTICIPO/FINANZIAMENTO FATT.39'), ['39']);
+  const b = (data: string, importo: number, descrizione: string): MovimentoAnticipo => ({ data, importo, descrizione, conto: 'b' });
+  const f = (id: number, numero: string, data: string, importo: number, cliente = 'ALFA SRL', pagata: string | null = null) =>
+    ({ id, numero, data, cliente, rate: [{ id: id * 10, scadenza: '2026-12-31', importo, pagata }] });
+  const fatture = [
+    f(1, '14', '2026-02-28', 10000), f(2, '18', '2026-02-28', 2000, 'BETA SRL'), f(3, '20', '2026-02-28', 3000, 'GAMMA SRL'),
+    f(4, '4', '2026-01-31', 5000, 'ALFA SRL', '2026-04-22'), f(5, '64', '2026-06-30', 4100, 'DELTA SRL'),
+    f(6, '74', '2026-07-16', 3000, 'EPSILON SRL'), f(7, '75', '2026-07-16', 1500, 'ZETA SRL'), f(8, '73', '2026-07-16', 2400, 'ETA SRL'),
+    f(9, '65', '2026-06-30', 12000, 'CABLE TEST SRL'), f(10, '91', '2026-08-17', 1000, 'TETA SRL'),
+  ];
+  const a = anticipiDelleFatture([
+    b('2026-03-06', -9600, 'ANTICIPO SU DOCUMENTI FT.14 +20'),        // 80 % di 14 + 18, non di 14 + 20
+    b('2026-06-30', -3280, 'ANTICIPO SU DOCUMENTI ft.4/2026'),          // la 4 è già incassata: 80 % della 64
+    b('2026-07-02', -9000, 'ANTICIPO SU DOCUMENTI ft cable test'),      // senza numero, col nome del cliente
+    b('2026-07-17', -3600, 'ANTICIPO SU DOCUMENTI ft'),                 // 80 % di 74 + 75
+    b('2026-08-14', -800, 'ANTICIPO SU DOCUMENTI ft. 91'),              // fattura con la data di 3 giorni dopo
+  ], fatture);
+  assert.deepEqual([...a.keys()].sort((x, y) => x - y), [1, 2, 5, 6, 7, 9, 10]);
+  assert.equal(a.get(2)![0].numeroBanca, '14 + 20');
+  assert.equal(a.get(5)![0].importo, 3280);
+  assert.match(segnoAnticipo(a.get(7))!.titolo, /non ha scritto il numero/);
+});
+
+test('anticipi: rientro che corregge il numero, rientro di anticipi più vecchi, RiBa con più fatture', () => {
+  const b = (data: string, importo: number, descrizione: string, conto = 'b'): MovimentoAnticipo => ({ data, importo, descrizione, conto });
+  const a = anticipiDelleFatture([
+    b('2026-01-05', 1000, 'RIENTRO ANTICIPO/FINANZIAMENTO ALFA SRL N 125'),       // anticipata a dicembre, prima del file
+    b('2026-02-02', -7000, 'ANTICIPO SU DOCUMENTI FT. 05 DEL 30.01.26'),
+    b('2026-02-25', 7000, 'RIENTRO ANTICIPO/FINANZIAMENTO BETA SRL N 2'),          // l'anticipo era della 2
+    b('2026-08-03', 1159, 'ACCREDITO RIBA AL SBF LOTTO: PRG. 0003 NUM.EFF. 00001', 'r'),
+  ], [
+    { id: 1, numero: '125', data: '2025-12-16', rate: [{ id: 11, scadenza: '2026-01-31', importo: 1250, pagata: '2026-01-05' }] },
+    { id: 2, numero: '2', data: '2026-01-31', rate: [{ id: 21, scadenza: '2026-03-31', importo: 9000, pagata: '2026-02-25' }] },
+    { id: 3, numero: '5', data: '2026-01-31', rate: [{ id: 31, scadenza: '2026-02-28', importo: 183, pagata: '2026-02-20' }] },
+    { id: 4, numero: '72', data: '2026-07-15', rate: [{ id: 41, scadenza: '2026-09-10', importo: 976, riba: true, pagata: null }] },
+    { id: 5, numero: '82', data: '2026-07-29', rate: [{ id: 51, scadenza: '2026-09-10', importo: 183, riba: true, pagata: null }] },
+  ]);
+  assert.equal(a.get(1)![0].prima, true);
+  assert.equal(a.get(1)![0].rientro, '2026-01-05');
+  assert.equal(a.has(3), false);
+  assert.equal(a.get(2)![0].numeroBanca, '5');
+  assert.equal(a.get(4)![0].tipo, 'riba');
+  assert.deepEqual(a.get(5)![0].insieme, ['72']);
+});
+
+test('incasso: incassata col movimento della banca, in parte, scaduta, da incassare', () => {
+  const oggi = '2026-11-09';
+  const i = statoIncasso([{ scadenza: '2026-10-31', importo: 100, pagata: '2026-10-14', movimento: { data: '2026-10-14', conto: 'c/c ordinario' } }], oggi)!;
+  assert.equal(i.stato, 'incassata');
+  assert.equal(i.testo, 'incassata 14/10/2026');
+  assert.match(i.titolo, /movimento di banca del 14\/10\/2026, c\/c ordinario/);
+  assert.equal(statoIncasso([{ scadenza: '2026-10-31', importo: 100, pagata: '2026-10-30' }, { scadenza: '2026-11-30', importo: 100, pagata: null }], oggi)!.stato, 'in_parte');
+  assert.equal(statoIncasso([{ scadenza: '2026-10-31', importo: 100, pagata: null }], oggi)!.stato, 'scaduta');
+  assert.equal(statoIncasso([{ scadenza: '2026-12-31', importo: 100, pagata: null }], oggi)!.testo, 'da incassare');
+  assert.equal(statoIncasso([], oggi), null);
+  assert.ok(cercaGuida('fattura incassata colonna incasso').some(a => a.argomento.id === 'banca-riba'));
 });
