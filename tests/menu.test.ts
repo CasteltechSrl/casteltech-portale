@@ -93,3 +93,10 @@ test('Amministrazione (Adriano 2/11/2026): DDT, Fatture, Autofatture, Note di cr
   assert.ok(!MENU_CONTABILITA.some(v => v[0] === 'Documenti emessi'));
   assert.equal(g.voci[1][1], '/amministrazione/documenti?tipo=ddt');
 });
+
+test('menu: "⌂ Cruscotto" prima voce del menu, senza tendina (Adriano 9/11/2026)', () => {
+  const src = readFileSync(new URL('../src/server/views/layout.ts', import.meta.url), 'utf8');
+  const voce = src.indexOf('class="voce-cruscotto');
+  assert.ok(voce > 0 && voce < src.indexOf('MENU_GRUPPI : []).map'));
+  assert.match(src, /<a href="\/cruscotto" class="voce-cruscotto \$\{opz\.attiva === 'cruscotto' \? 'attiva' : ''\}">⌂ Cruscotto<\/a>/);
+});
