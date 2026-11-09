@@ -31,6 +31,7 @@ import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-se
 import { aggiornaPrezzoMateriale, domandaPrezzoMateriale } from '../materiali-consumo-servizio.js';
 import { caricaPrezzi, scaglioniDi, salvaScaglioni, listinoProdotto, aggiornaPrezzoDaDocumento, cercaComponentiPerOrdine, domandaPrezzoComponente,
   aggiornaAcquistoDaOrdine } from '../prezzi-servizio.js';
+import { caratteriCasella, MINIMO_CODICE, MASSIMO_CODICE, MINIMO_DESCRIZIONE, MASSIMO_DESCRIZIONE } from '../../engine/larghezze-colonne.js';
 import { leggiScaglioni, scrivi as scriviScaglioni } from '../../engine/listino.js';
 import { leggiPrezzo, dataIt } from '../../engine/prezzi-fic.js';
 import { datiSchedaCliente, type DatiSchedaCliente } from '../scheda-cliente-servizio.js';
@@ -302,6 +303,9 @@ export function rotteAnagrafiche() {
     const opzClienti = (sel: number | null, conVuoto = true) => html`
       ${conVuoto ? html`<option value="" disabled ${sel === null ? raw('selected') : ''}>— scegli il cliente —</option>` : ''}
       ${clienti.map(c => html`<option value="${c.id}" ${c.id === sel ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}`;
+    // codice sempre intero, descrizione fino a 60 caratteri (Adriano 9/11/2026)
+    const misuraCodice = caratteriCasella(prodotti.map(p => p.codice), MINIMO_CODICE, MASSIMO_CODICE);
+    const misuraDescrizione = caratteriCasella(prodotti.map(p => p.descrizione), MINIMO_DESCRIZIONE, MASSIMO_DESCRIZIONE);
     res.send(await pag(req, 'prodotti', html`
       <p class="nota">Nei preventivi codice e descrizione si scelgono solo da qui. Ogni codice deve avere il suo cliente. Tutto viene salvato in MAIUSCOLO.
         ${vedeAnalisi(req.session.utente?.ruolo) ? html`Il tasto <b>Analisi</b> apre la scheda di analisi del prodotto (pezzi e fatturato anno per anno, preventivi, consuntivo delle commesse);
@@ -315,22 +319,22 @@ export function rotteAnagrafiche() {
       ${ricercaVeloce('tab-prodotti', 'Cerca codice, descrizione o cliente…', prodotti.length, String(req.query.q ?? ''))}
       <p class="nota"><a class="bottone" href="/anagrafiche/prodotti.xlsx${filtro > 0 ? `?cliente=${filtro}` : ''}" title="Prodotti e prezzi in Excel (del cliente scelto, o tutti)">Excel</a></p>
       <template id="modello-clienti">${opzClienti(null)}</template>
-      <div class="tabella-scorre limitata"><table class="editor" id="tab-prodotti" data-ordina>
+      <div class="tabella-scorre limitata"><table class="editor su-misura" id="tab-prodotti" data-ordina>
         <thead><tr><th>Codice</th><th>Descrizione</th><th>Cliente</th><th class="n" title="Prezzo di vendita a scheda, IVA esclusa">Prezzo €</th>
           <th title="Facoltativi: prezzi diversi per quantità, es. 1-5=10; 6-20=8; 21+=7">Scaglioni di quantità</th><th class="n">Preventivi</th><th></th></tr></thead>
         <tbody>
           <tr class="nuova-riga">
-            <td><input name="codice" form="p-nuovo" class="maiuscolo" required placeholder="NUOVO CODICE"></td>
-            <td class="largo"><input name="descrizione" form="p-nuovo" class="maiuscolo" required></td>
-            <td><select name="cliente_id" form="p-nuovo" required>${opzClienti(filtro > 0 ? filtro : null)}</select></td>
+            <td><input name="codice" form="p-nuovo" class="maiuscolo su-misura" size="${misuraCodice}" required placeholder="NUOVO CODICE"></td>
+            <td><input name="descrizione" form="p-nuovo" class="maiuscolo su-misura" size="${misuraDescrizione}" required></td>
+            <td><select name="cliente_id" form="p-nuovo" required class="cliente">${opzClienti(filtro > 0 ? filtro : null)}</select></td>
             <td><input name="prezzo" form="p-nuovo" class="prezzo" inputmode="decimal"></td>
             <td><input name="scaglioni" form="p-nuovo" class="scaglioni" placeholder="es. 1-5=10; 6-20=8; 21+=7"></td><td></td>
             <td><form method="post" action="/anagrafiche/prodotti" id="p-nuovo"><input type="hidden" name="filtro" value="${filtro}"><button class="primario">Aggiungi</button></form></td>
           </tr>
           ${prodotti.map(p => html`<tr class="${p.cliente_id === null ? 'senza-cliente' : ''}" title="${p.cliente_id === null ? 'Codice senza cliente: assegnalo a un cliente o eliminalo' : ''}">
-            <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo"></td>
-            <td class="largo"><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo"></td>
-            <td><select name="cliente_id" form="p-${p.id}" required class="clienti-al-clic"><option value="${p.cliente_id ?? ''}" selected>${p.cliente_id === null ? '— scegli il cliente —' : nomeCliente.get(p.cliente_id) ?? ''}</option></select></td>
+            <td><input name="codice" form="p-${p.id}" value="${p.codice}" class="maiuscolo su-misura" size="${misuraCodice}"></td>
+            <td><input name="descrizione" form="p-${p.id}" value="${p.descrizione ?? ''}" class="maiuscolo su-misura" size="${misuraDescrizione}" title="${p.descrizione ?? ''}"></td>
+            <td><select name="cliente_id" form="p-${p.id}" required class="clienti-al-clic cliente" title="${p.cliente_id === null ? '' : nomeCliente.get(p.cliente_id) ?? ''}"><option value="${p.cliente_id ?? ''}" selected>${p.cliente_id === null ? '— scegli il cliente —' : nomeCliente.get(p.cliente_id) ?? ''}</option></select></td>
             <td><input name="prezzo" form="p-${p.id}" class="prezzo" inputmode="decimal" value="${p.prezzo == null ? '' : num(p.prezzo, 5)}"
               title="${testoPrezzo(p)}"></td>
             <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"

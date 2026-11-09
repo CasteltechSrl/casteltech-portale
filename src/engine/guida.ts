@@ -259,10 +259,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'maiuscolo-ricerca', area: 'inizio', titolo: 'Ricerche negli elenchi e scritte in MAIUSCOLO',
-    parole: 'cercare trovare ricerca filtro maiuscolo minuscolo accenti trattini',
+    parole: 'cercare trovare ricerca filtro maiuscolo minuscolo accenti trattini larghezza colonne codice tagliato descrizione',
     testo: [
       'Negli elenchi delle Anagrafiche la ricerca filtra mentre scrivi: puoi scrivere più parole in qualsiasi ordine ("rossi milano"), accenti e maiuscole non contano, e nei codici trattini e punti non contano ("rs0603" trova "RS-0603-2K2").',
       'Clienti, prodotti e fornitori si salvano sempre in MAIUSCOLO, anche se li scrivi in minuscolo. Email e PEC restano in minuscolo.',
+      'In Anagrafiche → Prodotti le caselle Codice e Descrizione sono larghe quanto il testo più lungo dell\'elenco: il codice si vede sempre tutto, la descrizione fino a 60 caratteri (oltre si taglia: passa sopra con il mouse o clicca nella casella per leggerla intera). Cliente, prezzo e scaglioni sono più stretti.',
     ],
     pagine: [['/anagrafiche', 'Anagrafiche']],
   },
