@@ -54,8 +54,8 @@ import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
-import { anticipiFatture } from '../banca-servizio.js';
-import { segnoAnticipo, type AnticipoFattura } from '../../engine/anticipi.js';
+import { anticipiFatture, incassiFatture } from '../banca-servizio.js';
+import { segnoAnticipo, statoIncasso, type AnticipoFattura } from '../../engine/anticipi.js';
 import { segnaDocumentoInviato } from '../invii-servizio.js';
 import { INVIATO_TITOLO, SQL_SDI_INVIATO_IL } from '../../engine/invii.js';
 import { SCHEDE_DOCUMENTI, controlloDdtStessoCliente, type TipoDocumentoElenco, dividiPerAzione, frasiEscluse, motivoEscluso, pulsantiDocumenti, type AzioneDocumenti } from '../../engine/azioni-documenti.js';
@@ -466,6 +466,9 @@ export function rotteAmministrazione() {
       righe.splice(0, righe.length, ...tenere);
     }
     const pag = paginata(righe, req.query as Record<string, unknown>);
+    // incassata / da incassare con il movimento della banca (Adriano 9/11/2026)
+    const incassi = tipo === 'fattura' ? await incassiFatture(pag.righe.filter(d => d.numero != null).map(d => d.id)) : new Map();
+    const oggiIt = oggiRoma();
     const anni = (await q<{ anno: number }>(`SELECT DISTINCT anno FROM documenti ORDER BY anno DESC`)).map(a => a.anno);
     if (!anni.includes(anno)) anni.unshift(anno);
     const totale = righe.filter(d => d.stato !== 'bozza' && d.stato !== 'annullato').reduce((s, d) => s + Number(d.imponibile), 0);
@@ -496,7 +499,7 @@ export function rotteAmministrazione() {
       ${tipo === 'autofattura' ? await riquadroFattureEstere(spunte) : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
-        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th>${tipo === 'fattura' ? html`<th title="Anticipata dalla banca: RiBa al salvo buon fine o anticipo con bonifico (80 %)">Anticipo</th>` : ''}<th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
+        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th>${tipo === 'fattura' ? html`<th title="Anticipata dalla banca: RiBa al salvo buon fine o anticipo con bonifico (80 %)">Anticipo</th><th title="Incassata dal cliente (rate segnate pagate: dal movimento della banca, a mano o da Fatture in Cloud)">Incasso</th>` : ''}<th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
         <tbody>${pag.righe.map(d => html`<tr>
           ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
@@ -506,6 +509,8 @@ export function rotteAmministrazione() {
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
             ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
           ${tipo === 'fattura' ? (() => { const a = segnoAnticipo(anticipi.get(d.id)); return html`<td>${a ? html`<span class="etichetta" title="${a.titolo}">${a.testo}</span>` : ''}</td>`; })() : ''}
+          ${tipo === 'fattura' ? (() => { const i = d.numero == null ? null : statoIncasso(incassi.get(d.id) ?? [], oggiIt);
+            return html`<td data-valore="${i?.data ?? (i ? `0-${i.stato}` : '')}">${i ? html`<span class="stato ${i.stato === 'incassata' ? 'doc-consegnato' : i.stato === 'scaduta' ? 'doc-scartato' : 'doc-bozza'}" title="${i.titolo}">${i.testo}</span>` : ''}</td>`; })() : ''}
           <td data-valore="${d.email_inviata_il ? new Date(d.email_inviata_il).toISOString() : d.sdi_inviato_il ? new Date(d.sdi_inviato_il).toISOString() : ''}">${d.stato === 'bozza' ? '' : segnoInvioElenco(d)}</td>
         </tr>`)}</tbody></table></div>${pag.barra}${modulo.chiudi}` : html`<p class="vuoto">Nessun documento.</p>`}`, msg(req),
       [...(tipo === 'autofattura' ? ['acquisizioni.js'] : []), ...(spunte ? ['elenco.js'] : [])]));

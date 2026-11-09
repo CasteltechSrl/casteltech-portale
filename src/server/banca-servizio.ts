@@ -4,7 +4,7 @@
 import { q, q1, transazione } from './db.js';
 import { leggiFileBom } from './codifica-servizio.js';
 import { testoDaFile } from '../engine/componenti-clienti.js';
-import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi } from '../engine/anticipi.js';
+import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi, type RataIncasso } from '../engine/anticipi.js';
 import { rataMancante, abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
   categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
@@ -322,19 +322,37 @@ export async function anticipiFatture(ids?: number[]): Promise<Map<number, Antic
       importo::float AS importo, descrizione, conto FROM banca_movimenti WHERE conto = ANY($1)`, [tecnici]);
   if (!movimenti.length) return new Map();
   const dal = movimenti.reduce((m, x) => (x.data < m ? x.data : m), '9999');
-  const righe = await q<{ id: number; numero: number; data: string; sid: number | null; scadenza: string | null; importo: number | null; modalita: string | null; pagata: string | null }>(
-    `SELECT d.id, d.numero, to_char(d.data, 'YYYY-MM-DD') AS data, s.id AS sid, to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita, to_char(s.pagata_il, 'YYYY-MM-DD') AS pagata
-      FROM documenti d LEFT JOIN documenti_scadenze s ON s.documento_id = d.id
+  const righe = await q<{ id: number; numero: number; data: string; cliente: string | null; sid: number | null; scadenza: string | null; importo: number | null; modalita: string | null; pagata: string | null }>(
+    `SELECT d.id, d.numero, to_char(d.data, 'YYYY-MM-DD') AS data, coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale') AS cliente, s.id AS sid, to_char(s.data, 'YYYY-MM-DD') AS scadenza, s.importo::float AS importo, s.modalita, to_char(s.pagata_il, 'YYYY-MM-DD') AS pagata
+      FROM documenti d LEFT JOIN documenti_scadenze s ON s.documento_id = d.id LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE d.tipo = 'fattura' AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.data >= $1::date - 365`, [dal]);
   const fatture = new Map<number, FatturaPerAnticipi>();
   for (const r of righe) {
-    const f = fatture.get(r.id) ?? { id: r.id, numero: String(r.numero), data: r.data, rate: [] };
+    const f = fatture.get(r.id) ?? { id: r.id, numero: String(r.numero), data: r.data, cliente: r.cliente, rate: [] };
     if (r.sid && r.scadenza && r.importo != null) f.rate.push({ id: r.sid, scadenza: r.scadenza, importo: r.importo, riba: r.modalita === 'MP12', pagata: r.pagata });
     fatture.set(r.id, f);
   }
   const tutte = anticipiDelleFatture(movimenti, [...fatture.values()]);
   if (!ids) return tutte;
   return new Map(ids.filter(id => tutte.has(id)).map(id => [id, tutte.get(id)!]));
+}
+
+/** Rate delle fatture con il movimento di banca che le ha pagate (colonna "Incasso" delle Fatture, Adriano 9/11/2026). */
+export async function incassiFatture(ids: number[]): Promise<Map<number, RataIncasso[]>> {
+  if (!ids.length) return new Map();
+  const [rate, conti] = await Promise.all([
+    q<{ documento_id: number; id: number; scadenza: string; importo: number; pagata: string | null; modo: string | null }>(
+      `SELECT documento_id, id, to_char(data, 'YYYY-MM-DD') AS scadenza, importo::float AS importo, to_char(pagata_il, 'YYYY-MM-DD') AS pagata, modo
+       FROM documenti_scadenze WHERE documento_id = ANY($1) ORDER BY data, id`, [ids]),
+    contiBanca()]);
+  const movimenti = rate.some(r => r.pagata) ? await q<{ rata: number; data: string; conto: string }>(
+    `SELECT (x->>'id')::int AS rata, to_char(m.data, 'YYYY-MM-DD') AS data, m.conto FROM banca_movimenti m, jsonb_array_elements(m.rate) x
+     WHERE coalesce(x->>'tipo', 'emessa') = 'emessa' AND (x->>'id')::int = ANY($1)`, [rate.filter(r => r.pagata).map(r => r.id)]) : [];
+  const perRata = new Map(movimenti.map(m => [m.rata, { data: m.data, conto: nomeConto(m.conto, conti) }]));
+  const esito = new Map<number, RataIncasso[]>();
+  for (const r of rate) esito.set(r.documento_id, [...(esito.get(r.documento_id) ?? []),
+    { scadenza: r.scadenza, importo: r.importo, pagata: r.pagata, modo: r.modo, movimento: perRata.get(r.id) ?? null }]);
+  return esito;
 }
 
 /** Aggiunge la rata a una fattura emessa che non ne ha (vedi `rataMancante`). Risposta: id della rata nuova, o il motivo. */
