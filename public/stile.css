@@ -1119,3 +1119,10 @@ form.in-riga select { max-width: 14rem; }
   .fascia .riquadri { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .cerca-menu { display: block; width: 100%; max-width: 32rem; margin: 0 0 .2rem; font-size: .9em; padding: .25rem .4rem; }
+
+/* Anagrafiche → Prodotti (Adriano 9/11/2026): codice e descrizione larghi quanto il testo più lungo (attributo size), il resto più stretto */
+table.editor.su-misura td { min-width: 0; }
+table.editor input.su-misura { width: auto; max-width: none; }
+table.editor.su-misura select.cliente { width: 15rem; min-width: 0; text-overflow: ellipsis; }
+table.editor.su-misura input.prezzo { width: 5.5rem; }
+table.editor.su-misura input.scaglioni { width: 11rem; }
