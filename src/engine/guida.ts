@@ -841,16 +841,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'cruscotto-ordini', area: 'ordini', titolo: 'Cruscotto ordini, previsione e Gantt',
-    parole: 'cruscotto fatturato previsione anno mese gantt pianificazione produzione carico lavoro fatture senza ordine giornaliero settimana settimanale trimestre calendario',
+    parole: 'cruscotto fatturato previsione anno mese gantt pianificazione produzione carico lavoro fatture senza ordine giornaliero settimana settimanale trimestre calendario ordini fatturato confronto mancano ordini postumi fittizi ad hoc copertura',
     testo: [
-      'Il cruscotto mostra fatturato, media dei mesi chiusi, ordini da evadere per mese e previsione dell\'anno.',
+      'Il cruscotto mostra fatturato (tutte le fatture emesse, anche quelle fatte dal portale), media dei mesi chiusi, ordini da evadere per mese e previsione dell\'anno.',
       'Il Gantt parte dalla data di consegna e va all\'indietro: ogni barra è una consegna da fare, lunga quanto le ore ciclo dell\'ultimo preventivo del prodotto diviso le ore al giorno (Impostazioni → Ordini).',
       'Il Gantt è a giorni e occupa tutta la larghezza dello schermo. In alto si sceglie il periodo: 1 mese (5 settimane, quello standard), Settimana o 3 mesi; parte sempre dal lunedì della settimana in corso. Le frecce ‹ › spostano avanti o indietro di un periodo, "Oggi" riporta alla settimana attuale.',
       'Cliccando una barra o un nome si apre l\'ordine. Le lavorazioni in ritardo già finite prima del periodo restano visibili come un piccolo segno rosso sul bordo sinistro.',
       'Una barra è rossa (in ritardo) se doveva già cominciare o se la lavorazione finisce dopo la data di consegna richiesta (per esempio perché il materiale arriva tardi): nell\'elenco sotto il Gantt c\'è scritto "finisce dopo la consegna".',
-      '"Fatture senza ordine" elenca le fatture in cui nessuna riga è collegata a un ordine.',
+      '"Ordini e fatturato" (ex "Fatture senza ordine") confronta mese per mese il fatturato con gli ordini: per ogni fattura guarda se le righe hanno un ordine (collegamento già fatto, oppure un ordine dello stesso cliente con lo stesso codice e quantità ancora libera, prima i più vecchi). Mostra quanto è stato ordinato nel mese, quanto fatturato ha un ordine e quanto no, e sotto, mese per mese, i clienti e le fatture con le righe senza ordine.',
+      'Ordinato e fatturato dello stesso mese non coincidono: un ordine si fattura spesso uno o due mesi dopo. Per questo un mese con pochi ordini (es. ottobre 2026) non vuol dire per forza che manchino ordini: conta la colonna "Senza ordine".',
+      '"Crea gli ordini postumi" fa un ordine per ogni fattura con righe senza ordine: numero dall\'8001, data e righe della fattura, scritto "ORDINE POSTUMO creato ad hoc" nell\'elenco e nella pagina dell\'ordine. Non è un ordine del cliente: nasce già evaso, quindi non va tra le righe da evadere, nel Gantt, nel flusso di produzione né negli acquisti, e non si manda la conferma d\'ordine. Si può eliminare come ogni ordine: la fattura torna "senza ordine".',
     ],
-    pagine: [['/ordini/cruscotto', 'Cruscotto'], ['/ordini/gantt', 'Gantt'], ['/ordini/fatture', 'Fatture senza ordine']],
+    pagine: [['/ordini/cruscotto', 'Cruscotto'], ['/ordini/gantt', 'Gantt'], ['/ordini/fatture', 'Ordini e fatturato']],
   },
 
   // ── Commesse ──

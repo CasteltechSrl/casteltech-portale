@@ -26,6 +26,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { q, q1 } from '../db.js';
+import { confrontoOrdiniFatturato, creaOrdiniPostumi } from '../ordini-postumi-servizio.js';
 import { chiaveGiusta } from '../../engine/gmail.js';
 import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
@@ -172,6 +173,19 @@ export function rotteApiClaude() {
           (SELECT string_agg(d.numero::text || ' (' || d.stato || ')', ', ') FROM documenti d WHERE d.ordine_id = o.id AND d.tipo = 'conferma_ordine') AS conferme
         FROM ordini o LEFT JOIN ordini_righe r ON r.ordine_id = o.id WHERE o.numero >= 9001 GROUP BY o.id ORDER BY o.anno, o.numero`),
     });
+  });
+
+  // Ordini contro fatturato e ordini postumi (Adriano 9/11/2026): stesso conto della pagina Ordini → Ordini e fatturato
+  r.get('/ordini-fatturato', async (req, res) => {
+    const { mesi } = await confrontoOrdiniFatturato(Number(req.query.anno) || new Date().getFullYear());
+    res.json({ mesi: mesi.map(m => ({ ...m, clienti: m.clienti.map(c => ({ ...c, fatture: c.fatture.map(e => ({ numero: e.fattura.numero, data: e.fattura.data,
+      valore: e.valore, scoperto: e.scoperto, postumo: e.postumo, righe: e.scoperte.map(x => ({ codice: x.codice, descrizione: x.descrizione, quantita: x.quantitaScoperta, valore: x.valoreScoperto })) })) })) })) });
+  });
+  r.post('/ordini-postumi', async (req, res) => {
+    const anno = Number(req.body?.anno);
+    if (!Number.isInteger(anno)) return res.status(400).json({ errore: 'manca anno' });
+    const fatture = Array.isArray(req.body?.fatture) ? req.body.fatture.map(Number).filter(Number.isInteger) : undefined;
+    res.json({ creati: await creaOrdiniPostumi(anno, new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' }), fatture) });
   });
 
   // Banca (Adriano 7/11/2026): Claude carica l'estratto conto mandato da Adriano nel progetto e scrive i conti (nomi, tipo, saldo dell'estratto conto, fido).
