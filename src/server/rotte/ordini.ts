@@ -293,9 +293,9 @@ export function rotteOrdini() {
     const servizi = await serviziAttivi();
     const sceltaProdotto = (nome: string, id: number | null | undefined, codiceVecchio?: string | null) => {
       const servizio = !id && codiceVecchio ? servizi.find(s => s.codice === String(codiceVecchio).trim().toUpperCase()) : undefined;
-      return html`<select name="${nome}" aria-label="Codice dall'anagrafica del cliente o servizio una tantum">
+      return html`<select name="${nome}" class="cercabile" aria-label="Codice dall'anagrafica del cliente o servizio una tantum">
       <option value="">${codiceVecchio && !id && !servizio ? `${codiceVecchio} (non in anagrafica)` : '— senza codice —'}</option>
-      ${prodotti.map(k => html`<option value="${k.id}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}
+      ${prodotti.map(k => html`<option value="${k.id}" data-descrizione="${k.descrizione ?? ''}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}
       ${opzioniServizi(servizi, servizio?.codice, s => `ut:${s.codice}`)}</select>`;
     };
     const stato = statoOrdine(righe.map(x => x.stato));

@@ -74,7 +74,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   test in `tests/servizi-una-tantum.test.ts`): lamina, documentazione, programmazione attrezzature, attrezzaggio PCB = codici Casteltech UT-… validi per TUTTI i clienti
   (eccezione voluta alla regola codice-cliente, per questo non sono in `prodotti`). Gruppo "Servizi una tantum" in fondo al menu Codice (`opzioniServizi`: documenti con
   `cellaCodice(x, i, prodotti, servizi)`, ordine con valore `ut:CODICE` → riga tipo servizio), descrizione modificabile, prezzo proposto; Ordini da e-mail e PDF propongono
-  il servizio dalla descrizione (`servizioProposto`). Venduto per anno nella pagina: codice UT o, per le fatture di prima/FIC, la prima riga della descrizione che cita UN servizio.
+  il servizio dalla descrizione (`servizioProposto`); generico UT-COSTI-UNA-TANTUM (Adriano 9/11/2026, migrazione 083) = più costi una tantum insieme,
+  proposto per le righe "una tantum" che non citano un servizio solo. Menu prodotto lunghi con la casella "cerca" sopra: `select.cercabile` + `public/menu-cercabile.js`
+  (ordini da e-mail e PDF, righe dell'ordine; una sola voce trovata = scelta). Venduto per anno nella pagina: codice UT o, per le fatture di prima/FIC, la prima riga della descrizione che cita UN servizio.
 - Documentazione dei prodotti (Adriano 6/11/2026, "non pesare sul portale, ma solo su Google Drive"; migrazione 081 `prodotti_documenti`, regole in
   `engine/documenti-prodotto.ts`, letture in `documenti-prodotto-servizio.ts`, pagina `rotte/documenti-prodotto.ts` = tasto "Doc" in Anagrafiche → Prodotti →
   `/anagrafiche/prodotti/:id/documentazione`, test in `tests/documenti-prodotto.test.ts`): per ogni prodotto le REVISIONI dei documenti del cliente come RIASSUNTO

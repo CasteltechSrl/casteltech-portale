@@ -36,7 +36,7 @@ test('servizi una tantum: venduto per codice e anno, note di credito in meno, ri
   assert.deepEqual(lamina.anni[2025], { quantita: 2, importo: 220, righe: 1 });
   assert.deepEqual(lamina.anni[2026], { quantita: 0, importo: 55, righe: 2 });
   assert.deepEqual(v.insieme, [{ anno: 2026, righe: 1, importo: 350 }]);
-  assert.equal(v.perCodice.length, 4);
+  assert.equal(v.perCodice.length, 5);
 });
 
 test('servizi una tantum: codice UT-, maiuscolo, descrizione obbligatoria', () => {
@@ -53,7 +53,11 @@ test('servizi una tantum: proposta per gli ordini letti e righe UT sempre serviz
   const servizi = SERVIZI_INIZIALI.map(s => ({ codice: s.codice, attivo: true }));
   assert.equal(servizioProposto('LAMINA SERIGRAFICA TOP', servizi), 'UT-LAMINA');
   assert.equal(servizioProposto('PREPARAZIONE DOCUMENTAZIONE', servizi), 'UT-DOCUMENTAZIONE');
-  assert.equal(servizioProposto('COSTI UNA TANTUM', servizi), null);
+  // generico (Adriano 9/11/2026): "una tantum" senza un servizio solo, o con più servizi insieme
+  assert.equal(servizioProposto('COSTI UNA TANTUM', servizi), 'UT-COSTI-UNA-TANTUM');
+  assert.equal(servizioProposto('COSTO UNA TANTUM - SPESE REALIZZAZIONE LAMINA E PROGRAMMAZIONE ATTREZZATURE', servizi), 'UT-COSTI-UNA-TANTUM');
+  assert.equal(servizioProposto('SCHEDE COMPRENSIVE DEI COSTI UNA TANTUM', servizi), null);
+  assert.equal(servizioProposto('COSTI UNA TANTUM', servizi.filter(s => s.codice !== 'UT-COSTI-UNA-TANTUM')), null);
   assert.equal(servizioProposto('LAMINA', servizi.map(s => ({ ...s, attivo: s.codice !== 'UT-LAMINA' }))), null);
   assert.ok(eServizio('UT-DOCUMENTAZIONE', 'PREPARAZIONE DOCUMENTAZIONE DI PRODUZIONE'));
 });

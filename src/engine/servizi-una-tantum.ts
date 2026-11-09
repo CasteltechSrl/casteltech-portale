@@ -16,7 +16,12 @@ export const SERVIZI_INIZIALI = [
   { codice: 'UT-DOCUMENTAZIONE', descrizione: 'PREPARAZIONE DOCUMENTAZIONE DI PRODUZIONE', prezzo: null },
   { codice: 'UT-PROGRAMMAZIONE', descrizione: 'PROGRAMMAZIONE ATTREZZATURE', prezzo: null },
   { codice: 'UT-ATTREZZAGGIO-PCB', descrizione: 'ATTREZZAGGIO PCB', prezzo: null },
+  // generico (Adriano 9/11/2026, migrazione 083): tutti i costi una tantum insieme senza dividerli (lamina, programmazioni…)
+  { codice: 'UT-COSTI-UNA-TANTUM', descrizione: 'COSTI UNA TANTUM', prezzo: null },
 ];
+
+/** Servizio generico che raccoglie più costi una tantum nella stessa riga (Adriano 9/11/2026). */
+export const SERVIZIO_GENERICO = 'UT-COSTI-UNA-TANTUM';
 
 /** Parole che dicono di quale servizio parla una descrizione (righe senza codice UT). */
 const PAROLE: Record<string, RegExp> = {
@@ -99,6 +104,14 @@ export function vendutoPerServizio(righe: RigaVenduta[], codiciValidi: string[])
   return { perCodice: [...mappa.values()], insieme: [...insieme.values()].sort((a, b) => b.anno - a.anno) };
 }
 
-/** Ordine da e-mail e PDF: servizio proposto per una riga di servizio (solo se la descrizione ne cita uno solo). */
-export const servizioProposto = (descrizione: unknown, servizi: Pick<ServizioUnaTantum, 'codice' | 'attivo'>[]) =>
-  servizioDellaRiga(null, descrizione, servizi.filter(s => s.attivo).map(s => s.codice));
+/**
+ * Ordine da e-mail e PDF: servizio proposto per una riga di servizio (se la descrizione ne cita uno solo); una riga che dice
+ * "una tantum" e ne cita nessuno o più d'uno ("COSTO UNA TANTUM - SPESE REALIZZAZIONE…") = il generico UT-COSTI-UNA-TANTUM.
+ */
+export function servizioProposto(descrizione: unknown, servizi: Pick<ServizioUnaTantum, 'codice' | 'attivo'>[]): string | null {
+  const attivi = servizi.filter(s => s.attivo).map(s => s.codice);
+  const uno = servizioDellaRiga(null, descrizione, attivi);
+  if (uno) return uno;
+  const t = pulito(descrizione);
+  return attivi.includes(SERVIZIO_GENERICO) && /\bUNA\s+TANTUM\b/.test(t) && !/\bCOMPRENSIV[IOAE]\b/.test(t) ? SERVIZIO_GENERICO : null;
+}

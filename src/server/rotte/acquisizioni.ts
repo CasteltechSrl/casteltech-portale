@@ -321,8 +321,8 @@ export function rotteAcquisizioni() {
           <tbody>${righe.map((x, i) => modificabile ? html`<tr${righeSbagliate.has(i) ? raw(' class="da-controllare"') : ''}>
             <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}"></td>
             <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
-            <td><select name="righe[r${i}][prodotto]"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: cerca dal codice' : '— cerca dal codice —'}</option>
-              ${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}
+            <td><select name="righe[r${i}][prodotto]" class="cercabile" aria-label="Prodotto dall'anagrafica del cliente o servizio una tantum"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: scegli dal menu' : '— scegli dal menu (vuoto = cerca dal codice letto) —'}</option>
+              ${prodotti.length ? html`<optgroup label="Prodotti del cliente in anagrafica">${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</optgroup>` : ''}
               ${opzioniServizi(servizi, x?.servizio, s => `ut:${s.codice}`)}</select>
               ${x && !x.prodottoId && x.tipo !== 'servizio' && p.clienteId ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
                 <label>Codice <input name="righe[r${i}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
