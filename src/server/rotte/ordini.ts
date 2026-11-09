@@ -26,12 +26,14 @@ import { serviziAttivi, servizioPerCodice } from '../servizi-una-tantum-servizio
 import { opzioniServizi } from '../views/scelta-prodotto.js';
 import { codiceProposto, numeroDa } from '../../engine/acquisizioni.js';
 import type { Utente } from '../views/layout.js';
+import { confrontoOrdiniFatturato, creaOrdiniPostumi } from '../ordini-postumi-servizio.js';
+import { ETICHETTA_POSTUMO, FATTURE_STORNATE, fattureDaCoprire } from '../../engine/ordini-postumi.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const nomeMese = (m: string) => `${MESI[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 
-const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['conferme', "Conferme d'ordine"], ['fatture', 'Fatture senza ordine'], ['acquisire', 'Ordini da e-mail e PDF']] as const;
+const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['conferme', "Conferme d'ordine"], ['fatture', 'Ordini e fatturato'], ['acquisire', 'Ordini da e-mail e PDF']] as const;
 function schede(attiva: string) {
   return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
@@ -106,7 +108,7 @@ export function rotteOrdini() {
         <tbody>${righe.map(x => html`
           <tr class="cliccabile ${x.tipo === 'servizio' ? 'servizio' : ''} ${x.consegna && x.consegna < oggi && x.residuoQuantita > 0 ? 'scaduta' : ''}" data-href="/ordini/${x.ordineId}">
             ${casella(x.id, `${x.numero}/${x.anno} ${x.codice ?? x.descrizione ?? ''}`, x.ordineId)}
-            <td class="nowrap"><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a></td><td>${data(x.dataOrdine)}</td>
+            <td class="nowrap"><a href="/ordini/${x.ordineId}">${x.numero}/${x.anno}</a>${x.origine === 'postumo' ? html` <span class="esito verifica" title="${ETICHETTA_POSTUMO}: copre una fattura senza ordine, non è un ordine del cliente">postumo</span>` : ''}</td><td>${data(x.dataOrdine)}</td>
             <td class="taglia">${x.cliente}</td><td>${x.rifCliente}</td><td class="nowrap">${x.codice}</td><td class="taglia">${x.descrizione}</td>
             <td class="n">${num(x.quantita, 0)}</td><td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
             <td class="n">${x.residuoQuantita ? num(x.residuoQuantita, 0) : ''}</td><td class="n">${euroUnitario(x.prezzo)}</td>
@@ -131,7 +133,11 @@ export function rotteOrdini() {
   r.get('/cruscotto', async (req, res) => {
     const oggi = oggiRoma();
     const anno = Number(req.query.anno) || Number(oggi.slice(0, 4));
-    const fatture = await q(`SELECT data, imponibile, intestazione FROM fatture_righe WHERE anno = $1`, [anno]);
+    // fatturato dalle fatture emesse (Adriano 9/11/2026: con le righe dell'import di FIC ottobre risultava quasi vuoto, le fatture dopo il 25/10 mancavano)
+    const fatture = (await q(`SELECT data, imponibile::float AS imponibile, numero FROM documenti
+      WHERE tipo = 'fattura' AND anno = $1 AND numero IS NOT NULL AND stato NOT IN ('bozza', 'annullato', 'scartato')`, [anno]))
+      .filter(f => !(FATTURE_STORNATE[anno] ?? []).includes(f.numero))
+      .map(f => ({ data: typeof f.data === 'string' ? f.data.slice(0, 10) : new Date(f.data).toLocaleDateString('sv-SE'), imponibile: Number(f.imponibile ?? 0) }));
     const righe = await righeOrdini();
     const c = cruscotto(fatture, righe, oggi, anno);
     const perCliente = new Map<string, number>();
@@ -192,22 +198,56 @@ export function rotteOrdini() {
           <td>${b.inRitardo ? html`<span class="ritardo" title="${b.oltreConsegna ? 'La lavorazione finisce dopo la consegna richiesta' : 'Doveva già cominciare'}">${b.oltreConsegna ? 'finisce dopo la consegna' : 'in ritardo'}</span>` : ''}</td></tr>`; })}</tbody></table></div>`));
   });
 
-  // ── Fatture senza ordine ──
+  // ── Ordini e fatturato (Adriano 9/11/2026; prima "Fatture senza ordine"): mese per mese quanto del fatturato ha un ordine, cosa manca, ordini postumi ──
   r.get('/fatture', async (req, res) => {
     const anno = Number(req.query.anno) || Number(oggiRoma().slice(0, 4));
-    const fatture = await q(`
-      SELECT numero, min(data) AS data, min(cliente_nome) AS cliente, sum(imponibile) AS imponibile,
-        string_agg(coalesce(nullif(codice, ''), descrizione), ' · ' ORDER BY id) AS righe
-      FROM fatture_righe WHERE anno = $1 AND NOT intestazione
-      GROUP BY numero HAVING bool_and(riga_id IS NULL) AND sum(imponibile) <> 0
-      ORDER BY numero`, [anno]);
-    const totale = fatture.reduce((a, f) => a + f.imponibile, 0);
-    res.send(pagina(req.session.utente, 'Fatture senza ordine', 'fatture', html`
-      <p class="nota">Fatture ${anno} in cui nessuna riga è collegata a un ordine (direttamente o tramite il DDT). Possono essere ordini dell'anno prima,
-        lavori fatti senza ordine scritto, o fatture da controllare.</p>
-      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Fattura</th><th>Data</th><th>Cliente</th><th>Righe</th><th class="n">Imponibile</th></tr></thead>
-        <tbody>${fatture.map(f => html`<tr><td>${f.numero}/${anno}</td><td>${data(f.data)}</td><td>${f.cliente}</td><td class="taglia">${f.righe}</td><td class="n">${euro(f.imponibile)}</td></tr>`)}</tbody>
-        <tfoot><tr><td colspan="4">${fatture.length} fatture</td><td class="n"><b>${euro(totale)}</b></td></tr></tfoot></table></div>`));
+    const { esiti, mesi } = await confrontoOrdiniFatturato(anno);
+    const daCoprire = fattureDaCoprire(esiti);
+    const totale = (k: 'fatturato' | 'coperto' | 'scoperto' | 'postumi' | 'ordinato') => mesi.reduce((t, m) => t + m[k], 0);
+    const postumi = await q(`SELECT o.id, o.numero, o.data_ordine, o.cliente_nome, d.numero AS fattura,
+        coalesce((SELECT sum(r.quantita * r.prezzo) FROM ordini_righe r WHERE r.ordine_id = o.id), 0)::float AS valore
+      FROM ordini o LEFT JOIN documenti d ON d.id = o.fattura_id WHERE o.origine = 'postumo' AND o.anno = $1 ORDER BY o.numero`, [anno]);
+    const mostrati = mesi.filter(m => m.fatturato || m.ordinato);
+    const stornate = FATTURE_STORNATE[anno] ?? [];
+    res.send(pagina(req.session.utente, 'Ordini e fatturato', 'fatture', html`
+      <p>${[anno - 1, anno, anno + 1].map(a => html`<a href="/ordini/fatture?anno=${a}" class="${a === anno ? 'attiva' : ''}">${a}</a> `)}</p>
+      <p class="nota">Per ogni fattura ${anno} si guarda se le righe hanno un ordine: collegamento già fatto (import da Fatture in Cloud, DDT o fattura fatti dall'ordine),
+        altrimenti un ordine dello stesso cliente con lo stesso codice e quantità ancora libera (prima gli ordini più vecchi, anche dell'anno prima).
+        "Senza ordine" = righe fatturate che nessun ordine copre. "Ordinato nel mese" = ordini veri ricevuti nel mese (data dell'ordine): non coincide col
+        fatturato perché un ordine si fattura spesso nei mesi dopo. Note di credito escluse${stornate.length ? `; fatture ${stornate.join(', ')} escluse perché stornate (doppie)` : ''}.</p>
+      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Mese</th><th class="n">Ordinato nel mese</th><th class="n">Fatturato</th>
+        <th class="n">Con ordine</th><th class="n">Senza ordine</th><th class="n">Coperto da ordini postumi</th></tr></thead>
+        <tbody>${mostrati.map(m => html`<tr><td><a href="#m${m.mese}">${nomeMese(m.mese)}</a></td>
+          <td class="n">${m.ordinato ? euro(m.ordinato) : ''} <span class="nota">${m.ordini ? `(${m.ordini})` : ''}</span></td><td class="n">${euro(m.fatturato)}</td>
+          <td class="n">${euro(m.coperto)}</td><td class="n">${m.scoperto ? html`<b class="ritardo">${euro(m.scoperto)}</b>` : ''}</td><td class="n">${m.postumi ? euro(m.postumi) : ''}</td></tr>`)}</tbody>
+        <tfoot><tr><td>Totale</td><td class="n">${euro(totale('ordinato'))}</td><td class="n"><b>${euro(totale('fatturato'))}</b></td><td class="n">${euro(totale('coperto'))}</td>
+          <td class="n"><b>${euro(totale('scoperto'))}</b></td><td class="n">${euro(totale('postumi'))}</td></tr></tfoot></table></div>
+      ${daCoprire.length ? html`<form method="post" action="/ordini/postumi" class="inline"
+          data-conferma="${`Creare ${daCoprire.length} ordini postumi (uno per fattura senza ordine, totale ${euro(daCoprire.reduce((t, e) => t + e.scoperto, 0))})? Saranno numerati dall'8001, segnati "${ETICHETTA_POSTUMO}" e già evasi: non vanno in produzione né negli acquisti.`}">
+          <input type="hidden" name="anno" value="${anno}">
+          <button class="primario" title="Un ordine per ogni fattura con righe senza ordine, già evaso e segnato come postumo">Crea gli ordini postumi (${daCoprire.length} fatture)</button></form>`
+        : html`<p class="nota">Nessuna fattura ${anno} senza ordine da coprire.</p>`}
+      ${mostrati.filter(m => m.clienti.length).map(m => html`<h2 id="m${m.mese}">${nomeMese(m.mese)}: ${m.scoperto ? html`mancano ordini per ${euro(m.scoperto)}` : 'tutto coperto'}</h2>
+        <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Cliente</th><th>Fattura</th><th>Righe senza ordine</th><th class="n">Senza ordine</th><th>Ordine postumo</th></tr></thead>
+        <tbody>${m.clienti.flatMap(c => c.fatture.map(e => html`<tr><td>${c.cliente}</td>
+          <td class="nowrap"><a href="/amministrazione/documenti/${e.fattura.id}">${e.fattura.numero}/${e.fattura.anno}</a> <span class="nota">${data(e.fattura.data)}</span></td>
+          <td class="taglia">${e.postumo ? html`<span class="nota">coperta</span>` : e.scoperte.map((x, i) => html`${i ? ' · ' : ''}${x.codice || String(x.descrizione ?? '').split('\n')[0].slice(0, 40)} × ${num(x.quantitaScoperta, 0)}`)}</td>
+          <td class="n">${e.scoperto ? euro(e.scoperto) : ''}</td>
+          <td>${e.postumo ? (() => { const p = postumi.find(x => x.fattura === e.fattura.numero); return p ? html`<a href="/ordini/${p.id}">${p.numero}/${anno}</a>` : 'sì'; })() : ''}</td></tr>`))}</tbody></table></div>`)}
+      ${postumi.length ? html`<h2>Ordini postumi ${anno}</h2>
+        <p class="nota">${ETICHETTA_POSTUMO}: non sono ordini dei clienti, coprono fatture che non avevano un ordine. Già evasi, fuori da produzione, Gantt e acquisti.
+          Si possono eliminare dalla pagina dell'ordine (la fattura torna "senza ordine").</p>
+        <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Ordine</th><th>Data</th><th>Cliente</th><th>Fattura</th><th class="n">Valore</th></tr></thead>
+        <tbody>${postumi.map(p => html`<tr><td><a href="/ordini/${p.id}">${p.numero}/${anno}</a></td><td>${data(p.data_ordine)}</td><td>${p.cliente_nome}</td><td>${p.fattura ?? ''}</td><td class="n">${euro(p.valore)}</td></tr>`)}</tbody></table></div>` : ''}`,
+      { avviso: req.query.msg ? String(req.query.msg) : undefined }));
+  });
+
+  r.post('/postumi', async (req, res) => {
+    const anno = Number(req.body.anno) || Number(oggiRoma().slice(0, 4));
+    const creati = await creaOrdiniPostumi(anno, oggiRoma());
+    res.redirect(conMessaggio(`/ordini/fatture?anno=${anno}`, creati.length
+      ? `Creati ${creati.length} ordini postumi (${creati[0].ordine}–${creati[creati.length - 1].ordine}/${anno}) per ${euro(creati.reduce((t, x) => t + x.valore, 0))}.`
+      : 'Nessun ordine postumo da creare.'));
   });
 
   // ── Conferme d'ordine (Adriano 1/11/2026): elenco di tutte le conferme, dal menu Commerciale ──
@@ -307,9 +347,9 @@ export function rotteOrdini() {
       WHERE d.tipo = 'ddt' AND d.stato <> 'annullato' AND (d.ordine_id = $1 OR y.ordine_id = $1) ORDER BY d.data, d.numero`, [o.id]);
     res.send(pagina(req.session.utente, `Ordine ${o.numero}/${o.anno}`, '', html`
       <div class="intestazione-pagina"><h2>Ordine ${o.numero}/${o.anno} <span class="stato ${stato}">${STATI_ORDINE[stato]}</span></h2>
-        <form method="post" action="/ordini/${o.id}/conferme" class="inline">
+        ${o.origine === 'postumo' ? '' : html`<form method="post" action="/ordini/${o.id}/conferme" class="inline">
           <button class="primario" title="Conferma d'ordine per il cliente con le righe e le date di consegna dell'ordine (modificabili)">${conferme.some(k => k.stato === 'bozza')
-            ? "Riprendi la conferma d'ordine" : conferme.some(k => k.stato !== 'annullato') ? "Nuova conferma d'ordine" : "Conferma d'ordine"}</button></form>
+            ? "Riprendi la conferma d'ordine" : conferme.some(k => k.stato !== 'annullato') ? "Nuova conferma d'ordine" : "Conferma d'ordine"}</button></form>`}
         <form method="post" action="/ordini/${o.id}/elimina" class="inline"
           data-conferma="${confermaEliminaOrdine({ numero: o.numero, anno: o.anno, origine: o.origine, righe: righe.length, conDocumenti: ddt.length + fatture.length > 0 })}">
           <button class="pericolo" title="Elimina l'ordine inserito per errore">Elimina ordine</button></form>
@@ -320,12 +360,15 @@ export function rotteOrdini() {
           <button class="primario" title="DDT (bozza) con le schede ancora da spedire">Crea DDT</button></form>` : ''}
         ${['da_evadere', 'parziale'].includes(stato) && o.cliente_id ? html`<form method="post" action="/amministrazione/documenti/acconto-da-ordine/${o.id}" class="inline"
           data-conferma="Preparare una fattura d'acconto (bozza) su questo ordine? Poi la scali sulla fattura di saldo."><button title="Anticipo chiesto al cliente prima della consegna (TD02)">Fattura d'acconto</button></form>` : ''}</div>
+      ${o.origine === 'postumo' ? html`<p class="avviso postumo"><b>${ETICHETTA_POSTUMO}.</b> Non è un ordine del cliente: copre una fattura che non aveva un ordine registrato,
+        così ordini e fatturato tornano. È già evaso e non va in produzione, nel Gantt o negli acquisti.
+        ${o.fattura_id ? html`<a href="/amministrazione/documenti/${o.fattura_id}">Apri la fattura</a> · ` : ''}<a href="/ordini/fatture?anno=${o.anno}">Ordini e fatturato</a></p>` : ''}
       ${ddtPortale.length ? html`<p class="nota">DDT del portale: ${ddtPortale.map((x, i) => html`${i ? ', ' : ''}<a href="/amministrazione/documenti/${x.id}">${x.numero == null ? 'bozza' : `n. ${x.numero}`} del ${data(x.data)}</a>`)}</p>` : ''}
       <dl class="dati-ordine">
         <dt>Cliente</dt><dd>${o.cliente_nome}${o.cliente_id ? '' : html` <span class="esito verifica">non in anagrafica</span>`}</dd>
         <dt>Data ordine</dt><dd>${data(o.data_ordine)}</dd>
         <dt>Ordine del cliente</dt><dd>${o.rif_cliente}${o.data_ordine_cliente ? html` del ${data(o.data_ordine_cliente)}` : ''}${o.file ? html` <small class="nota">(${o.file})</small>` : ''}</dd>
-        <dt>Origine</dt><dd>${({ fic: 'Fatture in Cloud', ordine_cliente: 'ordine del cliente (non in Fatture in Cloud)', foglio: 'foglio Schedulazione', manuale: 'inserito a mano', email: 'email' } as Record<string, string>)[o.origine] ?? o.origine}</dd>
+        <dt>Origine</dt><dd>${({ fic: 'Fatture in Cloud', ordine_cliente: 'ordine del cliente (non in Fatture in Cloud)', foglio: 'foglio Schedulazione', manuale: 'inserito a mano', email: 'email', preventivo: 'dal preventivo', postumo: ETICHETTA_POSTUMO } as Record<string, string>)[o.origine] ?? o.origine}</dd>
         ${o.note ? html`<dt>Note</dt><dd>${o.note}</dd>` : ''}
         ${conferme.length ? html`<dt>Conferme d'ordine</dt><dd>${conferme.map((k, i) => html`${i ? ' · ' : ''}<a href="/ordini/${o.id}/conferme/${k.id}">${k.numero ? `n. ${k.numero}/${k.anno}` : 'bozza'}</a>
           del ${data(k.data)} ${statoConferma(k.stato)} ${k.numero ? segnoInvioElenco({ ...k, tipo: 'conferma_ordine' }) : ''}`)}</dd>` : ''}

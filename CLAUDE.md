@@ -453,6 +453,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    date del foglio "Schedulazione produzione" (lavorazione = arrivo materiale + 3 gg, prevista = lavorazione + 5 gg + ritardi),
    consegne a programma (es. Univac 15 mesi), cruscotto (fatturato, media mesi chiusi, da evadere per mese, previsione anno),
    Gantt all'indietro dalla consegna con ore ciclo dell'ultimo preventivo del prodotto ÷ ore al giorno, fatture senza ordine.
+   Ordini e fatturato + ordini postumi (Adriano 9/11/2026; scheda "Ordini e fatturato" = `/ordini/fatture`, regole in `engine/ordini-postumi.ts`, letture e creazione in
+   `ordini-postumi-servizio.ts`, migrazione 084 `ordini.fattura_id` + origine 'postumo', test in `tests/ordini-postumi.test.ts`): per mese ordinato (ordini veri), fatturato, con/senza ordine;
+   riga di fattura coperta = collegata (fatture_righe.riga_id, riga_ordine_id, DDT fatturato collegato) o stesso cliente + codice con quantità libera (FIFO, ordini fino a 31 gg dopo);
+   fatture stornate 6, 13, 26/2026 escluse (`FATTURE_STORNATE`). "Crea gli ordini postumi" (o POST `/api/claude/ordini-postumi`) = un ordine 8001+ per fattura, "ORDINE POSTUMO creato ad hoc",
+   già evaso (fuori da produzione, Gantt, flusso, acquisti; niente conferma). Cruscotto ordini: fatturato da `documenti` (prima `fatture_righe`, ferme all'import del 25/10).
    Gantt a giorni su tutta la larghezza (Adriano 28/10/2026, `periodoGantt`): 1 mese (5 settimane dal lunedì) standard, Settimana o 3 mesi, nient'altro; ‹ Oggi ›.
    Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
    con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).

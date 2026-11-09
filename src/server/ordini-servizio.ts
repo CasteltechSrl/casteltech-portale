@@ -129,7 +129,7 @@ export async function importaOrdini(f: FileOrdini) {
 // ───────────────────────────── lettura ─────────────────────────────
 export interface RigaElenco extends RigaOrdine {
   spedizioni: Abbinamento[];   // DDT del portale abbinati in automatico (oltre a quelli dell'import)
-  numero: number; anno: number; dataOrdine: string | null; cliente: string; clienteId: number | null; rifCliente: string | null;
+  numero: number; anno: number; origine?: string; dataOrdine: string | null; cliente: string; clienteId: number | null; rifCliente: string | null;
   codice: string | null; descrizione: string | null; codiceCliente: string | null; descrizioneCliente?: string | null; prodottoId: number | null; commessaId: number | null; note: string | null;
   stato: StatoRiga; lavorazione: string | null; prevista: string | null; ritardo: number | null; consegna: string | null;
   residuoQuantita: number; residuoValore: number;
@@ -163,7 +163,7 @@ async function righeSpedite(): Promise<RigaSpedita[]> {
 export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
   // tutte le righe: l'abbinamento dei DDT va fatto su tutti gli ordini del cliente (prima i più vecchi)
   const righe = await q(`
-    SELECT r.*, o.numero, o.anno, o.data_ordine, o.cliente_nome, o.cliente_id, o.rif_cliente,
+    SELECT r.*, o.numero, o.anno, o.data_ordine, o.cliente_nome, o.cliente_id, o.rif_cliente, o.origine,
       coalesce((SELECT json_agg(json_build_object('data', k.data, 'quantita', k.quantita) ORDER BY k.data) FROM ordini_consegne k WHERE k.riga_id = r.id), '[]') AS consegne,
       coalesce((SELECT sum(d.quantita) FROM ddt_righe d WHERE d.riga_id = r.id AND d.origine = 'acquisito'), 0) AS spedita_acquisita,
       -- fatture emesse dal portale che citano la riga (dal DDT o dalle righe di servizio aggiunte in fattura): i servizi diventano evasi
@@ -195,7 +195,7 @@ export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
     // con un programma di consegne vale la prossima consegna ancora da fare
     const prossima = b.consegne?.length && b.tipo === 'scheda' ? prossimaConsegna(b) : null;
     return [{
-      ...b, numero: r.numero, anno: r.anno, dataOrdine: r.data_ordine, cliente: r.cliente_nome, clienteId: r.cliente_id, rifCliente: r.rif_cliente,
+      ...b, numero: r.numero, anno: r.anno, origine: r.origine, dataOrdine: r.data_ordine, cliente: r.cliente_nome, clienteId: r.cliente_id, rifCliente: r.rif_cliente,
       codice: r.codice, descrizione: r.descrizione, codiceCliente: r.codice_cliente, descrizioneCliente: r.descrizione_cliente, prodottoId: r.prodotto_id, commessaId: r.commessa_id, note: r.note,
       stato, lavorazione: d.lavorazione, prevista: d.prevista, ritardo: d.ritardo, consegna: prossima ?? d.consegna,
       residuoQuantita: res.quantita, residuoValore: res.valore, spedizioni: spedizioni.get(b.id) ?? [],
