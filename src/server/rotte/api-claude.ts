@@ -20,6 +20,8 @@
  *                                              (Adriano 7/11/2026: "non riesci a capirlo tu incrociando fatture, acquisti, stipendi?"), confermato_da 'Claude'
  *   POST /api/claude/banca/rata-mancante     → { anno, numero } = una rata (totale alla data) per la fattura emessa che non ne ha
  *   POST /api/claude/banca/iban              → { clienti: [{id, iban}] } = banca d'appoggio dei clienti RiBa (solo dove manca)
+ *   POST /api/claude/xml-fic                 → { documenti: [{ xml }] } = XML delle fatture/NC/autofatture emesse con FIC (export di FIC), attaccati
+ *                                              al documento dello storico con stesso tipo, numero e data se non ha già l'XML (Adriano 9/11/2026, anticipo fatture in banca)
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
@@ -33,6 +35,7 @@ import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from 
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
 import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante } from '../banca-servizio.js';
+import { datiXmlFattura } from '../../engine/xml-fic.js';
 import { CATEGORIE_MOVIMENTO, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
@@ -243,6 +246,22 @@ export function rotteApiClaude() {
     for (const c of Array.isArray(req.body?.clienti) ? req.body.clienti : []) {
       const e = await salvaIbanCliente(Number(c.id), String(c.iban ?? ''));
       esiti[e] = (esiti[e] ?? 0) + 1;
+    }
+    res.json(esiti);
+  });
+
+  r.post('/xml-fic', async (req, res) => {
+    const esiti = { attaccati: 0, giaPresenti: 0, nonTrovati: [] as string[], nonLetti: 0 };
+    for (const x of Array.isArray(req.body?.documenti) ? req.body.documenti : []) {
+      const xml = String(x?.xml ?? '');
+      const d = datiXmlFattura(xml);
+      if (!d) { esiti.nonLetti++; continue; }
+      const doc = await q1<{ id: number; ha: boolean }>(`SELECT id, xml IS NOT NULL AS ha FROM documenti
+        WHERE origine = 'fic' AND tipo = $1 AND numero = $2 AND data = $3::date ORDER BY id LIMIT 1`, [d.tipo, d.numero, d.data]);
+      if (!doc) { esiti.nonTrovati.push(`${d.tipoSdi} ${d.numeroTesto} del ${d.data}`); continue; }
+      if (doc.ha) { esiti.giaPresenti++; continue; }
+      await q(`UPDATE documenti SET xml = $1 WHERE id = $2`, [xml, doc.id]);
+      esiti.attaccati++;
     }
     res.json(esiti);
   });
