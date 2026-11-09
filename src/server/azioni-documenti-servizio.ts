@@ -146,8 +146,8 @@ export async function duplicaFattura(id: number, creatoDa: number | null): Promi
   await transazione(async c => {
     await c.query(`UPDATE documenti SET condizione_pagamento = $2, cig = $3, cup = $4, data_ordine = $5, note = $6 WHERE id = $1`,
       [nuova, f.condizione_pagamento, f.cig ?? null, f.cup ?? null, f.data_ordine ?? null, f.note ?? null]);
-    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva)
-      SELECT $1, row_number() OVER (ORDER BY posizione), solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva
+    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, note)
+      SELECT $1, row_number() OVER (ORDER BY posizione), solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, note
       FROM documenti_righe WHERE documento_id = $2 AND ddt_id IS NULL AND acconto_id IS NULL ORDER BY posizione`, [nuova, id]);
   });
   return nuova;

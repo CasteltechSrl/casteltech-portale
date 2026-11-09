@@ -8,7 +8,7 @@ import { sedeDelCliente, testoSede } from '../../engine/sede-operativa.js';
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
-import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
+import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaNotaRiga, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
 import { q, q1 } from '../db.js';
 import { layout, tastiAcquisti } from '../views/layout.js';
@@ -156,7 +156,7 @@ async function moduloDdt(d: any, righe: any[]): Promise<Raw> {
   const rigaModulo = (x: any, i: number) => html`<tr class="${x.solo_descrizione ? 'riga-testo' : ''}">
     <td class="tipo-riga">${cellaTipoDdt(x, i)}</td>
     <td>${cellaCodiceDdt(x, i, prodotti, servizi)}<input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}"></td>
-    <td>${cellaDescrizioneDdt(x, i, prodotti)}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
+    <td>${cellaDescrizioneDdt(x, i, prodotti)}${x.solo_descrizione ? '' : cellaNotaRiga(x, i)}${x.riga_ordine_id ? html`<span class="nota">dall'ordine</span>` : ''}</td>
     <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
     <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
     <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
@@ -908,7 +908,7 @@ export function rotteAmministrazione() {
         <input type="hidden" name="righe[${i}][prodotto_id]" value="${x.prodotto_id ?? ''}">`}<input type="hidden" name="righe[${i}][ddt_id]" value="${x.ddt_id ?? ''}">
         <input type="hidden" name="righe[${i}][riga_ordine_id]" value="${x.riga_ordine_id ?? ''}">
         <input type="hidden" name="righe[${i}][acconto_id]" value="${x.acconto_id ?? ''}"></td>
-      <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
+      <td>${conAnagrafica ? cellaDescrizione(x, i, prodotti) : html`<input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}">`}${x.solo_descrizione || d.tipo === 'autofattura' ? '' : cellaNotaRiga(x, i)}${x.ddt_numero && !x.solo_descrizione ? html`<span class="nota">dal DDT n. ${x.ddt_numero}</span>` : ''}</td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td>${sceltaUm(`righe[${i}][um]`, x.um, !x.descrizione && !x.codice)}</td>
       <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal">${avvisiMargine.has(i) ? html`<small class="avviso-margine" title="${avvisiMargine.get(i)!.testo}">⚠ ${avvisiMargine.get(i)!.livello === 'critico' ? 'sotto il preventivo' : 'margine basso'}</small>` : ''}</td>

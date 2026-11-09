@@ -48,6 +48,15 @@ export function cellaDescrizione(x: { codice?: string | null; prodotto_id?: numb
 }
 
 /**
+ * Note della riga per questo lotto (Adriano 9/11/2026, DDT 222): sotto la descrizione, sempre modificabili, MAIUSCOLO.
+ * Non cambiano l'anagrafica; dal DDT passano alla fattura; si stampano sotto la descrizione (stampa, PDF, XML).
+ */
+export function cellaNotaRiga(x: { note?: string | null }, i: number): Raw {
+  return html`<input name="righe[${i}][note]" value="${x.note ?? ''}" class="maiuscolo nota-riga-doc" maxlength="500"
+    placeholder="note per questo lotto (non vanno in anagrafica)" title="Note solo di questo documento: passano alla fattura e si stampano sotto la descrizione">`;
+}
+
+/**
  * Riquadri sotto le righe: prodotto nuovo (codice + descrizione, MAIUSCOLO, va nell'anagrafica del cliente) e domanda
  * "aggiorno l'anagrafica?" quando un prezzo scritto a mano è diverso da quello del listino.
  */
@@ -60,6 +69,16 @@ export function riquadriSceltaProdotto(clienteId: number | null): Raw {
       </div>
       <div class="azioni-riga"><button type="button" id="np-riga-aggiungi" class="primario">Aggiungi in anagrafica</button>
         <button type="button" id="np-riga-annulla" class="link">Annulla</button><span id="np-riga-esito" class="nota"></span></div>
+    </div>
+    <div id="domanda-sostituisci" class="nuovo-prodotto" hidden>
+      <p id="domanda-sostituisci-testo"></p>
+      <div class="riga-campi">
+        <label class="spunta"><input type="checkbox" id="sostituisci-descrizione" checked> anche la descrizione <span id="sostituisci-descrizione-nuova" class="nota"></span></label>
+        <label class="spunta"><input type="checkbox" id="sostituisci-prezzo"> anche il prezzo <span id="sostituisci-prezzo-nota" class="nota">(quello del listino, se c'è)</span></label>
+      </div>
+      <div class="azioni-riga"><button type="button" id="sostituisci-applica" class="primario">Applica</button>
+        <button type="button" id="sostituisci-solo-codice">Solo il codice</button>
+        <button type="button" id="sostituisci-annulla" class="link">Annulla (rimetti il codice di prima)</button></div>
     </div>
     <div id="domanda-prezzo" class="nuovo-prodotto" hidden>
       <p id="domanda-prezzo-testo"></p>

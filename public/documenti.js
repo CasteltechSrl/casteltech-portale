@@ -67,11 +67,67 @@ moduloDoc?.addEventListener('change', e => {
     if (pannelloNuovo) { pannelloNuovo.hidden = false; document.getElementById('np-riga-codice').focus(); }
     return;
   }
+  const opzione = sel.selectedOptions[0], codicePrima = campo(riga, 'codice')?.value ?? '';
+  // riga che ha già descrizione o prezzo e codice diverso: si chiede cosa sostituire (Adriano 9/11/2026, DDT 222)
+  if (domandaSost && opzione?.dataset.codice && opzione.dataset.codice !== codicePrima && rigaConDati(riga)) {
+    chiediSostituzione(riga, sel, opzione, codicePrima);
+    return;
+  }
   const prezzo = campo(riga, 'prezzo');
   if (prezzo?.dataset.listino) prezzo.value = '';      // il prezzo del prodotto di prima non vale più
-  scegliProdotto(riga, sel.selectedOptions[0]);
+  scegliProdotto(riga, opzione);
   prezzoDaListino(riga);
 });
+
+// ── Codice scelto su una riga già scritta (Adriano 9/11/2026): solo il codice, oppure anche descrizione e/o prezzo ──
+const domandaSost = document.getElementById('domanda-sostituisci');
+let sostituzione = null;         // { riga, sel, opzione, codicePrima }
+function rigaConDati(riga) {
+  return !!(campo(riga, 'descrizione')?.value.trim() || campo(riga, 'prezzo')?.value.trim());
+}
+function chiediSostituzione(riga, sel, opzione, codicePrima) {
+  sostituzione = { riga, sel, opzione, codicePrima };
+  const n = [...tabella.children].indexOf(riga) + 1;
+  document.getElementById('domanda-sostituisci-testo').textContent =
+    `Riga ${n}: hai scelto ${opzione.dataset.codice}${codicePrima ? ' al posto di ' + codicePrima : ''}, ma la riga è già compilata. Cosa sostituisco oltre al codice?`;
+  const nuova = opzione.dataset.descrizione || '';
+  document.getElementById('sostituisci-descrizione-nuova').textContent = nuova ? `(diventa: ${nuova})` : '';
+  document.getElementById('sostituisci-descrizione').checked = true;
+  document.getElementById('sostituisci-prezzo').checked = false;
+  domandaSost.hidden = false;
+  domandaSost.scrollIntoView({ block: 'nearest' });
+}
+/** Applica il codice scelto alla riga; descrizione e prezzo di prima restano se non vanno sostituiti. */
+function applicaScelta(riga, opzione, { descrizione = true, prezzo = true } = {}) {
+  const casPrezzo = campo(riga, 'prezzo'), descr = campo(riga, 'descrizione');
+  const prezzoPrima = casPrezzo?.value ?? '', descrPrima = descr?.value ?? '';
+  if (prezzo && casPrezzo) { casPrezzo.value = ''; delete casPrezzo.dataset.listino; }
+  if (descrizione && descr) { descr.value = ''; delete descr.dataset.servizio; }
+  scegliProdotto(riga, opzione);
+  if (!descrizione && descr) {
+    descr.value = descrPrima; descr.readOnly = false;
+    descr.title = "Descrizione tenuta com'era: vale solo per questo documento, l'anagrafica non cambia";
+  }
+  if (!prezzo && casPrezzo) { casPrezzo.value = prezzoPrima; delete casPrezzo.dataset.listino; }   // resta come scritto
+  else prezzoDaListino(riga);
+}
+function chiudiSostituzione(esito) {
+  if (!sostituzione) return;
+  const { riga, sel, opzione, codicePrima } = sostituzione;
+  sostituzione = null;
+  domandaSost.hidden = true;
+  if (esito === 'annulla') {
+    const i = [...sel.options].findIndex(o => o.dataset.codice === codicePrima && o.value !== 'nuovo');
+    sel.selectedIndex = i < 0 ? 0 : i;
+  } else {
+  applicaScelta(riga, opzione, esito === 'solo' ? { descrizione: false, prezzo: false }
+    : { descrizione: document.getElementById('sostituisci-descrizione').checked, prezzo: document.getElementById('sostituisci-prezzo').checked });
+  }
+  moduloDoc?.dispatchEvent(new Event('input', { bubbles: true }));   // l'autosalvataggio vede la modifica
+}
+document.getElementById('sostituisci-applica')?.addEventListener('click', () => chiudiSostituzione('applica'));
+document.getElementById('sostituisci-solo-codice')?.addEventListener('click', () => chiudiSostituzione('solo'));
+document.getElementById('sostituisci-annulla')?.addEventListener('click', () => chiudiSostituzione('annulla'));
 if (pannelloNuovo) {
   const np = k => document.getElementById('np-riga-' + k);
   const chiudi = () => { pannelloNuovo.hidden = true; np('esito').textContent = ''; np('codice').value = ''; np('descrizione').value = ''; };

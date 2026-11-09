@@ -10,7 +10,7 @@ import { assegnaNumero, caricaAliquote, caricaAzienda } from './amministrazione-
 import { addebitaBollo, calcolaScadenze, calcolaTotali, numeroCompleto, siglaNazione, type Aliquota } from '../engine/amministrazione.js';
 import { attributiDaModulo } from '../engine/attributi-fatturapa.js';
 import { generaAutofatturaXml, generaFatturaXml, type ClienteXml, type DocumentoXml, type EsitoXml } from '../engine/fatturapa.js';
-import { righeDaModulo } from '../engine/documenti.js';
+import { descrizioneConNota, righeDaModulo } from '../engine/documenti.js';
 import { risolviFontiDdt } from './componenti-clienti-servizio.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
 import type { DdtAperto } from '../engine/fatture-differite.js';
@@ -116,8 +116,8 @@ export async function creaNotaCredito(fatturaId: number, creatoDa: number | null
       VALUES ('nota_credito', 'TD04', $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [Number(data.slice(0, 4)), data, f.cliente_id, f.condizione_pagamento, f.id,
        `Nota di credito relativa alla fattura n. ${numeroCompleto(f.numero, f.sezionale)} del ${f.data.split('-').reverse().join('/')}`, creatoDa])).rows[0].id;
-    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva)
-      SELECT $1, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva
+    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, note)
+      SELECT $1, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, note
       FROM documenti_righe WHERE documento_id = $2 AND NOT (solo_descrizione AND descrizione ILIKE 'DDT%')`, [id, f.id]);
     // stessa esigibilità IVA della fattura stornata (es. differita: altrimenti la nota nasceva "immediata", controllo del 4/11/2026)
     await c.query(`UPDATE documenti SET esigibilita_iva = $2 WHERE id = $1`, [id, f.esigibilita_iva ?? null]);
@@ -231,13 +231,14 @@ export async function salvaBozza(id: number, b: any): Promise<string[]> {
     await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
     if (righe.length) await c.query(
       `INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, ddt_id,
-         riga_ordine_id, acconto_id, fonte, componente_id, componente_cliente_id)
+         riga_ordine_id, acconto_id, fonte, componente_id, componente_cliente_id, note)
        SELECT $1, r.posizione, r.solo_descrizione, (SELECT id FROM prodotti WHERE id = r.prodotto_id), r.codice, r.descrizione, r.quantita, r.um, r.prezzo, r.sconto,
          (SELECT codice FROM aliquote_iva WHERE codice = r.aliquota_iva), (SELECT id FROM documenti WHERE id = r.ddt_id AND tipo = 'ddt'),
          (SELECT id FROM ordini_righe WHERE id = r.riga_ordine_id), (SELECT id FROM documenti WHERE id = r.acconto_id AND tipo_sdi = 'TD02'),
-         CASE WHEN $3 THEN r.fonte END, (SELECT id FROM componenti WHERE id = r.componente_id), (SELECT id FROM componenti_clienti WHERE id = r.componente_cliente_id)
+         CASE WHEN $3 THEN r.fonte END, (SELECT id FROM componenti WHERE id = r.componente_id), (SELECT id FROM componenti_clienti WHERE id = r.componente_cliente_id), r.note
        FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, solo_descrizione boolean, prodotto_id int, codice text, descrizione text, quantita numeric,
-         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int, fonte text, componente_id int, componente_cliente_id int)`,
+         um text, prezzo numeric, sconto numeric, aliquota_iva text, ddt_id int, riga_ordine_id int, acconto_id int, fonte text, componente_id int, componente_cliente_id int,
+         note text)`,
       [id, JSON.stringify(righe), d.tipo === 'ddt']);
     if (ddtEmesso) {
       const { errori: e } = await controllaDdt(id, c);
@@ -337,8 +338,9 @@ export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number>
       if (!t) continue;
       await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, descrizione, quantita, prezzo, ddt_id)
         VALUES ($1, $2, true, $3, 1, 0, $4)`, [id, ++pos, `DDT n. ${t.numero} del ${t.data.split('-').reverse().join('/')}`, t.id]);
-      const r = await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, riga_ordine_id, commessa_id, ddt_id)
-        SELECT $1, $2 + row_number() OVER (ORDER BY posizione), solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, riga_ordine_id, commessa_id, $3
+      // le note del lotto scritte nel DDT passano alla fattura (Adriano 9/11/2026)
+      const r = await c.query(`INSERT INTO documenti_righe (documento_id, posizione, solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, riga_ordine_id, commessa_id, ddt_id, note)
+        SELECT $1, $2 + row_number() OVER (ORDER BY posizione), solo_descrizione, prodotto_id, codice, descrizione, quantita, um, prezzo, sconto, aliquota_iva, riga_ordine_id, commessa_id, $3, note
         FROM documenti_righe WHERE documento_id = $3 ORDER BY posizione`, [id, pos, t.id]);
       pos += r.rowCount ?? 0;
       aggiunti++;
@@ -374,7 +376,7 @@ async function datiXml(c: pg.PoolClient | null, id: number, numero?: number) {
   const dataTesto = (v: unknown) => v == null ? null : typeof v === 'string' ? v.slice(0, 10) : new Date(v as Date).toLocaleDateString('sv-SE');
   const documento: DocumentoXml = {
     id: d.id, tipo: d.tipo, numero: numero ?? d.numero, sezionale: d.sezionale, data: d.data, causale: d.causale, riferimento_esterno: d.riferimento_esterno,
-    righe: righe.map((r: any) => ({ codice: r.codice, descrizione: r.descrizione, quantita: r.quantita, um: r.um, prezzo: r.prezzo, sconto: r.sconto,
+    righe: righe.map((r: any) => ({ codice: r.codice, descrizione: descrizioneConNota(r.descrizione, r.note), quantita: r.quantita, um: r.um, prezzo: r.prezzo, sconto: r.sconto,
       aliquota_iva: r.aliquota_iva, solo_descrizione: r.solo_descrizione,
       ddt: r.ddt_id && !r.solo_descrizione ? { numero: String(r.ddt_numero), data: r.ddt_data } : null })),
     scadenze, origine: origine ? { numero: numeroCompleto(origine.numero, origine.sezionale), data: origine.data } : null,

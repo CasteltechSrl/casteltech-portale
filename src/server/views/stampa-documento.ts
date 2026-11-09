@@ -11,6 +11,9 @@ import { importoRiga, numeroCompleto, type Totali } from '../../engine/amministr
 import { importoDaIncassare, nomeTipoSdi } from '../../engine/tipi-fattura.js';
 import { noteDdt, notaFattura } from '../../engine/condizioni.js';
 
+/** Note del lotto sotto la descrizione della riga (Adriano 9/11/2026): DDT e fattura. */
+const notaStampa = (r: any) => r.note ? html`<div class="nota-riga">${r.note}</div>` : '';
+
 const righeTesto = (s: string | null | undefined) => String(s ?? '').split('\n').filter(Boolean).map(r => html`${r}<br>`);
 
 export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any): Raw {
@@ -50,7 +53,7 @@ export function stampaDdt(d: any, righe: any[], azienda: any, destinatario: any)
     <thead><tr><th class="cod">Codice</th><th>Descrizione dei beni</th><th class="um">U.m.</th><th class="q">Quantità</th></tr></thead>
     <tbody>${righe.map(r => r.solo_descrizione
       ? html`<tr><td></td><td colspan="3"><em>${r.descrizione}</em></td></tr>`
-      : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}</td><td class="um">${r.um ?? ''}</td><td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td></tr>`)}</tbody>
+      : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}${notaStampa(r)}</td><td class="um">${r.um ?? ''}</td><td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td></tr>`)}</tbody>
   </table>
   <table class="griglia piede-ddt"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
     <tr><td colspan="4" class="note-ddt">${noteDdt(t.causale).map(n => html`<p>${n}</p>`)}</td></tr>
@@ -115,7 +118,7 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
     <thead><tr><th class="cod">Codice</th><th>Descrizione</th><th class="um">U.m.</th><th class="q">Q.tà</th><th class="q">Prezzo</th><th class="um">Sc. %</th><th class="q">Importo</th><th class="um">IVA</th></tr></thead>
     <tbody>${righe.map(r => r.solo_descrizione
       ? html`<tr><td></td><td colspan="7"><em>${r.descrizione}</em></td></tr>`
-      : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}</td><td class="um">${r.um ?? ''}</td>
+      : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}${notaStampa(r)}</td><td class="um">${r.um ?? ''}</td>
         <td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td><td class="q">${euroUnitario(Number(r.prezzo))}</td>
         <td class="um">${Number(r.sconto) ? num(Number(r.sconto)) : ''}</td><td class="q">${euro(importoRiga(r))}</td>
         <td class="um">${(() => { const g = percentuale(r.aliquota_iva); return g ? (g.percentuale ? `${num(g.percentuale, 0)}%` : g.natura) : ''; })()}</td></tr>`)}</tbody>
