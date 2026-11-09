@@ -29,10 +29,10 @@ test('profilo Esterno (Adriano 2/11/2026): legge tutto, non modifica nulla', () 
 test('profilo Esterno: entra nel cruscotto generale e non va in Impostazioni né nel reparto', () => {
   assert.equal(paginaIniziale('esterno'), '/cruscotto');
   assert.equal(paginaDopoAccesso('esterno', '/'), '/cruscotto');
-  assert.equal(paginaDopoAccesso('esterno', '/preventivi/3'), '/preventivi/3');
+  assert.equal(paginaDopoAccesso('esterno', '/preventivi/3'), '/cruscotto'); // Adriano 9/11/2026: sempre il cruscotto
   assert.equal(paginaDopoAccesso('esterno', '/impostazioni/utenti'), '/cruscotto');
   assert.equal(paginaDopoAccesso('esterno', '/r/c/ABC'), '/cruscotto');
-  assert.equal(paginaDopoAccesso('esterno', '/ricevuti'), '/ricevuti'); // /r solo come pagina del reparto, non come inizio di parola
+  assert.equal(paginaDopoAccesso('esterno', '/ricevuti'), '/cruscotto');
 });
 
 test('profilo Esterno: stesso menu dell\'ufficio, senza Impostazioni, con "sola lettura" e caselle spente', () => {
