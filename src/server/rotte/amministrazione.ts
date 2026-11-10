@@ -416,7 +416,7 @@ export function rotteAmministrazione() {
             ${x.ddt.map(d => html`<input type="hidden" name="ddt[]" value="${d.id}">`)}
             <button class="${x.scaduto || x.inScadenza ? 'primario' : ''}">Fattura tutti i DDT</button></form></div>
         <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th class="num">Righe</th><th class="num">Importo</th><th data-non-ordinare>Da fatturare?</th></tr></thead>
-          <tbody>${x.ddt.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
+          <tbody>${x.ddt.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}?da=differite">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
             <td class="num">${d.righe ?? ''}</td><td class="num">${d.totale != null ? euro(d.totale) : ''}</td>
             <td class="scelta-differita"><form method="post" action="/amministrazione/differite/scelta" class="in-linea">
               <input type="hidden" name="id" value="${d.id}">
@@ -428,7 +428,7 @@ export function rotteAmministrazione() {
       ${segnati.length ? html`<section class="blocco"><h2>DDT segnati da non fatturare <small class="nota">${segnati.length}${segnati.length === 100 ? ' (ultimi 100)' : ''}</small></h2>
         <p class="nota">Non sono nell'elenco sopra né negli avvisi del cruscotto. "Rimetti da fatturare" li riporta tra i DDT da fatturare.</p>
         <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th>Cliente</th><th>Motivo</th><th data-non-ordinare></th></tr></thead>
-          <tbody>${segnati.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
+          <tbody>${segnati.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}?da=differite">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
             <td>${d.cliente}</td><td>${d.motivo}</td>
             <td><form method="post" action="/amministrazione/differite/da-fatturare" class="in-linea"><input type="hidden" name="id" value="${d.id}">
               <button>Rimetti da fatturare</button></form></td></tr>`)}</tbody></table></section>` : ''}`, msg(req), ['differite.js']));
@@ -838,7 +838,10 @@ export function rotteAmministrazione() {
     const nome = nomeTipoSdi(d.tipo, d.tipo_sdi) ?? NOMI[d.tipo]?.uno ?? d.tipo;
     const titolo = `${nome} ${d.numero == null ? '(bozza)' : `n. ${numeroCompleto(d.numero, d.sezionale)}`}`;
     const intestatario = d.ragione_sociale ?? d.intestatario?.ragione_sociale ?? d.intestatario?.nome ?? '';
-    const testa = html`<p><a href="/amministrazione/documenti?tipo=${d.tipo}&anno=${d.anno}">← ${NOMI[d.tipo]?.tanti ?? 'Documenti'}</a></p>
+    // aperto da Fatture differite (Adriano 10/11/2026): il link in alto riporta lì, non all'elenco dei DDT
+    const daDifferite = req.query.da === 'differite';
+    const testa = html`<p>${daDifferite ? html`<a href="/amministrazione/differite">← Fatture differite · DDT da fatturare</a>`
+      : html`<a href="/amministrazione/documenti?tipo=${d.tipo}&anno=${d.anno}">← ${NOMI[d.tipo]?.tanti ?? 'Documenti'}</a>`}</p>
       <div class="intestazione-pagina"><h1>${titolo}</h1><div class="azioni"><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
         ${d.origine === 'fic' ? html`<span class="etichetta">da Fatture in Cloud</span>` : ''}</div></div>
       <p><strong>${intestatario}</strong> · ${data(d.data)}
