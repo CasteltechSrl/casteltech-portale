@@ -8,7 +8,7 @@ import { pianificaProduzione, righeOrdini } from './ordini-servizio.js';
 import { elencoOrdiniFornitore } from './ordini-fornitore-servizio.js';
 import { elencoBackup } from './backup.js';
 import { avvisoServizi } from './stato-servizi.js';
-import { caricoGiornaliero, daEvadere as daEvadereSchede } from '../engine/ordini.js';
+import { caricoGiornaliero, consegneInRitardo, daEvadere as daEvadereSchede } from '../engine/ordini.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
 import { SQL_DDT_DIFFERITA } from '../engine/ddt.js';
@@ -96,7 +96,7 @@ export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(og
   const daEvadere = somma(aperte.map(x => x.residuoValore));   // valore ancora da fatturare: anche le righe di costo (una tantum, lamine…)
   // righe da evadere = solo schede (Adriano 6/11/2026): le righe di costo non sono prodotti da produrre o spedire
   const schedeAperte = daEvadereSchede(aperte).filter(x => x.residuoQuantita > 0);
-  const inRitardo = schedeAperte.filter(x => x.consegna && x.consegna < oggi);
+  const inRitardo = consegneInRitardo(schedeAperte, oggi);   // stessa regola della scheda Ordini → In ritardo
   const prossime = schedeAperte.filter(x => x.consegna && x.consegna <= fra14).sort((a, b) => a.consegna!.localeCompare(b.consegna!));
   const pian = await pianificaProduzione(oggi, righe);
   const settimane = caricoSettimane(caricoGiornaliero(pian.barre), oggi, pian.oreGiorno);
