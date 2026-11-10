@@ -175,6 +175,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   così il servizio fatturato diventa evaso; controllo settimanale `servizi-non-fatturati` (urgente). Conferma d'ordine: righe senza data prendono la prima consegna
   dell'ordine (`righeConfermaDaOrdine`). Ricerca per parametri dei passivi senza P/N: esito in `fornitori_cache` ('parametri', radice del gestionale, 7 giorni,
   `parametriDaCache`/`parametriInCache`) e riusato tra righe uguali della stessa BOM.
+- Controllo serale del 10/11/2026 (routine "Controllo serale del portale", ora solo il martedì 22:30; test in `tests/cruscotto-generale.test.ts`): prova in locale con la copia del
+  database del 6/11 (Project Files → copia-locale-portale, `tools/ripristina-backup.ts`, 25 s). Regola: un numero del cruscotto porta a una pagina che mostra lo STESSO elenco.
+  "Consegne in ritardo" e il riquadro "In ritardo" → scheda Ordini → In ritardo (`/ordini?vista=ritardo`, regola unica `consegneInRitardo` in `engine/ordini.ts`);
+  "DDT da fatturare" → Fatture differite.
 - Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
   nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.

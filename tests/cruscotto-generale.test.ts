@@ -66,3 +66,16 @@ test('la guida spiega il cruscotto generale', async () => {
   assert.equal(cercaGuida('pagina iniziale')[0]?.argomento.id, 'cruscotto-generale');
   assert.equal(cercaGuida('cose da fare oggi')[0]?.argomento.id, 'cruscotto-generale');
 });
+
+test('controllo serale 10/11/2026: i numeri di "Da fare oggi" portano alla pagina con lo stesso elenco', async () => {
+  const { consegneInRitardo } = await import('../src/engine/ordini.js');
+  const v = cosaDaFare({ sdiScartate: 0, sdiNonConsegnate: 0, consegneInRitardo: 2, incassiScaduti: 0, pagamentiScaduti: 0, preventiviDaValidare: 0,
+    ordiniDaAcquisire: 0, acquisizioniInErrore: 0, ddtDaFatturare: 5, bozzeDocumenti: 0, schedeScansionate: 0, tempiAperti: 0, crmScadute: 0 } as ContiDaFare);
+  assert.equal(v.find(x => x.chiave === 'consegne-ritardo')!.link, '/ordini?vista=ritardo');
+  assert.equal(v.find(x => x.chiave === 'ddt-da-fatturare')!.link, '/amministrazione/differite');
+  // stessa regola del numero del cruscotto e della scheda Ordini → In ritardo: solo schede aperte con pezzi da spedire e consegna passata
+  const r = (tipo: 'scheda' | 'servizio', stato: any, residuoQuantita: number, consegna: string | null) => ({ tipo, stato, residuoQuantita, consegna });
+  const righe = [r('scheda', 'da_evadere', 10, '2026-11-01'), r('scheda', 'parziale', 5, '2026-11-09'), r('scheda', 'da_evadere', 10, '2026-11-20'),
+    r('scheda', 'evaso', 0, '2026-10-01'), r('servizio', 'da_evadere', 1, '2026-10-01'), r('scheda', 'da_evadere', 10, null), r('scheda', 'parziale', 0, '2026-10-01')];
+  assert.equal(consegneInRitardo(righe, '2026-11-10').length, 2);
+});

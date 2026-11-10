@@ -93,6 +93,14 @@ export function daEvadere<T extends { tipo: 'scheda' | 'servizio'; stato: StatoR
   return righe.filter(x => x.tipo === 'scheda' && (x.stato === 'da_evadere' || x.stato === 'parziale'));
 }
 
+/**
+ * Consegne in ritardo (controllo serale 10/11/2026): schede da evadere con pezzi ancora da spedire e consegna prima di oggi.
+ * Stessa regola per il numero "Consegne in ritardo" del cruscotto e per la scheda Ordini → In ritardo, così il numero e l'elenco coincidono.
+ */
+export function consegneInRitardo<T extends { tipo: 'scheda' | 'servizio'; stato: StatoRiga; residuoQuantita: number; consegna?: string | null }>(righe: T[], oggi: string): T[] {
+  return daEvadere(righe).filter(x => x.residuoQuantita > 0 && !!x.consegna && x.consegna < oggi);
+}
+
 /** Stato dell'ordine intero: evaso se tutte le righe sono evase (o annullate), parziale se qualcosa è partito. */
 export function statoOrdine(stati: StatoRiga[]): StatoRiga {
   const vive = stati.filter(s => s !== 'annullato');

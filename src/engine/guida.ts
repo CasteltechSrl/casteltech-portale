@@ -863,9 +863,10 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'righe-evadere', area: 'ordini', titolo: 'Ordini da evadere, date e ritardi',
-    parole: 'evadere evaso evasi parziale consegna consegnato data lavorazione prevista ritardo arrivo materiale stato note servizio servizi programmazione attrezzature lamina una tantum ddt fattura abbinati automatico aggiornare',
+    parole: 'evadere evaso evasi parziale consegna consegnato data lavorazione prevista ritardo in ritardo scadute scaduta oltre arrivo materiale stato note servizio servizi programmazione attrezzature lamina una tantum ddt fattura abbinati automatico aggiornare',
     testo: [
       'Una riga è evasa quando le schede spedite con DDT arrivano alla quantità ordinata, parziale se ne è partita una parte. Lo stato scritto dall\'ufficio vince sempre.',
+      'Scheda "In ritardo" (10/11/2026): Ordini → In ritardo elenca solo le schede con pezzi ancora da spedire e la consegna richiesta già passata. Sono le stesse righe contate da "Consegne in ritardo" nel cruscotto, che ora porta qui; "DDT da fatturare" del cruscotto porta a Fatture differite, dove c\'è lo stesso numero di DDT.',
       'I DDT che stanno nel portale (storico di Fatture in Cloud e, dopo il 10/11, quelli fatti nel portale) si abbinano da soli: ogni riga va alla riga d\'ordine aperta dello stesso cliente con lo stesso codice (o la stessa descrizione), prima agli ordini più vecchi. Nella pagina dell\'ordine sono sotto "Abbinati in automatico". Le fatture non contano: una fattura d\'anticipo non vuol dire merce consegnata.',
       'Le righe di costo (programmazioni, lamine serigrafiche, attrezzaggio, costi una tantum o di avvio produzione, acquisto PCB o del materiale, trasporto, sconti, acconti, prototipazione, servizi UT-…) non sono prodotti: dal 6/11/2026 non compaiono tra le righe "Da evadere" (si vedono in "Tutti" e nella pagina dell\'ordine) e risultano evase quando sono fatturate o quando l\'ordine non ha più schede da spedire. Il portale le riconosce dalla descrizione, anche se nell\'ordine erano scritte come schede.',
       'Se una riga risulta ancora da evadere ma è stata consegnata (codice diverso nel DDT, consegna senza DDT), apri l\'ordine e scegli "evaso" nello Stato della riga, poi Salva; se è consegnato tutto l\'ordine, premi "Segna tutto evaso" in alto.',

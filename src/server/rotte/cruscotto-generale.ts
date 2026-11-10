@@ -173,7 +173,7 @@ function ordini(d: DatiCruscottoGenerale, oggi: string): Fascia {
     ${x.altreProssime ? html`<p class="nota"><a href="/ordini">Altre ${x.altreProssime} →</a></p>` : ''}`;
   return { chiave: 'ordini', nome: 'Ordini clienti', riquadri: [
     { chiave: 'da-evadere', titolo: 'Da evadere', numero: euro(c.daEvadere), sotto: `${c.righeDaEvadere} righe`, link: '/ordini', dettaglio: prossime },
-    { chiave: 'in-ritardo', titolo: 'In ritardo', numero: x.inRitardo, sotto: 'righe oltre la consegna', link: '/ordini', livello: x.inRitardo ? 'urgente' : undefined, dettaglio: prossime },
+    { chiave: 'in-ritardo', titolo: 'In ritardo', numero: x.inRitardo, sotto: 'righe oltre la consegna', link: '/ordini?vista=ritardo', livello: x.inRitardo ? 'urgente' : undefined, dettaglio: prossime },
     { chiave: 'prossime', titolo: 'Prossimi 14 giorni', numero: c.consegne14, sotto: 'consegne', link: '/ordini/gantt', dettaglio: prossime },
     { chiave: 'da-acquisire', titolo: 'Da acquisire', numero: x.ordiniDaAcquisire, sotto: 'mail e cartella Drive', link: '/ordini/acquisire',
       livello: x.ordiniDaAcquisire ? 'controllare' : undefined },

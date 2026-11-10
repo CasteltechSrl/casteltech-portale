@@ -13,7 +13,7 @@ import { q, q1, transazione } from '../db.js';
 import { salvaBackupSuDisco } from '../backup.js';
 import { pianificaProduzione, righeOrdini, type RigaElenco } from '../ordini-servizio.js';
 import {
-  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, cruscotto, daEvadere, differenzaGiorni, lavorativo, periodoGantt, piuGiorni, statoOrdine,
+  STATI_ORDINE, VISTE_GANTT, barreNelPeriodo, caricoGiornaliero, consegneInRitardo, cruscotto, daEvadere, differenzaGiorni, lavorativo, periodoGantt, piuGiorni, statoOrdine,
   type Barra, type VistaGantt,
 } from '../../engine/ordini.js';
 import { confermaEliminaOrdine } from '../../engine/eliminazioni.js';
@@ -35,9 +35,9 @@ const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europ
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const nomeMese = (m: string) => `${MESI[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 
-const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['conferme', "Conferme d'ordine"], ['fatture', 'Ordini e fatturato'], ['acquisire', 'Ordini da e-mail e PDF']] as const;
+const VISTE = [['cruscotto', 'Cruscotto'], ['aperti', 'Da evadere'], ['ritardo', 'In ritardo'], ['evasi', 'Evasi'], ['tutti', 'Tutti'], ['gantt', 'Gantt'], ['conferme', "Conferme d'ordine"], ['fatture', 'Ordini e fatturato'], ['acquisire', 'Ordini da e-mail e PDF']] as const;
 function schede(attiva: string) {
-  return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
+  return html`<nav class="schede">${VISTE.map(([k, t]) => html`<a href="${k === 'aperti' ? '/ordini' : ['ritardo', 'evasi', 'tutti'].includes(k) ? `/ordini?vista=${k}` : `/ordini/${k}`}"
     class="${k === attiva ? 'attiva' : ''}">${t}</a>`)}</nav>`;
 }
 export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string | string[] } = {}) =>
@@ -54,14 +54,16 @@ export function rotteOrdini() {
 
   // ── Elenco delle righe ──
   const righeFiltrate = async (query: Record<string, unknown>) => {
-    const vista = ['evasi', 'tutti'].includes(String(query.vista)) ? String(query.vista) : 'aperti';
+    const vista = ['ritardo', 'evasi', 'tutti'].includes(String(query.vista)) ? String(query.vista) : 'aperti';
     const cerca = String(query.q ?? '').trim().toUpperCase();
     const tutte = await righeOrdini();
+    // "In ritardo" (controllo serale 10/11/2026) = le righe contate da "Consegne in ritardo" del cruscotto
+    const ritardo = vista === 'ritardo' ? new Set(consegneInRitardo(tutte, oggiRoma())) : null;
     // "Da evadere" = solo schede (Adriano 6/11/2026): le righe di costo (una tantum, programmazioni, lamine, acquisti) si vedono in "Tutti"
     let righe = tutte.filter(x =>
-      (vista === 'tutti' || (vista === 'evasi' ? ['evaso', 'annullato'].includes(x.stato) : daEvadere([x]).length > 0)) &&
+      (ritardo ? ritardo.has(x) : vista === 'tutti' || (vista === 'evasi' ? ['evaso', 'annullato'].includes(x.stato) : daEvadere([x]).length > 0)) &&
       (!cerca || [x.cliente, x.codice, x.descrizione, x.codiceCliente, x.rifCliente, String(x.numero)].some(t => String(t ?? '').toUpperCase().includes(cerca))));
-    righe = vista === 'aperti'
+    righe = vista === 'aperti' || vista === 'ritardo'
       ? righe.sort((a, b) => (a.consegna ?? '9999').localeCompare(b.consegna ?? '9999') || a.numero - b.numero)
       : righe.sort((a, b) => b.anno - a.anno || b.numero - a.numero);
     return { vista, cerca, tutte, righe };
