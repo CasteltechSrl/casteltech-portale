@@ -42,3 +42,13 @@ test('fatture differite: DDT da non fatturare con il motivo (Adriano 10/11/2026)
   assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'portale', valore: 100, fatturatoAltrove: notaNonFatturare('garanzia', '', 'A', 'oggi') }), false);
   assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'portale', valore: 100, fatturatoAltrove: null }), true);
 });
+
+test('fatture differite: la scelta per riga si salva senza ricaricare la pagina (Adriano 10/11/2026)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const js = readFileSync(new URL('../public/differite.js', import.meta.url), 'utf8');
+  assert.match(js, /\/amministrazione\/differite\/scelta/);
+  assert.match(js, /riga\.remove\(\)/);
+  const rotta = readFileSync(new URL('../src/server/rotte/amministrazione.ts', import.meta.url), 'utf8');
+  assert.match(rotta, /\['differite\.js'\]/);
+  assert.match(rotta, /res\.json\(\{ ok: true, tolto/);
+});
