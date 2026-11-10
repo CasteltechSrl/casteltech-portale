@@ -131,15 +131,15 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi,
           <input type="date" name="pagata_il" value="${oggiRoma()}" required>
           <select name="modo" required title="Come è stata ${parola}"><option value="">Modo di pagamento…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
           <input name="conto" list="conti" placeholder="Banca (es. Bper)" title="Facoltativo: banca o conto usato" class="corto">
-          ${Number(s.importo) > 0 ? html`<input name="importo" inputmode="decimal" class="corto" placeholder="${numCampo(Number(s.importo))}"
-            title="Facoltativo: scrivi quanto è arrivato se è un pagamento parziale (vuoto = rata intera); il resto rimane da ${sezione === 'documenti' ? 'incassare' : 'pagare'}">` : ''}
+          ${Number(s.importo) > 0 ? html`<input name="importo" inputmode="decimal" class="corto" value="${numCampo(Number(s.importo))}"
+            title="Importo arrivato: già scritto il totale della rata, cambialo solo se è un pagamento parziale; il resto rimane da ${sezione === 'documenti' ? 'incassare' : 'pagare'}">` : ''}
           <button>Segna ${parola}</button></form>`}</li>`)}</ul>
     ${(() => {
       const pagato = scadenze.filter(s => s.pagata_il).reduce((t, s) => t + Number(s.importo), 0);
       const resta = scadenze.filter(s => !s.pagata_il).reduce((t, s) => t + Number(s.importo), 0);
       return pagato && resta ? html`<p class="nota">${sezione === 'documenti' ? 'Incassato' : 'Pagato'} finora <strong>${euro(pagato)}</strong> · resta da ${sezione === 'documenti' ? 'incassare' : 'pagare'} <strong>${euro(resta)}</strong>.</p>` : '';
     })()}
-    ${scadenze.some(s => !s.pagata_il) ? html`<p class="nota">Pagamento parziale: scrivi l'importo arrivato nella casella accanto alla banca; la rata si divide e il resto rimane aperto.</p>` : ''}`;
+    ${scadenze.some(s => !s.pagata_il) ? html`<p class="nota">Pagamento parziale: nella casella accanto alla banca c'è già il totale della rata, cambialo con l'importo arrivato; la rata si divide e il resto rimane aperto.</p>` : ''}`;
 }
 
 /** Solleciti incassi (Adriano 10/11/2026, "manca l'opzione pagato"): rata segnata incassata, anche in parte, senza ricaricare la pagina. */
@@ -149,7 +149,7 @@ function moduloPagato(r: { scadenzaId?: number; importo: number }, modi: string[
     <input type="hidden" name="torna" value="${torna}">
     <input type="date" name="pagata_il" value="${oggiRoma()}" required title="Data dell'incasso">
     <select name="modo" required title="Come è stata incassata"><option value="">Modo…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
-    <input name="importo" inputmode="decimal" class="corto" placeholder="${numCampo(r.importo)}" title="Facoltativo: importo arrivato se è un pagamento parziale (vuoto = rata intera)">
+    <input name="importo" inputmode="decimal" class="corto" value="${numCampo(r.importo)}" title="Importo arrivato: già scritto il totale della rata, cambialo solo se il cliente ha pagato una parte">
     <button>Pagato</button></form>`;
 }
 
@@ -358,11 +358,12 @@ export function rotteAmministrazione() {
       <div class="intestazione-pagina"><h1>Solleciti incassi · rate scadute per cliente</h1><div class="azioni"><a class="bottone" href="/amministrazione">Cruscotto</a></div></div>
       <p class="nota">Tutte le rate scadute e non incassate delle fatture emesse, un gruppo per cliente. <b>Prepara il sollecito</b> scrive l'email con l'elenco delle fatture, gli importi e l'IBAN:
         la controlli e la mandi (con Gmail quando la delega è attiva, altrimenti con la tua posta). Il tono sale con il ritardo: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso.
-        Se il cliente ha pagato premi <b>Pagato</b> sulla riga: scegli la rata, la data e il modo; se ha pagato solo una parte scrivi l'importo arrivato e il resto rimane da incassare.</p>
+        Clic sul numero della fattura per aprirla. Se il cliente ha pagato premi <b>Pagato</b> sulla riga: l'importo è già il totale della rata, scegli data e modo; se ha pagato solo una parte cambia l'importo e il resto rimane da incassare.</p>
       ${gruppi.length ? html`<p class="nota">${gruppi.length} clienti, ${euro(totale)} scaduti.</p>
-      <div class="tabella-scorre"><table class="elenco solleciti"><thead><tr><th>Cliente</th><th class="n">Rate</th><th class="n">Scaduto</th><th class="n">Ritardo max</th><th>Livello</th><th>Email</th><th></th></tr></thead>
+      <div class="tabella-scorre"><table class="elenco solleciti"><thead><tr><th>Cliente</th><th>Fatture</th><th class="n">Rate</th><th class="n">Scaduto</th><th class="n">Ritardo max</th><th>Livello</th><th>Email</th><th></th></tr></thead>
         <tbody>${gruppi.map(g => html`<tr class="livello-${g.livello}">
-          <td><a href="/anagrafiche/clienti/${g.clienteId}">${g.cliente}</a></td><td class="n">${g.rate.length}</td><td class="n"><b>${euro(g.totale)}</b></td>
+          <td><a href="/anagrafiche/clienti/${g.clienteId}">${g.cliente}</a></td>
+          <td>${[...new Map(g.rate.map(x => [x.documentoId, x])).values()].map((x, i) => html`${i ? ', ' : ''}<a href="/amministrazione/documenti/${x.documentoId}" title="Apri la fattura">n. ${x.numero}</a>`)}</td><td class="n">${g.rate.length}</td><td class="n"><b>${euro(g.totale)}</b></td>
           <td class="n">${g.giorniMax} gg</td><td>${NOMI_LIVELLO[g.livello]}</td><td>${g.email ?? html`<span class="nota">manca (Dati fiscali del cliente)</span>`}</td>
           <td><a class="bottone ${g.livello === 'ultimo' ? 'primario' : ''}" href="/amministrazione/solleciti/${g.clienteId}">Prepara il sollecito</a>
             <details class="pagato-cliente"><summary class="bottone">Pagato</summary><ul class="scadenze">${g.rate.map(x => html`<li>
