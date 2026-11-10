@@ -44,6 +44,7 @@ import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDif
 import { controlloStorno } from '../../engine/analisi.js';
 import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { MODALITA, stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { allegatoFattura, fatturaLeggibile } from '../../engine/fattura-leggibile.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
 import { datiStampaFattura, inviaFatturaEmail, pdfDellaFattura, propostaEmailFattura } from '../fattura-email-servizio.js';
@@ -151,6 +152,17 @@ function moduloPagato(r: { scadenzaId?: number; importo: number }, modi: string[
     <select name="modo" required title="Come è stata incassata"><option value="">Modo…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
     <input name="importo" inputmode="decimal" class="corto" value="${numCampo(r.importo)}" title="Importo arrivato: già scritto il totale della rata, cambialo solo se il cliente ha pagato una parte">
     <button>Pagato</button></form>`;
+}
+
+/** Righe della fattura del fornitore già lette dall'XML (storico FIC e SdI): per capire cosa si è comprato (Adriano 10/11/2026). */
+async function righeRicevuta(id: number): Promise<Raw> {
+  const righe = await q<any>(`SELECT codice, descrizione, quantita::float AS quantita, um, prezzo_unitario::float AS prezzo, sconto::float AS sconto,
+      imponibile::float AS imponibile, aliquota::float AS aliquota, natura FROM documenti_ricevuti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
+  if (!righe.length) return html``;
+  return html`<h2>Cosa c'è in fattura</h2><div class="tabella-scorre"><table class="elenco"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>U.M.</th><th class="n">Prezzo</th><th class="n">Importo</th><th class="n">IVA</th></tr></thead>
+    <tbody>${righe.map(x => html`<tr><td>${x.codice ?? ''}</td><td>${x.descrizione}</td><td class="n">${x.quantita == null ? '' : num(x.quantita)}</td><td>${x.um ?? ''}</td>
+      <td class="n">${x.prezzo == null ? '' : euroUnitario(x.prezzo)}${x.sconto ? html` <span class="nota">−${num(x.sconto)} %</span>` : ''}</td><td class="n">${euro(x.imponibile)}</td>
+      <td class="n">${x.aliquota ? `${num(x.aliquota)} %` : x.natura ?? ''}</td></tr>`)}</tbody></table></div>`;
 }
 
 const ETICHETTE_TRASPORTO: Record<string, string> = { causale: 'Causale', a_cura: 'Trasporto a cura del', trasportatore: 'Vettore', porto: 'Porto',
@@ -1341,9 +1353,48 @@ export function rotteAmministrazione() {
           + `al fornitore si paga il netto, la ritenuta la versa Casteltech con F24 (codice tributo 1040 per i professionisti) `
           + (tutte ? `entro il ${data(scadenzaF24(pagate[pagate.length - 1]))}.` : 'entro il 16 del mese dopo il pagamento.');
       })()}</p>` : ''}
+      ${await righeRicevuta(id)}
       ${elencoScadenze(scadenze, 'ricevuti', await caricaModiPagamento())}
-      ${d.xml ? html`<p><a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : ''}
+      ${d.xml ? html`<p><a class="bottone primario" href="/amministrazione/ricevuti/${id}/vedi" target="_blank" rel="noopener" title="La fattura del fornitore in chiaro (righe, IVA, pagamento, allegati come il PDF del fornitore)">Vedi la fattura</a>
+        <a class="bottone" href="/amministrazione/ricevuti/${id}/xml">Scarica XML</a></p>` : html`<p class="nota">Fattura senza XML nel portale (solo PDF in Fatture in Cloud): l'originale è nell'archivio, chiedilo a Claude.</p>`}
       ${d.origine === 'manuale' && !d.elettronica ? html`<form method="post" action="/amministrazione/spese/${id}/elimina" data-conferma="Eliminare questa spesa?"><button class="pericolo">Elimina la spesa</button></form>` : ''}`, msg(req)));
+  });
+
+  // fattura del fornitore da leggere (Adriano 10/11/2026): l'XML in chiaro + allegati (spesso il PDF del fornitore)
+  r.get('/ricevuti/:id/vedi', async (req, res) => {
+    const d = await q1<{ id: number; xml: string }>(`SELECT id, xml FROM documenti_ricevuti WHERE id = $1 AND xml IS NOT NULL`, [Number(req.params.id)]);
+    if (!d) return res.status(404).send('XML non disponibile');
+    const f = fatturaLeggibile(d.xml);
+    const pdf = f.allegati.find(a => /pdf/i.test(a.formato) || /\.pdf$/i.test(a.nome));
+    res.send(pagina(req, `${f.tipo} ${f.numero} · ${f.fornitore.nome}`, html`<p><a href="/amministrazione/ricevuti/${d.id}">← Torna alla fattura nel portale</a></p>
+      <div class="intestazione-pagina"><h1>${f.tipo} n. ${f.numero} del ${data(f.data)}</h1><div class="azioni">
+        ${pdf ? html`<a class="bottone primario" href="/amministrazione/ricevuti/${d.id}/allegato/${pdf.n}" target="_blank" rel="noopener">Apri il PDF del fornitore</a>` : ''}
+        <a class="bottone" href="/amministrazione/ricevuti/${d.id}/xml">Scarica XML</a></div></div>
+      <dl class="dati-ordine"><dt>Fornitore</dt><dd><strong>${f.fornitore.nome}</strong></dd>
+        ${f.fornitore.partitaIva ? html`<dt>P.IVA</dt><dd>${f.fornitore.partitaIva}</dd>` : ''}
+        ${f.fornitore.indirizzo ? html`<dt>Indirizzo</dt><dd>${f.fornitore.indirizzo}</dd>` : ''}
+        ${f.causale.length ? html`<dt>Causale</dt><dd>${f.causale.join(' ')}</dd>` : ''}
+        ${f.ordini.length ? html`<dt>Ordine</dt><dd>${f.ordini.join(', ')}</dd>` : ''}
+        ${f.ddt.length ? html`<dt>DDT</dt><dd>${f.ddt.join(', ')}</dd>` : ''}
+        ${f.valuta !== 'EUR' ? html`<dt>Valuta</dt><dd>${f.valuta}</dd>` : ''}</dl>
+      <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>U.M.</th><th class="n">Prezzo</th><th class="n">Sconto</th><th class="n">Importo</th><th class="n">IVA</th></tr></thead>
+        <tbody>${f.righe.map(x => html`<tr><td>${x.codice ?? ''}</td><td>${x.descrizione}</td><td class="n">${x.quantita == null ? '' : num(x.quantita)}</td><td>${x.um ?? ''}</td>
+          <td class="n">${x.prezzoUnitario == null ? '' : euroUnitario(x.prezzoUnitario)}</td><td class="n">${x.sconto ? `${num(x.sconto)} %` : ''}</td>
+          <td class="n">${euro(x.imponibile)}</td><td class="n">${x.aliquota ? `${num(x.aliquota)} %` : x.natura ?? ''}</td></tr>`)}</tbody></table></div>
+      <h2>Riepilogo IVA</h2><table class="elenco"><thead><tr><th class="n">Aliquota</th><th class="n">Imponibile</th><th class="n">Imposta</th><th>Note</th></tr></thead>
+        <tbody>${f.riepilogo.map(r => html`<tr><td class="n">${r.aliquota ? `${num(r.aliquota)} %` : r.natura}</td><td class="n">${r.imponibile == null ? '' : euro(r.imponibile)}</td>
+          <td class="n">${r.imposta == null ? '' : euro(r.imposta)}</td><td>${r.norma}</td></tr>`)}</tbody></table>
+      ${f.totale != null ? html`<p class="totali-documento"><strong>Totale documento ${euro(f.totale)}</strong></p>` : ''}
+      ${f.pagamenti.length ? html`<h2>Pagamento</h2><ul>${f.pagamenti.map(p => html`<li>${p.modalita}${p.scadenza ? ` · scadenza ${data(p.scadenza)}` : ''}${p.importo != null ? html` · <strong>${euro(p.importo)}</strong>` : ''}${p.iban ? ` · IBAN ${p.iban}` : ''}${p.istituto ? ` (${p.istituto})` : ''}</li>`)}</ul>` : ''}
+      ${f.allegati.length ? html`<h2>Allegati</h2><ul>${f.allegati.map(a => html`<li><a href="/amministrazione/ricevuti/${d.id}/allegato/${a.n}" target="_blank" rel="noopener">${a.nome}</a>
+        <span class="nota">${[a.descrizione, `${Math.max(1, Math.round(a.byte / 1024))} KB`].filter(Boolean).join(' · ')}</span></li>`)}</ul>` : ''}`, msg(req)));
+  });
+  r.get('/ricevuti/:id/allegato/:n', async (req, res) => {
+    const d = await q1<{ xml: string }>(`SELECT xml FROM documenti_ricevuti WHERE id = $1 AND xml IS NOT NULL`, [Number(req.params.id)]);
+    const a = d ? allegatoFattura(d.xml, Number(req.params.n)) : null;
+    if (!a) return res.status(404).send('Allegato non trovato');
+    res.type(a.tipo).setHeader('Content-Disposition', `${a.tipo === 'application/octet-stream' ? 'attachment' : 'inline'}; filename="${a.nome}"`);
+    res.send(a.dati);
   });
 
   r.get('/ricevuti/:id/xml', async (req, res) => {
