@@ -603,7 +603,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    telefono: "Aperta per sbaglio: annulla l'apertura", una sola apertura per fase (migrazione 057). Prodotto già usato: il cliente non si cambia.
    Punti aperti decisi da Adriano (1/11/2026 sera; test in `tests/ddt.test.ts`, `azioni-documenti`, `cruscotto-amministrazione`, `scheda-cliente`, `ordini`, `acquisizioni`):
    DDT "da fatturare" = `SQL_DDT_DA_FATTURARE`/`ddtDaFatturareRegola` (fuori anche "riparato" e "completamento fornitura", DDT dello storico FIC a valore zero e quelli
-   segnati "Già fatturato" = `documenti.fatturato_altrove`, migrazione 061, tasto nella pagina del DDT e azione dell'elenco); nota di credito aperta toglie dal "da incassare"
+   segnati "Già fatturato" = `documenti.fatturato_altrove`, migrazione 061, tasto nella pagina del DDT e azione dell'elenco; Adriano 10/11/2026: in Fatture differite ogni riga ha "Non fatturare" con il motivo `MOTIVI_NON_FATTURARE` / `notaNonFatturare` in `engine/ddt.ts` e in fondo "DDT segnati da non fatturare" con "Rimetti da fatturare"); nota di credito aperta toglie dal "da incassare"
    (`SQL_IMPORTO_DA_INCASSARE`/`SQL_DATA_DA_INCASSARE`, nella fascia della fattura) e si chiude da sola con "Compensato con fattura" + "Compensazione con fattura n. X" quando la
    fattura è tutta incassata (`compensaNoteCredito`); Gantt: barra che finisce dopo la consegna = in ritardo (`oltreConsegna`); DDT letti da PDF oltre la riga d'ordine
    divisi tra le righe dello stesso codice in consegna entro 60 gg, altrimenti tutto sulla prima (`dividiDdt`). PIN del reparto restano a 4 cifre.

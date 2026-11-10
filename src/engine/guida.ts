@@ -756,13 +756,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'fatture-differite', area: 'amministrazione', titolo: 'Fatture differite: i DDT da fatturare entro il 15',
-    parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla già fatturato anticipo proforma valore zero',
+    parole: 'differita differite TD24 DDT da fatturare entro il 15 del mese dopo fattura tutti i DDT riepilogativa mensile promemoria scadenza bolla già fatturato anticipo proforma valore zero non fatturare garanzia riparazione fatturato prima della consegna rimetti',
     testo: [
       'I DDT di vendita e reso lavorato emessi in un mese si fatturano entro il 15 del mese dopo (fattura differita, tipo TD24: il portale lo sceglie da solo all\'emissione quando la fattura cita DDT con data precedente).',
       'Amministrazione → Fatture differite mostra tutti i DDT emessi e non ancora fatturati, raggruppati per cliente, con il termine: giallo se scade in questo mese, rosso se è già passato. "Fattura tutti i DDT" prepara una bozza con le righe di tutti i DDT del cliente; "Fattura tutti i clienti in scadenza" ne prepara una per cliente.',
       'Il cruscotto generale lo ricorda in "Da fare oggi": giallo dal 1° del mese per i DDT del mese prima, rosso dal 16 se non sono ancora fatturati. Le bozze si controllano (prezzi, pagamento) e si emettono una per una.',
       'Non sono "da fatturare": i DDT di reso non lavorato, garanzia, conto visione, conto lavorazione, campioni, prestito, reso riparato e completamento fornitura, e i DDT dello storico di Fatture in Cloud a valore zero (merce già fatturata con anticipo o proforma).',
       'Un DDT già fatturato in altro modo (anticipo, proforma, fattura di Fatture in Cloud senza collegamento) si toglie dall\'elenco con "Già fatturato": nella pagina del DDT, o spuntando più DDT in Amministrazione → DDT. Si rimette con "Rimetti tra i da fatturare" nella pagina del DDT.',
+      'Riga per riga in Fatture differite: ogni DDT ha "Da fatturare?" con il motivo (già fatturato prima della consegna, riparazione in garanzia, già fatturato con anticipo/proforma/Fatture in Cloud, altro) e una nota facoltativa; "Non fatturare" lo toglie dall\'elenco e dagli avvisi del cruscotto. In fondo alla pagina "DDT segnati da non fatturare" con il motivo e "Rimetti da fatturare" per tornare indietro.',
     ],
     passi: ['Amministrazione → Fatture differite (o il pulsante nel cruscotto).', 'Per un cliente: "Fattura tutti i DDT"; oppure in alto "Fattura tutti i clienti in scadenza".', 'Nella bozza controlla prezzi e pagamento, poi Emetti e Invia allo SdI.'],
     pagine: [['/amministrazione/differite', 'Fatture differite'], ['/amministrazione/documenti?tipo=ddt', 'DDT']],
