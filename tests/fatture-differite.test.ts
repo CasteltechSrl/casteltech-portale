@@ -52,3 +52,10 @@ test('fatture differite: la scelta per riga si salva senza ricaricare la pagina 
   assert.match(rotta, /\['differite\.js'\]/);
   assert.match(rotta, /res\.json\(\{ ok: true, tolto/);
 });
+
+test('fatture differite: il DDT aperto da qui torna alle Fatture differite (Adriano 10/11/2026)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const rotta = readFileSync(new URL('../src/server/rotte/amministrazione.ts', import.meta.url), 'utf8');
+  assert.match(rotta, /documenti\/\$\{d\.id\}\?da=differite/);
+  assert.match(rotta, /daDifferite \? html`<a href="\/amministrazione\/differite">/);
+});
