@@ -1126,3 +1126,9 @@ table.editor input.su-misura { width: auto; max-width: none; }
 table.editor.su-misura select.cliente { width: 15rem; min-width: 0; text-overflow: ellipsis; }
 table.editor.su-misura input.prezzo { width: 5.5rem; }
 table.editor.su-misura input.scaglioni { width: 11rem; }
+
+/* Anno di riferimento dei cruscotti (Adriano 10/11/2026, views/scelta-anno.ts) */
+.scelta-anno { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; margin: .4rem 0 .8rem; }
+.scelta-anno span { font-size: .9rem; color: var(--grigio, #666); margin-right: .2rem; }
+.scelta-anno a { padding: .2rem .7rem; border: 1px solid var(--bordo); border-radius: 99px; background: var(--carta); text-decoration: none; color: var(--testo); font-size: .9rem; }
+.scelta-anno a.attivo { background: var(--accento); border-color: var(--accento); color: #fff; }

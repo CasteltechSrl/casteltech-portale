@@ -16,16 +16,21 @@ import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } fr
 import { contaDifferite } from '../engine/fatture-differite.js';
 import { bolloPerTrimestre } from '../engine/fiscale.js';
 import { ordinaRiprendi, type VoceRiprendi } from '../engine/riprendi.js';
+import { limiteConfronto } from '../engine/anno-riferimento.js';
+import { fatturatoClienti } from './anno-riferimento.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
 const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
 
-export async function datiCruscottoGenerale(oggi: string) {
+export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(oggi.slice(0, 4))) {
   const anno = Number(oggi.slice(0, 4));
+  // anno di riferimento (Adriano 10/11/2026): i numeri "dell'anno" seguono l'anno scelto, il resto è la situazione di oggi
+  const ar = annoScelto, inCorso = ar === anno, limitePrima = limiteConfronto(ar, oggi);
   const fra14 = piuGiorni(oggi, 14);
   const [
     righe, preventivi, preventiviUltimi, commesse, commesseAperte, tempiAperti, acquisizioni, crm, crmProssime,
     emessi, incassi, pagamenti, ddt, bozze, sdi, sdiUltimi, ricevutiSdi, ordiniFornitore, suggerimenti,
+    clienti, preventiviAnno, ordiniAnno, commesseAnno, ricevutiAnno, personale,
   ] = await Promise.all([
     righeOrdini(),
     q<{ stato: string; quanti: number; valore: number }>(`SELECT stato, count(*)::int AS quanti, coalesce(sum(totale_primo_lotto), 0) AS valore
@@ -48,7 +53,7 @@ export async function datiCruscottoGenerale(oggi: string) {
     q<{ id: number; ragione_sociale: string; prossima_azione: string | null; data_prossima_azione: string }>(`SELECT id, ragione_sociale, prossima_azione, data_prossima_azione
       FROM crm_aziende WHERE da_verificare IS NULL AND stato NOT IN ('non_interessato', 'scartato') AND data_prossima_azione <= $1::date + 7 ORDER BY data_prossima_azione, id LIMIT ${MOSTRATE}`, [oggi]),
     q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, data, imponibile FROM documenti
-      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
+      WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [ar]),
     q<{ data: string; importo: number; documento_id: number; numero_doc: number; sezionale: string; anno: number; nome: string }>(`
       SELECT (${SQL_DATA_DA_INCASSARE})::text AS data, (${SQL_IMPORTO_DA_INCASSARE})::float AS importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS nome
@@ -71,6 +76,21 @@ export async function datiCruscottoGenerale(oggi: string) {
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti_ricevuti WHERE origine = 'sdi' AND creato_il >= now() - interval '7 days'`),
     elencoOrdiniFornitore(),
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM suggerimenti WHERE stato = 'da_valutare'`),
+    // ── numeri dell'anno di riferimento ──
+    fatturatoClienti(ar, oggi),
+    q<{ quanti: number; accettati: number; valore: number }>(`SELECT count(*)::int AS quanti, count(*) FILTER (WHERE stato = 'accettato')::int AS accettati,
+        coalesce(sum(totale_primo_lotto) FILTER (WHERE stato = 'accettato'), 0)::float AS valore
+      FROM preventivi WHERE extract(year FROM creato_il AT TIME ZONE 'Europe/Rome')::int = $1`, [ar]),
+    q<{ anno: number; quanti: number; valore: number }>(`SELECT extract(year FROM o.data)::int AS anno, count(DISTINCT o.id)::int AS quanti,
+        coalesce(sum(r.quantita * r.prezzo), 0)::float AS valore
+      FROM (SELECT id, coalesce(data_ordine, creato_il::date) AS data FROM ordini WHERE origine <> 'postumo') o LEFT JOIN ordini_righe r ON r.ordine_id = o.id
+      WHERE extract(year FROM o.data)::int IN ($1::int, $1::int - 1) AND ($2::date IS NULL OR o.data <= $2::date OR extract(year FROM o.data)::int = $1) GROUP BY 1`, [ar, limitePrima]),
+    q<{ quanti: number; schede: number }>(`SELECT count(*)::int AS quanti, coalesce(sum(quantita), 0)::int AS schede FROM commesse
+      WHERE extract(year FROM creato_il AT TIME ZONE 'Europe/Rome')::int = $1`, [ar]),
+    q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, to_char(data, 'YYYY-MM-DD') AS data, imponibile::float AS imponibile FROM documenti_ricevuti
+      WHERE extract(year FROM data)::int IN ($1::int, $1::int - 1)`, [ar]),
+    q<{ anno: number; mese: number; costo: number }>(`SELECT anno, mese, sum(lordo + contributi + tfr + altri)::float AS costo FROM costi_personale
+      WHERE anno IN ($1::int, $1::int - 1) GROUP BY 1, 2`, [ar]),
   ]);
 
   // ── Ordini clienti ──
@@ -84,9 +104,17 @@ export async function datiCruscottoGenerale(oggi: string) {
   const settimane = caricoSettimane(caricoGiornaliero(pian.barre), oggi, pian.oreGiorno);
 
   // ── Amministrazione ──
-  const fatturato = somma(imponibilePerMese(emessi, anno)), fatturatoPrima = somma(imponibilePerMese(emessi, anno - 1, oggi));
+  const fatturato = somma(imponibilePerMese(emessi, ar)), fatturatoPrima = somma(imponibilePerMese(emessi, ar - 1, limitePrima ?? undefined));
   const meseCorrente = Number(oggi.slice(5, 7));
-  const fatturatoMese = imponibilePerMese(emessi, anno)[meseCorrente - 1];
+  const fatturatoMese = inCorso ? imponibilePerMese(emessi, anno)[meseCorrente - 1] : null;
+  const acquistiAnno = somma(imponibilePerMese(ricevutiAnno, ar)), acquistiPrima = somma(imponibilePerMese(ricevutiAnno, ar - 1, limitePrima ?? undefined));
+  const ordAnno = ordiniAnno.find(x => x.anno === ar), ordPrima = ordiniAnno.find(x => x.anno === ar - 1);
+  // costo del personale: mesi caricati dell'anno scelto, confronto con gli stessi mesi dell'anno prima
+  const mesiPers = personale.filter(x => x.anno === ar);
+  const costoPersonale = somma(mesiPers.map(x => Number(x.costo)));
+  const primaPers = mesiPers.map(x => personale.find(y => y.anno === ar - 1 && y.mese === x.mese));
+  const costoPersonalePrima = mesiPers.length && primaPers.every(Boolean) ? somma(primaPers.map(y => Number(y!.costo))) : 0;
+  const fatturatoMesiPers = somma(imponibilePerMese(emessi, ar).filter((_, i) => mesiPers.some(x => x.mese === i + 1)));
   const inc = riepilogoScadenze(incassi, oggi), pag = riepilogoScadenze(pagamenti, oggi);
   const incassiScaduti = incassi.filter(s => s.data < oggi && s.importo > 0).slice(0, 3)
     .map(s => ({ ...s, numero: numeroCompleto(s.numero_doc, s.sezionale) + (s.anno === anno ? '' : `/${s.anno}`), giorni: giorniTra(s.data, oggi) }));
@@ -144,6 +172,15 @@ export async function datiCruscottoGenerale(oggi: string) {
     amministrazione: {
       fatturatoMese, scadutoClienti: inc.fasce.scaduta.totale, ddtDaFatturare: ddt.length, differite,
       sdi: sdiUltimi, sdiInAttesa: sdiConto('inviato'), ricevutiSdi: ricevutiSdi[0]?.quanti ?? 0, incassiScaduti,
+    },
+    anno: {
+      anno: ar, inCorso, clienti,
+      preventivi: preventiviAnno[0] ?? { quanti: 0, accettati: 0, valore: 0 },
+      ordini: { quanti: ordAnno?.quanti ?? 0, valore: ordAnno?.valore ?? 0, prima: ordPrima?.valore ?? 0, variazione: variazione(ordAnno?.valore ?? 0, ordPrima?.valore ?? 0) },
+      commesse: commesseAnno[0] ?? { quanti: 0, schede: 0 },
+      acquisti: { totale: acquistiAnno, prima: acquistiPrima, variazione: variazione(acquistiAnno, acquistiPrima) },
+      personale: { totale: costoPersonale, mesi: mesiPers.length, variazione: variazione(costoPersonale, costoPersonalePrima),
+        peso: fatturatoMesiPers > 0 ? Math.round(costoPersonale / fatturatoMesiPers * 1000) / 10 : null },
     },
     sistema: {
       scadenze: scadenzeFiscali(oggi, 35, await trimestriBollo(oggi)), backup: elencoBackup()[0] ?? null, servizi: avvisoServizi(), suggerimenti: suggerimenti[0]?.quanti ?? 0,
