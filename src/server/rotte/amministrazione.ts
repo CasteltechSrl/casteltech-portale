@@ -431,18 +431,22 @@ export function rotteAmministrazione() {
           <tbody>${segnati.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
             <td>${d.cliente}</td><td>${d.motivo}</td>
             <td><form method="post" action="/amministrazione/differite/da-fatturare" class="in-linea"><input type="hidden" name="id" value="${d.id}">
-              <button>Rimetti da fatturare</button></form></td></tr>`)}</tbody></table></section>` : ''}`, msg(req)));
+              <button>Rimetti da fatturare</button></form></td></tr>`)}</tbody></table></section>` : ''}`, msg(req), ['differite.js']));
   });
   // Scelta per riga (Adriano 10/11/2026): DDT da non fatturare con il motivo (già fatturato prima della consegna, garanzia…), e ritorno
   r.post('/differite/scelta', async (req, res) => {
     const id = Number(req.body.id);
     const motivo = String(req.body.motivo ?? 'da');
+    // dalla pagina (public/differite.js, Adriano 10/11/2026): risposta JSON, la riga sparisce senza ricaricare
+    const json = (req.get('Accept') ?? '').includes('application/json');
+    const rispondi = (tolto: boolean, messaggio: string) => json ? res.json({ ok: true, tolto, messaggio })
+      : res.redirect(`/amministrazione/differite?msg=${encodeURIComponent(messaggio)}`);
     if (!(id > 0) || motivo === 'da') {   // "Da fatturare": resta (o torna) tra i DDT da fatturare
       if (id > 0) await rimettiDaFatturare(id);
-      return res.redirect(`/amministrazione/differite?msg=${encodeURIComponent('Il DDT resta tra i DDT da fatturare.')}`);
+      return rispondi(false, 'Il DDT resta tra i DDT da fatturare.');
     }
     const n = await segnaGiaFatturati([id], req.session.utente?.nome ?? 'ufficio', motivo, String(req.body.nota ?? ''));
-    res.redirect(`/amministrazione/differite?msg=${encodeURIComponent(n ? 'DDT segnato da non fatturare: è in fondo alla pagina.' : 'Il DDT è già fatturato o già segnato.')}`);
+    rispondi(n > 0, n ? 'DDT segnato da non fatturare (lo trovi in fondo alla pagina).' : 'Il DDT è già fatturato o già segnato.');
   });
   r.post('/differite/da-fatturare', async (req, res) => {
     const id = Number(req.body.id);
