@@ -18,6 +18,8 @@ import type { DaFare } from '../../engine/cruscotto-generale.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
 import { elencoControlli, riepilogoControlli, type Controllo } from '../../engine/controlli.js';
 import { datiControlli } from '../controlli-servizio.js';
+import { annoRiferimento } from '../anno-riferimento.js';
+import { sceltaAnno, tabellaClientiFatturato } from '../views/scelta-anno.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const oraRoma = () => Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hourCycle: 'h23' }));
@@ -33,7 +35,8 @@ export function rotteCruscottoGenerale() {
     const oggi = oggiRoma();
     const finestra = finestraValida(req.query.flusso);
     const apri = typeof req.query.apri === 'string' ? req.query.apri : finestra;
-    const [d, riprendi, flusso, datiCtrl] = await Promise.all([datiCruscottoGenerale(oggi), cosePerRiprendere(req.session.utente?.id ?? null), datiFlusso(oggi),
+    const anno = annoRiferimento(req, oggi);
+    const [d, riprendi, flusso, datiCtrl] = await Promise.all([datiCruscottoGenerale(oggi, anno), cosePerRiprendere(req.session.utente?.id ?? null), datiFlusso(oggi),
       datiControlli(oggi)]);
     res.send(String(layout({
       titolo: 'Cruscotto', utente: req.session.utente, attiva: 'cruscotto', largo: true,
@@ -79,11 +82,15 @@ function pagina(d: DatiCruscottoGenerale, oggi: string, nome: string, riprendi: 
   const primoNome = nome.split(' ')[0];
   const fasce: Fascia[] = [
     daFareOggi(d.daFare, riprendi, oggi), produzione(d, flusso, oggi, solaLettura), commerciale(d, oggi), ordini(d, oggi), acquisti(d),
-    amministrazione(d, oggi), fasciaControlli(controlli), sistema(d),
+    amministrazione(d, oggi), dipendenti(d), fasciaControlli(controlli), sistema(d),
   ];
+  const a = d.anno.anno;
   return html`
     <div class="saluto"><h1>${saluto(oraRoma())}${primoNome ? `, ${primoNome}` : ''}</h1>
-      <p class="nota">${giornoEsteso(oggi)} · dati letti all'apertura della pagina (ricarica per aggiornarli)</p></div>
+      <p class="nota">${giornoEsteso(oggi)} · dati letti all'apertura della pagina (ricarica per aggiornarli)</p>
+      ${sceltaAnno(a, '/cruscotto', Number(oggi.slice(0, 4)))}
+      <p class="nota">I riquadri con l'anno nel titolo usano il <b>${a}</b>${d.anno.inCorso ? ' (fino a oggi, confronto con lo stesso periodo dell\'anno prima)' : ` (anno intero, confronto con il ${a - 1})`};
+        gli altri sono la situazione di oggi. L'anno scelto vale anche nei cruscotti di Ordini clienti, Amministrazione e Dipendenti.</p></div>
     ${disegnaFasce(fasce, apri)}
     <p class="nota piede">Clic su un riquadro = la pagina dove si lavora; "dettagli" = l'elenco qui sotto. I cruscotti completi restano in Ordini clienti e in Amministrazione.</p>`;
 }
@@ -125,6 +132,8 @@ function produzione(d: DatiCruscottoGenerale, f: DatiFlusso, oggi: string, solaL
           ritardo ? `consegna ${gm(k.data_consegna)}` : ferma >= 3 ? `ultimo tempo ${ferma} gg fa` : k.stato === 'in_produzione' ? 'in produzione' : k.data_consegna ? `consegna ${gm(k.data_consegna)}` : 'aperta',
           { link: `/commesse/${k.id}`, rosso: !!ritardo });
       }), 'Nessuna commessa aperta.')}</div></div>` });
+  riquadri.push({ chiave: 'commesse-anno', titolo: `Commesse ${d.anno.anno}`, numero: d.anno.commesse.quanti, link: '/commesse',
+    sotto: `${num(d.anno.commesse.schede, 0)} schede da produrre` });
   return { chiave: 'produzione', nome: 'Produzione', riquadri };
 }
 
@@ -143,7 +152,17 @@ function commerciale(d: DatiCruscottoGenerale, oggi: string): Fascia {
       dettaglio: () => html`${tit('CRM: prossime azioni')}${elenco(x.crmProssime.map(a => riga(`${a.prossima_azione || 'Azione'} · ${a.ragione_sociale}`,
         a.data_prossima_azione < oggi ? `scaduta ${gm(a.data_prossima_azione)}` : gm(a.data_prossima_azione),
         { link: `/crm/${a.id}`, rosso: a.data_prossima_azione < oggi })), 'Nessuna azione nei prossimi 7 giorni.')}` },
+    { chiave: 'preventivi-anno', titolo: `Preventivi ${d.anno.anno}`, numero: d.anno.preventivi.quanti, link: '/preventivi',
+      sotto: `${d.anno.preventivi.accettati} accettati${d.anno.preventivi.valore ? ` · ${euroBreve(d.anno.preventivi.valore)}` : ''}` },
   ] };
+}
+
+/** Clienti con il fatturato dell'anno scelto (Adriano 10/11/2026): numero = clienti fatturati, dettaglio = elenco completo. */
+function riquadroClienti(d: DatiCruscottoGenerale): Riquadro {
+  const x = d.anno, fatturati = x.clienti.filter(c => c.fatturato > 0);
+  return { chiave: 'clienti', titolo: `Clienti ${x.anno}`, numero: fatturati.length, link: '/ordini/cruscotto#clienti',
+    sotto: fatturati[0] ? `primo: ${fatturati[0].cliente.slice(0, 22)} · ${euroBreve(fatturati[0].fatturato)}` : 'nessuna fattura',
+    dettaglio: () => html`${tit(`Clienti e fatturato ${x.anno}`)}${tabellaClientiFatturato(x.clienti, x.anno, x.inCorso)}` };
 }
 
 function ordini(d: DatiCruscottoGenerale, oggi: string): Fascia {
@@ -158,6 +177,9 @@ function ordini(d: DatiCruscottoGenerale, oggi: string): Fascia {
     { chiave: 'prossime', titolo: 'Prossimi 14 giorni', numero: c.consegne14, sotto: 'consegne', link: '/ordini/gantt', dettaglio: prossime },
     { chiave: 'da-acquisire', titolo: 'Da acquisire', numero: x.ordiniDaAcquisire, sotto: 'mail e cartella Drive', link: '/ordini/acquisire',
       livello: x.ordiniDaAcquisire ? 'controllare' : undefined },
+    { chiave: 'ordini-anno', titolo: `Ordini ricevuti ${d.anno.anno}`, numero: euro(d.anno.ordini.valore), link: '/ordini?vista=tutti',
+      sotto: `${d.anno.ordini.quanti} ordini${confronto(d.anno.ordini.variazione, d.anno.anno, d.anno.inCorso)}` },
+    riquadroClienti(d),
   ] };
 }
 
@@ -172,6 +194,8 @@ function acquisti(d: DatiCruscottoGenerale): Fascia {
         'Nessun ordine a fornitore in attesa di merce.')}<p class="nota"><a href="/quotazioni/prezzo">Miglior prezzo di un P/N →</a></p>` },
     { chiave: 'da-pagare', titolo: 'Da pagare', numero: euro(c.daPagare), link: '/amministrazione/ricevuti?da_pagare=1', livello: c.pagamentiScaduti ? 'urgente' : undefined,
       sotto: c.pagamentiScaduti ? `${euro(c.pagamentiScaduti)} scaduti` : `${euro(c.pagamenti7)} entro 7 gg` },
+    { chiave: 'acquisti-anno', titolo: `Acquisti ${d.anno.anno}`, numero: euro(d.anno.acquisti.totale), link: '/amministrazione/ricevuti/mesi',
+      sotto: `fatture fornitori${confronto(d.anno.acquisti.variazione, d.anno.anno, d.anno.inCorso)}` },
   ] };
 }
 
@@ -182,8 +206,9 @@ function amministrazione(d: DatiCruscottoGenerale, oggi: string): Fascia {
   if (x.ricevutiSdi) sdi.push(riga(`${x.ricevutiSdi} ${x.ricevutiSdi === 1 ? 'fattura fornitore arrivata' : 'fatture fornitori arrivate'} dallo SdI`, 'ultimi 7 gg', { link: '/amministrazione/ricevuti' }));
   const differite = testoDifferite(x.differite);
   return { chiave: 'amministrazione', nome: 'Amministrazione', riquadri: [
-    { chiave: 'fatturato', titolo: `Fatturato ${oggi.slice(0, 4)}`, numero: euro(c.fatturato), link: '/amministrazione',
-      sotto: c.variazioneFatturato == null ? `${euroBreve(x.fatturatoMese)} nel mese` : `${c.variazioneFatturato > 0 ? '+' : ''}${c.variazioneFatturato} % sullo stesso periodo ${Number(oggi.slice(0, 4)) - 1}` },
+    { chiave: 'fatturato', titolo: `Fatturato ${d.anno.anno}`, numero: euro(c.fatturato), link: '/amministrazione',
+      sotto: c.variazioneFatturato == null ? (x.fatturatoMese == null ? 'fatture meno note di credito' : `${euroBreve(x.fatturatoMese)} nel mese`)
+        : `${c.variazioneFatturato > 0 ? '+' : ''}${c.variazioneFatturato} % sul${d.anno.inCorso ? 'lo stesso periodo' : ''} ${d.anno.anno - 1}` },
     { chiave: 'da-incassare', titolo: 'Da incassare', numero: euro(c.daIncassare), link: '/amministrazione/crediti', livello: c.incassiScaduti ? 'urgente' : undefined,
       sotto: c.incassiScaduti ? `${euro(c.incassiScaduti)} scaduti` : 'nessuna rata scaduta',
       dettaglio: () => html`${tit('Incassi scaduti più vecchi')}${elenco(x.incassiScaduti.map(s => riga(`${s.nome} · fatt. ${s.numero} · ${euro(s.importo)}`, `da ${s.giorni} gg`,
@@ -195,6 +220,21 @@ function amministrazione(d: DatiCruscottoGenerale, oggi: string): Fascia {
       dettaglio: () => html`${tit('SdI')}${elenco(sdi, 'Nessuna fattura in attesa di esito, nessuno scarto.')}` },
   ] };
 }
+
+/** Dipendenti (Adriano 10/11/2026): costo del personale dell'anno scelto (solo il totale, come la pagina Costo del personale). */
+function dipendenti(d: DatiCruscottoGenerale): Fascia {
+  const p = d.anno.personale;
+  return { chiave: 'dipendenti', nome: 'Dipendenti', riquadri: [
+    { chiave: 'personale', titolo: `Costo del personale ${d.anno.anno}`, numero: p.mesi ? euro(p.totale) : '—', link: '/dipendenti',
+      sotto: p.mesi ? `${p.mesi} ${p.mesi === 1 ? 'mese caricato' : 'mesi caricati'}${p.variazione != null ? ` · ${p.variazione > 0 ? '+' : ''}${p.variazione} % sugli stessi mesi` : ''}` : 'nessun mese caricato' },
+    { chiave: 'personale-peso', titolo: `Peso sul fatturato ${d.anno.anno}`, numero: p.peso != null ? `${String(p.peso).replace('.', ',')} %` : '—', link: '/dipendenti',
+      sotto: 'costo del personale ÷ fatturato degli stessi mesi' },
+  ] };
+}
+
+/** " · +12 % sullo stesso periodo 2025" (vuoto se non c'è nulla da confrontare). */
+const confronto = (v: number | null, anno: number, inCorso: boolean) =>
+  (v == null ? '' : ` · ${v > 0 ? '+' : ''}${v} % sul${inCorso ? 'lo stesso periodo' : ''} ${anno - 1}`);
 
 function fasciaControlli(controlli: Controllo[]): Fascia {
   const r = riepilogoControlli(controlli);

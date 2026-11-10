@@ -2,6 +2,8 @@
  * Amministrazione → Cruscotto (pagina iniziale del menu, Adriano 27/10/2026): fatturato e acquisti dell'anno,
  * incassi e pagamenti in scadenza, DDT da fatturare, bozze da finire. I conti stanno in engine/cruscotto-amministrazione.ts.
  */
+import { limiteConfronto } from '../../engine/anno-riferimento.js';
+import { sceltaAnno } from '../views/scelta-anno.js';
 import { q } from '../db.js';
 import { SCHEDE_DOCUMENTI } from '../../engine/azioni-documenti.js';
 import { html, data, euro, num, type Raw } from '../views/html.js';
@@ -29,10 +31,13 @@ export function menuAmministrazione(attiva: 'cruscotto' | 'ddt' | 'fattura' | 'a
 
 interface Scadenza { id: number; data: string; importo: number; documento_id: number; numero: string; nome: string }
 
-export async function contenutoCruscotto(): Promise<Raw> {
+export async function contenutoCruscotto(annoScelto?: number): Promise<Raw> {
   const oggi = oggiRoma();
-  const anno = Number(oggi.slice(0, 4));
-  const meseCorrente = Number(oggi.slice(5, 7));
+  const annoOggi = Number(oggi.slice(0, 4));
+  // anno di riferimento (Adriano 10/11/2026): fatturato, acquisti e grafico dell'anno scelto; incassi, pagamenti, DDT e bozze restano quelli di oggi
+  const anno = annoScelto ?? annoOggi, inCorso = anno === annoOggi;
+  const meseCorrente = inCorso ? Number(oggi.slice(5, 7)) : 12;
+  const limite = limiteConfronto(anno, oggi) ?? undefined;
   const [emessi, ricevuti, incassi, pagamenti, ddtTutti, bozze] = await Promise.all([
     q(`SELECT tipo, data, imponibile FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
@@ -56,12 +61,12 @@ export async function contenutoCruscotto(): Promise<Raw> {
   ]);
 
   const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
-  const fatturato = imponibilePerMese(emessi, anno), fatturatoPrima = imponibilePerMese(emessi, anno - 1, oggi);
-  const acquisti = imponibilePerMese(ricevuti, anno), acquistiPrima = imponibilePerMese(ricevuti, anno - 1, oggi);
+  const fatturato = imponibilePerMese(emessi, anno), fatturatoPrima = imponibilePerMese(emessi, anno - 1, limite);
+  const acquisti = imponibilePerMese(ricevuti, anno), acquistiPrima = imponibilePerMese(ricevuti, anno - 1, limite);
   const inc = riepilogoScadenze(incassi, oggi), pag = riepilogoScadenze(pagamenti, oggi);
   const confronto = (attuale: number, prima: number) => {
     const v = variazione(attuale, prima);
-    return html`stesso periodo ${anno - 1}: ${euro(prima)}${v == null ? '' : html` <span class="${v >= 0 ? 'positivo' : 'negativo'}">(${v > 0 ? '+' : ''}${v} %)</span>`}`;
+    return html`${inCorso ? 'stesso periodo ' : ''}${anno - 1}: ${euro(prima)}${v == null ? '' : html` <span class="${v >= 0 ? 'positivo' : 'negativo'}">(${v > 0 ? '+' : ''}${v} %)</span>`}`;
   };
   const rate = (n: number) => (n === 1 ? '1 rata' : `${n} rate`);
   const ddtAltri = ddtTutti.reduce((s, x) => s + x.altri, 0);
@@ -69,6 +74,7 @@ export async function contenutoCruscotto(): Promise<Raw> {
   const ddtTotale = ddt.reduce((s, x) => s + x.quanti, 0);
 
   return html`
+    ${sceltaAnno(anno, '/amministrazione', annoOggi)}
     <div class="cifre">
       <div class="cifra"><span>Fatturato ${anno}</span><b>${euro(somma(fatturato))}</b><small>${confronto(somma(fatturato), somma(fatturatoPrima))}</small></div>
       <div class="cifra"><span>Acquisti ${anno}</span><b>${euro(somma(acquisti))}</b><small>${confronto(somma(acquisti), somma(acquistiPrima))}</small></div>

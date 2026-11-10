@@ -2,6 +2,8 @@
  * Ordini dei clienti: elenco delle righe (da evadere / evase), scheda dell'ordine con le date del foglio
  * "Schedulazione produzione", cruscotto (fatturato e previsione), Gantt della produzione, fatture senza ordine.
  */
+import { annoRiferimento, fatturatoClienti } from '../anno-riferimento.js';
+import { sceltaAnno, tabellaClientiFatturato } from '../views/scelta-anno.js';
 import { segnoInvioElenco } from '../views/invio.js';
 import { INVIATO_TITOLO } from '../../engine/invii.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
@@ -132,19 +134,20 @@ export function rotteOrdini() {
   // ── Cruscotto ──
   r.get('/cruscotto', async (req, res) => {
     const oggi = oggiRoma();
-    const anno = Number(req.query.anno) || Number(oggi.slice(0, 4));
+    const anno = annoRiferimento(req, oggi);   // anno scelto in uno dei cruscotti (Adriano 10/11/2026)
     // fatturato dalle fatture emesse (Adriano 9/11/2026: con le righe dell'import di FIC ottobre risultava quasi vuoto, le fatture dopo il 25/10 mancavano)
     const fatture = (await q(`SELECT data, imponibile::float AS imponibile, numero FROM documenti
       WHERE tipo = 'fattura' AND anno = $1 AND numero IS NOT NULL AND stato NOT IN ('bozza', 'annullato', 'scartato')`, [anno]))
       .filter(f => !(FATTURE_STORNATE[anno] ?? []).includes(f.numero))
       .map(f => ({ data: typeof f.data === 'string' ? f.data.slice(0, 10) : new Date(f.data).toLocaleDateString('sv-SE'), imponibile: Number(f.imponibile ?? 0) }));
-    const righe = await righeOrdini();
+    const [righe, clientiAnno] = await Promise.all([righeOrdini(), fatturatoClienti(anno, oggi)]);
     const c = cruscotto(fatture, righe, oggi, anno);
     const perCliente = new Map<string, number>();
     for (const x of righe) if (x.residuoValore) perCliente.set(x.cliente, (perCliente.get(x.cliente) ?? 0) + x.residuoValore);
     const clienti = [...perCliente].sort((a, b) => b[1] - a[1]);
     const mesiFuturi = c.mesi.filter(m => m.mese >= oggi.slice(0, 7));
     res.send(pagina(req.session.utente, 'Cruscotto ordini', 'cruscotto', html`
+      ${sceltaAnno(anno, '/ordini/cruscotto', Number(oggi.slice(0, 4)))}
       <div class="cifre">
         <div class="cifra"><span>Fatturato ${anno}</span><b>${euro(c.fatturato)}</b><small>fatture emesse fino a oggi</small></div>
         <div class="cifra"><span>Media mensile</span><b>${euro(c.mediaMensile)}</b><small>sui ${c.nMesiChiusi} mesi chiusi</small></div>
@@ -163,7 +166,9 @@ export function rotteOrdini() {
         <section><h2>Da evadere per cliente</h2>
           <div class="tabella-scorre"><table><thead><tr><th>Cliente</th><th class="n">Valore</th></tr></thead>
           <tbody>${clienti.map(([n, v]) => html`<tr><td><a href="/ordini?q=${encodeURIComponent(n)}">${n}</a></td><td class="n">${euro(v)}</td></tr>`)}</tbody></table></div></section>
-      </div>`));
+      </div>
+      <h2 id="clienti">Clienti e fatturato ${anno}</h2>
+      ${tabellaClientiFatturato(clientiAnno, anno, anno === Number(oggi.slice(0, 4)))}`));
   });
 
   // ── Gantt della produzione ──

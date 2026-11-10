@@ -4,6 +4,7 @@
  * Invio allo SdI con Invoicetronic (invoicetronic.ts): "Invia allo SdI" sui documenti emessi; con la chiave di prova
  * "Prova l'invio" anche dalle bozze. Gli esiti arrivano dal webhook o con "Aggiorna esito".
  */
+import { annoRiferimento } from '../anno-riferimento.js';
 import { sedeDelCliente, testoSede } from '../../engine/sede-operativa.js';
 import { sceltaUm } from '../views/scelta-um.js';
 import { prodottiPerCliente } from '../anagrafiche-servizio.js';
@@ -241,7 +242,7 @@ export function rotteAmministrazione() {
 
   r.get('/', async (req, res) => {
     res.send(pagina(req, 'Amministrazione', html`<div class="intestazione-pagina"><h1>Amministrazione</h1></div>
-      ${menuAmministrazione('cruscotto')}${await contenutoCruscotto()}`, msg(req)));
+      ${menuAmministrazione('cruscotto')}${await contenutoCruscotto(annoRiferimento(req))}`, msg(req)));
   });
 
   r.use('/fatture-estere', rotteAutofatture());

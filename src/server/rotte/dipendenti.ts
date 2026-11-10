@@ -7,6 +7,8 @@
  * - Persone: dipendenti e soci con le loro auto e la tariffa al km.
  * I documenti dello studio paghe arrivano anche dalla cartella Drive "Da acquisire" (`server/drive.ts`) e non passano da Ordini → Da acquisire.
  */
+import { annoRiferimento } from '../anno-riferimento.js';
+import { sceltaAnno } from '../views/scelta-anno.js';
 import express, { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { gunzipSync } from 'node:zlib';
@@ -110,10 +112,13 @@ export function rotteDipendenti() {
     const tabella = tabellaCosti(costi.map(c => ({ anno: c.anno, mese: c.mese, costo: Number(c.costo) })));
     const fattAnno = (anno: number, mesi: (number | null)[]) => mesi.reduce<number>((s, v, i) => s + (v == null ? 0 : fatturato.get(`${anno}-${i + 1}`) ?? 0), 0);
     const ultimo = costi.length ? costi.reduce((a, b) => (a.anno * 100 + a.mese > b.anno * 100 + b.mese ? a : b)) : null;
-    const corrente = tabella[0];
+    // anno di riferimento scelto in uno dei cruscotti (Adriano 10/11/2026): le cifre in alto sono di quell'anno, la tabella resta con tutti gli anni
+    const annoScelto = annoRiferimento(req);
+    const corrente = tabella.find(t => t.anno === annoScelto) ?? (annoScelto === annoOggi() ? tabella[0] : undefined);
     res.send(pagina(req, 'Costo del personale', html`
       <div class="intestazione-pagina"><h1>Dipendenti · costo del personale</h1></div>
       ${menuDipendenti('costi')}
+      ${sceltaAnno(annoScelto, '/dipendenti', annoOggi())}
       <div class="cifre">
         <div class="cifra"><span>Ultimo mese caricato</span><b>${ultimo ? euro(Number(ultimo.costo)) : '—'}</b><small>${ultimo ? `${nomeMeseMaiuscolo(ultimo.mese)} ${ultimo.anno}` : 'nessuna nota contabile'}</small></div>
         <div class="cifra"><span>Media mensile ${corrente?.anno ?? ''}</span><b>${corrente ? euro(corrente.media) : '—'}</b><small>${corrente ? `${corrente.mesiCaricati} mesi caricati` : ''}</small></div>
@@ -128,7 +133,7 @@ export function rotteDipendenti() {
       ${tabella.length ? html`<div class="tabella-scorre"><table class="elenco">
         <thead><tr><th>Anno</th>${Array.from({ length: 12 }, (_, i) => html`<th class="num">${nomeMeseMaiuscolo(i + 1).slice(0, 3)}</th>`)}<th class="num">Totale</th><th class="num">Media</th>
           <th class="num" title="Sugli stessi mesi dell'anno prima">Rispetto all'anno prima</th><th class="num" title="Costo del personale ÷ fatturato degli stessi mesi">Sul fatturato</th></tr></thead>
-        <tbody>${tabella.map(t => { const f = fattAnno(t.anno, t.mesi); return html`<tr><td><b>${t.anno}</b></td>
+        <tbody>${tabella.map(t => { const f = fattAnno(t.anno, t.mesi); return html`<tr class="${t.anno === annoScelto ? 'corrente' : ''}"><td><b>${t.anno}</b></td>
           ${t.mesi.map(v => html`<td class="num">${v == null ? '' : num(v, 0)}</td>`)}
           <td class="num"><b>${num(t.totale, 0)}</b></td><td class="num">${num(t.media, 0)}</td>
           <td class="num ${t.variazione != null && t.variazione > 10 ? 'negativo' : ''}">${t.variazione == null ? '' : `${t.variazione > 0 ? '+' : ''}${num(t.variazione, 1)} %`}</td>

@@ -38,8 +38,8 @@ test('cruscotto a fasce (Adriano 8/11/2026): nome dell\'ambito grande, riquadri 
 
 test('cruscotto: gli ambiti in ordine, da fare oggi in cima', () => {
   const src = readFileSync(new URL('../src/server/rotte/cruscotto-generale.ts', import.meta.url), 'utf8');
-  const ordine = ["nome: 'Da fare oggi'", "nome: 'Produzione'", "nome: 'Commerciale'", "nome: 'Ordini clienti'", "nome: 'Acquisti'", "nome: 'Amministrazione'", "nome: 'Controlli'", "nome: 'Sistema'"];
+  const ordine = ["nome: 'Da fare oggi'", "nome: 'Produzione'", "nome: 'Commerciale'", "nome: 'Ordini clienti'", "nome: 'Acquisti'", "nome: 'Amministrazione'", "nome: 'Dipendenti'", "nome: 'Controlli'", "nome: 'Sistema'"];
   for (const n of ordine) assert.ok(src.includes(n), n);
-  assert.match(src, /daFareOggi\(d\.daFare, riprendi, oggi\), produzione\(d, flusso, oggi, solaLettura\), commerciale\(d, oggi\), ordini\(d, oggi\), acquisti\(d\),\s*amministrazione\(d, oggi\), fasciaControlli\(controlli\), sistema\(d\)/);
+  assert.match(src, /daFareOggi\(d\.daFare, riprendi, oggi\), produzione\(d, flusso, oggi, solaLettura\), commerciale\(d, oggi\), ordini\(d, oggi\), acquisti\(d\),\s*amministrazione\(d, oggi\), dipendenti\(d\), fasciaControlli\(controlli\), sistema\(d\)/);
   assert.equal(cercaGuida('cruscotto fasce ambiti')[0]?.argomento.id, 'cruscotto-generale');
 });
