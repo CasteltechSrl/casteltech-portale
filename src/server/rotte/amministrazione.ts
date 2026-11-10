@@ -38,11 +38,11 @@ import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scar
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
   TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, aggiungiRigheOrdine, righeOrdineDaFatturare, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
-  creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
+  creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, ddtSegnatiNonDaFatturare, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { controlloStorno } from '../../engine/analisi.js';
-import { CAUSALI_DDT, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
+import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
 import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
@@ -398,6 +398,8 @@ export function rotteAmministrazione() {
     const totale = gruppi.reduce((n, g) => n + g.ddt.length, 0);
     const daFareOra = gruppi.filter(g => g.scaduto || g.inScadenza);
     const g = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+    const segnati = await ddtSegnatiNonDaFatturare();
+    const opzioniMotivo = Object.entries(MOTIVI_NON_FATTURARE).map(([k, v]) => html`<option value="${k}">${v}</option>`);
     res.send(pagina(req, 'Fatture differite', html`
       <div class="intestazione-pagina"><h1>Fatture differite · DDT da fatturare</h1>
         <div class="azioni">${daFareOra.length ? html`<form method="post" action="/amministrazione/differite/fattura-tutti" class="inline"
@@ -405,16 +407,41 @@ export function rotteAmministrazione() {
           <button class="primario">Fattura tutti i clienti in scadenza (${daFareOra.length})</button></form>` : ''}</div></div>
       <p class="nota">I DDT di vendita e reso lavorato di un mese si fatturano <b>entro il 15 del mese dopo</b> (fattura differita TD24, scelta da sola all'emissione).
         Qui ci sono tutti i DDT emessi e non ancora fatturati, un gruppo per cliente: <b>Fattura tutti i DDT</b> prepara una bozza con le righe di tutti i DDT del cliente,
-        da controllare ed emettere. Il cruscotto avvisa dal 1° del mese (giallo) e dal 16 (rosso).</p>
+        da controllare ed emettere. Il cruscotto avvisa dal 1° del mese (giallo) e dal 16 (rosso).
+        Un DDT che non va fatturato (già fatturato prima della consegna, riparazione in garanzia) si toglie con <b>Non fatturare</b> sulla sua riga.</p>
       ${gruppi.length === 0 ? html`<p class="vuoto">Nessun DDT da fatturare.</p>` : html`<p class="nota">${totale} DDT di ${gruppi.length} clienti.</p>
       ${gruppi.map(x => html`<section class="blocco differite ${x.scaduto ? 'scaduto' : x.inScadenza ? 'in-scadenza' : ''}">
         <div class="intestazione-pagina"><h2>${x.cliente} <small class="nota">${x.ddt.length} DDT · entro il ${g(x.termine)}${x.scaduto ? ' · termine superato' : x.inScadenza ? ' · da fare questo mese' : ''}</small></h2>
           <form method="post" action="/amministrazione/differite/fattura" class="inline"><input type="hidden" name="cliente_id" value="${x.clienteId}">
             ${x.ddt.map(d => html`<input type="hidden" name="ddt[]" value="${d.id}">`)}
             <button class="${x.scaduto || x.inScadenza ? 'primario' : ''}">Fattura tutti i DDT</button></form></div>
-        <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th class="num">Righe</th><th class="num">Importo</th></tr></thead>
+        <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th class="num">Righe</th><th class="num">Importo</th><th data-non-ordinare>Da fatturare?</th></tr></thead>
           <tbody>${x.ddt.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
-            <td class="num">${d.righe ?? ''}</td><td class="num">${d.totale != null ? euro(d.totale) : ''}</td></tr>`)}</tbody></table></section>`)}`}`, msg(req)));
+            <td class="num">${d.righe ?? ''}</td><td class="num">${d.totale != null ? euro(d.totale) : ''}</td>
+            <td><form method="post" action="/amministrazione/differite/non-fatturare" class="in-linea"
+                data-conferma="Il DDT n. ${d.numero} non va fatturato? Esce da questo elenco e dagli avvisi del cruscotto (si rimette in fondo alla pagina).">
+              <input type="hidden" name="id" value="${d.id}">
+              <select name="motivo" aria-label="Motivo">${opzioniMotivo}</select>
+              <input name="nota" placeholder="nota (facoltativa)" maxlength="200" size="14">
+              <button>Non fatturare</button></form></td></tr>`)}</tbody></table></section>`)}`}
+      ${segnati.length ? html`<section class="blocco"><h2>DDT segnati da non fatturare <small class="nota">${segnati.length}${segnati.length === 100 ? ' (ultimi 100)' : ''}</small></h2>
+        <p class="nota">Non sono nell'elenco sopra né negli avvisi del cruscotto. "Rimetti da fatturare" li riporta tra i DDT da fatturare.</p>
+        <table class="elenco"><thead><tr><th>DDT</th><th>Data</th><th>Cliente</th><th>Motivo</th><th data-non-ordinare></th></tr></thead>
+          <tbody>${segnati.map(d => html`<tr><td><a href="/amministrazione/documenti/${d.id}">n. ${numeroCompleto(d.numero, d.sezionale ?? undefined)}</a></td><td>${data(d.data)}</td>
+            <td>${d.cliente}</td><td>${d.motivo}</td>
+            <td><form method="post" action="/amministrazione/differite/da-fatturare" class="in-linea"><input type="hidden" name="id" value="${d.id}">
+              <button>Rimetti da fatturare</button></form></td></tr>`)}</tbody></table></section>` : ''}`, msg(req)));
+  });
+  // Scelta per riga (Adriano 10/11/2026): DDT da non fatturare con il motivo (già fatturato prima della consegna, garanzia…), e ritorno
+  r.post('/differite/non-fatturare', async (req, res) => {
+    const id = Number(req.body.id);
+    const n = id > 0 ? await segnaGiaFatturati([id], req.session.utente?.nome ?? 'ufficio', String(req.body.motivo ?? ''), String(req.body.nota ?? '')) : 0;
+    res.redirect(`/amministrazione/differite?msg=${encodeURIComponent(n ? 'DDT segnato da non fatturare: è in fondo alla pagina.' : 'Il DDT è già fatturato o già segnato.')}`);
+  });
+  r.post('/differite/da-fatturare', async (req, res) => {
+    const id = Number(req.body.id);
+    if (id > 0) await rimettiDaFatturare(id);
+    res.redirect(`/amministrazione/differite?msg=${encodeURIComponent('Il DDT è di nuovo tra i DDT da fatturare.')}`);
   });
   r.post('/differite/fattura', async (req, res) => {
     const clienteId = Number(req.body.cliente_id);

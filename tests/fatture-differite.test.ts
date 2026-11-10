@@ -32,3 +32,13 @@ test('fatture differite: conteggio per il cruscotto e frase (giallo dal 1°, ros
   const v = cosaDaFare({ ...zero, differiteScadute: 2, differiteInScadenza: 3 });
   assert.deepEqual(v.map(x => [x.chiave, x.livello, x.link]), [['differite-scadute', 'urgente', '/amministrazione/differite'], ['differite-in-scadenza', 'controllare', '/amministrazione/differite']]);
 });
+
+test('fatture differite: DDT da non fatturare con il motivo (Adriano 10/11/2026)', async () => {
+  const { notaNonFatturare, MOTIVI_NON_FATTURARE, ddtDaFatturareRegola } = await import('../src/engine/ddt.js');
+  assert.equal(notaNonFatturare('prima', '', 'Adriano', '10/11/2026'), 'Già fatturato prima della consegna, segnato da Adriano il 10/11/2026');
+  assert.equal(notaNonFatturare('garanzia', '  scheda  rotta ', 'Adriano', '10/11/2026'), 'Riparazione in garanzia (scheda rotta), segnato da Adriano il 10/11/2026');
+  assert.ok(notaNonFatturare('???', null, 'X', '1/1/2026').startsWith(MOTIVI_NON_FATTURARE.altro));
+  // segnato = non più da fatturare (stessa colonna fatturato_altrove usata da elenco, differite e cruscotto)
+  assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'portale', valore: 100, fatturatoAltrove: notaNonFatturare('garanzia', '', 'A', 'oggi') }), false);
+  assert.equal(ddtDaFatturareRegola({ causale: 'VENDITA', origine: 'portale', valore: 100, fatturatoAltrove: null }), true);
+});

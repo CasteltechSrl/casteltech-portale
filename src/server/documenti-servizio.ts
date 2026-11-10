@@ -272,6 +272,13 @@ export const ddtDaFatturareTutti = () => q<DdtAperto>(
      AND NOT EXISTS (SELECT 1 FROM documenti_righe y JOIN documenti f ON f.id = y.documento_id WHERE y.ddt_id = d.id AND f.stato = 'bozza')
    ORDER BY d.data, d.numero`);
 
+/** DDT segnati "da non fatturare" (già fatturati prima, garanzia…): in fondo a Fatture differite con "Rimetti da fatturare". Ultimi 100. */
+export const ddtSegnatiNonDaFatturare = () => q<{ id: number; numero: number; sezionale: string | null; data: string; cliente: string; motivo: string }>(
+  `SELECT d.id, d.numero, d.sezionale, d.data::text AS data, coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', '') AS cliente, d.fatturato_altrove AS motivo
+   FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
+   WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.fatturato_altrove IS NOT NULL AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
+   ORDER BY d.data DESC, d.numero DESC LIMIT 100`);
+
 /** Una fattura (bozza) con tutti i DDT da fatturare del cliente: diventa TD24 da sola all'emissione se i DDT sono di date precedenti. */
 export async function fatturaTuttiIDdt(clienteId: number, ddtIds: number[], creatoDa: number | null): Promise<number> {
   if (!ddtIds.length) throw new Error('Nessun DDT da fatturare per questo cliente.');

@@ -1,3 +1,4 @@
+import { notaNonFatturare } from '../engine/ddt.js';
 /**
  * Azioni con le spunte nell'elenco dei documenti emessi (Amministrazione → Documenti emessi): letture e scritture.
  * Le regole (chi va bene per quale pulsante) stanno in `engine/azioni-documenti.ts`.
@@ -26,9 +27,9 @@ export async function documentiSpuntati(ids: number[], tipo: string): Promise<Do
 }
 
 /** DDT segnati "Già fatturato" (anticipo, proforma o fattura di FIC senza collegamento): escono dai DDT da fatturare. */
-export async function segnaGiaFatturati(ids: number[], chi: string): Promise<number> {
+export async function segnaGiaFatturati(ids: number[], chi: string, motivo = 'altrove', note?: string): Promise<number> {
   if (!ids.length) return 0;
-  const nota = `Già fatturato (anticipo o Fatture in Cloud), segnato da ${chi} il ${new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}`;
+  const nota = notaNonFatturare(motivo, note, chi, new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }));
   const r = await q(`UPDATE documenti SET fatturato_altrove = $2 WHERE id = ANY($1) AND tipo = 'ddt' AND fattura_id IS NULL AND fatturato_altrove IS NULL RETURNING id`, [ids, nota]);
   return r.length;
 }

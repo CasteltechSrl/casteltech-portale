@@ -177,3 +177,22 @@ export function bloccoModificaDdt(d: { tipo: string; origine: string | null; sta
   if (sdi) return `Il DDT è nella fattura n. ${sdi.numero ?? ''} già mandata allo SdI: non si modifica più.`;
   return null;
 }
+
+/**
+ * Motivi per segnare un DDT "da non fatturare" dalla pagina Fatture differite (Adriano 10/11/2026: "alle volte sono stati fatturati
+ * prima della consegna, o sono delle riparazioni in garanzia"). Il testo va in `documenti.fatturato_altrove`: il DDT esce dai
+ * DDT da fatturare, dalle fatture differite e dagli avvisi del cruscotto; "Rimetti da fatturare" lo toglie.
+ */
+export const MOTIVI_NON_FATTURARE: Record<string, string> = {
+  prima: 'Già fatturato prima della consegna',
+  garanzia: 'Riparazione in garanzia',
+  altrove: 'Già fatturato (anticipo, proforma o Fatture in Cloud)',
+  altro: 'Non da fatturare',
+};
+
+/** Testo salvato in `fatturato_altrove`: motivo (sconosciuto = "Non da fatturare"), nota facoltativa, chi e quando. */
+export function notaNonFatturare(motivo: string | null | undefined, nota: string | null | undefined, chi: string, quando: string): string {
+  const base = MOTIVI_NON_FATTURARE[motivo ?? ''] ?? MOTIVI_NON_FATTURARE.altro;
+  const extra = (nota ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return `${base}${extra ? ` (${extra})` : ''}, segnato da ${chi} il ${quando}`;
+}
