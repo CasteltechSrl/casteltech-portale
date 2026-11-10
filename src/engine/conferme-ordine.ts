@@ -3,7 +3,7 @@
  * tutte le righe e le date di consegna (modificabili), si emette il PDF e si manda in risposta all'email dell'ordine.
  * Solo calcoli e testi: niente database e niente rete.
  */
-import { numeroModulo } from './documenti.js';
+import { notaRiga, numeroModulo } from './documenti.js';
 import { dataDa, numeroDa } from './acquisizioni.js';
 import { arrotonda2 } from './amministrazione.js';
 
@@ -18,6 +18,8 @@ export interface RigaOrdineConferma {
 export interface RigaConferma {
   posizione: number; codice: string | null; descrizione: string; quantita: number; prezzo: number;
   consegna: string | null; prodotto_id: number | null; riga_ordine_id: number | null;
+  /** Note/specifiche della sola riga (ordini a fornitore, Adriano 10/11/2026): si stampano dopo la descrizione, l'anagrafica non cambia. */
+  note?: string | null;
 }
 
 /**
@@ -51,7 +53,7 @@ export function righeConfermaDaOrdine(righe: RigaOrdineConferma[]): RigaConferma
 
 export interface RigaModuloConferma {
   codice?: string; descrizione?: string; quantita?: string | number; prezzo?: string | number; consegna?: string;
-  prodotto_id?: string | number; riga_ordine_id?: string | number; togli?: string;
+  prodotto_id?: string | number; riga_ordine_id?: string | number; togli?: string; note?: string;
 }
 
 /** Righe scritte nel modulo della conferma → righe del documento (vuote e spuntate "togli" escluse), con gli errori. */
@@ -59,7 +61,7 @@ export function righeConfermaDaModulo(input: RigaModuloConferma[] | Record<strin
   const errori: string[] = [];
   const elenco = (Array.isArray(input) ? input : Object.values(input ?? {})) as RigaModuloConferma[];
   const righe = elenco
-    .filter(r => r && !r.togli && [r.codice, r.descrizione, r.quantita, r.prezzo].some(v => String(v ?? '').trim()))
+    .filter(r => r && !r.togli && [r.codice, r.descrizione, r.quantita, r.prezzo, r.note].some(v => String(v ?? '').trim()))
     .map((r, i) => {
       const n = i + 1;
       // quantità: "1.200" sono milleduecento pezzi; prezzo: il punto o la virgola sono i decimali (0.125 €)
@@ -73,7 +75,7 @@ export function righeConfermaDaModulo(input: RigaModuloConferma[] | Record<strin
       if (!descrizione) errori.push(`Riga ${n}: manca la descrizione.`);
       return {
         posizione: n, codice: String(r.codice ?? '').trim().toUpperCase() || null, descrizione, quantita, prezzo, consegna,
-        prodotto_id: Number(r.prodotto_id) || null, riga_ordine_id: Number(r.riga_ordine_id) || null,
+        prodotto_id: Number(r.prodotto_id) || null, riga_ordine_id: Number(r.riga_ordine_id) || null, note: notaRiga(r.note),
       };
     });
   if (!righe.length) errori.push('Serve almeno una riga.');

@@ -25,6 +25,7 @@ export const CATEGORIE_MATERIALI = {
   COA: 'Coating e mascherature',
   IMB: 'Imballaggio',
   ESD: 'ESD e protezione',
+  PCB: 'PCB (circuiti stampati)',   // Adriano 10/11/2026: un codice nostro, il prodotto e le specifiche nelle note della riga
   VAR: 'Varie',
 } as const;
 export type CategoriaMateriale = keyof typeof CATEGORIE_MATERIALI;
@@ -101,7 +102,7 @@ export function descrizioneDaRiga(r: { codice: string | null; descrizione: strin
 export function categoriaProposta(descrizione: string): CategoriaMateriale {
   const d = normalizzaRicerca(descrizione);
   const regole: [RegExp, CategoriaMateriale][] = [
-    [/lamin|stencil/, 'LAM'], [/pasta sald|crema sald|solder paste/, 'PAS'], [/barr|vergh|verghe|lingott/, 'BAR'],
+    [/\bpcb\b|circuit\w* stampat|attrezzatura test|test elettric/, 'PCB'], [/lamin|stencil/, 'LAM'], [/pasta sald|crema sald|solder paste/, 'PAS'], [/barr|vergh|verghe|lingott/, 'BAR'],
     [/filo|wire/, 'FIL'], [/kapton|poliimm/, 'KAP'], [/punt|ugell|weller|tip\b/, 'PUN'], [/fluss|flux/, 'FLU'],
     [/alcol|isoprop|ipa\b|detergent|cleaner|remover|pann|lavagg/, 'PUL'], [/coating|vernic|diluent|spellicol|mascher/, 'COA'],
     [/bust|pluriboll|scatol|imball/, 'IMB'], [/esd|guant|camic/, 'ESD'],

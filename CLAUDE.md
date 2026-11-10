@@ -70,6 +70,9 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   materiali-consumo; 'manuale' non si tocca). Ordine a fornitore: nel Codice una parola ("lamina") → menu materiali + componenti (`/anagrafiche/materiali/cerca`),
   descrizione sempre modificabile nella riga, in fondo "+ Nuovo materiale" e "Riga libera"; righe con codice fuori anagrafica → riquadro "Righe non in anagrafica"
   con "Aggiungi ai materiali" (la riga prende il codice MC-…). Si elimina solo se in nessun ordine, altrimenti spunta "Attivo".
+  Adriano 10/11/2026 (migrazione 086, test in `tests/materiali-consumo.test.ts`): categoria PCB (MC-PCB-001 circuito stampato, -002 attrezzatura una tantum, -003 prototipi)
+  + DOWSIL e scarpe ESD dagli ordini a fornitore 2026 di FIC; la ricerca parte anche dalla Descrizione se il Codice è vuoto (`cerca-articolo-descrizione` in
+  `public/articoli-ordine.js`); casella "note / specifiche" per riga (`documenti_righe.note`, `RigaConferma.note`), stampata nel PDF con `descrizioneConNota`.
   Servizi una tantum (Adriano 3/11/2026; migrazione 066 `servizi_una_tantum`, `engine/servizi-una-tantum.ts`, `servizi-una-tantum-servizio.ts`, `rotte/servizi-una-tantum.ts`,
   test in `tests/servizi-una-tantum.test.ts`): lamina, documentazione, programmazione attrezzature, attrezzaggio PCB = codici Casteltech UT-… validi per TUTTI i clienti
   (eccezione voluta alla regola codice-cliente, per questo non sono in `prodotti`). Gruppo "Servizi una tantum" in fondo al menu Codice (`opzioniServizi`: documenti con

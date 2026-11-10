@@ -2,6 +2,8 @@
 // i materiali di consumo e i componenti delle Anagrafiche (Adriano 3/11/2026). Scelto l'articolo arrivano codice nostro, descrizione
 // (che resta modificabile: si completa con il prodotto per cui serve, il modello della punta…) e ultimo prezzo.
 // In fondo al menu: "+ Nuovo materiale" (lo aggiunge in anagrafica con un codice nostro) e "Riga libera" (resta come scritto).
+// Adriano 10/11/2026: si cerca anche scrivendo nella Descrizione ("pcb") finché il Codice della riga è vuoto; scelto l'articolo,
+// il Codice prende il nostro codice e la Descrizione il nome dell'anagrafica. Le specifiche vanno nella casella note sotto.
 (() => {
   const modulo = document.getElementById('modulo-documento');
   if (!modulo || !modulo.querySelector('.cerca-articolo')) return;
@@ -21,7 +23,8 @@
 
   function scegli(el, c) {
     const riga = el.closest('tr'), descr = campo(riga, 'descrizione'), prezzo = campo(riga, 'prezzo');
-    el.value = c.codice;
+    const codice = campo(riga, 'codice') ?? el;
+    codice.value = c.codice;
     if (descr) { descr.value = c.descrizione || descr.value; descr.title = 'Dall\'anagrafica: puoi completarla per questo ordine'; }
     if (prezzo && (!prezzo.value.trim() || prezzo.dataset.listino) && c.prezzo != null) {
       prezzo.value = String(c.prezzo).replace('.', ',');
@@ -29,8 +32,8 @@
       prezzo.title = `Ultimo acquisto${c.fornitore ? ' da ' + c.fornitore : ''}`;
     }
     chiudi();
-    el.dispatchEvent(new Event('change', { bubbles: true }));   // salvataggio automatico della bozza
-    campo(riga, 'quantita')?.focus();
+    codice.dispatchEvent(new Event('change', { bubbles: true }));   // salvataggio automatico della bozza
+    (campo(riga, 'note') && !campo(riga, 'note').value ? campo(riga, 'note') : campo(riga, 'quantita'))?.focus();
   }
 
   function apriNuovo(el, categoria) {
@@ -59,7 +62,7 @@
     const m = res ? await res.json().catch(() => null) : null;
     if (!res?.ok || !m?.codice) { esito.textContent = m?.errore ?? 'Materiale non aggiunto: riprova.'; return; }
     pannello.hidden = true;
-    if (rigaNuovo) scegli(campo(rigaNuovo, 'codice'), { ...m, prezzo: null });
+    if (rigaNuovo) scegli(campo(rigaNuovo, 'codice') ?? campo(rigaNuovo, 'descrizione'), { ...m, prezzo: null });
     rigaNuovo = null;
   });
 
@@ -84,7 +87,7 @@
     aggiungi(nuovo, () => apriNuovo(el, categoria));
     const libero = document.createElement('li'); libero.className = 'libero';
     libero.textContent = `Riga libera: tieni «${scritto}» come scritto`;
-    aggiungi(libero, () => { chiudi(); campo(el.closest('tr'), 'descrizione')?.focus(); });
+    aggiungi(libero, () => { chiudi(); (el.classList.contains('cerca-articolo-descrizione') ? campo(el.closest('tr'), 'note') : campo(el.closest('tr'), 'descrizione'))?.focus(); });
     if (!voci.length) { const v = document.createElement('li'); v.className = 'vuoto'; v.textContent = 'Niente in anagrafica con queste parole.'; elenco.prepend(v); }
     const r = el.getBoundingClientRect();
     Object.assign(elenco.style, { left: `${r.left + window.scrollX}px`, top: `${r.bottom + window.scrollY}px`, minWidth: `${Math.max(r.width, 420)}px` });
@@ -94,7 +97,10 @@
 
   modulo.addEventListener('input', e => {
     const el = e.target;
-    if (!el.classList?.contains('cerca-articolo')) return;
+    const daDescrizione = el.classList?.contains('cerca-articolo-descrizione');
+    if (!el.classList?.contains('cerca-articolo') && !daDescrizione) return;
+    // dalla Descrizione si cerca solo se il Codice è vuoto: con l'articolo già scelto la descrizione si completa senza menu
+    if (daDescrizione && campo(el.closest('tr'), 'codice')?.value.trim()) { chiudi(); return; }
     clearTimeout(attesa);
     attesa = setTimeout(async () => {
       const t = el.value.trim();

@@ -15,6 +15,7 @@ import {
   arriviDaModulo, controlliEmissioneOrdine, csvCarrello, emailOrdineFornitore, fornitorePerDistributore, nomeFilePdfOrdine, righeOrdineDaBom, statoArrivo,
   type RigaOrdineFornitore, type StatoArrivo,
 } from '../engine/ordini-fornitore.js';
+import { descrizioneConNota } from '../engine/documenti.js';
 import { cosaManca, quantitaBomPerCommessa, type EsitoManca, type RigaDaOrdinare, type RigaOrdinata } from '../engine/cosa-manca.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -55,9 +56,9 @@ export const commessePerOrdini = () => q<{ id: number; numero: string; cliente: 
 async function scriviRighe(c: Db, id: number, righe: RigaOrdineFornitore[]) {
   await c.query(`DELETE FROM documenti_righe WHERE documento_id = $1`, [id]);
   if (righe.length) await c.query(
-    `INSERT INTO documenti_righe (documento_id, posizione, codice, descrizione, quantita, prezzo, consegna, arrivati, arrivati_il)
-     SELECT $1, r.posizione, r.codice, r.descrizione, r.quantita, r.prezzo, r.consegna, coalesce(r.arrivati, 0), r.arrivati_il
-     FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, codice text, descrizione text, quantita numeric, prezzo numeric, consegna date, arrivati numeric, arrivati_il date)`,
+    `INSERT INTO documenti_righe (documento_id, posizione, codice, descrizione, quantita, prezzo, consegna, arrivati, arrivati_il, note)
+     SELECT $1, r.posizione, r.codice, r.descrizione, r.quantita, r.prezzo, r.consegna, coalesce(r.arrivati, 0), r.arrivati_il, r.note
+     FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, codice text, descrizione text, quantita numeric, prezzo numeric, consegna date, arrivati numeric, arrivati_il date, note text)`,
     [id, JSON.stringify(righe)]);
 }
 
@@ -83,7 +84,7 @@ export async function leggiOrdineFornitore(id: number) {
       LEFT JOIN commesse co ON co.id = d.commessa_id LEFT JOIN bom_analisi b ON b.id = d.bom_id LEFT JOIN documenti_ricevuti r ON r.id = d.ricevuto_id
     WHERE d.id = $1 AND d.tipo = 'ordine_fornitore'`, [id]);
   if (!d) return null;
-  const righe = (await q<any>(`SELECT posizione, codice, descrizione, quantita, prezzo, consegna, arrivati, arrivati_il, NULL::int AS prodotto_id, NULL::int AS riga_ordine_id
+  const righe = (await q<any>(`SELECT posizione, codice, descrizione, note, quantita, prezzo, consegna, arrivati, arrivati_il, NULL::int AS prodotto_id, NULL::int AS riga_ordine_id
     FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione, id`, [id]))
     .map(r => ({ ...r, quantita: Number(r.quantita), prezzo: Number(r.prezzo), arrivati: Number(r.arrivati) })) as RigaOrdineFornitore[];
   return { d, righe, arrivo: statoArrivo(righe) };
@@ -152,7 +153,9 @@ async function datiPdf(id: number): Promise<{ dati: DatiPdfConferma; nome: strin
       piva: a.partita_iva || P.partita_iva, rea: a.rea_ufficio && a.rea_numero ? `${a.rea_ufficio}-${a.rea_numero}` : P.rea,
       tel: a.telefono || P.telefono, email: a.email || P.email, pec: a.pec || P.pec,
     },
-    cliente: fornitore, rifCliente: d.riferimento_esterno, dataRif: d.data_riferimento, pagamento: d.pagamento, note: note || null, righe,
+    cliente: fornitore, rifCliente: d.riferimento_esterno, dataRif: d.data_riferimento, pagamento: d.pagamento, note: note || null,
+    // le note/specifiche della riga si stampano dopo la descrizione ("PCB … - FR4 1,6 MM ENIG")
+    righe: righe.map(r => ({ ...r, descrizione: descrizioneConNota(r.descrizione, r.note) })),
   };
   return { dati, nome: nomeFilePdfOrdine(d.numero, d.anno, fornitore.ragione_sociale ?? '') };
 }

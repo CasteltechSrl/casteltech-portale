@@ -211,7 +211,10 @@ export function rotteOrdiniFornitore() {
     const rigaModulo = (x: any, i: number) => html`<tr>
       <td><input name="righe[${i}][codice]" value="${x.codice ?? ''}" class="codice maiuscolo cerca-componente cerca-articolo" autocomplete="off"
         placeholder="lamina, kapton, P/N…" title="Scrivi una parola (lamina, pasta, filo, kapton…) o il P/N: il menu propone i materiali di consumo e i componenti delle Anagrafiche"></td>
-      <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo"></td>
+      <td class="largo"><input name="righe[${i}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo cerca-articolo-descrizione" autocomplete="off"
+          placeholder="pcb, lamina, stagno… o descrizione libera" title="Con il codice vuoto, scrivendo qui (pcb, lamina, kapton, filo…) il menu propone gli articoli delle Anagrafiche">
+        <input name="righe[${i}][note]" value="${x.note ?? ''}" class="maiuscolo nota-riga-doc" maxlength="500"
+          placeholder="note / specifiche (prodotto, rev., spessore…)" title="Solo per questa riga: si stampa sull'ordine dopo la descrizione, l'anagrafica non cambia"></td>
       <td><input name="righe[${i}][quantita]" value="${numCampo(x.quantita)}" class="corto" inputmode="decimal"></td>
       <td><input name="righe[${i}][prezzo]" value="${numCampo(x.prezzo)}" class="corto" inputmode="decimal"></td>
       <td><input type="date" name="righe[${i}][consegna]" value="${x.consegna ?? ''}"></td>
@@ -260,9 +263,10 @@ export function rotteOrdiniFornitore() {
             <button type="button" class="primario" id="nm-aggiungi">Aggiungi e usa nella riga</button></div>
         </div>
         <div class="barra-azioni"><button type="button" id="aggiungi-riga">+ Riga</button>
-          <span class="nota">Codice: scrivi una parola ("lamina", "pasta", "filo 0,7", "kapton 12") o il P/N e scegli dal menu: materiali di consumo e componenti
-            di Anagrafiche, con descrizione e ultimo prezzo. La descrizione si può completare (es. per quale prodotto è la lamina). Un articolo nuovo si scrive libero:
-            dopo il salvataggio il portale propone di aggiungerlo in anagrafica. La consegna richiesta non è obbligatoria.</span>
+          <span class="nota">Scrivi una parola ("pcb", "lamina", "pasta", "filo 0,7", "kapton 12") o il P/N nel Codice, oppure nella Descrizione se il codice è vuoto,
+            e scegli dal menu: materiali e componenti di Anagrafiche, con il nostro codice, la descrizione e l'ultimo prezzo. Le specifiche di questo ordine (per quale prodotto,
+            revisione, spessore, finitura…) vanno nella casella delle note sotto la descrizione. Un articolo nuovo: "+ Nuovo materiale" in fondo al menu lo mette subito in anagrafica.
+            La consegna richiesta non è obbligatoria.</span>
           <button class="primario">Salva</button></div>
       </form>
       <div class="blocco">

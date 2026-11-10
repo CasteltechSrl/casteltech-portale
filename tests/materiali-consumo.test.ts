@@ -82,3 +82,27 @@ test('Materiali: file degli ultimi prezzi, righe non valide scartate', () => {
   assert.equal(scartate, 2);
   assert.throws(() => leggiFilePrezziMateriali({ prodotti: [] }), /prezzi dei materiali/);
 });
+
+// Ordini a fornitore (Adriano 10/11/2026): "scrivendo pcb nella descrizione voglio la riga della PCB in anagrafica", note libere per riga
+test('Materiali: articoli standard degli ordini a fornitore (PCB, attrezzatura, coating DOWSIL) trovati con una parola', async () => {
+  const sql086 = readFileSync(new URL('../db/migrazioni/086_materiali_pcb.sql', import.meta.url), 'utf8');
+  const nuovi = [...sql086.matchAll(/\('(MC-[A-Z]{3}-\d{3})', '([A-Z]{3})', '([A-Z]+)', '((?:[^']|'')+)'\)/g)]
+    .map(([, codice, categoria, um, descrizione], i) => ({ id: 1000 + i, codice, categoria, um, descrizione, attivo: true }));
+  assert.ok(nuovi.length >= 5);
+  const tutti = [...iniziali, ...nuovi];
+  assert.equal(new Set(tutti.map(m => m.codice)).size, tutti.length, 'codici nuovi diversi da quelli della 065');
+  for (const m of nuovi) assert.ok(m.categoria in CATEGORIE_MATERIALI && m.codice.startsWith(`MC-${m.categoria}-`), m.codice);
+  assert.equal(filtraMateriali(tutti, 'pcb')[0].codice, 'MC-PCB-001');
+  assert.ok(filtraMateriali(tutti, 'circuito stampato').some(m => m.codice === 'MC-PCB-001'));
+  assert.ok(filtraMateriali(tutti, 'dowsil').some(m => m.codice === 'MC-COA-007'));
+  assert.equal(categoriaProposta('PCB NASOMETER V11'), 'PCB');
+  assert.equal(categoriaProposta('Circuito stampato 4 strati'), 'PCB');
+  const { righeConfermaDaModulo } = await import('../src/engine/conferme-ordine.js');
+  const { righe, errori } = righeConfermaDaModulo([
+    { codice: 'mc-pcb-001', descrizione: 'PCB CIRCUITO STAMPATO', note: '  nasometer v11  fr4 1,6 mm enig ', quantita: '120', prezzo: '2,99' },
+    { codice: 'MC-LAM-006', descrizione: 'LAMINA', quantita: '1', prezzo: '75' },
+  ]);
+  assert.deepEqual(errori, []);
+  assert.equal(righe[0].note, 'NASOMETER V11 FR4 1,6 MM ENIG');
+  assert.equal(righe[1].note, null);
+});

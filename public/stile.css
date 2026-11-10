@@ -1132,3 +1132,5 @@ table.editor.su-misura input.scaglioni { width: 11rem; }
 .scelta-anno span { font-size: .9rem; color: var(--grigio, #666); margin-right: .2rem; }
 .scelta-anno a { padding: .2rem .7rem; border: 1px solid var(--bordo); border-radius: 99px; background: var(--carta); text-decoration: none; color: var(--testo); font-size: .9rem; }
 .scelta-anno a.attivo { background: var(--accento); border-color: var(--accento); color: #fff; }
+/* note / specifiche della riga sotto la descrizione (DDT, fatture, ordini a fornitore) */
+table.editor input.nota-riga-doc { display: block; width: 100%; margin-top: .25rem; font-size: .85rem; }
