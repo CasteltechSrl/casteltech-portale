@@ -11,7 +11,7 @@ import { avvisoServizi } from './stato-servizi.js';
 import { caricoGiornaliero, daEvadere as daEvadereSchede } from '../engine/ordini.js';
 import { SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, imponibilePerMese, riepilogoScadenze, variazione } from '../engine/cruscotto-amministrazione.js';
 import { numeroCompleto } from '../engine/amministrazione.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js';
+import { SQL_DDT_DIFFERITA } from '../engine/ddt.js';
 import { caricoSettimane, cosaDaFare, giorniTra, piuGiorni, scadenzeFiscali } from '../engine/cruscotto-generale.js';
 import { contaDifferite } from '../engine/fatture-differite.js';
 import { bolloPerTrimestre } from '../engine/fiscale.js';
@@ -61,9 +61,7 @@ export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(og
       WHERE s.pagata_il IS NULL AND d.tipo IN ('fattura', 'nota_credito') AND d.stato NOT IN ('bozza', 'annullato', 'scartato') ORDER BY 1, d.numero`),
     q<{ data: string; importo: number }>(`SELECT s.data, s.importo FROM documenti_ricevuti_scadenze s JOIN documenti_ricevuti d ON d.id = s.documento_id
       WHERE s.pagata_il IS NULL AND d.tipo = 'fattura'`),
-    q<{ data: string }>(`SELECT d.data::text AS data FROM documenti d
-      WHERE d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}')
-        AND ${SQL_DDT_DA_FATTURARE}`),
+    q<{ data: string }>(`SELECT d.data::text AS data FROM documenti d WHERE ${SQL_DDT_DIFFERITA}`),   // stessi DDT della pagina Fatture differite
     q<{ quanti: number }>(`SELECT count(*)::int AS quanti FROM documenti WHERE stato = 'bozza' AND tipo IN ('fattura', 'nota_credito', 'autofattura', 'ddt')`),
     q<{ stato: string; quanti: number; ultimo: number }>(`SELECT stato, count(*)::int AS quanti, max(id) AS ultimo FROM documenti
       WHERE stato IN ('scartato', 'non_consegnato', 'inviato') AND tipo IN ('fattura', 'nota_credito', 'autofattura') GROUP BY stato`),

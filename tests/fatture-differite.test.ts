@@ -59,3 +59,12 @@ test('fatture differite: il DDT aperto da qui torna alle Fatture differite (Adri
   assert.match(rotta, /documenti\/\$\{d\.id\}\?da=differite/);
   assert.match(rotta, /daDifferite \? html`<a href="\/amministrazione\/differite">/);
 });
+
+test('fatture differite: cruscotto e pagina contano gli stessi DDT (Adriano 10/11/2026)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { SQL_DDT_DIFFERITA } = await import('../src/engine/ddt.js');
+  assert.match(SQL_DDT_DIFFERITA, /d\.numero IS NOT NULL AND d\.cliente_id IS NOT NULL/);
+  assert.match(SQL_DDT_DIFFERITA, /f\.stato = 'bozza'/);   // DDT già in una bozza di fattura: né nella pagina né nell'avviso
+  for (const f of ['../src/server/cruscotto-generale-servizio.ts', '../src/server/documenti-servizio.ts'])
+    assert.match(readFileSync(new URL(f, import.meta.url), 'utf8'), /WHERE \$\{SQL_DDT_DIFFERITA\}/);
+});

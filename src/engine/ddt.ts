@@ -43,6 +43,15 @@ export function ddtDaFatturareRegola(d: { causale?: string | null; origine: stri
 export const SQL_DDT_DA_FATTURARE = `(${SQL_CAUSALE_DA_FATTURARE} AND d.fatturato_altrove IS NULL
   AND NOT (d.origine = 'fic' AND NOT EXISTS (SELECT 1 FROM documenti_righe zz WHERE zz.documento_id = d.id AND abs(coalesce(zz.quantita, 0) * coalesce(zz.prezzo, 0)) >= 0.005)))`;
 
+/**
+ * DDT che compaiono in Fatture differite e negli avvisi del cruscotto (Adriano 10/11/2026: il cruscotto contava 1 DDT "oltre il 15" che la pagina
+ * non mostrava): emesso con numero e cliente, senza fattura, non già in una bozza di fattura, da fatturare (`SQL_DDT_DA_FATTURARE`). Stessa condizione
+ * per la pagina e per i conteggi, alias `d` sulla tabella documenti.
+ */
+export const SQL_DDT_DIFFERITA = `(d.tipo = 'ddt' AND d.fattura_id IS NULL AND d.numero IS NOT NULL AND d.cliente_id IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato')
+  AND (d.origine <> 'fic' OR d.data >= '${INIZIO_DDT_DA_FATTURARE}') AND ${SQL_DDT_DA_FATTURARE}
+  AND NOT EXISTS (SELECT 1 FROM documenti_righe y JOIN documenti f ON f.id = y.documento_id WHERE y.ddt_id = d.id AND f.stato = 'bozza'))`;
+
 /** Dati del trasporto salvati in documenti.dati_trasporto (stesse chiavi dello storico di FIC: causale, colli, peso, trasportatore, destinazione). */
 export interface DatiTrasporto {
   causale?: string; a_cura?: string; trasportatore?: string; porto?: string; colli?: string; peso?: string; aspetto?: string;
