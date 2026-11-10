@@ -13,13 +13,13 @@ import { numeroCompleto } from '../engine/amministrazione.js';
 import { euroIt, mailtoSollecito, oggettoSollecito, raggruppaScaduti, testoSollecito, type GruppoSollecito, type RataScaduta } from '../engine/solleciti.js';
 
 export async function rateScadute(oggi: string, clienteId?: number): Promise<RataScaduta[]> {
-  const righe = await q<any>(`SELECT s.documento_id, d.numero, d.sezionale, d.data::text AS data_fattura, s.data::text AS scadenza, s.importo::float AS importo,
+  const righe = await q<any>(`SELECT s.id AS scadenza_id, s.documento_id, d.numero, d.sezionale, d.data::text AS data_fattura, s.data::text AS scadenza, s.importo::float AS importo,
       d.cliente_id, coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS cliente, c.email_amministrazione, c.pec
     FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
     WHERE s.pagata_il IS NULL AND d.tipo = 'fattura' AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND s.data < $1 AND d.cliente_id IS NOT NULL
       AND ($2::int IS NULL OR d.cliente_id = $2) ORDER BY s.data`, [oggi, clienteId ?? null]);
   return righe.map(r => ({
-    documentoId: r.documento_id, numero: `${numeroCompleto(r.numero, r.sezionale)}/${r.data_fattura.slice(0, 4)}`, dataFattura: r.data_fattura, scadenza: r.scadenza,
+    documentoId: r.documento_id, scadenzaId: r.scadenza_id, numero: `${numeroCompleto(r.numero, r.sezionale)}/${r.data_fattura.slice(0, 4)}`, dataFattura: r.data_fattura, scadenza: r.scadenza,
     importo: Number(r.importo), clienteId: r.cliente_id, cliente: r.cliente, email: indirizzoEmail(r.email_amministrazione) || indirizzoEmail(r.pec) || null,
   }));
 }

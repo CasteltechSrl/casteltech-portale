@@ -24,3 +24,11 @@ test('pagamento parziale: colonna Incasso dice quanto resta, la Guida lo spiega'
   assert.match(i.testo, /restano 720,00 €/);
   assert.ok(cercaGuida('fattura pagata parzialmente').some(a => a.argomento.id === 'incassi-pagamenti'));
 });
+
+test('solleciti incassi: pulsante "Pagato" per rata, spiegato nella Guida', async () => {
+  const { readFileSync } = await import('node:fs');
+  const rotte = readFileSync('src/server/rotte/amministrazione.ts', 'utf8');
+  assert.match(rotte, /function moduloPagato/);
+  assert.match(readFileSync('public/solleciti.js', 'utf8'), /X-Senza-Ricarica/);
+  assert.ok(cercaGuida('solleciti pagato').some(a => a.argomento.id === 'solleciti-incassi'));
+});

@@ -142,6 +142,17 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi,
     ${scadenze.some(s => !s.pagata_il) ? html`<p class="nota">Pagamento parziale: scrivi l'importo arrivato nella casella accanto alla banca; la rata si divide e il resto rimane aperto.</p>` : ''}`;
 }
 
+/** Solleciti incassi (Adriano 10/11/2026, "manca l'opzione pagato"): rata segnata incassata, anche in parte, senza ricaricare la pagina. */
+function moduloPagato(r: { scadenzaId?: number; importo: number }, modi: string[], torna: string): Raw {
+  if (!r.scadenzaId) return html``;
+  return html`<form method="post" action="/amministrazione/documenti/scadenze/${r.scadenzaId}" class="inline pagato-rata">
+    <input type="hidden" name="torna" value="${torna}">
+    <input type="date" name="pagata_il" value="${oggiRoma()}" required title="Data dell'incasso">
+    <select name="modo" required title="Come è stata incassata"><option value="">Modo…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
+    <input name="importo" inputmode="decimal" class="corto" placeholder="${numCampo(r.importo)}" title="Facoltativo: importo arrivato se è un pagamento parziale (vuoto = rata intera)">
+    <button>Pagato</button></form>`;
+}
+
 const ETICHETTE_TRASPORTO: Record<string, string> = { causale: 'Causale', a_cura: 'Trasporto a cura del', trasportatore: 'Vettore', porto: 'Porto',
   colli: 'Colli', peso: 'Peso', aspetto: 'Aspetto dei beni', destinazione: 'Destinazione', inizio: 'Inizio trasporto' };
 
@@ -341,19 +352,22 @@ export function rotteAmministrazione() {
   r.get('/solleciti', async (req, res) => {
     const oggi = oggiRoma();
     const gruppi = await gruppiSolleciti(oggi);
+    const { modi } = await caricaModiPagamento();
     const totale = gruppi.reduce((s, g) => s + g.totale, 0);
     res.send(pagina(req, 'Solleciti incassi', html`
       <div class="intestazione-pagina"><h1>Solleciti incassi · rate scadute per cliente</h1><div class="azioni"><a class="bottone" href="/amministrazione">Cruscotto</a></div></div>
       <p class="nota">Tutte le rate scadute e non incassate delle fatture emesse, un gruppo per cliente. <b>Prepara il sollecito</b> scrive l'email con l'elenco delle fatture, gli importi e l'IBAN:
         la controlli e la mandi (con Gmail quando la delega è attiva, altrimenti con la tua posta). Il tono sale con il ritardo: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso.
-        Una rata incassata si segna dalla fattura (o da Amministrazione → Fatture → Segna incassate) e sparisce da qui.</p>
+        Se il cliente ha pagato premi <b>Pagato</b> sulla riga: scegli la rata, la data e il modo; se ha pagato solo una parte scrivi l'importo arrivato e il resto rimane da incassare.</p>
       ${gruppi.length ? html`<p class="nota">${gruppi.length} clienti, ${euro(totale)} scaduti.</p>
       <div class="tabella-scorre"><table class="elenco solleciti"><thead><tr><th>Cliente</th><th class="n">Rate</th><th class="n">Scaduto</th><th class="n">Ritardo max</th><th>Livello</th><th>Email</th><th></th></tr></thead>
         <tbody>${gruppi.map(g => html`<tr class="livello-${g.livello}">
           <td><a href="/anagrafiche/clienti/${g.clienteId}">${g.cliente}</a></td><td class="n">${g.rate.length}</td><td class="n"><b>${euro(g.totale)}</b></td>
           <td class="n">${g.giorniMax} gg</td><td>${NOMI_LIVELLO[g.livello]}</td><td>${g.email ?? html`<span class="nota">manca (Dati fiscali del cliente)</span>`}</td>
-          <td><a class="bottone ${g.livello === 'ultimo' ? 'primario' : ''}" href="/amministrazione/solleciti/${g.clienteId}">Prepara il sollecito</a></td></tr>`)}</tbody></table></div>`
-        : html`<p class="vuoto">Nessuna rata scaduta: niente da sollecitare.</p>`}`));
+          <td><a class="bottone ${g.livello === 'ultimo' ? 'primario' : ''}" href="/amministrazione/solleciti/${g.clienteId}">Prepara il sollecito</a>
+            <details class="pagato-cliente"><summary class="bottone">Pagato</summary><ul class="scadenze">${g.rate.map(x => html`<li>
+              <a href="/amministrazione/documenti/${x.documentoId}">n. ${x.numero}</a> scad. ${data(x.scadenza)} <b>${euro(x.importo)}</b> ${moduloPagato(x, modi, '/amministrazione/solleciti')}</li>`)}</ul></details></td></tr>`)}</tbody></table></div>`
+        : html`<p class="vuoto">Nessuna rata scaduta: niente da sollecitare.</p>`}`, msg(req), 'solleciti.js'));
   });
   r.get('/solleciti/:cliente', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.cliente)) return next();
@@ -361,14 +375,15 @@ export function rotteAmministrazione() {
     const p = await propostaSollecito(Number(req.params.cliente), oggi);
     if (!p) return res.redirect(`/amministrazione/solleciti?msg=${encodeURIComponent('Il cliente non ha rate scadute.')}`);
     const g = p.gruppo;
+    const { modi } = await caricaModiPagamento();
     res.send(pagina(req, `Sollecito · ${g.cliente}`, html`
       <div class="intestazione-pagina"><h1>Sollecito incassi · ${g.cliente} <small class="nota">${NOMI_LIVELLO[g.livello]}</small></h1>
         <div class="azioni"><a class="bottone" href="/amministrazione/solleciti">Tutti i clienti</a> <a class="bottone" href="/anagrafiche/clienti/${g.clienteId}">Scheda cliente</a></div></div>
       ${p.ultimo ? html`<div class="avviso info">Ultimo sollecito registrato nel CRM il ${data(p.ultimo.data)}: ${p.ultimo.descrizione}</div>` : ''}
-      <table class="elenco"><thead><tr><th>Fattura</th><th>Data</th><th>Scadenza</th><th class="n">Ritardo</th><th class="n">Importo</th></tr></thead>
+      <table class="elenco"><thead><tr><th>Fattura</th><th>Data</th><th>Scadenza</th><th class="n">Ritardo</th><th class="n">Importo</th><th>Pagato</th></tr></thead>
         <tbody>${g.rate.map(r => html`<tr><td><a href="/amministrazione/documenti/${r.documentoId}">n. ${r.numero}</a></td><td>${data(r.dataFattura)}</td><td>${data(r.scadenza)}</td>
-          <td class="n">${giorniRitardo(r.scadenza, oggi)} gg</td><td class="n">${euro(r.importo)}</td></tr>`)}</tbody>
-        <tfoot><tr><td colspan="4">Totale scaduto</td><td class="n"><b>${euro(g.totale)}</b></td></tr></tfoot></table>
+          <td class="n">${giorniRitardo(r.scadenza, oggi)} gg</td><td class="n">${euro(r.importo)}</td><td>${moduloPagato(r, modi, `/amministrazione/solleciti/${g.clienteId}`)}</td></tr>`)}</tbody>
+        <tfoot><tr><td colspan="4">Totale scaduto</td><td class="n"><b>${euro(g.totale)}</b></td><td></td></tr></tfoot></table>
       <form method="post" action="/amministrazione/solleciti/${g.clienteId}/invia" class="blocco" data-conferma="Mandare il sollecito al cliente?">
         <h2>Email al cliente</h2>
         <div class="riga-campi">
@@ -1359,7 +1374,7 @@ export function rotteAmministrazione() {
         return { documento_id: rata.documento_id as number, testo: `Rata segnata come non ${parola}.${resto ? ' Riunita con il residuo della stessa scadenza.' : ''}` };
       }
       const conti = pagamentoRata(Number(rata.importo), rata.pagata_il ? '' : req.body.importo);
-      if ('errore' in conti) return { documento_id: rata.documento_id as number, testo: conti.errore };
+      if ('errore' in conti) return { documento_id: rata.documento_id as number, testo: conti.errore, errore: true };
       await c.query(`UPDATE ${tabella} SET pagata_il = $2, conto = $3, modo = $4, importo = $5 WHERE id = $1`,
         [id, giorno, String(req.body.conto ?? '').trim() || null, modoPagamento(req.body.modo, modi), conti.pagato]);
       if (conti.residuo > 0) await c.query(sezione === 'documenti'
@@ -1372,6 +1387,9 @@ export function rotteAmministrazione() {
     // fattura tutta incassata: le sue note di credito aperte si chiudono come "Compensato con fattura"
     const compensate = esito && sezione === 'documenti' && !annulla && !esito.residuo ? await compensaNoteCredito([esito.documento_id]) : 0;
     const testo = esito ? `${esito.testo}${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}` : '';
+    // modulo "Pagato" dei Solleciti: risposta senza ricaricare la pagina
+    if (req.get('X-Senza-Ricarica') === '1') return res.status(esito ? 200 : 404).json({ ok: !!esito && !('errore' in esito),
+      testo: testo || 'Rata non trovata.', residuo: esito && 'residuo' in esito ? esito.residuo ?? 0 : 0 });
     const torna = ritornoSicuro(req.body.torna);
     if (esito && torna) return res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(testo)}`);
     res.redirect(esito ? `/amministrazione/${sezione}/${esito.documento_id}?msg=${encodeURIComponent(testo)}` : '/amministrazione');

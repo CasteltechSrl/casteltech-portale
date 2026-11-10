@@ -4,7 +4,7 @@
  * (con Gmail quando la delega è attiva, altrimenti con la propria posta). Il tono sale con i giorni di ritardo.
  */
 export interface RataScaduta {
-  documentoId: number; numero: string; dataFattura: string; scadenza: string; importo: number;
+  documentoId: number; scadenzaId?: number; numero: string; dataFattura: string; scadenza: string; importo: number;
   clienteId: number; cliente: string; email: string | null;
 }
 export type LivelloSollecito = 'primo' | 'secondo' | 'ultimo';

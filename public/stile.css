@@ -1139,3 +1139,10 @@ table.editor.su-misura input.scaglioni { width: 11rem; }
 .scelta-anno a.attivo { background: var(--accento); border-color: var(--accento); color: #fff; }
 /* note / specifiche della riga sotto la descrizione (DDT, fatture, ordini a fornitore) */
 table.editor input.nota-riga-doc { display: block; width: 100%; margin-top: .25rem; font-size: .85rem; }
+
+/* Solleciti incassi: "Pagato" per rata (10/11/2026) */
+details.pagato-cliente { display: inline-block; margin-left: .3rem; }
+details.pagato-cliente[open] { display: block; margin: .4rem 0 0; }
+details.pagato-cliente summary { list-style: none; cursor: pointer; }
+details.pagato-cliente summary::-webkit-details-marker { display: none; }
+form.pagato-rata input.corto { width: 7rem; }

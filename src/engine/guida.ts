@@ -701,11 +701,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'solleciti-incassi', area: 'amministrazione', titolo: 'Solleciti incassi: email al cliente per le fatture scadute',
-    parole: 'sollecito solleciti incassi pagamento fatture scadute scaduto email cliente gmail iban ritardo ultimo avviso crm',
+    parole: 'sollecito solleciti incassi pagamento fatture scadute scaduto email cliente gmail iban ritardo ultimo avviso crm pagato pagata parziale in parte segna incassata',
     testo: [
       'Amministrazione → Solleciti incassi elenca le rate scadute e non incassate delle fatture emesse, un gruppo per cliente, con il totale, il ritardo massimo e il livello: primo sollecito sotto i 30 giorni, secondo fino a 60, poi ultimo avviso. Ci si arriva anche dal pulsante rosso "incassi scaduti" del cruscotto e dalla scheda del cliente.',
       '"Prepara il sollecito" scrive l\'email: elenco delle fatture con data, scadenza, giorni di ritardo e importo, totale scaduto, IBAN dell\'azienda (da Impostazioni → Amministrazione). Il destinatario proposto è l\'email amministrativa del cliente (Dati fiscali). Si corregge tutto prima di mandarla.',
-      'Con Gmail attivo (delega di Google Workspace per info@) il pulsante "Invia con Gmail" la manda e la registra nel CRM del cliente come attività email. Finché la delega non c\'è: "Apri nella posta" o "Copia il testo", poi "Segna come mandato" per registrarla nel CRM. Una rata incassata si segna dalla fattura e sparisce dall\'elenco.',
+      'Con Gmail attivo (delega di Google Workspace per info@) il pulsante "Invia con Gmail" la manda e la registra nel CRM del cliente come attività email. Finché la delega non c\'è: "Apri nella posta" o "Copia il testo", poi "Segna come mandato" per registrarla nel CRM. Se il cliente ha pagato premi "Pagato" sulla sua riga (o nella colonna Pagato della pagina del sollecito): per ogni rata data, modo e, se ha pagato solo una parte, l\'importo arrivato; la rata si segna incassata senza ricaricare la pagina e il resto rimane da incassare (10/11/2026).',
     ],
     passi: ['Apri Amministrazione → Solleciti incassi.', 'Premi "Prepara il sollecito" sul cliente.', 'Controlla destinatario e testo, poi "Invia con Gmail" (o "Apri nella posta" e "Segna come mandato").'],
     pagine: [['/amministrazione/solleciti', 'Solleciti incassi'], ['/amministrazione', 'Cruscotto amministrazione']],
