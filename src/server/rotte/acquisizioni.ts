@@ -319,9 +319,9 @@ export function rotteAcquisizioni() {
         <div class="tabella-scorre"><table class="elenco righe-ordine">
           <thead><tr><th>Codice letto</th><th>Descrizione</th><th>Prodotto in anagrafica</th><th>Tipo</th><th class="n">Q.tà</th><th class="n">Prezzo</th><th>Consegna</th>${modificabile ? html`<th>Togli</th>` : ''}</tr></thead>
           <tbody>${righe.map((x, i) => modificabile ? html`<tr${righeSbagliate.has(i) ? raw(' class="da-controllare"') : ''}>
-            <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}"></td>
+            <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}" id="codice-r${i}"></td>
             <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
-            <td><select name="righe[r${i}][prodotto]" class="cercabile" aria-label="Prodotto dall'anagrafica del cliente o servizio una tantum"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: scegli dal menu' : '— scegli dal menu (vuoto = cerca dal codice letto) —'}</option>
+            <td><select name="righe[r${i}][prodotto]" class="cercabile scelta-prodotto-riga" data-riga="r${i}" aria-label="Prodotto dall'anagrafica del cliente o servizio una tantum"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: scegli dal menu' : '— scegli dal menu (vuoto = cerca dal codice letto) —'}</option>
               ${prodotti.length ? html`<optgroup label="Prodotti del cliente in anagrafica">${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</optgroup>` : ''}
               ${opzioniServizi(servizi, x?.servizio, s => `ut:${s.codice}`)}</select>
               ${x && !x.prodottoId && x.tipo !== 'servizio' && p.clienteId ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
@@ -329,7 +329,7 @@ export function rotteAcquisizioni() {
                 <label>Descrizione <input name="righe[r${i}][np_descrizione]" value="${x.descrizione}" class="maiuscolo lungo"></label>
                 <button formaction="/ordini/acquisire/${a.id}/prodotto?riga=${i}" title="Va in Anagrafiche → Prodotti del cliente scelto e si collega a questa riga">Aggiungi in anagrafica</button>
               </details>` : ''}</td>
-            <td><select name="righe[r${i}][tipo]">${[['scheda', 'schede'], ['servizio', 'servizio']].map(([v, t]) => html`<option value="${v}" ${(x?.tipo ?? 'scheda') === v ? raw('selected') : ''}>${t}</option>`)}</select></td>
+            <td><select name="righe[r${i}][tipo]" id="tipo-r${i}">${[['scheda', 'schede'], ['servizio', 'servizio']].map(([v, t]) => html`<option value="${v}" ${(x?.tipo ?? 'scheda') === v ? raw('selected') : ''}>${t}</option>`)}</select></td>
             <td class="n"><input name="righe[r${i}][quantita]" value="${x ? numCampo(x.quantita, 3) : ''}" inputmode="decimal" class="corto"></td>
             <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto">${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
             <td><input type="date" name="righe[r${i}][consegna]" value="${x?.consegna ?? ''}"></td>
@@ -339,7 +339,8 @@ export function rotteAcquisizioni() {
           <tfoot><tr><td colspan="5">Somma delle righe${p.totaleDocumento != null ? html` · nell'ordine ${euro(p.totaleDocumento)}` : ''}</td><td class="n"><b>${euro(conti?.somma ?? 0)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
         </table></div>
         ${modificabile ? html`<p class="nota">Dopo aver cambiato il cliente premi «Salva le correzioni»: i prodotti si ricollegano alla sua anagrafica.
-          Le righe con il prodotto non in anagrafica entrano nell'ordine con il codice del cliente (come nell'import).</p>
+          Con «Conferma e crea l'ordine» le righe collegate a un prodotto entrano con codice e descrizione dell'anagrafica (quelli letti restano come codice e descrizione del cliente);
+          le righe con il prodotto non in anagrafica entrano con il codice e la descrizione letti (come nell'import).</p>
           ${conti && !conti.torna ? html`<p><label><input type="checkbox" name="contiControllati" value="1"> Ho controllato: confermo anche se i conti non tornano</label></p>` : ''}
           <p class="pulsanti"><button class="primario">Conferma e crea l'ordine</button>
             <button formaction="/ordini/acquisire/${a.id}/salva">Salva le correzioni</button></p>` : ''}
@@ -347,7 +348,7 @@ export function rotteAcquisizioni() {
       ${a.stato !== 'confermato' ? html`<p class="pulsanti">
         ${a.contenuto && ['ordine', 'email', 'scheda_produzione', 'ddt', 'ddt_ricevuto'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
         ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo documento? Non diventa un ordine e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
-      { avviso }));
+      { avviso, script: ['elenco.js', 'acquisizioni.js'] }));
   });
 
   r.get('/:id/file', async (req, res) => {

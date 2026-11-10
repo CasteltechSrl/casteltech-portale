@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dataDa, leggiEmail, normalizzaProposta, numeroDa, numeroOrdineEmail, oggettoJson, tipoFile } from '../src/engine/acquisizioni.js';
+import { dataDa, leggiEmail, normalizzaProposta, numeroDa, numeroOrdineEmail, oggettoJson, rigaConProdotto, tipoFile } from '../src/engine/acquisizioni.js';
 
 test('acquisizioni: tipo del file dal nome', () => {
   assert.equal(tipoFile('export_ordini_25-10-2026_22-51-19.xls'), 'export_ordini');
@@ -198,4 +198,13 @@ test('codice proposto per il prodotto nuovo da una riga d\'ordine', async () => 
   assert.equal(codiceProposto('ea1002-0', 'scheda'), 'EA1002-0');
   assert.equal(codiceProposto('', 'Montaggio scheda M2501-B'), 'M2501-B');
   assert.equal(codiceProposto('', 'COSTO UNA TANTUM'), '');
+});
+
+test('acquisizioni: riga collegata a un prodotto in anagrafica (Adriano 10/11/2026)', () => {
+  // codice letto vuoto = codice del prodotto, tipo scheda anche se l'IA aveva detto servizio
+  assert.deepEqual(rigaConProdotto({ codice: '', tipo: 'servizio' as const }, { codice: 'BLSTM' }), { codice: 'BLSTM', tipo: 'scheda' });
+  // il codice letto scritto resta (diventa il codice del cliente nell'ordine)
+  assert.deepEqual(rigaConProdotto({ codice: '74.212', tipo: 'scheda' as const }, { codice: 'BLSTM' }), { codice: '74.212', tipo: 'scheda' });
+  // senza prodotto non cambia niente
+  assert.deepEqual(rigaConProdotto({ codice: '', tipo: 'servizio' as const }, null), { codice: '', tipo: 'servizio' });
 });
