@@ -26,3 +26,18 @@
 document.querySelectorAll('tr[data-href]').forEach(tr => {
   tr.addEventListener('click', e => { if (!e.target.closest('a, button, input, label')) location.href = tr.dataset.href; });
 });
+
+// Proposta dell'ordine (Adriano 10/11/2026): scelto un prodotto dall'anagrafica, il codice letto vuoto prende quello del prodotto
+// e la riga diventa "schede" (un prodotto in anagrafica è una scheda); scelto un servizio una tantum (ut:…), la riga diventa "servizio".
+document.addEventListener('change', e => {
+  const menu = e.target.closest?.('select.scelta-prodotto-riga');
+  if (!menu) return;
+  const riga = menu.dataset.riga;
+  const codice = document.getElementById(`codice-${riga}`);
+  const tipo = document.getElementById(`tipo-${riga}`);
+  const scelta = menu.selectedOptions[0];
+  if (!scelta || !menu.value) return;
+  if (menu.value.startsWith('ut:')) { if (tipo) tipo.value = 'servizio'; return; }
+  if (tipo) tipo.value = 'scheda';
+  if (codice && !codice.value.trim()) codice.value = scelta.textContent.split(' · ')[0].trim();
+});

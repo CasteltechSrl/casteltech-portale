@@ -14,7 +14,7 @@ import { collegaFatturaEstera, descriviCaricata, fatturaEsteraGiaCaricata } from
 import { fasiCommessa, leggiCommessa } from './commesse-servizio.js';
 import { righeDaFoglio, type FoglioLetto, type RigaScansione } from '../engine/fogli-tempi.js';
 import { fineLavorazioneDaScansione, leggiFineLavorazione } from '../engine/flusso.js';
-import { dividiDdt, prodottoDaDescrizione, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
+import { dividiDdt, prodottoDaDescrizione, rigaConProdotto, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { collegaDdtRicevuto } from './ddt-ricevuti-servizio.js';
 import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
@@ -73,6 +73,7 @@ async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null):
     const x = r as Partial<RigaPropostaDb>;
     let prodottoId = x.prodottoId ?? null;
     let codice = r.codice;
+    let codiceProdotto: string | null = null;
     // il prodotto scelto deve essere del cliente (o senza cliente); altrimenti si cerca dal codice letto
     if (prodottoId && !(await q1(`SELECT 1 FROM prodotti WHERE id = $1 AND (cliente_id = $2 OR cliente_id IS NULL)`, [prodottoId, clienteId ?? -1]))) prodottoId = null;
     if (!prodottoId && x.prodottoId === undefined && chiaveCodice(r.codice) && clienteId) prodottoId = (await risolvi(pool, nomeCliente, r.codice)).prodottoId;
@@ -82,11 +83,15 @@ async function collega(p: Proposta | PropostaDb, clienteScelto?: number | null):
       const trovato = prodottoDaDescrizione(r.descrizione, delCliente);
       if (trovato) { prodottoId = trovato.id; codice = trovato.codice; }
     }
-    const tipo = x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`));
+    if (prodottoId) codiceProdotto = (await q1<{ codice: string }>(`SELECT codice FROM prodotti WHERE id = $1`, [prodottoId]))?.codice ?? null;
+    // prodotto in anagrafica = scheda, e il codice letto vuoto prende quello dell'anagrafica
+    const conProdotto = rigaConProdotto({ codice: chiaveCodice(codice) ? codice : '', tipo: x.tipo ?? (prodottoId ? 'scheda' : tipoRigaDa(`${r.codice} ${r.descrizione}`)) },
+      codiceProdotto ? { codice: codiceProdotto } : null);
+    const tipo = conProdotto.tipo;
     // riga di servizio: servizio una tantum scelto dall'ufficio, altrimenti proposto dalla descrizione ("LAMINA SERIGRAFICA" → UT-LAMINA)
     const servizio = prodottoId || tipo !== 'servizio' ? null
       : x.servizio && servizi.some(s => s.codice === x.servizio) ? x.servizio : servizioProposto(r.descrizione, servizi);
-    righe.push({ ...r, codice: chiaveCodice(codice) ? codice : '', prodottoId, tipo, servizio });
+    righe.push({ ...r, codice: conProdotto.codice, prodottoId, tipo, servizio });
   }
   return { ...p, clienteId, cliente: maiuscolo(nomeCliente), righe };
 }

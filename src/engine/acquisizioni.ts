@@ -210,6 +210,13 @@ export const numeroOrdineEmail = (massimo: number | null | undefined) => Math.ma
 export const tipoRigaDa = (descrizione: string): 'scheda' | 'servizio' =>
   /\b(UNA\s+TANTUM|ATTREZZ\w*|SETUP|SET-UP|LAMIN[AE]|STENCIL|PROGRAMMAZION\w*|SPESE|TRASPORTO|IMBALL\w*|CERTIFICAT\w*|NRE)\b/i.test(descrizione) ? 'servizio' : 'scheda';
 
+/** Riga collegata a un prodotto in anagrafica (Adriano 10/11/2026): il prodotto è una scheda, quindi la riga è di tipo scheda
+ *  (l'IA può averla letta come servizio per parole come "PROGRAMMAZIONE" nella descrizione); il codice letto vuoto prende quello dell'anagrafica. */
+export function rigaConProdotto<T extends { codice: string; tipo: 'scheda' | 'servizio' }>(r: T, prodotto: { codice: string } | null): T {
+  if (!prodotto) return r;
+  return { ...r, tipo: 'scheda', codice: r.codice.trim() ? r.codice : prodotto.codice };
+}
+
 // ───────────────────────────── cartella Google Drive ─────────────────────────────
 /** La cartella si controlla solo nei giorni feriali dalle 8 alle 20 (ora italiana), come l'uso reale del portale. */
 export const orarioDrive = (p: { feriale: boolean; minuti: number }) => p.feriale && p.minuti >= 8 * 60 && p.minuti <= 20 * 60;
