@@ -93,6 +93,8 @@ test('Materiali: articoli standard degli ordini a fornitore (PCB, attrezzatura, 
   assert.equal(new Set(tutti.map(m => m.codice)).size, tutti.length, 'codici nuovi diversi da quelli della 065');
   for (const m of nuovi) assert.ok(m.categoria in CATEGORIE_MATERIALI && m.codice.startsWith(`MC-${m.categoria}-`), m.codice);
   assert.equal(filtraMateriali(tutti, 'pcb')[0].codice, 'MC-PCB-001');
+  // Adriano 10/11/2026: PCB e prototipi sono la stessa famiglia, un solo codice (la 087 toglie MC-PCB-003)
+  assert.match(readFileSync(new URL('../db/migrazioni/087_pcb_un_codice.sql', import.meta.url), 'utf8'), /DELETE FROM materiali_consumo WHERE codice = 'MC-PCB-003'/);
   assert.ok(filtraMateriali(tutti, 'circuito stampato').some(m => m.codice === 'MC-PCB-001'));
   assert.ok(filtraMateriali(tutti, 'dowsil').some(m => m.codice === 'MC-COA-007'));
   assert.equal(categoriaProposta('PCB NASOMETER V11'), 'PCB');
