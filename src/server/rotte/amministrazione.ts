@@ -43,7 +43,7 @@ import {
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { controlloStorno } from '../../engine/analisi.js';
 import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
-import { stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { MODALITA, stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
 import { datiStampaFattura, inviaFatturaEmail, pdfDellaFattura, propostaEmailFattura } from '../fattura-email-servizio.js';
@@ -122,7 +122,7 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi,
   if (!scadenze.length) return html``;
   const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
   return html`<h2>Scadenze</h2><datalist id="conti">${conti.map(c => html`<option value="${c}">`)}</datalist>
-    <ul class="scadenze">${scadenze.map(s => html`<li>${data(s.data)}: <strong>${euro(Number(s.importo))}</strong> ${s.pagata_il
+    <ul class="scadenze">${scadenze.map(s => html`<li>${data(s.data)}${s.modalita && MODALITA[s.modalita] ? html` <span class="nota">(${MODALITA[s.modalita]})</span>` : ''}: <strong>${euro(Number(s.importo))}</strong> ${s.pagata_il
       ? html`<span class="stato doc-consegnato">${parola} il ${data(s.pagata_il)}${s.modo || s.conto ? ` (${[s.modo, s.conto].filter(Boolean).join(' · ')})` : ''}</span>
         <form method="post" action="/amministrazione/${sezione}/scadenze/${s.id}" class="inline" data-conferma="Segnare la rata come non ${parola}?">
           <input type="hidden" name="annulla" value="1"><button class="link">annulla</button></form>`
@@ -911,6 +911,8 @@ export function rotteAmministrazione() {
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
           ${email ? html`<a class="bottone primario" href="#invia-email">✉ Invia per email</a>` : ''}
+          ${['fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'fic' ? html`<a class="bottone primario" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
+            title="Il documento ricostruito con i dati del portale (cliente, righe, IVA, pagamento e scadenze), da leggere o stampare; l'originale è il PDF di Fatture in Cloud">Vedi la fattura</a>` : ''}
           ${['ddt', 'fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'portale' ? html`<a class="bottone ${d.tipo === 'ddt' && !email ? 'primario' : ''}" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
             title="${d.tipo === 'ddt' ? '' : 'Copia di cortesia per il cliente (il documento fiscale è l\'XML)'}">${d.tipo === 'ddt' ? 'Stampa / PDF' : 'PDF di cortesia'}</a>` : ''}
           ${d.tipo === 'ddt' && d.stato !== 'annullato' && d.origine === 'portale' ? (bloccoModifica

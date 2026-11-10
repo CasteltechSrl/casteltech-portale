@@ -32,3 +32,10 @@ test('solleciti incassi: pulsante "Pagato" per rata, spiegato nella Guida', asyn
   assert.match(readFileSync('public/solleciti.js', 'utf8'), /X-Senza-Ricarica/);
   assert.ok(cercaGuida('solleciti pagato').some(a => a.argomento.id === 'solleciti-incassi'));
 });
+
+test('fatture di FIC: "Vedi la fattura" e modo di pagamento dalla scadenza', async () => {
+  const { readFileSync } = await import('node:fs');
+  assert.match(readFileSync('src/server/rotte/amministrazione.ts', 'utf8'), /Vedi la fattura/);
+  assert.match(readFileSync('src/server/views/stampa-documento.ts', 'utf8'), /MODALITA\[scadenze\[0\]\?\.modalita\]/);
+  assert.ok(cercaGuida('modo di pagamento fattura fatture in cloud').length > 0);
+});

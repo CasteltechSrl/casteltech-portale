@@ -144,10 +144,10 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
   ${totali.bollo ? html`<p class="nota-stampa">Imposta di bollo assolta in modo virtuale ai sensi del D.M. 17/06/2014.</p>` : ''}
   ${d.tipo === 'fattura' ? html`<p class="nota-stampa nota-condizioni">${notaFattura()}</p>` : ''}
   ${d.tipo === 'fattura' ? html`<table class="griglia"><colgroup><col class="meta"><col class="meta"></colgroup>
-    <tr><td><div class="etic">Pagamento</div><div class="val">${pagamento?.descrizione ?? ''}</div>
+    <tr><td><div class="etic">Pagamento</div><div class="val">${pagamento?.descrizione ?? MODALITA[scadenze[0]?.modalita] ?? ''}</div>
         ${scadenze.length ? html`<div class="indirizzo-stampa">${scadenze.map(x => html`Scadenza ${data(x.data)}: ${euro(Number(x.importo))}<br>`)}</div>` : ''}</td>
-      <td><div class="etic">Coordinate bancarie</div><div class="indirizzo-stampa">${pagamento?.modalita === 'MP05' || !pagamento ? html`${azienda.banca ?? ''}<br>IBAN ${azienda.iban ?? ''}`
-        : MODALITA[pagamento.modalita] ?? ''}</div></td></tr>
+      <td><div class="etic">Coordinate bancarie</div><div class="indirizzo-stampa">${(pagamento?.modalita ?? scadenze[0]?.modalita ?? 'MP05') === 'MP05' ? html`${azienda.banca ?? ''}<br>IBAN ${azienda.iban ?? ''}`
+        : MODALITA[pagamento?.modalita ?? scadenze[0]?.modalita] ?? ''}</div></td></tr>
   </table>` : ''}
   <p class="piede">Copia di cortesia: il documento fiscale è il file XML trasmesso al Sistema di Interscambio ed è disponibile nell'area riservata del sito dell'Agenzia delle Entrate.</p>
 </section>
