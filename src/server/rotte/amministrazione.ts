@@ -11,7 +11,7 @@ import { prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { serviziAttivi } from '../servizi-una-tantum-servizio.js';
 import { cellaCodice, cellaCodiceDdt, cellaDescrizione, cellaDescrizioneDdt, cellaNotaRiga, cellaTipoDdt, riquadriSceltaProdotto, type ProdottoScelta } from '../views/scelta-prodotto.js';
 import { Router, type Request } from 'express';
-import { q, q1 } from '../db.js';
+import { q, q1, transazione } from '../db.js';
 import { layout, tastiAcquisti } from '../views/layout.js';
 import { analisiPermessa } from '../../engine/ruoli.js';
 import { differitePerCliente } from '../../engine/fatture-differite.js';
@@ -22,7 +22,7 @@ import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { html, data, euro, euroUnitario, num, raw, type Raw, numCampo } from '../views/html.js';
-import { IMPORTO_BOLLO, SOGLIA_BOLLO, modoPagamento, numeroCompleto } from '../../engine/amministrazione.js';
+import { IMPORTO_BOLLO, SOGLIA_BOLLO, modoPagamento, numeroCompleto, pagamentoRata } from '../../engine/amministrazione.js';
 import { caricaModiPagamento } from '../modi-pagamento-servizio.js';
 import type { ModiPagamento } from '../../engine/modi-pagamento.js';
 import { contenutoCruscotto, menuAmministrazione } from './cruscotto-amministrazione.js';
@@ -131,7 +131,15 @@ function elencoScadenze(scadenze: any[], sezione: keyof typeof SCADENZE, { modi,
           <input type="date" name="pagata_il" value="${oggiRoma()}" required>
           <select name="modo" required title="Come è stata ${parola}"><option value="">Modo di pagamento…</option>${modi.map(m => html`<option>${m}</option>`)}</select>
           <input name="conto" list="conti" placeholder="Banca (es. Bper)" title="Facoltativo: banca o conto usato" class="corto">
-          <button>Segna ${parola}</button></form>`}</li>`)}</ul>`;
+          ${Number(s.importo) > 0 ? html`<input name="importo" inputmode="decimal" class="corto" placeholder="${numCampo(Number(s.importo))}"
+            title="Facoltativo: scrivi quanto è arrivato se è un pagamento parziale (vuoto = rata intera); il resto rimane da ${sezione === 'documenti' ? 'incassare' : 'pagare'}">` : ''}
+          <button>Segna ${parola}</button></form>`}</li>`)}</ul>
+    ${(() => {
+      const pagato = scadenze.filter(s => s.pagata_il).reduce((t, s) => t + Number(s.importo), 0);
+      const resta = scadenze.filter(s => !s.pagata_il).reduce((t, s) => t + Number(s.importo), 0);
+      return pagato && resta ? html`<p class="nota">${sezione === 'documenti' ? 'Incassato' : 'Pagato'} finora <strong>${euro(pagato)}</strong> · resta da ${sezione === 'documenti' ? 'incassare' : 'pagare'} <strong>${euro(resta)}</strong>.</p>` : '';
+    })()}
+    ${scadenze.some(s => !s.pagata_il) ? html`<p class="nota">Pagamento parziale: scrivi l'importo arrivato nella casella accanto alla banca; la rata si divide e il resto rimane aperto.</p>` : ''}`;
 }
 
 const ETICHETTE_TRASPORTO: Record<string, string> = { causale: 'Causale', a_cura: 'Trasporto a cura del', trasportatore: 'Vettore', porto: 'Porto',
@@ -1328,21 +1336,45 @@ export function rotteAmministrazione() {
     res.send(d.xml);
   });
 
-  // rata incassata / pagata (data e conto) o annullata; poi si torna al documento
+  // rata incassata / pagata (data e conto) o annullata; poi si torna al documento.
+  // Pagamento parziale (Adriano 10/11/2026): importo minore della rata = la rata si divide (pagata + residuo con la stessa scadenza);
+  // "annulla" su una parte rimette insieme la rata con il residuo ancora aperto della stessa scadenza.
   for (const sezione of Object.keys(SCADENZE) as (keyof typeof SCADENZE)[]) r.post(`/${sezione}/scadenze/:id`, async (req, res) => {
     const annulla = req.body.annulla === '1';
     const giorno = String(req.body.pagata_il ?? '');
     if (!annulla && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) return res.redirect(req.get('referer') ?? '/amministrazione');
     const { modi } = annulla ? { modi: [] as string[] } : await caricaModiPagamento();
-    const s = await q1<{ documento_id: number }>(`UPDATE ${SCADENZE[sezione]} SET pagata_il = $2, conto = $3, modo = $4 WHERE id = $1 RETURNING documento_id`,
-      [Number(req.params.id), annulla ? null : giorno, annulla ? null : String(req.body.conto ?? '').trim() || null, annulla ? null : modoPagamento(req.body.modo, modi)]);
+    const tabella = SCADENZE[sezione];
     const parola = sezione === 'documenti' ? 'incassata' : 'pagata';
+    const id = Number(req.params.id);
+    const esito = await transazione(async c => {
+      const rata = (await c.query(`SELECT id, documento_id, data, importo::float AS importo, pagata_il FROM ${tabella} WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      if (!rata) return null;
+      if (annulla) {
+        await c.query(`UPDATE ${tabella} SET pagata_il = NULL, conto = NULL, modo = NULL WHERE id = $1`, [id]);
+        // residuo aperto della stessa scadenza (pagamento parziale): si riunisce a questa rata
+        const resto = (await c.query(`DELETE FROM ${tabella} WHERE id = (SELECT id FROM ${tabella} WHERE documento_id = $1 AND id <> $2 AND pagata_il IS NULL
+            AND data = (SELECT data FROM ${tabella} WHERE id = $2) ORDER BY id LIMIT 1) RETURNING importo::float AS importo`, [rata.documento_id, id])).rows[0];
+        if (resto) await c.query(`UPDATE ${tabella} SET importo = round((importo + $2)::numeric, 2) WHERE id = $1`, [id, resto.importo]);
+        return { documento_id: rata.documento_id as number, testo: `Rata segnata come non ${parola}.${resto ? ' Riunita con il residuo della stessa scadenza.' : ''}` };
+      }
+      const conti = pagamentoRata(Number(rata.importo), rata.pagata_il ? '' : req.body.importo);
+      if ('errore' in conti) return { documento_id: rata.documento_id as number, testo: conti.errore };
+      await c.query(`UPDATE ${tabella} SET pagata_il = $2, conto = $3, modo = $4, importo = $5 WHERE id = $1`,
+        [id, giorno, String(req.body.conto ?? '').trim() || null, modoPagamento(req.body.modo, modi), conti.pagato]);
+      if (conti.residuo > 0) await c.query(sezione === 'documenti'
+        ? `INSERT INTO documenti_scadenze (documento_id, data, importo, modalita, riba_distinta_id) SELECT documento_id, data, $2, modalita, riba_distinta_id FROM documenti_scadenze WHERE id = $1`
+        : `INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo) SELECT documento_id, data, $2 FROM documenti_ricevuti_scadenze WHERE id = $1`, [id, conti.residuo]);
+      return { documento_id: rata.documento_id as number, residuo: conti.residuo,
+        testo: conti.residuo > 0 ? `Pagamento parziale: ${euro(conti.pagato)} ${parola === 'incassata' ? 'incassati' : 'pagati'}, restano ${euro(conti.residuo)} da ${sezione === 'documenti' ? 'incassare' : 'pagare'} con la stessa scadenza.`
+          : `Rata segnata come ${parola}.` };
+    });
     // fattura tutta incassata: le sue note di credito aperte si chiudono come "Compensato con fattura"
-    const compensate = s && sezione === 'documenti' && !annulla ? await compensaNoteCredito([s.documento_id]) : 0;
+    const compensate = esito && sezione === 'documenti' && !annulla && !esito.residuo ? await compensaNoteCredito([esito.documento_id]) : 0;
+    const testo = esito ? `${esito.testo}${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}` : '';
     const torna = ritornoSicuro(req.body.torna);
-    if (s && torna) return res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}`)}`);
-    res.redirect(s ? `/amministrazione/${sezione}/${s.documento_id}?msg=${encodeURIComponent(annulla ? `Rata segnata come non ${parola}.` : `Rata segnata come ${parola}.${compensate ? ' Nota di credito chiusa: compensata con questa fattura.' : ''}`)}`
-      : '/amministrazione');
+    if (esito && torna) return res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(testo)}`);
+    res.redirect(esito ? `/amministrazione/${sezione}/${esito.documento_id}?msg=${encodeURIComponent(testo)}` : '/amministrazione');
   });
 
   return r;

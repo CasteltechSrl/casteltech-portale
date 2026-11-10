@@ -331,7 +331,10 @@ export function statoIncasso(rate: RataIncasso[], oggi: string): StatoIncasso | 
     const ultima = pagate.map(r => r.pagata!).sort().at(-1)!;
     return { stato: 'incassata', testo: `incassata ${dataBreve(ultima)}`, titolo, data: ultima };
   }
-  if (aperte.some(r => r.scadenza < oggi)) return { stato: 'scaduta', testo: pagate.length ? 'in parte, scaduta' : 'scaduta', titolo, data: null };
-  if (pagate.length) return { stato: 'in_parte', testo: `in parte (${pagate.length} di ${rate.length})`, titolo, data: null };
+  if (aperte.some(r => r.scadenza < oggi)) return { stato: 'scaduta', testo: pagate.length ? `in parte, scaduta (restano ${euroIt(aperte.reduce((t, r) => t + r.importo, 0))})` : 'scaduta', titolo, data: null };
+  if (pagate.length) {
+    const resta = aperte.reduce((t, r) => t + r.importo, 0);
+    return { stato: 'in_parte', testo: `in parte, restano ${euroIt(resta)}`, titolo, data: null };
+  }
   return { stato: 'da_incassare', testo: 'da incassare', titolo, data: null };
 }

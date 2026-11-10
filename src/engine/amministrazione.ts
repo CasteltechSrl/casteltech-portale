@@ -392,3 +392,20 @@ export function modoPagamento(valore: unknown, elenco: readonly string[] = MODI_
   const v = String(valore ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   return elenco.find(m => m.toLowerCase().replace(/\s+/g, ' ') === v) ?? null;
 }
+
+/**
+ * Pagamento parziale di una rata (Adriano 10/11/2026, "fattura pagata parzialmente"): accanto a "Segna incassata/pagata"
+ * si scrive quanto è arrivato. Vuoto o uguale alla rata = rata intera. Meno della rata = la rata si divide in due:
+ * la parte pagata (con data e modo) e il residuo ancora da incassare/pagare, con la stessa scadenza. Così crediti, cruscotto,
+ * solleciti, previsione di cassa e banca contano da soli solo quello che manca.
+ */
+export function pagamentoRata(importoRata: number, scritto: unknown): { pagato: number; residuo: number } | { errore: string } {
+  const testo = String(scritto ?? '').replace(/€/g, '').trim();
+  const rata = Math.round(importoRata * 100) / 100;
+  if (!testo || rata <= 0) return { pagato: rata, residuo: 0 };
+  const s = /,/.test(testo) ? testo.replace(/\./g, '').replace(',', '.') : /^\d{1,3}(\.\d{3})+$/.test(testo) ? testo.replace(/\./g, '') : testo;
+  const n = Math.round(Number(s) * 100) / 100;
+  if (!Number.isFinite(n) || n <= 0) return { errore: `Importo pagato non valido: "${testo}".` };
+  if (n > rata) return { errore: `L'importo pagato (${n.toFixed(2).replace('.', ',')} €) è più della rata (${rata.toFixed(2).replace('.', ',')} €).` };
+  return { pagato: n, residuo: Math.round((rata - n) * 100) / 100 };
+}
