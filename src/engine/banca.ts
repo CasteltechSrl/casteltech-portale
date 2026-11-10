@@ -454,3 +454,6 @@ export function generaRiba(c: CreditoreRiba, effetti: EffettoRiba[], dataCreazio
   righe.push(` EF${sia}${banca.abi}${data}${supporto}${' '.repeat(6)}${num(quanti, 7)}${num(totale, 15)}${'0'.repeat(15)}${num(quanti * 7 + 2, 7)}${' '.repeat(24)}E${' '.repeat(6)}`);
   return righe.join('\r\n') + '\r\n';
 }
+
+// Codice SIA dell'azienda (CBI): 5 caratteri, lettere e numeri (es. CHJ6R)
+export const codiceSiaValido = (sia: string): boolean => /^[A-Z0-9]{5}$/.test(String(sia ?? '').toUpperCase().replace(/\s/g, ''));

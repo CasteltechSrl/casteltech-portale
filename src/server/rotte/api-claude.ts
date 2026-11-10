@@ -34,9 +34,9 @@ import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
-import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante } from '../banca-servizio.js';
+import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante, codiceSia, salvaCodiceSia } from '../banca-servizio.js';
 import { datiXmlFattura } from '../../engine/xml-fic.js';
-import { CATEGORIE_MOVIMENTO, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
+import { CATEGORIE_MOVIMENTO, codiceSiaValido, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
 let chiaveInMemoria: string | null | undefined;
@@ -194,7 +194,7 @@ export function rotteApiClaude() {
   // Banca (Adriano 7/11/2026): Claude carica l'estratto conto mandato da Adriano nel progetto e scrive i conti (nomi, tipo, saldo dell'estratto conto, fido).
   // Abbinamento da qui solo con /banca/decisioni (Adriano 7/11/2026 sera: lo fa Claude incrociando fatture, acquisti, stipendi).
   r.get('/banca', async (_req, res) => {
-    res.json({ conti: await contiConSaldo(), fidoAnticipi: await fidoAnticipi(),
+    res.json({ sia: await codiceSia(), conti: await contiConSaldo(), fidoAnticipi: await fidoAnticipi(),
       movimenti: await q(`SELECT conto, stato, count(*)::int AS quanti, min(data)::text AS dal, max(data)::text AS al FROM banca_movimenti GROUP BY 1, 2 ORDER BY 1, 2`) });
   });
   r.post('/banca/conti', async (req, res) => {
@@ -205,6 +205,13 @@ export function rotteApiClaude() {
       fido: typeof c.fido === 'number' ? c.fido : null }));
     await salvaConti(conti, typeof b.fidoAnticipi === 'number' ? b.fidoAnticipi : undefined);
     res.json({ ok: true, conti: await contiConSaldo() });
+  });
+  // Codice SIA dell'azienda per le distinte RiBa (Adriano 10/11/2026: CHJ6R, confermato da BPER)
+  r.post('/banca/sia', async (req, res) => {
+    const sia = String(req.body?.sia ?? '').toUpperCase().replace(/\s/g, '');
+    if (!codiceSiaValido(sia)) return res.status(400).json({ errore: 'Il codice SIA è di 5 caratteri (lettere e numeri).' });
+    await salvaCodiceSia(sia);
+    res.json({ ok: true, sia: await codiceSia() });
   });
   r.post('/banca/movimenti', async (req, res) => {
     const b = req.body ?? {};

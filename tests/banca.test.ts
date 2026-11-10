@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abiCabDaIban, categoriaProposta, chiaviMovimenti, contoNuovo, numeroConto, saldoConto, citaNumero, controlliCreditore, controlliEffetto, dataDa, generaRiba, ibanValido, importoDa,
+import { codiceSiaValido, abiCabDaIban, categoriaProposta, chiaviMovimenti, contoNuovo, numeroConto, saldoConto, citaNumero, controlliCreditore, controlliEffetto, dataDa, generaRiba, ibanValido, importoDa,
   leggiCbi, movimentiDaTabella, proponiAbbinamento, rataMancante, SOGLIA_SICURA, type Movimento, type RataAperta } from '../src/engine/banca.js';
 import { cercaGuida } from '../src/engine/guida.js';
 import { MENU_GRUPPI } from '../src/server/views/layout.js';
@@ -222,4 +222,12 @@ test('banca: rata per la fattura emessa che non ne ha', () => {
   assert.equal(rataMancante({ tipo: 'fattura', stato: 'consegnato', numero: 52, data: '2026-05-20', totale: 1202.43, rate: 1 }), null);
   assert.equal(rataMancante({ tipo: 'fattura', stato: 'bozza', numero: null, data: '2026-05-20', totale: 100, rate: 0 }), null);
   assert.equal(rataMancante({ tipo: 'nota_credito', stato: 'emesso', numero: 3, data: '2026-05-20', totale: 100, rate: 0 }), null);
+});
+
+test('codice SIA: 5 caratteri, lettere e numeri', () => {
+  assert.equal(codiceSiaValido('CHJ6R'), true);
+  assert.equal(codiceSiaValido('chj6r'), true);
+  assert.equal(codiceSiaValido('CHJ6'), false);
+  assert.equal(codiceSiaValido('CHJ6R1'), false);
+  assert.equal(codiceSiaValido('CH-6R'), false);
 });
