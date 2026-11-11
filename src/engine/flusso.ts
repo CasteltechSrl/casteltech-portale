@@ -133,6 +133,7 @@ export interface RigaFlusso {
   righeOrdine?: { codice?: string | null; descrizione?: string | null }[];   // le altre righe dello stesso ordine (per gli acquisti)
   commessa?: { id: number; numero: string; stato: string; quantita: number; fineLavorazione: FineLavorazione[]; fasi: { codice: string; gruppo?: string | null; cicloSec?: number }[]; fasiConTempi: string[] } | null;
   ddt?: DdtRiga[];             // DDT del portale di questa riga o della sua commessa (emessi, non annullati)
+  giaPartiti?: { documento: string; quantita: number }[];   // DDT già contati nelle partite (anche storico FIC abbinato per codice): si mostrano in "Da spedire"
   flusso: StatoFlusso;
 }
 

@@ -81,12 +81,18 @@ export async function datiFlusso(oggi: string, righeGia?: RigaElenco[]): Promise
     const parametri = (prevId != null ? parametriPrev.get(prevId) : undefined) ?? (r.prodottoId != null ? parametriProdotto.get(r.prodottoId) : undefined) ?? null;
     const ddt: DdtRiga[] = ddtRighe.filter(d => d.riga_ordine_id === r.id || (c && d.commessa_id === c.id && d.riga_ordine_id == null))
       .map(d => ({ id: d.id, numero: d.numero, sezionale: d.sezionale, data: d.data, quantita: d.quantita, partitoIl: isoOra(d.partito_il), stato: d.stato }));
+    // DDT già partiti contati nelle "già partite": abbinati per codice (storico FIC, Adriano 11/11/2026: DDT 217 di 499 pz non mostrato) o collegati alla riga
+    const giaPartiti = r.spedizioni.map(s => ({ documento: s.documento, quantita: s.quantita }));
+    for (const d of ddt.filter(x => x.partitoIl)) {
+      const documento = `DDT ${d.numero ?? '—'} del ${d.data.slice(8, 10)}/${d.data.slice(5, 7)}/${d.data.slice(0, 4)}`;
+      if (!giaPartiti.some(g => g.documento === documento)) giaPartiti.push({ documento, quantita: d.quantita });
+    }
     const riga: RigaFlusso = {
       id: r.id, quantita: r.quantita, quantitaSpedita: r.quantitaSpedita, residuoQuantita: r.residuoQuantita, stato: r.stato,
       consegnaRichiesta: r.consegnaRichiesta ? isoData(r.consegnaRichiesta) : null, dataOrdine: isoData(r.dataOrdine),
       parametri, righeOrdine: tutte.filter(x => x.ordineId === r.ordineId && x.id !== r.id && x.tipo === 'servizio').map(x => ({ codice: x.codice, descrizione: x.descrizione })),
       commessa: c ? { id: c.id, numero: c.numero, stato: c.stato, quantita: c.quantita, fineLavorazione: leggiFineLavorazione(c.fine_lavorazione), fasi: fasiDi.get(c.id) ?? [], fasiConTempi: tempiDi.get(c.id) ?? [] } : null,
-      ddt, flusso: statoDi.get(r.id) ?? { priorita: null, acquisti: {}, materiale: {}, produzione: {}, inProduzione: null },
+      ddt, giaPartiti, flusso: statoDi.get(r.id) ?? { priorita: null, acquisti: {}, materiale: {}, produzione: {}, inProduzione: null },
     };
     return {
       ...riga, ordineId: r.ordineId, numero: r.numero, anno: r.anno, cliente: r.cliente, codice: r.codice, descrizione: r.descrizione, prodottoId: r.prodottoId,
@@ -198,6 +204,11 @@ export async function segnaSpedito(ddtIds: number[], utente: string): Promise<nu
   if (!ddtIds.length) return 0;
   const r = await q(`UPDATE documenti SET partito_il = now(), partito_da = $2 WHERE id = ANY($1::int[]) AND tipo = 'ddt' AND stato NOT IN ('bozza', 'annullato') AND partito_il IS NULL RETURNING id`, [ddtIds, utente]);
   return r.length;
+}
+
+/** Chiude la riga d'ordine (stato scritto a mano "evaso"): le ultime schede non partiranno. */
+export async function chiudiRiga(rigaId: number): Promise<void> {
+  await q(`UPDATE ordini_righe SET stato_manuale = 'evaso' WHERE id = $1`, [rigaId]);
 }
 
 /** Torna "in attesa di corriere" (premuto per sbaglio). */
