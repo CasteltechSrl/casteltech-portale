@@ -428,7 +428,7 @@ export function rotteOrdini() {
       <div class="tabella-scorre"><table class="elenco righe-ordine">
         <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Prezzo</th><th class="n">Fatturato</th>
           <th>Consegna richiesta</th><th>Arrivo materiale</th><th>Lavorazione</th><th>Ritardi (gg)</th><th>Consegna prevista</th><th>Ritardo</th><th>Stato</th><th>Commessa</th><th>Note</th><th></th></tr></thead>
-        <tbody>${righe.map(x => html`<tr class="${x.tipo === 'servizio' ? 'servizio' : ''}">
+        <tbody>${righe.map(x => html`<tr id="riga-${x.id}" class="${x.tipo === 'servizio' ? 'servizio' : ''}">
           <td class="nowrap">${sceltaProdotto(`righe[r${x.id}][prodotto]`, x.prodottoId, x.codice)}${!x.prodottoId && x.tipo !== 'servizio' && o.cliente_id ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
             <label>Codice <input name="righe[r${x.id}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
             <label>Descrizione <input name="righe[r${x.id}][np_descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo"></label>

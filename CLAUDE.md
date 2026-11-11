@@ -501,7 +501,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `preventivi-ordini-servizio.ts`, test in `tests/preventivi-ordini.test.ts`): menu "Preventivo" sotto il codice di ogni riga di schede, proposta `propostaPreventivo` = stesso prodotto,
    altrimenti stesso codice scritto (`codiceNormale`, vecchio portale); a parità di codice la QUANTITÀ più vicina all'ordine, poi inviati/accettati, fatti prima dell'ordine, più recente;
    si salva solo con Salva. Preventivo senza prodotto collegato a una riga = prende il prodotto della riga (`collegaPreventivo`, codice vecchio in `intestazione.codiceVecchioPortale`).
-   "Crea commessa" sulla riga = `/commesse/nuova?preventivo=&riga=` (quantità, ordine cliente, consegna), al salvataggio `collegaCommessaARiga`. Preventivo: riquadro "Prezzi da confrontare"
+   "Crea commessa" sulla riga = `/commesse/nuova?preventivo=&riga=` (quantità, ordine cliente, consegna), al salvataggio `collegaCommessaARiga`. Flusso di produzione: `RigaCruscottoFlusso.preventivo` (collegato
+   o proposto) sotto il codice = "prev. P…" + Crea commessa / "da verificare" → `/ordini/:id#riga-<id>` / "nessun preventivo" → Fai il preventivo (`?cliente=`); le fasi usano anche il proposto. Preventivo: riquadro "Prezzi da confrontare"
    (`riquadroPrezziPrecedenti`: vecchio portale + anagrafica con scaglioni).
    Prezzo in anagrafica dal preventivo inviato (Adriano 11/11/2026, confermate A/B/C; migrazione 093 `preventivi.anagrafica_prezzo`, regole in `engine/prezzo-anagrafica.ts`,
    `prezzo-anagrafica-servizio.ts`, test in `tests/prezzo-anagrafica.test.ts`): email del preventivo o "Segna come inviato" = `prezzoInAnagraficaDaPreventivo(id, 'invio')` col prezzo a scheda

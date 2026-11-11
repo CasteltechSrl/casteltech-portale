@@ -3,6 +3,8 @@
  * Tutto si legge una volta all'apertura del cruscotto (Neon): righe d'ordine aperte, commesse collegate (con fasi, tempi del reparto e
  * fine lavorazione), preventivo di riferimento (spunte e tempi), DDT del portale (in attesa di corriere / partiti).
  */
+import { preventiviDelCliente } from './preventivi-ordini-servizio.js';
+import { propostaPreventivo } from '../engine/preventivi-ordini.js';
 import { q, q1 } from './db.js';
 import { righeOrdini, type RigaElenco } from './ordini-servizio.js';
 import { rigaOrdinePerCommessa } from '../engine/ddt.js';
@@ -16,6 +18,9 @@ export interface RigaCruscottoFlusso extends RigaFlusso {
   ordineId: number; numero: number; anno: number; cliente: string; codice: string | null; descrizione: string | null; prodottoId: number | null;
   consegna: string | null; prevista: string | null; ritardo: number | null;
   commessaNumero: string | null; commessaId: number | null;
+  clienteId: number | null;
+  /** preventivo della riga (Adriano 11/11/2026): collegato (proposto = false) o proposto dal portale da verificare nell'ordine */
+  preventivo: { id: number; numero: string; proposto: boolean } | null;
   valutazione: Valutazione;
   posizione: number;
 }
@@ -57,17 +62,32 @@ export async function datiFlusso(oggi: string, righeGia?: RigaElenco[]): Promise
   const ids = aperte.map(r => r.id);
   const idsCommesse = [...new Set([...commessaDiRiga.values()].map(c => c.id))];
   const ordiniPrev = new Map((await q<{ id: number; preventivo_id: number | null }>(`SELECT id, preventivo_id FROM ordini WHERE id = ANY($1::int[])`, [[...new Set(aperte.map(r => r.ordineId))]])).map(o => [o.id, o.preventivo_id]));
+  // preventivo di ogni riga: collegato nell'ordine, della commessa o dell'ordine creato dal preventivo, altrimenti proposto (da verificare)
+  const clientiSenza = [...new Set(aperte.filter(r => !r.preventivoId && r.clienteId != null).map(r => r.clienteId!))];
+  const candidatiCliente = new Map(await Promise.all(clientiSenza.map(async id => [id, await preventiviDelCliente(id)] as const)));
+  const numeriPrev = new Map<number, string>();
+  for (const l of candidatiCliente.values()) for (const k of l) numeriPrev.set(k.id, k.numero);
+  const prevRiga = new Map<number, { id: number; proposto: boolean }>();
+  for (const r of aperte) {
+    const c = commessaDiRiga.get(r.id);
+    const certo = r.preventivoId ?? c?.preventivo_id ?? ordiniPrev.get(r.ordineId) ?? null;
+    if (certo != null) { prevRiga.set(r.id, { id: certo, proposto: false }); continue; }
+    const pr = r.clienteId != null ? propostaPreventivo({ prodottoId: r.prodottoId, codici: [r.codice, r.codiceCliente], quantita: r.quantita, dataOrdine: isoData(r.dataOrdine) },
+      candidatiCliente.get(r.clienteId) ?? []) : null;
+    if (pr) prevRiga.set(r.id, { id: pr.id, proposto: true });
+  }
   const [stati, fasi, tempi, preventivi, ultimiPerProdotto] = await Promise.all([
     q<any>(`SELECT * FROM flusso_righe WHERE riga_id = ANY($1::int[])`, [ids]),
     q<{ commessa_id: number; codice: string; gruppo: string; ciclo: number }>(`SELECT cf.commessa_id, cf.fase_codice AS codice, f.gruppo, cf.ciclo_previsto_sec::float AS ciclo
       FROM commesse_fasi cf JOIN fasi f ON f.codice = cf.fase_codice WHERE cf.commessa_id = ANY($1::int[])`, [idsCommesse]),
     q<{ commessa_id: number; fase_codice: string }>(`SELECT DISTINCT commessa_id, fase_codice FROM rilevazioni WHERE commessa_id = ANY($1::int[]) AND (aperta_il IS NULL OR chiusa_il IS NOT NULL)`, [idsCommesse]),
-    q<{ id: number; parametri: Record<string, unknown> }>(`SELECT id, parametri FROM preventivi WHERE id = ANY($1::int[])`,
-      [[...new Set([...commesse.map(c => c.preventivo_id), ...ordiniPrev.values()].filter((x): x is number => x != null))]]),
+    q<{ id: number; numero: string; parametri: Record<string, unknown> }>(`SELECT id, numero, parametri FROM preventivi WHERE id = ANY($1::int[])`,
+      [[...new Set([...commesse.map(c => c.preventivo_id), ...ordiniPrev.values(), ...[...prevRiga.values()].map(x => x.id)].filter((x): x is number => x != null))]]),
     q<{ prodotto_id: number; parametri: Record<string, unknown> }>(`SELECT DISTINCT ON (pr.prodotto_id) pr.prodotto_id, p.parametri FROM preventivi p JOIN prodotti_revisioni pr ON pr.id = p.revisione_id
       WHERE pr.prodotto_id = ANY($1::int[]) AND p.stato <> 'rifiutato' ORDER BY pr.prodotto_id, p.creato_il DESC`, [[...new Set(aperte.map(r => r.prodottoId).filter((x): x is number => x != null))]]),
   ]);
   const parametriPrev = new Map(preventivi.map(p => [p.id, p.parametri]));
+  for (const p of preventivi) numeriPrev.set(p.id, p.numero);
   const parametriProdotto = new Map(ultimiPerProdotto.map(p => [p.prodotto_id, p.parametri]));
   const statoDi = new Map(stati.map(s => [s.riga_id, leggiStatoFlusso(s)]));
   const fasiDi = new Map<number, { codice: string; gruppo: string; cicloSec: number }[]>();
@@ -77,7 +97,8 @@ export async function datiFlusso(oggi: string, righeGia?: RigaElenco[]): Promise
 
   const righe: Omit<RigaCruscottoFlusso, 'posizione'>[] = aperte.map(r => {
     const c = commessaDiRiga.get(r.id) ?? null;
-    const prevId = c?.preventivo_id ?? ordiniPrev.get(r.ordineId) ?? null;
+    const pr = prevRiga.get(r.id) ?? null;
+    const prevId = pr?.id ?? null;
     const parametri = (prevId != null ? parametriPrev.get(prevId) : undefined) ?? (r.prodottoId != null ? parametriProdotto.get(r.prodottoId) : undefined) ?? null;
     const ddt: DdtRiga[] = ddtRighe.filter(d => d.riga_ordine_id === r.id || (c && d.commessa_id === c.id && d.riga_ordine_id == null))
       .map(d => ({ id: d.id, numero: d.numero, sezionale: d.sezionale, data: d.data, quantita: d.quantita, partitoIl: isoOra(d.partito_il), stato: d.stato }));
@@ -96,7 +117,8 @@ export async function datiFlusso(oggi: string, righeGia?: RigaElenco[]): Promise
     };
     return {
       ...riga, ordineId: r.ordineId, numero: r.numero, anno: r.anno, cliente: r.cliente, codice: r.codice, descrizione: r.descrizione, prodottoId: r.prodottoId,
-      consegna: r.consegna, prevista: r.prevista, ritardo: r.ritardo, commessaNumero: c?.numero ?? null, commessaId: c?.id ?? null, valutazione: valutaRiga(riga),
+      consegna: r.consegna, prevista: r.prevista, ritardo: r.ritardo, commessaNumero: c?.numero ?? null, commessaId: c?.id ?? null, clienteId: r.clienteId,
+      preventivo: pr ? { id: pr.id, numero: numeriPrev.get(pr.id) ?? `#${pr.id}`, proposto: pr.proposto } : null, valutazione: valutaRiga(riga),
     };
   }).filter(r => r.valutazione.finestre.length > 0);
   const ordinate = ordinaPerPriorita(righe.map(r => ({ ...r, consegna: r.consegnaRichiesta ?? r.consegna, priorita: r.flusso.priorita })));

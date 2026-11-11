@@ -43,3 +43,10 @@ test('pagina dell\'ordine: menu del preventivo, Crea commessa dalla riga, commes
   assert.match(commesse, /collegaCommessaARiga\(Number\(b\.rigaOrdine\)/);
   assert.match(readFileSync('db/migrazioni/092_righe_ordine_preventivo.sql', 'utf8'), /ordini_righe ADD COLUMN IF NOT EXISTS preventivo_id/);
 });
+
+test('flusso di produzione: sotto il codice lo stato del preventivo (collegato, da verificare, da fare)', () => {
+  const f = readFileSync('src/server/rotte/flusso.ts', 'utf8');
+  assert.match(f, /preventivo da verificare/);
+  assert.match(f, /Fai il preventivo/);
+  assert.match(f, /\/ordini\/\$\{r\.ordineId\}#riga-\$\{r\.id\}/);
+});
