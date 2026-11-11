@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
+  cambioDaCsv, causaleAutofattura, dataAutofattura, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
   stessoNomeFornitore, tipoAutofattura, stessaFatturaEstera, chiaveNumeroFattura, motivoNonScartabile,
 } from '../src/engine/autofatture.js';
 import { generaAutofatturaXml } from '../src/engine/fatturapa.js';
@@ -120,4 +120,18 @@ test('Fatture estere doppie: stesso fornitore, numero e data anche da file diver
   assert.equal(motivoNonScartabile('da_confermare'), null);
   assert.equal(motivoNonScartabile('errore'), null);
   assert.notEqual(motivoNonScartabile('confermato'), null);
+});
+
+test("data dell'autofattura = giorno del caricamento della fattura nel portale (Adriano 11/11/2026)", () => {
+  // caricata il 3, preparata il 10: vale il 3
+  assert.equal(dataAutofattura('2026-11-03', null, '2026-11-10'), '2026-11-03');
+  assert.equal(dataAutofattura('2026-11-03', '2026-10-30', '2026-11-10'), '2026-11-03');
+  // nella serie c'è già un'autofattura del 5: le date restano in ordine, si prende il 5
+  assert.equal(dataAutofattura('2026-11-03', '2026-11-05', '2026-11-10'), '2026-11-05');
+  // caricata oggi o data mancante: oggi; mai nel futuro
+  assert.equal(dataAutofattura('2026-11-10', null, '2026-11-10'), '2026-11-10');
+  assert.equal(dataAutofattura('', null, '2026-11-10'), '2026-11-10');
+  assert.equal(dataAutofattura('2026-11-12', null, '2026-11-10'), '2026-11-10');
+  // l'ultima data di un altro anno non conta
+  assert.equal(dataAutofattura('2027-01-02', '2026-12-30', '2027-01-05'), '2027-01-02');
 });

@@ -10,7 +10,7 @@ import { q, q1, transazione } from './db.js';
 import { controllaPartitaIva, preparaFornitore } from '../engine/anagrafica-fornitori.js';
 import { nomeNazione, siglaNazione } from '../engine/amministrazione.js';
 import {
-  SEZIONALE_AUTOFATTURE, cambioDaCsv, causaleAutofattura, controllaFatturaEstera, nomeConfrontabile, paeseDaPartitaIva, paeseFiscale, righeInEuro,
+  SEZIONALE_AUTOFATTURE, cambioDaCsv, causaleAutofattura, dataAutofattura, controllaFatturaEstera, nomeConfrontabile, paeseDaPartitaIva, paeseFiscale, righeInEuro,
   sommaRighe, stessaFatturaEstera, stessoNomeFornitore, tipoAutofattura, type FatturaEstera,
 } from '../engine/autofatture.js';
 
@@ -158,7 +158,7 @@ export async function confermaFatturaEstera(id: number, input: FatturaEstera, fo
   const imponibile = sommaRighe(righeEuro);
   const oggi = oggiRoma();
   return transazione(async c => {
-    const a = (await c.query(`SELECT stato FROM acquisizioni WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    const a = (await c.query(`SELECT stato, to_char(creato_il AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') AS caricata FROM acquisizioni WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (!a) throw new Error('Documento non trovato.');
     if (a.stato === 'confermato') throw new Error("L'autofattura di questa fattura è già stata preparata.");
 
@@ -186,10 +186,14 @@ export async function confermaFatturaEstera(id: number, input: FatturaEstera, fo
     await c.query(`INSERT INTO documenti_ricevuti_scadenze (documento_id, data, importo, pagata_il) VALUES ($1, $2, $3, $4)`,
       [ricevutoId, f.data, imponibile, f.pagata ? f.data : null]);
 
-    // bozza dell'autofattura: data di oggi (si può cambiare prima di emettere), righe in euro con IVA 22 %
+    // bozza dell'autofattura: data del caricamento della fattura nel portale (si può cambiare prima di emettere), righe in euro con IVA 22 %
+    const caricata: string = a.caricata || oggi;
+    const ultima = (await c.query(`SELECT to_char(ultima_data, 'YYYY-MM-DD') AS d FROM numerazioni WHERE tipo = 'autofattura' AND sezionale = $1 AND anno = $2`,
+      [SEZIONALE_AUTOFATTURE, Number((caricata < oggi ? caricata : oggi).slice(0, 4))])).rows[0]?.d ?? null;
+    const dataAf = dataAutofattura(caricata, ultima, oggi);
     const autofatturaId = (await c.query(`INSERT INTO documenti (tipo, tipo_sdi, sezionale, anno, data, fornitore_id, ricevuto_id, causale, riferimento_esterno, creato_da)
       VALUES ('autofattura', $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [f.tipo, SEZIONALE_AUTOFATTURE, Number(oggi.slice(0, 4)), oggi, fornitoreId, ricevutoId, causaleAutofattura(f.numero, f.data!), f.numero.slice(0, 60), utenteId])).rows[0].id;
+      [f.tipo, SEZIONALE_AUTOFATTURE, Number(dataAf.slice(0, 4)), dataAf, fornitoreId, ricevutoId, causaleAutofattura(f.numero, f.data!), f.numero.slice(0, 60), utenteId])).rows[0].id;
     await c.query(`INSERT INTO documenti_righe (documento_id, posizione, codice, descrizione, quantita, prezzo, aliquota_iva)
       SELECT $1, r.posizione, r.codice, r.descrizione, r.quantita, r.prezzo, 'IVA22'
       FROM jsonb_to_recordset($2::jsonb) AS r(posizione int, codice text, descrizione text, quantita numeric, prezzo numeric)`,
