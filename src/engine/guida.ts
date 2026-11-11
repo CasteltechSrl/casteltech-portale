@@ -1464,6 +1464,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Nella copia ci sono tutti i dati del portale: preventivi, commesse, anagrafiche, ordini, fatture, DDT e fatture dei fornitori, CRM, documenti dei clienti. Restano fuori solo gli accessi e la cache dei prezzi dei distributori.',
       'Se le copie occupano più di 750 MB, il portale cancella da solo le più vecchie e ne tiene sempre almeno 5.',
       'Copia su Google Drive: in Impostazioni → Backup premi "Installa sul PC" e apri il file scaricato sul PC dell\'ufficio (doppio clic, poi "Esegui" se Windows lo chiede). Da quel momento ogni sera alle 18:30 il PC salva le copie nuove nella cartella 16_Backup\\Portale_Render di Google Drive (se il PC è già spento, la mattina dopo appena lo accendi). Sul PC restano gli ultimi 60 giorni più la prima copia di ogni mese.',
+      'Controllo settimanale di Claude (sabato sera): prende l\'ultima copia direttamente dal portale, con la chiave del Collegamento con Claude, per provare il portale con i dati della settimana. Non serve che il PC dell\'ufficio sia acceso e la copia non viene modificata.',
       'Nella stessa pagina vedi quando il PC ha preso l\'ultima copia. Se smette (PC cambiato, file reinstallato altrove), premi "Reinstalla sul PC" e riapri il file nuovo: quello vecchio smette di funzionare.'],
     pagine: [['/impostazioni/backup', 'Impostazioni → Backup']],
   },

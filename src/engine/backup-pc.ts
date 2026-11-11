@@ -25,6 +25,11 @@ export function giornoDelBackup(nome: string): string | null {
   return /^casteltech-backup-(\d{4}-\d{2}-\d{2})/.exec(nome)?.[1] ?? null;
 }
 
+/** L'ultima copia tra i nomi dati (il nome ha data e ora, quindi basta l'ordine del testo); altri file non contano. */
+export function ultimaCopia(nomi: string[]): string | null {
+  return nomi.filter(n => NOME_BACKUP.test(n)).sort().at(-1) ?? null;
+}
+
 export interface CopiaPortale { nome: string; byte: number }
 export interface PianoPc { scarica: CopiaPortale[]; togli: string[] }
 
