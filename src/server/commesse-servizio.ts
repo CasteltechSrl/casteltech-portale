@@ -11,6 +11,9 @@ import { calcola, datiDaRiga, leggiPreventivo, nPannelli } from './preventivi-se
 import type { Catalogo } from './catalogo-db.js';
 import type { Rilevazione } from '../engine/consuntivo.js';
 import type { Operatore } from '../engine/operatori.js';
+import { SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
+import { leggiFineLavorazione } from '../engine/flusso.js';
+import { spedizioniCommesse, type SpedizioneCommessa } from '../engine/commesse-spedite.js';
 
 // ───────────────────────────── scheda tecnica (intestazione della MASTERspec) ─────────────────────────────
 /** Campi con TOP e BOT, nell'ordine della scheda. */
@@ -286,3 +289,29 @@ export async function schedaTecnicaDaProporre(revisioneId: number | null, prodot
 }
 
 export { programmaForno } from '../engine/forno.js';
+
+/**
+ * Schede spedite con DDT per ogni commessa (Adriano 11/11/2026, THS C2026-0075 spedita col DDT 224 ma ancora tra le commesse):
+ * regole in `engine/commesse-spedite.ts`, letto all'apertura dell'elenco (due letture, nessuna tabella nuova).
+ */
+export async function spedizioniDelleCommesse(): Promise<Map<number, SpedizioneCommessa>> {
+  const commesse = await q<{ id: number; cliente_id: number | null; prodotto_id: number | null; codice: string | null; quantita: number; stato: string; inizio: string | null; fine_lavorazione: unknown }>(
+    `SELECT c.id, c.cliente_id, r.prodotto_id, c.intestazione->>'codice' AS codice, c.quantita, c.stato,
+       c.creato_il::date::text AS inizio, c.fine_lavorazione
+     FROM commesse c LEFT JOIN prodotti_revisioni r ON r.id = c.revisione_id`);
+  if (!commesse.length) return new Map();
+  const righe = await q<{ ddt_id: number; numero: number | null; data: string; cliente_id: number | null; prodotto_id: number | null; codice: string | null;
+    quantita: number; commessa_riga: number | null; commessa_documento: number | null; commessa_riga_ordine: number | null }>(
+    `SELECT d.id AS ddt_id, d.numero, d.data::text AS data, d.cliente_id, x.prodotto_id, x.codice, x.quantita::float AS quantita,
+       x.commessa_id AS commessa_riga, d.commessa_id AS commessa_documento, o.commessa_id AS commessa_riga_ordine
+     FROM documenti d JOIN documenti_righe x ON x.documento_id = d.id LEFT JOIN ordini_righe o ON o.id = x.riga_ordine_id
+     WHERE d.tipo = 'ddt' AND d.numero IS NOT NULL AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND NOT coalesce(x.solo_descrizione, false)
+       AND ${SQL_CAUSALE_DA_FATTURARE}
+       AND d.data >= (SELECT min(creato_il::date) FROM commesse)
+       AND (x.commessa_id IS NOT NULL OR d.commessa_id IS NOT NULL OR o.commessa_id IS NOT NULL OR d.cliente_id IN (SELECT cliente_id FROM commesse WHERE cliente_id IS NOT NULL))`);
+  return spedizioniCommesse(
+    commesse.map(c => ({ id: c.id, clienteId: c.cliente_id, prodottoId: c.prodotto_id, codice: c.codice, quantita: Number(c.quantita) || 0, stato: c.stato,
+      dataInizio: c.inizio, finite: leggiFineLavorazione(c.fine_lavorazione).reduce((s, f) => s + f.quantita, 0) })),
+    righe.map(r => ({ ddtId: r.ddt_id, numero: r.numero, data: r.data, clienteId: r.cliente_id, prodottoId: r.prodotto_id, codice: r.codice, quantita: Number(r.quantita) || 0,
+      commessaRiga: r.commessa_riga, commessaDocumento: r.commessa_documento, commessaRigaOrdine: r.commessa_riga_ordine })));
+}

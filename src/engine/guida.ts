@@ -702,6 +702,16 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cruscotto?flusso=preparare', 'Flusso di produzione'], ['/commesse', 'Commesse'], ['/r', 'Reparto (telefono)']],
   },
   {
+    id: 'commesse-spedite', area: 'commesse', titolo: 'Elenco commesse: da fare, spedite o chiuse',
+    parole: 'commesse spedite chiuse finite elenco commesse rimane resta ancora nell elenco già spedita ddt spedito da fare tutte nascoste colonna spedite',
+    testo: [
+      'L\'elenco Commesse si apre su "Da fare": mostra solo le commesse ancora da produrre o da spedire. Una commessa sparisce da "Da fare" quando è chiusa oppure quando le sue schede sono uscite con un DDT (tutte, o almeno il 90 % se il rientro è già confermato: il resto sono scarti o schede in più).',
+      'Il DDT conta anche se non è stato creato dalla commessa: basta che sia dello stesso cliente e dello stesso prodotto, fatto dal giorno della commessa in poi, con causale di vendita. Se due commesse hanno lo stesso prodotto, il DDT va prima a quella con la lavorazione finita, poi alla più vecchia.',
+      'La colonna "Spedite" dice quante schede sono partite e con quale DDT (clic = apre il DDT). Sopra l\'elenco: "Spedite o chiuse" per vedere le concluse, "Tutte" per vederle tutte. Cercando un numero o un cliente si trovano anche le commesse già spedite.',
+    ],
+    pagine: [['/commesse', 'Commesse'], ['/commesse?vista=spedite', 'Commesse spedite o chiuse']],
+  },
+  {
     id: 'pre-produzione', area: 'commesse', titolo: 'Pre-produzione della commessa: controllo completo, cosa fare e cosa non fare, checklist e via libera',
     parole: 'pre-produzione preproduzione scheda pre produzione via libera checklist verifica finale chi conferma data cosa fare cosa non fare materiale in casa magazzino bom offerte gerber documentazione tecnica segnalazioni preanalisi commessa prima di produrre',
     testo: [
