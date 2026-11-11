@@ -67,3 +67,12 @@ test('totali per anno: spesa, quantità, note di credito in negativo, variazione
 test('guida: anno per anno e ricerca tollerante', () => {
   assert.equal(cercaGuida('quanto ho comprato di lamine ogni anno')[0]?.argomento.id, 'analisi-acquisti');
 });
+
+// Adriano 11/11/2026: "filo di saldatura" trovava solo 2025–2026 (le righe vecchie dicono "STAGNO FILO 99C", "Filo Sn100Ni+")
+test('filo di saldatura = un solo gruppo con le scritte vecchie', () => {
+  for (const q of ['filo di saldatura', 'filo stagno', 'filo di stagno']) {
+    const t = terminiRicerca(q);
+    assert.equal(t.length, 1, q);
+    assert.ok(t[0].varianti.includes('STAGNO FILO') && t[0].varianti.includes('FILO SN'), q);
+  }
+});
