@@ -19,6 +19,7 @@ export interface DatiControlli {
   preventiviFermi: { id: number; numero: string; cliente: string; aggiornato: string }[];                  // bozze ferme da oltre 30 giorni
   commesseOltreConsegna: { id: number; numero: string; cliente: string; consegna: string }[];              // aperte con consegna passata
   tempiApertiVecchi: { id: number; commessa: string; commessaId: number; fase: string; sigla: string; data: string }[]; // fasi aperte dal telefono da oltre 2 giorni
+  lamineNonFatturate?: { data: string; fornitore: string; descrizione: string; pezzi: number; giorni: number }[]; // lamine comprate da oltre 30 gg senza fattura
   serviziNonFatturati?: { ordineId: number; ordine: string; cliente: string; descrizione: string; importo: number }[]; // servizi d'ordine evasi (schede consegnate) mai fatturati
 }
 
@@ -49,6 +50,11 @@ export function elencoControlli(d: DatiControlli): Controllo[] {
       chiave: 'servizi-non-fatturati', titolo: 'Servizi degli ordini mai fatturati con le schede già consegnate', livello: 'urgente',
       spiegazione: 'Lamine, programmazioni e una tantum che non viaggiano con il DDT: le schede sono tutte partite ma il servizio non è in nessuna fattura. Aggiungerlo dalla bozza della fattura ("Servizi degli ordini non ancora fatturati") o segnare la riga evasa nell\'ordine se è già stato pagato altrove.',
       righe: (d.serviziNonFatturati ?? []).map(x => ({ testo: `${x.ordine} · ${x.cliente}`, dettaglio: `${x.descrizione} · ${euroIt(x.importo)}`, link: `/ordini/${x.ordineId}` })),
+    },
+    {
+      chiave: 'lamine-da-fatturare', titolo: 'Lamine comprate da più di un mese e non ancora fatturate', livello: 'urgente',
+      spiegazione: 'Ogni lamina si compra per un prodotto e va in fattura (a parte o dentro i costi una tantum). Aggiungerla nella bozza della fattura del cliente; se è dentro un\'altra riga segnarla in Analisi → Costi → Lamine; se non si fattura (a nostro carico, accordo) segnarla lì "da non fatturare".',
+      righe: (d.lamineNonFatturate ?? []).map(l => ({ testo: `${l.pezzi === 1 ? '1 lamina' : `${l.pezzi} lamine`} · ${l.fornitore}`, dettaglio: `${l.descrizione.slice(0, 80)} · comprata il ${dataIt(l.data)}, ${l.giorni} gg fa`, link: `/amministrazione/analisi/costi/lamine?anno=${l.data.slice(0, 4)}` })),
     },
     {
       chiave: 'tempi-aperti', titolo: `Fasi aperte dal telefono da più di ${GIORNI_TEMPO_APERTO} giorni`, livello: 'controllare',

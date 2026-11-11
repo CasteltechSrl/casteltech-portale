@@ -14,7 +14,8 @@ import { CATEGORIE, NOMI_MACRO, SPIEGAZIONE_MACRO, categoria as categoriaDaCodic
 import {
   classificaCosti, classificaVendite, lamineDaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
 } from '../../engine/analisi-costi.js';
-import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, righeLamine, righePerLamine, salvaLamineRiga, type RigaPerLamine, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
+import { GIORNI_LAMINA, INIZIO_CONTROLLO_LAMINE, type LaminaACarico, type SituazioneLamine } from '../../engine/lamine-fatturazione.js';
+import { aggiungiACarico, lamineACarico, lamineDaFatturare, togliACarico, clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, righeLamine, righePerLamine, salvaLamineRiga, type RigaPerLamine, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 0)} €`);
@@ -95,7 +96,7 @@ function tabellaRivendita(riv: RivenditaAnno[], anno: number, inCorso: boolean):
     ${riga('Lamine comprate', r => html`${euro(r.compratoLamine)}${r.lamineCompratePezzi ? html` <small class="tenue">(${num(r.lamineCompratePezzi, 0)})</small>` : ''}`)}
     ${riga('Lamine fatturate a parte', r => html`${euro(r.lamineVendute)}${r.lamineVendutePezzi ? html` <small class="tenue">(${num(r.lamineVendutePezzi, 0)})</small>` : ''}`)}
     ${riga('Lamine dentro i costi una tantum (pezzi)', r => r.lamineUnaTantumPezzi ? html`${num(r.lamineUnaTantumPezzi, 0)} <small class="tenue">(righe per ${euro(r.lamineUnaTantumRighe)})</small>` : '—')}
-    <tr><td colspan="${riv.length + 1}"><small><a href="/amministrazione/analisi/costi/lamine?anno=${anno}">Lamine dentro altre righe di fattura: controlla e segna →</a></small></td></tr>
+    <tr><td colspan="${riv.length + 1}"><small><a href="/amministrazione/analisi/costi/lamine?anno=${anno}">Lamine: verifica della fatturazione e lamine dentro altre righe →</a></small></td></tr>
     ${riga('Guadagno stimato sulle lamine', r => (r.compratoLamine || r.lamineVendute || r.lamineUnaTantumPezzi) ? segno(r.margineLamine) : '—', 'riga-famiglia')}
     </tbody></table></div>`;
 }
@@ -178,15 +179,39 @@ function pagina(req: Request, d: Awaited<ReturnType<typeof calcola>>): Raw {
     <p class="nota">Le categorie scritte a mano (per fornitore, per fattura o per riga) vincono sulle regole automatiche; dalla pagina delle righe si corregge una riga sola.</p>`;
 }
 
-function paginaLamine(req: Request, anno: number, numero: number | undefined, righe: RigaPerLamine[]): Raw {
+/** Verifica della fatturazione delle lamine (Adriano 11/11/2026): comprate contro fatturate e non da fatturare, a pezzi dalla più vecchia. */
+function verificaLamine(ufficio: boolean, torna: string, sit: SituazioneLamine, aCarico: LaminaACarico[]): Raw {
+  const pz = (n: number) => (n === 1 ? '1 lamina' : `${n} lamine`);
+  const aperte = sit.daFatturare.reduce((s, l) => s + l.pezzi, 0);
+  return html`<section class="blocco ${sit.inRitardo.length ? 'da-verificare' : ''}"><h2>Verifica della fatturazione (dal ${INIZIO_CONTROLLO_LAMINE.split('-').reverse().join('/')})</h2>
+    <p>Comprate ${pz(sit.comprate)} · fatturate ${pz(sit.fatturate)} · non da fatturare ${pz(sit.aCarico)} · <b>${aperte ? `da fatturare ${pz(aperte)}` : 'tutte a posto'}</b>.</p>
+    <p class="nota">Ogni lamina si compra per un prodotto e va in fattura (a parte o dentro i costi una tantum). Il conto è a pezzi: le fatturate coprono le comprate dalla più vecchia.
+      Dopo ${GIORNI_LAMINA} giorni senza fattura la lamina va tra i controlli settimanali (cruscotto); la bozza di fattura le propone.</p>
+    ${sit.daFatturare.length ? html`<div class="tabella-scorre"><table class="elenco"><thead><tr><th>Comprata il</th><th>Fornitore</th><th>Descrizione</th><th class="num">Lamine</th><th class="num">Giorni</th></tr></thead>
+      <tbody>${sit.daFatturare.map(l => html`<tr><td class="nowrap">${l.data.split('-').reverse().join('/')}</td><td>${l.fornitore}</td><td>${l.descrizione.slice(0, 140)}</td>
+        <td class="num">${l.pezzi}</td><td class="num ${l.giorni > GIORNI_LAMINA ? 'rosso' : ''}">${l.giorni}</td></tr>`)}</tbody></table></div>` : ''}
+    <h3>Lamine da non fatturare</h3>
+    <p class="nota">Rifatte a nostro carico, accordi con il cliente, comprese in un pacchetto: segnale qui e non contano più tra quelle da fatturare.</p>
+    ${aCarico.length ? html`<ul>${aCarico.map((a, i) => html`<li>${a.data.split('-').reverse().join('/')} · ${pz(a.pezzi)} · ${a.motivo}
+      ${ufficio ? html`<form method="post" action="/amministrazione/analisi/costi/lamine-a-carico" class="in-riga"><input type="hidden" name="togli" value="${i}"><input type="hidden" name="torna" value="${torna}">
+        <button type="submit" data-conferma="Togliere questa riga? Le lamine tornano da fatturare.">Togli</button></form>` : ''}</li>`)}</ul>` : html`<p class="nota">Nessuna.</p>`}
+    ${ufficio ? html`<form method="post" action="/amministrazione/analisi/costi/lamine-a-carico" class="riga-campi"><input type="hidden" name="torna" value="${torna}">
+      <label class="stretto">Data <input type="date" name="data" required></label><label class="stretto">Lamine <input name="pezzi" value="1" class="cortissimo" inputmode="numeric"></label>
+      <label>Motivo <input name="motivo" placeholder="es. rifatta a nostro carico, accordo con il cliente"></label> <button type="submit">Segna da non fatturare</button></form>` : ''}
+  </section>`;
+}
+
+function paginaLamine(req: Request, anno: number, numero: number | undefined, righe: RigaPerLamine[], sit: SituazioneLamine, aCarico: LaminaACarico[]): Raw {
   const ufficio = eUfficio(req.session.utente?.ruolo);
   const torna = `/amministrazione/analisi/costi/lamine?anno=${anno}${numero ? `&fattura=${numero}` : ''}`;
   return html`${menuAmministrazione('analisi')}
-    <div class="intestazione-pagina"><div><h1>Lamine dentro altre righe · ${anno}</h1>
+    <div class="intestazione-pagina"><div><h1>Lamine · ${anno}</h1>
       <p class="nota">Le lamine fatturate dentro i costi una tantum o in un pacchetto, senza la parola "lamina" nella riga, il portale non le vede.
         Scrivi qui quante lamine contiene la riga (0 = nessuna, vuoto = decide la descrizione): contano in "Comprato e rivenduto". Per il futuro basta scrivere "lamina" nella riga della fattura.</p></div>
       <div class="azioni non-stampare"><a class="bottone" href="/amministrazione/analisi/costi?anno=${anno}">← Costi per categoria</a></div></div>
     ${tastiAnalisi('costi')}
+    ${verificaLamine(ufficio, torna, sit, aCarico)}
+    <h2>Lamine dentro altre righe di fattura</h2>
     <form method="get" action="/amministrazione/analisi/costi/lamine" class="cerca"><input type="hidden" name="anno" value="${anno}">
       <label>Mostra anche tutte le righe della fattura n. <input name="fattura" value="${numero ?? ''}" size="6" inputmode="numeric"></label> <button type="submit">Mostra</button></form>
     <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Data</th><th>Fattura</th><th>Cliente</th><th>Riga</th><th class="num">Importo</th><th>Lamine</th></tr></thead>
@@ -249,14 +274,23 @@ export function rotteAnalisiCosti() {
   r.get('/costi/lamine', async (req: Request, res) => {
     const anno = annoScelto(req);
     const numero = Number(req.query.fattura) > 0 ? Number(req.query.fattura) : undefined;
-    invia(req, res, 'Lamine dentro altre righe', paginaLamine(req, anno, numero, await righePerLamine(anno, numero)));
+    const [righe, sit, aCarico] = await Promise.all([righePerLamine(anno, numero), lamineDaFatturare(oggiRoma()), lamineACarico()]);
+    invia(req, res, 'Lamine', paginaLamine(req, anno, numero, righe, sit, aCarico));
+  });
+
+  r.post('/costi/lamine-a-carico', async (req: Request, res) => {
+    if (!eUfficio(req.session.utente?.ruolo)) return res.status(403).send('Solo l\'ufficio può segnare le lamine.');
+    const b = req.body ?? {};
+    const msg = b.togli != null ? await togliACarico(Number(b.togli)) : await aggiungiACarico(String(b.data ?? ''), String(b.pezzi ?? ''), String(b.motivo ?? ''));
+    const torna = /^\/amministrazione\/analisi\/costi\/lamine\?/.test(String(b.torna ?? '')) ? String(b.torna) : '/amministrazione/analisi/costi/lamine?';
+    res.redirect(`${torna}&msg=${encodeURIComponent(msg)}`);
   });
 
   r.post('/costi/lamine-riga', async (req: Request, res) => {
     if (!eUfficio(req.session.utente?.ruolo)) return res.status(403).send('Solo l\'ufficio può segnare le lamine.');
     const b = req.body ?? {};
     const msg = await salvaLamineRiga(Number(b.id), String(b.lamine ?? ''));
-    const torna = /^\/amministrazione\/analisi\/costi\/lamine\?/.test(String(b.torna ?? '')) ? String(b.torna) : '/amministrazione/analisi/costi/lamine';
+    const torna = /^\/amministrazione\/analisi\/costi\/lamine\?/.test(String(b.torna ?? '')) ? String(b.torna) : '/amministrazione/analisi/costi/lamine?';
     res.redirect(`${torna}&msg=${encodeURIComponent(msg)}`);
   });
 

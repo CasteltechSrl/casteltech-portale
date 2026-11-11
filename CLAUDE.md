@@ -824,6 +824,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Lamine segnate a mano (Adriano 11/11/2026; migrazione 089 `documenti_righe.lamine`, `righePerLamine`/`salvaLamineRiga`, pagina `/amministrazione/analisi/costi/lamine?anno=&fattura=`,
    POST `/costi/lamine-riga`): vincono sulla descrizione (0 = nessuna); righe a 0 € non contano; già segnate Idea FT 74 e Botisum FT 93 del 2026. Univac e Audioscope 2026 non fatturate (accordo/pacchetto).
    I-TRONIK: assistenza e ricambi Essemtec in Manutenzione, non in Stagno (`FORNITORI_DOPPI`).
+   Verifica della fatturazione delle lamine (Adriano 11/11/2026, "ogni lamina comprata va in fattura, avvisami se non l'ho venduta entro un mese"; `engine/lamine-fatturazione.ts`,
+   `lamineDaFatturare`/`lamineACarico` in `analisi-costi-servizio.ts`, test in `tests/lamine-fatturazione.test.ts`): dal 2026 a pezzi, fatturate (`lamineDellaRiga`) + non da fatturare
+   (impostazioni 'lamine_a_carico', migrazione 090: Univac 3, Audioscope 1; pagina Lamine) coprono le comprate dalla più vecchia; oltre 30 gg = controllo `lamine-da-fatturare` (urgente);
+   bozza di fattura = riquadro "Lamine comprate non ancora fatturate" con POST `/documenti/:id/lamina` (`aggiungiRigaLamina`: riga UT-LAMINA).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

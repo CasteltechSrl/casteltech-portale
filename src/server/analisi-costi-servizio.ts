@@ -9,6 +9,8 @@ import { riepilogo } from '../engine/riepilogo.js';
 import { chiaveFornitore, type RigaLamina, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita, type SceltaMateriale } from '../engine/analisi-costi.js';
 import { SQL_FATTORE_RIGHE, SQL_NON_DOPPIONE, sqlPartitaFinanziaria } from '../engine/costo-fornitori.js';
 import { categoria as categoriaDaCodice } from '../engine/categorie-acquisti.js';
+import { classificaCosti } from '../engine/analisi-costi.js';
+import { INIZIO_CONTROLLO_LAMINE, controllaACarico, lamineComprate, leggiACarico, pezziFatturati, situazioneLamine, type LaminaACarico, type SituazioneLamine } from '../engine/lamine-fatturazione.js';
 
 const NOME_FORNITORE = `coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '(senza nome)')`;
 const CHIAVE_FORNITORE = `CASE WHEN d.fornitore_id IS NOT NULL THEN 'f' || d.fornitore_id ELSE 'n:' || upper(${NOME_FORNITORE}) END`;
@@ -130,7 +132,7 @@ export async function salvaSceltaMateriale(chiave: string, scelta: string): Prom
 
 /** Righe di fatture e note di credito che citano una lamina (UT-LAMINA, o "lamina/stencil" in qualunque riga della descrizione: anche dentro i costi una tantum). */
 export function righeLamine(anni: number[], finoA = ''): Promise<RigaLamina[]> {
-  return q<RigaLamina>(`SELECT extract(year FROM d.data)::int AS anno, coalesce(r.codice, '') AS codice, coalesce(r.descrizione, '') AS descrizione,
+  return q<RigaLamina>(`SELECT extract(year FROM d.data)::int AS anno, to_char(d.data, 'YYYY-MM-DD') AS data, coalesce(r.codice, '') AS codice, coalesce(r.descrizione, '') AS descrizione,
       (${SEGNO} * r.quantita)::float AS quantita, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo, r.lamine
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
     WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.acconto_id IS NULL
@@ -159,6 +161,37 @@ export async function salvaLamineRiga(id: number, valore: string): Promise<strin
   if (v != null && (!Number.isInteger(v) || v < 0 || v > 50)) return 'Scrivi un numero di lamine da 0 a 50 (vuoto = decide la descrizione).';
   const r = await q(`UPDATE documenti_righe SET lamine = $2 WHERE id = $1 RETURNING id`, [id, v]);
   return r.length ? (v == null ? 'Tolto: decide la descrizione.' : `Segnate ${v} lamine sulla riga.`) : 'Riga non trovata.';
+}
+
+/** Lamine che non si fatturano (a nostro carico, accordi, pacchetti): impostazioni 'lamine_a_carico'. */
+export async function lamineACarico(): Promise<LaminaACarico[]> {
+  return leggiACarico((await q<{ valore: unknown }>(`SELECT valore FROM impostazioni WHERE chiave = 'lamine_a_carico'`))[0]?.valore);
+}
+async function scriviACarico(elenco: LaminaACarico[]): Promise<void> {
+  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('lamine_a_carico', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(elenco)]);
+}
+export async function aggiungiACarico(data: string, pezzi: string, motivo: string): Promise<string> {
+  const errore = controllaACarico(data, pezzi, motivo);
+  if (errore) return errore;
+  const elenco = await lamineACarico();
+  elenco.push({ data, pezzi: Number(pezzi), motivo: motivo.trim().slice(0, 200) });
+  await scriviACarico(elenco.sort((a, b) => a.data.localeCompare(b.data)));
+  return `Segnate ${pezzi} lamine da non fatturare.`;
+}
+export async function togliACarico(indice: number): Promise<string> {
+  const elenco = await lamineACarico();
+  if (!Number.isInteger(indice) || indice < 0 || indice >= elenco.length) return 'Riga non trovata.';
+  elenco.splice(indice, 1);
+  await scriviACarico(elenco);
+  return 'Tolta: quelle lamine tornano da fatturare.';
+}
+
+/** Lamine comprate dal 2026 ancora senza fattura (verifica della fatturazione delle lamine): per il controllo settimanale, la bozza di fattura e la pagina Lamine. */
+export async function lamineDaFatturare(oggi: string): Promise<SituazioneLamine> {
+  const primo = Number(INIZIO_CONTROLLO_LAMINE.slice(0, 4)), ultimo = Number(oggi.slice(0, 4));
+  const anni = Array.from({ length: Math.max(1, ultimo - primo + 1) }, (_, i) => primo + i);
+  const [costi, regole, vendute, aCarico] = await Promise.all([righeCosti(anni), regoleCategorie(), righeLamine(anni), lamineACarico()]);
+  return situazioneLamine(lamineComprate(classificaCosti(costi, regole)), pezziFatturati(vendute), aCarico, oggi);
 }
 
 /** Fatturato (imponibile di fatture meno note di credito) per anno. */

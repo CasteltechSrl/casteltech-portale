@@ -329,6 +329,20 @@ export async function aggiungiRigheOrdine(id: number, rigaIds: number[]): Promis
   });
 }
 
+/** Riga della lamina in fondo alla bozza di fattura (verifica della fatturazione delle lamine): servizio UT-LAMINA con descrizione e prezzo del servizio. */
+export async function aggiungiRigaLamina(id: number, pezzi: number): Promise<string> {
+  if (!Number.isInteger(pezzi) || pezzi < 1 || pezzi > 50) return 'Scrivi quante lamine (da 1 a 50).';
+  return transazione(async c => {
+    const d = (await c.query(`SELECT stato, tipo FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (d?.stato !== 'bozza' || d.tipo !== 'fattura') return 'Si aggiunge solo a una fattura in bozza.';
+    const s = (await c.query(`SELECT codice, descrizione, prezzo FROM servizi_una_tantum WHERE upper(codice) = 'UT-LAMINA'`)).rows[0];
+    const pos = Number((await c.query(`SELECT coalesce(max(posizione), 0) AS p FROM documenti_righe WHERE documento_id = $1`, [id])).rows[0].p);
+    await c.query(`INSERT INTO documenti_righe (documento_id, posizione, codice, descrizione, quantita, um, prezzo) VALUES ($1, $2, $3, $4, $5, 'PZ', $6)`,
+      [id, pos + 1, s?.codice ?? 'UT-LAMINA', s?.descrizione ?? 'LAMINA SERIGRAFICA', pezzi, Number(s?.prezzo ?? 0)]);
+    return `Aggiunta la riga della lamina (${pezzi} pz): controlla descrizione e prezzo.`;
+  });
+}
+
 /** Aggiunge in fondo alla bozza le righe dei DDT scelti, ciascuno preceduto dalla riga "DDT n. X del gg/mm/aaaa". */
 export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number> {
   const aggiunti = await aggiungiRigheDdt(id, ddtIds);

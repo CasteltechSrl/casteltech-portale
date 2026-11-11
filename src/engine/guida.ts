@@ -1384,6 +1384,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/analisi/costi', 'Costi per categoria'], ['/amministrazione/analisi/pareggio', 'Punto di pareggio'], ['/amministrazione/analisi/fornitori', 'Fornitori']],
   },
   {
+    id: 'lamine-da-fatturare', area: 'amministrazione', titolo: 'Lamine comprate da fatturare: avviso e proposta in fattura',
+    parole: 'lamine da fatturare lamina comprata non fatturata dimenticata avviso alert verifica fatturazione lamine non fatturate a nostro carico accordo pacchetto rifatta controllo settimanale bozza fattura ut-lamina',
+    testo: [
+      'Ogni lamina si compra per un prodotto e va messa in fattura, a parte (servizio UT-LAMINA) o dentro i costi una tantum. Il portale conta dal 1° gennaio 2026 le lamine comprate (fatture dei fornitori, categoria Lamine) contro quelle fatturate: il conto è a pezzi, le fatturate coprono le comprate dalla più vecchia; quelle che restano sono "da fatturare".',
+      'Avviso: una lamina comprata da più di 30 giorni e non ancora fatturata va tra i controlli settimanali (cruscotto e Amministrazione → Controlli settimanali), in rosso, con data, fornitore e descrizione.',
+      'In fattura: nella bozza di una fattura compare il riquadro giallo "Lamine comprate non ancora fatturate" con l\'elenco (tolte quelle già scritte nella bozza). Se una è di quel cliente scrivi quante e premi "Aggiungi la riga della lamina": in fondo arriva la riga UT-LAMINA con descrizione e prezzo del servizio, da controllare. Va bene anche scrivere "lamina" nella riga dei costi una tantum.',
+      'Lamine che non si fatturano (rifatte a nostro carico, accordo con il cliente, comprese in un pacchetto): in Analisi → Costi per categoria → "Lamine: verifica della fatturazione" scrivi data, quante e motivo e premi "Segna da non fatturare"; "Togli" le rimette da fatturare. Già segnate: Univac 3 (accordo, produzione maggio–giugno 2026) e Audioscope 1 (nel pacchetto).',
+      'Lamine fatturate dentro una riga che non scrive "lamina": nella stessa pagina, "Lamine dentro altre righe di fattura", si scrive quante lamine contiene la riga.',
+    ],
+    passi: ['Guarda i controlli settimanali nel cruscotto: "Lamine comprate da più di un mese e non ancora fatturate".', 'Nella bozza della fattura del cliente: "Aggiungi la riga della lamina".', 'Se non si fattura: Analisi → Costi per categoria → Lamine → "Segna da non fatturare".'],
+    pagine: [['/amministrazione/analisi/costi/lamine', 'Lamine: verifica della fatturazione'], ['/amministrazione/controlli', 'Controlli settimanali']],
+  },
+  {
     id: 'divisione-per-anno', area: 'inizio', titolo: 'Elenchi e analisi divisi per anno',
     parole: 'anno per anno divisione per anno un anno solo filtro anno 2026 2025 2024 quanti preventivi nel commesse dell anno ordini a fornitore dell anno ddt ricevuti fatturato del cliente per anno',
     testo: [
