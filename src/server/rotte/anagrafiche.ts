@@ -696,6 +696,24 @@ function tabellaCodiciPerAnno(d: DatiSchedaCliente): Raw {
         : html`<p class="nota">Nessuna consegna in questi anni.</p>`}
     </section>`;
 }
+/** Il cliente anno per anno (Adriano 11/11/2026): fatturato con la variazione, fatture, note di credito, DDT, ordini, preventivi. */
+function tabellaAnnoPerAnno(d: DatiSchedaCliente): Raw {
+  const anni = d.annoPerAnno;
+  if (!anni.length) return html``;
+  const c = d.cliente;
+  return html`
+    <section class="area anno-per-anno">
+      <header><h2>Anno per anno</h2><a href="/amministrazione/analisi/clienti">Analisi dei clienti →</a></header>
+      <p class="nota">Fatturato = imponibile delle fatture meno le note di credito (fuori bozze, annullati e scartati, anche lo storico di Fatture in Cloud); variazione sull'anno prima.
+        Per l'anno in corso il confronto è con tutto l'anno prima.</p>
+      <table data-non-ordinare><thead><tr><th>Anno</th><th class="num">Fatturato</th><th class="num">Variazione</th><th class="num">Fatture</th><th class="num">Note di credito</th>
+        <th class="num">DDT</th><th class="num">Ordini</th><th class="num">Preventivi</th></tr></thead>
+        <tbody>${anni.map(a => html`<tr><td><b>${a.anno}</b></td>
+          <td class="num"><a href="/amministrazione/documenti?tipo=fattura&anno=${a.anno}&q=${encodeURIComponent(c.ragione_sociale)}">${euro(a.fatturato)}</a></td>
+          <td class="num">${a.variazione == null ? '' : html`<span class="${a.variazione >= 0 ? 'positivo' : 'negativo'}">${a.variazione > 0 ? '+' : ''}${num(a.variazione, 0)} %</span>`}</td>
+          <td class="num">${a.fatture || ''}</td><td class="num">${a.noteCredito || ''}</td><td class="num">${a.ddt || ''}</td><td class="num">${a.ordini || ''}</td><td class="num">${a.preventivi || ''}</td></tr>`)}</tbody></table>
+    </section>`;
+}
 const STATI_COMMESSA_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
 const NOMI_DOC: Record<string, string> = { fattura: 'Fattura', nota_credito: 'Nota di credito', nota_debito: 'Nota di debito', ddt: 'DDT' };
 function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
@@ -760,5 +778,6 @@ function schedaCliente(d: DatiSchedaCliente, oggi: string): Raw {
         <div class="tit">Ultime attività</div>${elenco((crm.attivita as any[] ?? []).map(t => riga(`${t.tipo}: ${String(t.descrizione ?? '').slice(0, 80)}`, data(t.data))), 'Nessuna attività registrata.')}`
         : html`<p class="nota">Il cliente non è ancora collegato a un'azienda del CRM.</p>`)}
     </div>
+    ${tabellaAnnoPerAnno(d)}
     ${tabellaCodiciPerAnno(d)}`;
 }

@@ -2,6 +2,8 @@
  * Pagine delle commesse: elenco, nuova da preventivo, scheda della commessa (modificabile),
  * stampa della scheda di produzione (A4, con QR su ogni pagina).
  */
+import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
+import { barraAnni } from '../views/barra-anni.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { dichiaraFineLavorazione } from '../flusso-servizio.js';
@@ -46,7 +48,7 @@ export function rotteCommesse() {
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
       ORDER BY c.creato_il DESC, c.id DESC LIMIT ${limite}`, [cerca]);
   r.get('/elenco.xlsx', async (req, res) => {
-    const righe = await elencoCommesse(String(req.query.q ?? '').trim());
+    const righe = filtraPerAnno(await elencoCommesse(String(req.query.q ?? '').trim()), c => c.creato_il, annoScelto(req.query));
     inviaExcel(res, nomeExcel('commesse'), await excelSemplice('Commesse', [
       { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
       { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
@@ -57,7 +59,9 @@ export function rotteCommesse() {
 
   r.get('/', async (req, res) => {
     const cerca = String(req.query.q ?? '').trim();
-    const tutte = await elencoCommesse(cerca);
+    const tuttiGliAnni = await elencoCommesse(cerca);
+    const anno = annoScelto(req.query);
+    const tutte = filtraPerAnno(tuttiGliAnni, c => c.creato_il, anno);
     const { righe, barra } = paginata(tutte, req.query as Record<string, unknown>);
     // schede scansionate arrivate dalla cartella Drive (o caricate in Ordini → Da acquisire) ancora da portare nel rientro
     const scansioni = await q(`SELECT a.id, a.nome_file, a.stato, a.errore, a.creato_il, a.proposta FROM acquisizioni a
@@ -93,7 +97,8 @@ export function rotteCommesse() {
           : html`<p class="nota">Nessuna scheda scansionata da portare nel rientro.</p>`}
       </section>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button>
-        <a class="bottone" href="/commesse/elenco.xlsx${cerca ? `?q=${encodeURIComponent(cerca)}` : ''}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
+        <a class="bottone" href="${indirizzoAnno('/commesse/elenco.xlsx', { q: cerca }, anno)}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
+      ${barraAnni(contaPerAnno(tuttiGliAnni, c => c.creato_il), anno, '/commesse', req.query as Record<string, unknown>)}
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>

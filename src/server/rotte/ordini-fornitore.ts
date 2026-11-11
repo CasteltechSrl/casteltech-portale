@@ -3,6 +3,8 @@
  * "+ Nuovo ordine" con il fornitore SOLO dall'anagrafica, bozza → Emetti (numero e PDF) → Invia con Gmail,
  * arrivo della merce riga per riga, fattura del fornitore collegata. Dalla BOM quotata: un ordine per distributore.
  */
+import { annoScelto, contaPerAnno, filtraPerAnno } from '../../engine/anni-elenco.js';
+import { barraAnni } from '../views/barra-anni.js';
 import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
 import { INVIATO_TITOLO } from '../../engine/invii.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
@@ -42,9 +44,11 @@ export function rotteOrdiniFornitore() {
     const cerca = String(req.query.q ?? '').trim().toUpperCase();
     const vista = String(req.query.vista ?? 'aperti');
     const [tutti, fornitori, ultimo] = await Promise.all([elencoOrdiniFornitore(), fornitoriPerOrdini(), ultimoNumeroOrdini(Number(oggiRoma().slice(0, 4)))]);
-    const elenco = tutti.filter(o =>
+    const anno = annoScelto(req.query);
+    const filtrati = tutti.filter(o =>
       (vista === 'tutti' || (o.stato !== 'annullato' && (o.stato === 'bozza' || o.arrivo !== 'arrivato' || !o.fattura))) &&
       (!cerca || [o.fornitore, o.riferimento_esterno, o.commessa, o.numero ? `${o.numero}/${o.anno}` : ''].some(t => String(t ?? '').toUpperCase().includes(cerca))));
+    const elenco = filtraPerAnno(filtrati, o => o.data, anno);
     const avviso = avvisoNumerazione(Number(oggiRoma().slice(0, 4)), ultimo);
     const modulo = moduloAzioni({
       azione: '/ordini/fornitori/azioni', nome: { singolare: 'ordine', plurale: 'ordini' },
@@ -70,8 +74,9 @@ export function rotteOrdiniFornitore() {
         <input name="q" value="${String(req.query.q ?? '')}" placeholder="Cerca fornitore, numero, offerta, commessa">
         <select name="vista"><option value="aperti">Da completare (bozze, merce da ricevere o senza fattura)</option>
           <option value="tutti" ${vista === 'tutti' ? raw('selected') : ''}>Tutti</option></select>
-        <button>Filtra</button>
+        ${anno != null ? html`<input type="hidden" name="anno" value="${anno}">` : ''}<button>Filtra</button>
       </form>
+      ${barraAnni(contaPerAnno(filtrati, o => o.data), anno, '/ordini/fornitori', req.query as Record<string, unknown>)}
       ${modulo.apri}
       <table class="elenco">
         <thead><tr>${casellaTutti()}<th>N.</th><th>Data</th><th>Fornitore</th><th>Vostra offerta</th><th>Commessa</th><th>Consegna</th>

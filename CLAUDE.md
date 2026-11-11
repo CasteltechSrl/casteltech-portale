@@ -183,6 +183,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   database del 6/11 (Project Files → copia-locale-portale, `tools/ripristina-backup.ts`, 25 s). Regola: un numero del cruscotto porta a una pagina che mostra lo STESSO elenco.
   "Consegne in ritardo" e il riquadro "In ritardo" → scheda Ordini → In ritardo (`/ordini?vista=ritardo`, regola unica `consegneInRitardo` in `engine/ordini.ts`);
   "DDT da fatturare" → Fatture differite.
+- Divisione per anno (Adriano 11/11/2026, "è sempre una cosa importante"): ogni elenco o analisi dove ha senso va diviso per anno. Elenchi: fila "Anno: Tutti · 2026 (n) …"
+  con `contaPerAnno`/`filtraPerAnno`/`annoScelto`/`indirizzoAnno` (`engine/anni-elenco.ts`) + `barraAnni` (`views/barra-anni.ts`), `?anno=` vale anche per l'Excel (Preventivi, Commesse,
+  Ordini a fornitore, DDT ricevuti); scheda cliente = tabella "Anno per anno" (`clienteAnnoPerAnno`); analisi = tabelle anno per anno (es. `acquistiPerAnno`). Test in `tests/anni-elenco.test.ts`.
+  Il controllo settimanale lo verifica sulle pagine nuove o cambiate.
 - Guida del portale (`/guida`, testi in `src/engine/guida.ts`; Adriano 28/10/2026): ogni funzione nuova o cambiata va spiegata anche lì,
   nell'argomento della sua area (frasi semplici, passi, pagine), con un caso di ricerca in `tests/guida.test.ts` se serve.
 - Prima di salvare: `npm run verifica` (tipi) e `npm test` (deve passare tutto). Aggiungi un test per ogni regola nuova.

@@ -6,13 +6,14 @@ import { q, q1 } from './db.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { ddtDaFatturare } from './documenti-servizio.js';
 import { fatturatoClienti } from './crm-servizio.js';
+import { clienteAnnoPerAnno } from '../engine/anni-elenco.js';
 import { codiciPerAnno, fatturatoPerAnno, giorniMediIncasso, situazioneIncassi, type RigaConsegna } from '../engine/scheda-cliente.js';
 
 export async function datiSchedaCliente(id: number, oggi: string, opz: { tuttiGliAnni?: boolean } = {}) {
   const cliente = await q1(`SELECT c.*, (SELECT count(*)::int FROM prodotti p WHERE p.cliente_id = c.id) AS n_prodotti FROM clienti c WHERE c.id = $1`, [id]);
   if (!cliente) return null;
   const anno = Number(oggi.slice(0, 4));
-  const [prodotti, preventivi, righe, commesse, ddt, documenti, rate, crm, storico, consegne] = await Promise.all([
+  const [prodotti, preventivi, righe, commesse, ddt, documenti, rate, crm, storico, consegne, preventiviAnni, ordiniAnni] = await Promise.all([
     q(`SELECT p.id, p.codice, p.descrizione, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_data::text AS prezzo_data,
         (SELECT count(*)::int FROM prodotti_scaglioni s WHERE s.prodotto_id = p.id) AS scaglioni,
         (SELECT max(v.creato_il)::text FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS ultimo_preventivo
@@ -42,6 +43,9 @@ export async function datiSchedaCliente(id: number, oggi: string, opz: { tuttiGl
       FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN prodotti p ON p.id = r.prodotto_id
       WHERE d.cliente_id = $1 AND d.tipo IN ('ddt', 'fattura') AND d.stato NOT IN ('bozza', 'annullato', 'scartato') AND NOT r.solo_descrizione
         AND d.anno >= $2 ORDER BY d.data DESC, d.id DESC, r.posizione`, [id, opz.tuttiGliAnni ? 0 : anno - 2]),
+    // anno per anno (Adriano 11/11/2026): tutti i preventivi e gli ordini del cliente, solo la data
+    q<{ creato_il: string }>(`SELECT creato_il::text AS creato_il FROM preventivi WHERE cliente_id = $1`, [id]),
+    q<{ data: string | null }>(`SELECT coalesce(data_ordine, data_ordine_cliente)::text AS data FROM ordini WHERE cliente_id = $1`, [id]),
   ]);
   const ordiniAperti = righe.filter(r => r.tipo === 'scheda' && r.residuoQuantita > 0 && !['evaso', 'annullato'].includes(r.stato));
   return {
@@ -52,6 +56,7 @@ export async function datiSchedaCliente(id: number, oggi: string, opz: { tuttiGl
     crm, storico,
     valoreOrdiniAperti: ordiniAperti.reduce((t, r) => t + (r.residuoValore || 0), 0),
     codiciPerAnno: codiciPerAnno(consegne, anno, opz.tuttiGliAnni ? 0 : 3), tuttiGliAnni: !!opz.tuttiGliAnni,
+    annoPerAnno: clienteAnnoPerAnno(documenti, preventiviAnni, ordiniAnni),
   };
 }
 export type DatiSchedaCliente = NonNullable<Awaited<ReturnType<typeof datiSchedaCliente>>>;

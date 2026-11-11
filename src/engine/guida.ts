@@ -1382,6 +1382,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/analisi/costi', 'Costi per categoria'], ['/amministrazione/analisi/pareggio', 'Punto di pareggio'], ['/amministrazione/analisi/fornitori', 'Fornitori']],
   },
   {
+    id: 'divisione-per-anno', area: 'inizio', titolo: 'Elenchi e analisi divisi per anno',
+    parole: 'anno per anno divisione per anno un anno solo filtro anno 2026 2025 2024 quanti preventivi nel commesse dell anno ordini a fornitore dell anno ddt ricevuti fatturato del cliente per anno',
+    testo: [
+      'La divisione per anno c\'è dove serve (Adriano 11/11/2026, "è sempre una cosa importante"). Sopra gli elenchi di Preventivi, Commesse, Ordini a fornitore e DDT ricevuti c\'è la fila "Anno: Tutti · 2026 (45) · 2025 (120)…": il numero tra parentesi dice quanti sono; clic su un anno = solo quell\'anno (resta anche il filtro della ricerca, e il pulsante Excel scarica solo quell\'anno).',
+      'La scheda del cliente (Anagrafiche → Clienti → Scheda) ha la tabella "Anno per anno": fatturato (fatture meno note di credito) con la variazione sull\'anno prima, quante fatture, note di credito, DDT, ordini e preventivi; clic sul fatturato = le fatture di quell\'anno. Sotto restano i "Codici prodotti per anno".',
+      'Le pagine di Analisi sono già anno per anno: Andamento, Prodotti, Clienti, Fornitori (e le schede di fornitore, prodotto, componente e materiale), Costi per categoria, Acquisti ("Dove l\'ho comprato e a quanto"). Amministrazione → Fatture, Note di credito, DDT e Registri IVA si scelgono per anno. Il controllo settimanale del sabato verifica anche che le pagine nuove abbiano la divisione per anno dove ha senso.',
+    ],
+    passi: ['Apri l\'elenco (es. Preventivi).', 'Nella fila "Anno" clicca l\'anno che ti interessa; "Tutti" torna all\'elenco completo.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/acquisti/ddt', 'DDT ricevuti'], ['/anagrafiche/clienti', 'Clienti']],
+  },
+  {
     id: 'analisi-acquisti', area: 'amministrazione', titolo: 'Analisi degli acquisti: fornitori, materiali, dove ho comprato un articolo e a quale prezzo',
     parole: 'analisi acquisti fornitore fornitori energia enel bollette credito cliente doppione componente materiale materiali consumo scheda anno per anno spesa speso quanto ho speso variazione peso prezzo medio aumentato prezzo salito ultimo acquisto fermo classifica fornitori quando si paga il fornitore ritardo bom pulsante analisi dove l\'ho comprato da chi ho comprato a quale prezzo storico righe fatture fornitori riga per riga ricerca negli acquisti prezzo pagato in passato lamine lamina stencil anno per anno quanto ho comprato ogni anno sinonimi plurale errore di battitura parole esatte',
     testo: [
