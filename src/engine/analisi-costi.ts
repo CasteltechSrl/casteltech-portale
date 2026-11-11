@@ -204,7 +204,7 @@ export interface MaterialePreventivo { codice: string; clienteId: number | null;
 /** Lamine fatturate ai clienti in un anno: a parte (riga della lamina) e dentro i costi una tantum (riga "Avvio produzione - Programmazione - Lamina serigrafica"). */
 export interface LamineVendute { anno: number; pezzi: number; importo: number; pezziUnaTantum: number; importoUnaTantum: number }
 /** Riga di fattura (o NC, importo e quantità con il segno) che cita una lamina. */
-export interface RigaLamina { anno: number; codice: string; descrizione: string; quantita: number; importo: number;
+export interface RigaLamina { anno: number; data?: string; codice: string; descrizione: string; quantita: number; importo: number;
   /** lamine segnate a mano sulla riga (documenti_righe.lamine): vincono sulla descrizione, 0 = nessuna */
   lamine?: number | null }
 
@@ -220,25 +220,30 @@ export function pezziLamina(descrizione: string, quantita: number): number {
   return q >= 1 && q <= 20 && Number.isInteger(q) ? q : 1;
 }
 
+/** Lamine fatturate in una riga (con il segno: NC in negativo) e se la riga è la sola lamina o un forfait che la contiene. */
+export function lamineDellaRiga(r: RigaLamina): { pezzi: number; aParte: boolean } {
+  const d = r.descrizione.trim(), d1 = d.split('\n')[0];
+  const aMano = r.lamine != null;
+  if (!aMano && !/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) return { pezzi: 0, aParte: false };
+  if (!r.importo || r.lamine === 0) return { pezzi: 0, aParte: false };   // lamina riconsegnata a 0 € (JOX FT 60/2026): già fatturata prima
+  const segno = r.importo < 0 || r.quantita < 0 ? -1 : 1;
+  return { pezzi: segno * (aMano ? r.lamine! : pezziLamina(d, r.quantita)), aParte: /^UT-LAMINA$/i.test(r.codice.trim()) || (LAMINA.test(d1) && !ALTRE_VOCI.test(d)) };
+}
+
 /** Lamine fatturate per anno (Adriano 11/11/2026: "per ogni lamina acquistata c'è una lamina venduta", spesso dentro i costi una tantum). */
 export function lamineDaVendite(righe: RigaLamina[], anni: number[]): LamineVendute[] {
   return anni.map(anno => {
     const l: LamineVendute = { anno, pezzi: 0, importo: 0, pezziUnaTantum: 0, importoUnaTantum: 0 };
     for (const r of righe.filter(r => r.anno === anno)) {
-      const d = r.descrizione.trim(), d1 = d.split('\n')[0];
-      const aMano = r.lamine != null;
-      if (!aMano && !/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) continue;
-      if (!r.importo || r.lamine === 0) continue;   // lamina riconsegnata a 0 € (JOX FT 60/2026): già fatturata prima
-      const segno = r.importo < 0 || r.quantita < 0 ? -1 : 1;
-      const pezzi = segno * (aMano ? r.lamine! : pezziLamina(d, r.quantita));
-      const aParte = /^UT-LAMINA$/i.test(r.codice.trim()) || (LAMINA.test(d1) && !ALTRE_VOCI.test(d));
-      if (aParte) { l.pezzi += pezzi; l.importo += r.importo; } else { l.pezziUnaTantum += pezzi; l.importoUnaTantum += r.importo; }
+      const f = lamineDellaRiga(r);
+      if (!f.pezzi) continue;
+      if (f.aParte) { l.pezzi += f.pezzi; l.importo += r.importo; } else { l.pezziUnaTantum += f.pezzi; l.importoUnaTantum += r.importo; }
     }
     return { anno, pezzi: l.pezzi, importo: r2(l.importo), pezziUnaTantum: l.pezziUnaTantum, importoUnaTantum: r2(l.importoUnaTantum) };
   });
 }
 /** Lamine comprate (pezzi): righe di lamina della categoria lamine (non trasporti, sconti, PCB dello stesso fornitore). */
-const LAMINA_COMPRATA = /\b(lamin[ae]|stencil|zelflex)\b|\bla\d{2}-\d/i;
+export const LAMINA_COMPRATA = /\b(lamin[ae]|stencil|zelflex)\b|\bla\d{2}-\d/i;
 
 const MATERIALE_SCRITTO = /acquisto (dei )?(componenti|pcb|materiale)|^(componenti|materiale|components?)\b|\bpcb purchase\b|^componenti extra\b|^materiale (acquistato|x|per)\b/im;
 const ANTICIPO = /^\W*(anticipo|acconto|advance payment)\b|\bacconto \d+ ?%/im;

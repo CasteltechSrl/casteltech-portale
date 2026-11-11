@@ -37,7 +37,7 @@ import { caricaAliquote, caricaCondizioniPagamento } from '../amministrazione-se
 import { TIPI_SDI, aggiornaEsitiDocumento, ambienteAttuale, inviaDocumento, scaricaRicevute } from '../invoicetronic.js';
 import { NOMI_STATI_SDI } from '../../engine/sdi.js';
 import {
-  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, aggiungiRigheOrdine, righeOrdineDaFatturare, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
+  TIPI_EMISSIBILI, accontiDaScalare, aggiungiDdt, aggiungiRigheOrdine, aggiungiRigaLamina, righeOrdineDaFatturare, annullaDdt, bloccoDdt, anteprimaDocumento, controllaDdt, creaAccontoDaOrdine, creaBozza, creaDdtDaOrdine, creaDdtDaCommessa,
   creaNotaCredito, creaNotaDebito, ddtDaFatturare, ddtDaFatturareTutti, ddtSegnatiNonDaFatturare, fatturaTuttiIDdt, eliminaBozza, emettiDocumento, riapriScartato, salvaBozza, scalaAcconti, type TipoEmissibile,
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
@@ -52,6 +52,9 @@ import { TIPI_CORTESIA, nomeDocumento } from '../../engine/fattura-email.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
 import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
 import { marginePreventivo } from '../../engine/analisi.js';
+import { lamineDellaRiga } from '../../engine/analisi-costi.js';
+import { GIORNI_LAMINA, togliPezzi } from '../../engine/lamine-fatturazione.js';
+import { lamineDaFatturare } from '../analisi-costi-servizio.js';
 import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
@@ -1001,6 +1004,11 @@ export function rotteAmministrazione() {
         html`<option value="${a.codice}" ${x.aliquota_iva === a.codice ? raw('selected') : ''}>${a.descrizione}</option>`)}</select></td>
       <td class="centro"><input type="checkbox" name="righe[${i}][solo_descrizione]" ${x.solo_descrizione ? raw('checked') : ''} title="Riga di solo testo, senza importo"></td>
     </tr>`;
+    // lamine comprate non ancora fatturate (Adriano 11/11/2026): proposte nella bozza di fattura, tolte quelle già scritte qui
+    const lamineQui = d.tipo === 'fattura' && conAnagrafica ? righe.filter(x => !x.solo_descrizione).reduce((s: number, x: any) => s + Math.max(0, lamineDellaRiga({ anno: 0, codice: x.codice ?? '',
+      descrizione: x.descrizione ?? '', quantita: Number(x.quantita ?? 0), importo: Number(x.quantita ?? 0) * Number(x.prezzo ?? 0) * (1 - Number(x.sconto ?? 0) / 100), lamine: x.lamine ?? null }).pezzi), 0) : 0;
+    const lamineAperte = d.tipo === 'fattura' && conAnagrafica && d.tipo_sdi !== 'TD02'
+      ? togliPezzi((await lamineDaFatturare(oggiRoma()).catch(() => null))?.daFatturare ?? [], lamineQui) : [];
     // cliente di un altro paese UE: ultimo controllo VIES (serve per fatturare non imponibile art. 41 / 7-ter)
     const clienteUe = d.tipo !== 'autofattura' && d.cliente_id ? await q1(`SELECT partita_iva, nazione FROM clienti WHERE id = $1`, [d.cliente_id]) : null;
     res.send(pagina(req, titolo, html`${testa}
@@ -1056,6 +1064,15 @@ export function rotteAmministrazione() {
           <span class="nota">${x.quantita} × ${euro(x.prezzo)}</span></label>`)}
         <button>Aggiungi le righe scelte</button> <span class="nota">Salva prima le modifiche alle righe: le righe si aggiungono in fondo.</span>
       </form>` : ''}
+      ${lamineAperte.length ? html`<form method="post" action="/amministrazione/documenti/${id}/lamina" class="blocco da-verificare">
+        <h2>Lamine comprate non ancora fatturate</h2>
+        <p class="nota">Ogni lamina si compra per un prodotto e va in fattura. Queste non sono ancora in nessuna fattura emessa (conto a pezzi dalla più vecchia${lamineQui ? `, tolte le ${lamineQui} di questa bozza` : ''}):
+          se una è di questo cliente aggiungila qui, oppure scrivi "lamina" nella riga dei costi una tantum. Quelle che non si fatturano si segnano in
+          <a href="/amministrazione/analisi/costi/lamine">Analisi → Costi → Lamine</a>.</p>
+        <ul>${lamineAperte.map(l => html`<li>${data(l.data)} · ${l.fornitore} · ${l.descrizione} · ${l.pezzi === 1 ? '1 pz' : `${l.pezzi} pz`}${l.giorni > GIORNI_LAMINA ? html` <b class="rosso">da ${l.giorni} giorni</b>` : ''}</li>`)}</ul>
+        <label class="stretto">Lamine <input name="pezzi" value="1" class="cortissimo" inputmode="numeric"></label>
+        <button>Aggiungi la riga della lamina</button> <span class="nota">Servizio UT-LAMINA in fondo alla fattura; salva prima le modifiche alle righe.</span>
+      </form>` : ''}
       ${acconti.length ? html`<form method="post" action="/amministrazione/documenti/${id}/acconti" class="blocco">
         <h2>Fatture d'acconto da scalare</h2>
         ${acconti.map(x => html`<label class="riga-spunta"><input type="checkbox" name="acconto" value="${x.id}"> Acconto n. ${numeroCompleto(x.numero, x.sezionale)} del ${data(x.data)}
@@ -1097,6 +1114,11 @@ export function rotteAmministrazione() {
     res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(n ? `Aggiunti ${n} DDT.` : 'Nessun DDT scelto.')}`);
   });
 
+  r.post('/documenti/:id/lamina', async (req, res) => {
+    const id = Number(req.params.id);
+    const testo = await aggiungiRigaLamina(id, Number(req.body.pezzi));
+    res.redirect(`/amministrazione/documenti/${id}?msg=${encodeURIComponent(testo)}`);
+  });
   r.post('/documenti/:id/righe-ordine', async (req, res) => {
     const id = Number(req.params.id);
     const scelte = [req.body.riga ?? []].flat().map(Number).filter(Boolean);

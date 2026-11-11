@@ -4,6 +4,7 @@ import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../engine/ddt.js'
 
 import { GIORNI_PREVENTIVO_FERMO, GIORNI_TEMPO_APERTO, type DatiControlli } from '../engine/controlli.js';
 import { righeOrdini } from './ordini-servizio.js';
+import { lamineDaFatturare } from './analisi-costi-servizio.js';
 
 const NOME_CLIENTE = `coalesce(c.ragione_sociale, d.intestatario->>'nome', '')`;
 
@@ -52,7 +53,9 @@ export async function datiControlli(oggi: string): Promise<DatiControlli> {
   // servizi d'ordine (lamine, programmazioni…) risultati evasi perché le schede sono tutte partite, ma mai fatturati (controllo serale 5/11/2026)
   const serviziNonFatturati = (await righeOrdini()).filter(r => r.tipo === 'servizio' && r.stato === 'evaso' && !r.statoManuale && r.importoFatturato <= 0 && r.prezzo > 0 && r.quantita > 0)
     .slice(0, 100).map(r => ({ ordineId: r.ordineId, ordine: `${r.numero}/${r.anno}`, cliente: r.cliente ?? '', descrizione: r.descrizione ?? r.codice ?? '', importo: r.quantita * r.prezzo }));
-  return { oggi, ddtDaFatturare: ddt, ordiniSenzaConsegna: ordini, prodottiSenzaPrezzo: prodotti, clientiSenzaRecapitoSdi: clienti,
+  const lamineNonFatturate = (await lamineDaFatturare(oggi).catch(e => { console.error('Controllo lamine:', e); return null; }))?.inRitardo
+    .map(l => ({ data: l.data, fornitore: l.fornitore, descrizione: l.descrizione, pezzi: l.pezzi, giorni: l.giorni })) ?? [];
+  return { oggi, lamineNonFatturate, ddtDaFatturare: ddt, ordiniSenzaConsegna: ordini, prodottiSenzaPrezzo: prodotti, clientiSenzaRecapitoSdi: clienti,
     fattureFornitoriSenzaScadenza: fornitori, preventiviFermi: preventivi, commesseOltreConsegna: commesse, tempiApertiVecchi: tempi, serviziNonFatturati };
 }
 
