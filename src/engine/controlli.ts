@@ -11,7 +11,8 @@ export interface Controllo { chiave: string; titolo: string; livello: LivelloCon
 
 export interface DatiControlli {
   oggi: string;                                                                                            // aaaa-mm-gg
-  ddtDaFatturare: { id: number; numero: string; data: string; cliente: string }[];                        // DDT emessi senza fattura (causali da fatturare)
+  ddtDaFatturare: { id: number; numero: string; data: string; cliente: string; righe?: number; senzaPrezzo?: number }[]; // DDT emessi senza fattura (causali da fatturare)
+  ddtSenzaCausale?: { id: number; numero: string; data: string; cliente: string }[];                       // DDT emessi senza causale del trasporto
   ordiniSenzaConsegna: { id: number; numero: string; cliente: string; righe: number }[];                   // righe aperte senza data di consegna
   prodottiSenzaPrezzo: { id: number; codice: string; cliente: string; clienteId: number | null }[];        // usati in ordini aperti, prezzo vuoto in anagrafica
   clientiSenzaRecapitoSdi: { id: number; nome: string; fatture: number }[];                               // fatturati negli ultimi 12 mesi, né codice SDI né PEC
@@ -45,6 +46,18 @@ export function elencoControlli(d: DatiControlli): Controllo[] {
       chiave: 'ddt-vecchi', titolo: `DDT da fatturare da più di ${GIORNI_DDT_URGENTE} giorni`, livello: 'urgente',
       spiegazione: 'DDT emessi e mai messi in una fattura. Fatture differite li raggruppa per cliente.',
       righe: ddtVecchi.map(x => ({ testo: `DDT n. ${x.numero} del ${dataIt(x.data)} · ${x.cliente}`, dettaglio: `${giorniTra(x.data, d.oggi)} gg`, link: `/amministrazione/documenti/${x.id}` })),
+    },
+    {
+      // Adriano 11/11/2026: "per capire se i prezzi sono stati inseriti devo entrare in ogni singolo documento"
+      chiave: 'ddt-senza-prezzi', titolo: 'DDT da fatturare con righe senza prezzo', livello: 'urgente',
+      spiegazione: 'DDT di vendita o reso lavorato non ancora fatturati con righe a prezzo zero: la fattura uscirebbe a zero. Scrivere i prezzi nel DDT (o nella bozza della fattura); se il DDT non si fattura, segnarlo "Non fatturare" in Fatture differite.',
+      righe: d.ddtDaFatturare.filter(x => (x.senzaPrezzo ?? 0) > 0).map(x => ({ testo: `DDT n. ${x.numero} del ${dataIt(x.data)} · ${x.cliente}`,
+        dettaglio: x.senzaPrezzo === x.righe ? 'tutte le righe senza prezzo' : `${x.senzaPrezzo} ${x.senzaPrezzo === 1 ? 'riga' : 'righe'} su ${x.righe} senza prezzo`, link: `/amministrazione/documenti/${x.id}` })),
+    },
+    {
+      chiave: 'ddt-senza-causale', titolo: 'DDT emessi senza causale del trasporto', livello: 'controllare',
+      spiegazione: 'Senza causale il portale non sa se il DDT va fatturato (vendita, reso lavorato) o no (reso non lavorato, garanzia, conto visione): lo considera da fatturare. Scriverla con "Modifica DDT".',
+      righe: (d.ddtSenzaCausale ?? []).map(x => ({ testo: `DDT n. ${x.numero} del ${dataIt(x.data)} · ${x.cliente}`, link: `/amministrazione/documenti/${x.id}` })),
     },
     {
       chiave: 'servizi-non-fatturati', titolo: 'Servizi degli ordini mai fatturati con le schede già consegnate', livello: 'urgente',

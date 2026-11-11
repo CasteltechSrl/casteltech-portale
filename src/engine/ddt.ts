@@ -214,3 +214,14 @@ export function serviziDegliOrdini<T extends { id: number; ordineId: number }>(d
   const ordini = new Set(ordiniDeiDdt);
   return daFatturare.filter(r => ordini.has(r.ordineId)).map(r => r.id);
 }
+
+/**
+ * Avviso dei prezzi nell'elenco DDT (Adriano 11/11/2026: "per capire se i prezzi sono stati inseriti devo entrare in ogni documento"):
+ * un DDT da fatturare (vendita, reso lavorato…) con righe a prezzo zero o vuoto va in evidenza; i DDT che non si fatturano
+ * (reso non lavorato, garanzia, conto visione…) e quelli annullati no. `righe` = righe con quantità (non di solo testo), `senzaPrezzo` = quelle senza prezzo.
+ */
+export function avvisoPrezziDdt(d: { daFatturare: boolean; stato: string; righe: number; senzaPrezzo: number }): { testo: string; titolo: string } | null {
+  if (!d.daFatturare || d.stato === 'annullato' || d.senzaPrezzo <= 0) return null;
+  if (d.senzaPrezzo >= d.righe) return { testo: 'senza prezzi', titolo: 'DDT da fatturare con tutte le righe a prezzo zero: scrivi i prezzi prima di fatturarlo' };
+  return { testo: `${d.senzaPrezzo} ${d.senzaPrezzo === 1 ? 'riga' : 'righe'} senza prezzo`, titolo: 'DDT da fatturare con alcune righe a prezzo zero' };
+}

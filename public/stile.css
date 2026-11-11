@@ -1164,3 +1164,4 @@ dialog.domanda { max-width: 36rem; border: 1px solid #ccc; border-radius: 8px; p
 dialog.domanda label { display: block; margin: .5rem 0; }
 dialog.domanda input.corto { width: 5rem; }
 dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }
+.ddt-senza-prezzi { background: #fdf0ef; }
