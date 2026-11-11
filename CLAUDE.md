@@ -455,6 +455,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `cercaVarianti` e `digikeySostituti` in cache 24 h ('varianti', 'sostituti_dk' in `fornitori_cache`). Pagina della riga: caselle con elenco (`valoriTabella` + valori
    dell'archivio per famiglia `valoriArchivioFamiglia`), "Ricalcola" resta sulla riga con `esitoRicalcolo`, riquadro "Suggerimenti" (`suggerimentiRiga` in
    `engine/codifica/valori-tabella.ts`, test in `tests/valori-tabella.test.ts`).
+   P/N registrati a mano (Adriano 11/11/2026, BOM Argo ricaricata tornata "da completare"; `archiviaCorrette`, `correzioniAltreBom` in `codifica-servizio.ts`,
+   `correzioniPerPn` in `engine/codifica/modifiche-mano.ts`, test in `tests/modifiche-mano.test.ts`): riga con P/N corretta con "Ricalcola" e codici completi = subito in archivio
+   (anche alla rielaborazione); senza correzione nella BOM vale l'ultima "Ricalcola" dello stesso P/N fatta in un'altra BOM; componente salvato da QUESTA BOM si ricorregge (archivio aggiornato, stesso gestionale se la radice non cambia).
    Formato nuovo dalla riga (Adriano 4/11/2026; migrazione 076 `codifica_case`, `CASE_DAL_PORTALE` in `aggiunte.ts` letto da `caseLookup`, `controllaNuovoCase`/`caseDaAggiungere`
    in `valori-tabella.ts`, `aggiungiCase`/`caricaCaseDalPortale` in `codifica-servizio.ts`, POST `/quotazioni/bom/:id/riga/:n/nuovo-case`, test in `tests/case-dal-portale.test.ts`):
    case "non in tabella" → riquadro in cima alla riga con codice di 4 caratteri + S/T, vale OK per tutte le BOM, riga ricalcolata; elenco con "Togli" in Impostazioni → Componenti; tabella completa `/impostazioni/componenti/case` (+ `.xlsx`, `tabellaCase` in `valori-tabella.ts`).

@@ -121,3 +121,18 @@ test('BOM: connettore in MI (RJ45 HR911105A) passa da solo a CN con i valori sta
   assert.equal(famigliaProposta({ famiglia: 'IC', pn: 'ULN2803A', attributi: { case: 'DIP18' }, footprint: 'Package_DIP:DIP-18_W7.62mm' }), null);
   assert.equal(famigliaProposta({ famiglia: 'RS', pn: 'X', attributi: {}, footprint: 'Connector_RJ:RJ45' }), null);
 });
+
+test('BOM ricaricata: la correzione "Ricalcola" di un P/N fatta in un\'altra BOM vale ancora, vince la BOM più recente (Adriano 11/11/2026)', async () => {
+  const { correzioniPerPn } = await import('../src/engine/codifica/modifiche-mano.js');
+  const { pnKey } = await import('../src/engine/codifica/bom.js');
+  const tl = (c: string) => ({ pn: 'TL3301NF160QG', famiglia: 'IT', attributi: { case: c, tensione: '0.05A@12VDC', tecnologia: 'S' } });
+  const m = correzioniPerPn([
+    { bomId: 43, codifica: tl('4SMD60X60X43') },
+    { bomId: 12, codifica: tl('VECCHIO') },
+    { bomId: 43, codifica: { pn: null, famiglia: 'RS', attributi: {} } },
+    { bomId: 40, codifica: { pn: 'TR05S05', famiglia: null, attributi: {} } },
+    { bomId: 41, codifica: null },
+  ], pnKey);
+  assert.equal(m.get(pnKey('tl3301nf160qg')!)?.attributi.case, '4SMD60X60X43');
+  assert.equal(m.size, 1); // senza P/N o senza famiglia non vale fuori dalla sua BOM
+});

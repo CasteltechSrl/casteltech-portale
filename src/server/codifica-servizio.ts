@@ -27,7 +27,7 @@ import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriCo
 import { cercaComponenteSulWeb, iaConfigurata, leggiConIa, proponiCompatibiliIa, type EsitoRicercaWeb } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
-import { confermaVerifica, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
+import { confermaVerifica, correzioniPerPn, leggiQuantitaScheda, leggiScartoAMano, numeroRigaNuova, pezziScartoAMano, scriviNellaRiga, testoScarto, type CodificaMano, type ManoRiga, type RigaFile, type ScartoMano } from '../engine/codifica/modifiche-mano.js';
 import { alternativeDaConfermare, componentiDaVerificare } from '../engine/alternative-cliente.js';
 import { controllaNuovoCase, type ValoriArchivio } from '../engine/codifica/valori-tabella.js';
 import { CASE_DAL_PORTALE, impostaCaseDalPortale, type CasePortale } from '../engine/codifica/aggiunte.js';
@@ -413,9 +413,12 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     if (r.dbId || r.esito !== ESITI.INC) continue;
     const x = regolaCondensatori(r.famiglia, r.attributi); r.attributi = x.attributi; r.note = unico([...r.note, ...x.note]);
   }
-  // famiglia e campi corretti a mano con "Ricalcola" (stesso P/N): si rimettono prima di calcolare i codici
+  // famiglia e campi corretti a mano con "Ricalcola" (stesso P/N): si rimettono prima di calcolare i codici;
+  // senza correzione in questa BOM vale l'ultima fatta in un'altra BOM con lo stesso P/N (Adriano 11/11/2026: BOM ricaricata)
+  const daAltre = await correzioniAltreBom(id, righe.filter(r => r.pn && r.esito !== ESITI.DB && r.esito !== ESITI.NON_MONTATO).map(r => pnKey(r.pn)!));
   for (const r of righe) {
-    const cod = righeOriginali(r).map(n => righeFile.find(x => x.n === n)?.mano?.codifica).find(Boolean);
+    const qui = righeOriginali(r).map(n => righeFile.find(x => x.n === n)?.mano?.codifica).find(Boolean);
+    const cod = qui && pnKey(qui.pn) === pnKey(r.pn) ? qui : r.pn ? daAltre.get(pnKey(r.pn)!) : undefined;
     if (!cod || pnKey(cod.pn) !== pnKey(r.pn) || r.esito === ESITI.DB || r.esito === ESITI.NON_MONTATO) continue;
     r.famiglia = cod.famiglia; r.attributi = { ...cod.attributi } as Attributi;
     if (r.esito === ESITI.DB_PROD) { r.esito = ESITI.INC; r.dbId = null; r.mpnAcquisto = null; }
@@ -424,7 +427,7 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
   }
   // 6. codici
   await ricalcola(righe);
-  if (solo) { await salvaRighe(id, righe); return notaIa; } // solo codifica: niente prezzi, acquisti né alternative
+  if (solo) { await salvaRighe(id, righe); await archiviaCorrette(id, righe, 'correzione a mano'); return notaIa; } // solo codifica: niente prezzi, acquisti né alternative
   // 7. prezzi dei componenti senza P/N (passivi): il più economico con gli stessi dati
   av.fase = 'ricerca dei passivi senza P/N';
   await prezziGenerici(righe, ricerca.perPn, opz.soloCache);
@@ -440,7 +443,27 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
   const errori = Object.entries(ricerca.errori).map(([f, m]) => `${NOMI_FORNITORI[f as Fornitore]}: ${m}`);
   const notaCache = maiCercati ? `Rielaborata con i prezzi già letti: ${maiCercati === 1 ? '1 codice non è mai stato cercato' : `${maiCercati} codici non sono mai stati cercati`} dai distributori, premi "Aggiorna prezzi" per averli` : '';
   await salvaRighe(id, righe);
+  await archiviaCorrette(id, righe, 'correzione a mano');
   return [notaIa, notaCache, ...errori].filter(Boolean).join(' · ');
+}
+
+/** Correzioni "Ricalcola" delle altre BOM per questi P/N (una lettura sola, solo le righe del file con una correzione). */
+async function correzioniAltreBom(id: number, chiavi: string[]): Promise<Map<string, CodificaMano>> {
+  if (!chiavi.length) return new Map();
+  const righe = await q<{ bom_id: number; codifica: CodificaMano }>(`SELECT b.id AS bom_id, f->'mano'->'codifica' AS codifica
+    FROM bom_analisi b, jsonb_array_elements(b.righe_file) f WHERE b.id <> $1 AND f->'mano'->'codifica'->>'pn' IS NOT NULL`, [id]);
+  const tutte = correzioniPerPn(righe.map(x => ({ bomId: x.bom_id, codifica: x.codifica })), pnKey);
+  return new Map(chiavi.filter(k => tutte.has(k)).map(k => [k, tutte.get(k)!]));
+}
+
+/**
+ * Righe corrette a mano con il codice completo: entrano subito nell'archivio componenti (Adriano 11/11/2026, "una volta registrato il P/N,
+ * deve restare associato a quel preciso codice"), così ogni BOM dopo, anche la stessa ricaricata, le trova "in archivio" con gli stessi codici.
+ */
+async function archiviaCorrette(id: number, righe: RigaBom[], utente: string) {
+  const n = righe.filter(r => r.pn && r.fonti.includes('modifica a mano') && r.codiceGestionale && (r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER)).map(r => r.n);
+  if (n.length) await salvaInArchivio(id, utente, n);
+  return n.length > 0;
 }
 
 /** Codici delle righe non in archivio (dopo le modifiche a mano si richiama da sola). */
@@ -1160,12 +1183,18 @@ export async function aggiungiRigaBom(id: number, dati: { pn?: string; descrizio
 }
 
 /** Correzione a mano di una riga: famiglia, attributi, fornito dal cliente. Ricalcola codici e acquisti. */
-export async function correggiRiga(id: number, n: number, dati: { famiglia: string | null; attributi: Attributi; clienteFornisce: boolean }): Promise<RigaBom | undefined> {
+export async function correggiRiga(id: number, n: number, dati: { famiglia: string | null; attributi: Attributi; clienteFornisce: boolean }, utente = 'correzione a mano'): Promise<RigaBom | undefined> {
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   const righe: RigaBom[] = a.righe;
   const r = righe.find(x => x.n === n);
   if (!r) return;
   r.clienteFornisce = dati.clienteFornisce;
+  // componente messo nell'archivio da QUESTA BOM (correzione o "Salva nell'archivio"): si può ancora correggere e l'archivio si aggiorna
+  let giaSalvato: { id: number; codice_gestionale: string | null } | null = null;
+  if (r.esito === ESITI.DB && r.dbId) {
+    const c = await q1<{ id: number; codice_gestionale: string | null; fonte: string | null }>(`SELECT id, codice_gestionale, fonte FROM componenti WHERE id = $1`, [r.dbId]);
+    if (c?.fonte?.startsWith(`BOM ${a.nome} (`)) { giaSalvato = c; r.esito = ESITI.INC; r.dbId = null; }
+  }
   if (r.esito !== ESITI.DB && r.esito !== ESITI.NON_MONTATO) {
     r.famiglia = dati.famiglia; r.attributi = dati.attributi;
     if (r.esito === ESITI.DB_PROD) { r.esito = ESITI.INC; r.dbId = null; r.mpnAcquisto = null; }
@@ -1176,21 +1205,35 @@ export async function correggiRiga(id: number, n: number, dati: { famiglia: stri
     const rf = (a.righe_file ?? []) as RigaFile[];
     const f = rf.find(x => x.n === n);
     if (f) { f.mano = { ...(f.mano ?? {}), codifica: { pn: r.pn ?? null, famiglia: r.famiglia, attributi: { ...r.attributi } } }; await q(`UPDATE bom_analisi SET righe_file = $2 WHERE id = $1`, [id, JSON.stringify(rf)]); }
+    if (giaSalvato) {
+      if (r.codiceGestionale && (r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER)) {
+        // stessa radice: resta il codice gestionale già dato (il progressivo nuovo salterebbe quello già usato da questo componente)
+        const vecchio = giaSalvato.codice_gestionale;
+        if (vecchio && vecchio.slice(0, -4) === r.codiceGestionale.slice(0, -4)) r.codiceGestionale = vecchio;
+        await q(`UPDATE componenti SET famiglia = $2, codice_produzione = $3, codice_gestionale = $4, descrizione = $5, attributi = $6, stato = $7, aggiornato_il = now() WHERE id = $1`,
+          [giaSalvato.id, r.famiglia, r.codiceProduzione, r.codiceGestionale, r.descrizione, JSON.stringify(Object.fromEntries(Object.entries(r.attributi).filter(([, v]) => v))),
+            r.esito === ESITI.NUOVO ? OK : VER]);
+        r.esito = ESITI.DB;
+      }
+      r.dbId = giaSalvato.id;
+    }
   }
   await calcolaAcquisti(righe, a.quantita);
   await salvaRighe(id, righe);
-  return r;
+  if (giaSalvato || !(await archiviaCorrette(id, righe.filter(x => x.n === n), utente))) return r;
+  return ((await q1<any>(`SELECT righe FROM bom_analisi WHERE id = $1`, [id]))?.righe as RigaBom[] | undefined)?.find(x => x.n === n);
 }
 
 /** Scrive nell'archivio i componenti nuovi completi e completa quelli già presenti. */
-export async function salvaInArchivio(id: number, utente: string, soloRiga?: number): Promise<{ nuovi: number; aggiornati: number }> {
+export async function salvaInArchivio(id: number, utente: string, soloRiga?: number | number[]): Promise<{ nuovi: number; aggiornati: number }> {
+  const solo = soloRiga == null ? null : new Set(Array.isArray(soloRiga) ? soloRiga : [soloRiga]);
   const a = await q1<any>(`SELECT * FROM bom_analisi WHERE id = $1`, [id]);
   const righe: RigaBom[] = a.righe;
   const fonte = `BOM ${a.nome} (${utente})`;
   let nuovi = 0, aggiornati = 0;
   await transazione(async c => {
     for (const r of righe) {
-      if (soloRiga != null && r.n !== soloRiga) continue;
+      if (solo && !solo.has(r.n)) continue;
       if ((r.esito === ESITI.NUOVO || r.esito === ESITI.NUOVO_VER) && r.codiceGestionale) {
         // P/N già in archivio (anche salvato poco fa da un'altra riga con lo stesso P/N): la riga è "in database", non più "nuovo" (Adriano 5/11/2026)
         const gia = r.pn ? (await c.query(`SELECT id, codice_gestionale FROM componenti WHERE pn_key = $1 ORDER BY codice_gestionale IS NULL, id LIMIT 1`, [pnKey(r.pn)])).rows[0] : null;
@@ -1321,6 +1364,7 @@ export async function valoriArchivioFamiglia(famiglia: string | null): Promise<V
 /** Messaggio dopo "Ricalcola" nella pagina della riga: il risultato o cosa manca ancora. */
 export function esitoRicalcolo(r: RigaBom | undefined): string {
   if (!r) return 'Riga non trovata.';
+  if (r.codiceGestionale && r.codiceProduzione && r.esito === ESITI.DB) return `Ricalcolato: ${r.codiceProduzione} / ${r.codiceGestionale}, registrato nell'archivio componenti: le prossime BOM con questo P/N avranno questi codici.`;
   if (r.codiceGestionale && r.codiceProduzione) return `Ricalcolato: ${r.codiceProduzione} / ${r.codiceGestionale} (${r.esito}).`;
   const problemi = r.note.filter(n => /non in tabella|mancante|manca|non indicat|indicare/i.test(n));
   return `Ricalcolato, ma ${r.codiceGestionale ? 'manca il codice di produzione' : 'manca ancora il codice gestionale'}${problemi.length ? `: ${problemi.join('; ')}` : ''}. Guarda i suggerimenti qui sotto.`;
