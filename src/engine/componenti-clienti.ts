@@ -1,3 +1,4 @@
+import { corrispondeRicerca } from './ricerca.js';
 /**
  * Componenti dei clienti e righe del DDT (Adriano 2/11/2026).
  * - Anagrafiche → Componenti clienti: i codici del materiale in conto lavoro, ognuno con il suo cliente, tutto in MAIUSCOLO;
@@ -73,4 +74,14 @@ export function leggiElencoComponentiCliente(righe: string[][]): { componenti: C
 export function testoDaFile(b: Uint8Array): string {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^﻿/, ''); }
   catch { return new TextDecoder('windows-1252').decode(b); }
+}
+
+/**
+ * Ricerca nell'elenco dei componenti dei clienti (Adriano 11/11/2026, elenco a pagine): come la ricerca veloce delle anagrafiche
+ * (più parole, accenti e trattini non contano) ma fatta sul server, così guarda tutti i codici e non solo la pagina aperta.
+ */
+export function filtraComponentiClienti<T extends { codice: string; cliente?: string | null; descrizione?: string | null; famiglia?: string | null; gruppo?: string | null }>(righe: T[], cerca: string): T[] {
+  const testo = cerca.trim();
+  if (!testo) return righe;
+  return righe.filter(k => corrispondeRicerca([k.codice, k.descrizione, k.famiglia, k.gruppo, k.cliente].filter(Boolean).join(' '), testo));
 }

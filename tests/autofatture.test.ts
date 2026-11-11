@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cambioDaCsv, causaleAutofattura, dataAutofattura, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
+  cambioDaCsv, causaleAutofattura, dataAutofattura, fineMese, controllaFatturaEstera, nomeConfrontabile, normalizzaFatturaEstera, paeseFiscale, righeInEuro, sommaRighe,
   stessoNomeFornitore, tipoAutofattura, stessaFatturaEstera, chiaveNumeroFattura, motivoNonScartabile,
 } from '../src/engine/autofatture.js';
 import { generaAutofatturaXml } from '../src/engine/fatturapa.js';
@@ -134,4 +134,20 @@ test("data dell'autofattura = giorno del caricamento della fattura nel portale (
   assert.equal(dataAutofattura('2026-11-12', null, '2026-11-10'), '2026-11-10');
   // l'ultima data di un altro anno non conta
   assert.equal(dataAutofattura('2027-01-02', '2026-12-30', '2027-01-05'), '2027-01-02');
+});
+
+test("data dell'autofattura: ultima data utile del mese di arrivo della fattura (Adriano 11/11/2026)", () => {
+  assert.equal(fineMese('2026-10-28'), '2026-10-31');
+  assert.equal(fineMese('2026-02-10'), '2026-02-28');
+  assert.equal(fineMese('2028-02-10'), '2028-02-29');
+  // fattura del 28/10 caricata il 3/11: 31/10, se non c'è già un'autofattura di novembre
+  assert.equal(dataAutofattura('2026-11-03', '2026-10-30', '2026-11-05', '2026-10-28'), '2026-10-31');
+  assert.equal(dataAutofattura('2026-11-03', null, '2026-11-05', '2026-10-28'), '2026-10-31');
+  assert.equal(dataAutofattura('2026-11-03', '2026-10-31', '2026-11-05', '2026-10-28'), '2026-10-31');
+  // c'è già un'autofattura del 2/11 in mezzo: resta il giorno del caricamento
+  assert.equal(dataAutofattura('2026-11-03', '2026-11-02', '2026-11-05', '2026-10-28'), '2026-11-03');
+  // fattura dello stesso mese del caricamento, o di due mesi prima, o dell'anno prima: giorno del caricamento
+  assert.equal(dataAutofattura('2026-11-03', null, '2026-11-05', '2026-11-01'), '2026-11-03');
+  assert.equal(dataAutofattura('2026-11-03', null, '2026-11-05', '2026-09-28'), '2026-11-03');
+  assert.equal(dataAutofattura('2027-01-03', null, '2027-01-05', '2026-12-28'), '2027-01-03');
 });

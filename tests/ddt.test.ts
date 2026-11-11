@@ -120,3 +120,12 @@ test('DDT emesso: si corregge finché non è in una fattura già allo SdI (Adria
   assert.ok(bloccoModificaDdt({ ...ddt, origine: 'fic' }, []));
   assert.ok(bloccoModificaDdt({ ...ddt, stato: 'annullato' }, []));
 });
+
+test('servizi una tantum in fattura da soli: solo quelli degli ordini dei DDT (Adriano 11/11/2026)', async () => {
+  const { serviziDegliOrdini } = await import('../src/engine/ddt.js');
+  const daFatturare = [{ id: 1, ordineId: 10 }, { id: 2, ordineId: 10 }, { id: 3, ordineId: 11 }];
+  assert.deepEqual(serviziDegliOrdini(daFatturare, [10]), [1, 2]);
+  assert.deepEqual(serviziDegliOrdini(daFatturare, [10, 11]), [1, 2, 3]);
+  assert.deepEqual(serviziDegliOrdini(daFatturare, []), []);
+  assert.deepEqual(serviziDegliOrdini(daFatturare, [99]), []);
+});

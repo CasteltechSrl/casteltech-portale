@@ -175,6 +175,10 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   così il servizio fatturato diventa evaso; controllo settimanale `servizi-non-fatturati` (urgente). Conferma d'ordine: righe senza data prendono la prima consegna
   dell'ordine (`righeConfermaDaOrdine`). Ricerca per parametri dei passivi senza P/N: esito in `fornitori_cache` ('parametri', radice del gestionale, 7 giorni,
   `parametriDaCache`/`parametriInCache`) e riusato tra righe uguali della stessa BOM.
+- Risposte di Adriano dell'11/11/2026 alle domande del controllo: servizi una tantum da soli in fattura (`aggiungiServiziDegliOrdini` dentro `aggiungiDdt` in
+  `documenti-servizio.ts`, `serviziDegliOrdini` in `engine/ddt.ts`, test in `tests/ddt.test.ts`): entrando dei DDT nella bozza, i servizi mai fatturati degli STESSI ordini
+  si aggiungono in fondo; gli altri restano nel riquadro giallo. Componenti clienti a pagine da 100 con ricerca sul server (`?q=`, `filtraComponentiClienti` in
+  `engine/componenti-clienti.ts`, test in `tests/componenti-clienti.test.ts`).
 - Controllo serale del 10/11/2026 (routine "Controllo serale del portale", ora solo il martedì 22:30; test in `tests/cruscotto-generale.test.ts`): prova in locale con la copia del
   database del 6/11 (Project Files → copia-locale-portale, `tools/ripristina-backup.ts`, 25 s). Regola: un numero del cruscotto porta a una pagina che mostra lo STESSO elenco.
   "Consegne in ritardo" e il riquadro "In ritardo" → scheda Ordini → In ritardo (`/ordini?vista=ritardo`, regola unica `consegneInRitardo` in `engine/ordini.ts`);
@@ -686,6 +690,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    dell'autofattura (sezionale AF, righe in euro con IVA 22 %) → Emetti: XML `generaAutofatturaXml` (cedente estero RF18, CAP 00000, DatiFattureCollegate).
    Data della bozza (Adriano 11/11/2026, `dataAutofattura` in `engine/autofatture.ts`): giorno del caricamento della fattura nel portale (`acquisizioni.creato_il`), mai dopo oggi,
    non prima dell'ultima autofattura emessa della serie; si può cambiare nella bozza.
+   Mese di competenza: fattura del fornitore del mese prima del caricamento (stesso anno) = ultimo giorno del mese della fattura (`fineMese`), se la serie non ha già una data del mese dopo.
    Doppioni (Adriano 4/11/2026; `stessaFatturaEstera` in `engine/autofatture.ts`, `fatturaEsteraGiaCaricata`, migrazione 070, test in `tests/autofatture.test.ts`): stessa fattura
    (fornitore dal nome, numero senza segni, data) anche da file diverso (PDF + .eml) = quella arrivata dopo si scarta in `elabora`; nell'elenco "doppione" rosso,
    "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (POST `/amministrazione/fatture-estere/azioni`: "Prepara l'autofattura" = `confermaFatturaEstera` per ognuna, con gli errori

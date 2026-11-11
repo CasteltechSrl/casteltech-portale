@@ -7,7 +7,7 @@ import { elencoIndirizzi } from '../../engine/conferme-ordine.js';
 import { vedeAnalisi } from '../../engine/ruoli.js';
 import { linkAnalisiComponente, linkAnalisiProdotto } from '../../engine/analisi-acquisti.js';
 import express, { Router, type Request } from 'express';
-import { maiuscoloPulito } from '../../engine/componenti-clienti.js';
+import { filtraComponentiClienti, maiuscoloPulito } from '../../engine/componenti-clienti.js';
 import { conCampo } from '../../engine/errori-campo.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
@@ -21,7 +21,7 @@ import { aggiungiComponenteCliente, caricaComponentiCliente, cercaComponentiClie
   eliminaComponenteCliente, leggiFileComponentiCliente, salvaComponenteCliente } from '../componenti-clienti-servizio.js';
 import { datiNuovoComponente, famigliaFiltro } from '../../engine/componenti-archivio.js';
 import { calcolaPagina, PER_PAGINA } from '../../engine/paginazione.js';
-import { barraPagine } from '../views/paginazione.js';
+import { barraPagine, paginata } from '../views/paginazione.js';
 import { avvisoSenzaCliente, erroreClienteProdotto } from '../../engine/anagrafiche.js';
 import { rotteFornitoriAnagrafica } from './fornitori-anagrafica.js';
 import { datiFiscaliDaModulo } from '../../engine/tipi-fattura.js';
@@ -192,7 +192,11 @@ export function rotteAnagrafiche() {
   r.get('/componenti-clienti', async (req, res) => {
     const clienti = await clientiConComponenti();
     const scelto = clienti.find(c => c.id === Number(req.query.cliente)) ?? null;
-    const righe = await elencoComponentiClienti(scelto?.id ?? null);
+    // a pagine da 100 (Adriano 11/11/2026: i 964 codici di Idea automazione in una pagina sola erano lenti); la ricerca guarda tutti i codici
+    const cerca = String(req.query.q ?? '').trim();
+    const tutte = await elencoComponentiClienti(scelto?.id ?? null);
+    const trovate = filtraComponentiClienti(tutte, cerca);
+    const { righe, barra } = paginata(trovate, req.query as Record<string, unknown>);
     const conDati = clienti.filter(c => c.n);
     const menuClienti = (nome: string, valore: number | null, vuota: string, classe = '') => html`<select name="${nome}" class="${classe}" ${classe ? '' : raw('required')}>
       <option value="">${vuota}</option>${clienti.map(c => html`<option value="${c.id}" ${c.id === valore ? raw('selected') : ''}>${c.ragione_sociale}${c.n ? ` (${num(c.n, 0)})` : ''}</option>`)}</select>`;
@@ -200,8 +204,10 @@ export function rotteAnagrafiche() {
       <p class="nota">Il materiale in conto lavoro che i clienti ci mandano, con i <b>loro</b> codici. Ogni codice ha il suo cliente; tutto in maiuscolo.
         Nei DDT, scegliendo "Componente cliente" nella riga, si sceglie da qui (per esempio per restituire il materiale non montato).
         ${conDati.length ? html`Clienti con componenti: ${conDati.map((c, i) => html`${i ? ', ' : ''}<a href="?cliente=${c.id}">${c.ragione_sociale}</a> (${num(c.n, 0)})`)}.` : ''}</p>
-      <form method="get" class="riga-campi">${menuClienti('cliente', scelto?.id ?? null, 'Tutti i clienti', 'invia-subito')}</form>
-      ${ricercaVeloce('componenti-clienti', 'Cerca codice, descrizione, famiglia…', righe.length)}
+      <form method="get" class="riga-campi">${menuClienti('cliente', scelto?.id ?? null, 'Tutti i clienti', 'invia-subito')}
+        <input type="search" name="q" value="${cerca}" placeholder="Cerca codice, descrizione, famiglia…" autocomplete="off" ${cerca ? raw('autofocus') : ''}>
+        <button>Cerca</button>${cerca ? html` <a href="?cliente=${scelto?.id ?? ''}">togli la ricerca</a>` : ''}
+        <span class="nota">Trovati: <b>${num(trovate.length, 0)}</b>${cerca ? html` su ${num(tutte.length, 0)}` : ''}</span></form>
       ${righe.length ? html`<div class="tabella-scorre"><table class="elenco" id="componenti-clienti"><thead><tr>${scelto ? '' : html`<th>Cliente</th>`}<th>Codice</th><th>Descrizione</th>
           <th>Famiglia</th><th>Gruppo</th><th class="n" title="Righe di DDT che lo usano">Nei DDT</th><th></th></tr></thead><tbody>
         ${righe.map(k => html`<tr>${scelto ? '' : html`<td class="taglia">${k.cliente}</td>`}<td class="codice">${k.codice}</td>
@@ -211,7 +217,7 @@ export function rotteAnagrafiche() {
           <td class="nowrap"><form method="post" action="/anagrafiche/componenti-clienti/${k.id}?cliente=${scelto?.id ?? ''}" id="k-${k.id}" class="inline"><button>Salva</button></form>
             ${k.usato ? '' : html`<form method="post" action="/anagrafiche/componenti-clienti/${k.id}/elimina?cliente=${scelto?.id ?? ''}" class="inline"
               data-conferma="${`Eliminare il codice ${k.codice} di ${k.cliente}?`}"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
-        </tbody></table></div>` : html`<p class="vuoto">${scelto ? 'Nessun componente per questo cliente: aggiungili qui sotto o carica il loro elenco.' : 'Nessun componente dei clienti: carica l\'elenco di un cliente qui sotto.'}</p>`}
+        </tbody></table></div>${barra}` : html`<p class="vuoto">${cerca ? 'Nessun componente trovato con questa ricerca.' : scelto ? 'Nessun componente per questo cliente: aggiungili qui sotto o carica il loro elenco.' : 'Nessun componente dei clienti: carica l\'elenco di un cliente qui sotto.'}</p>`}
       <form method="post" action="/anagrafiche/componenti-clienti" class="blocco stretto-form" id="k-nuovo">
         <h2>+ Aggiungi componente del cliente</h2>
         <label>Cliente ${menuClienti('cliente_id', scelto?.id ?? null, '— scegli il cliente —')}</label>

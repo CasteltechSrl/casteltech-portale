@@ -190,7 +190,7 @@ export async function confermaFatturaEstera(id: number, input: FatturaEstera, fo
     const caricata: string = a.caricata || oggi;
     const ultima = (await c.query(`SELECT to_char(ultima_data, 'YYYY-MM-DD') AS d FROM numerazioni WHERE tipo = 'autofattura' AND sezionale = $1 AND anno = $2`,
       [SEZIONALE_AUTOFATTURE, Number((caricata < oggi ? caricata : oggi).slice(0, 4))])).rows[0]?.d ?? null;
-    const dataAf = dataAutofattura(caricata, ultima, oggi);
+    const dataAf = dataAutofattura(caricata, ultima, oggi, f.data);
     const autofatturaId = (await c.query(`INSERT INTO documenti (tipo, tipo_sdi, sezionale, anno, data, fornitore_id, ricevuto_id, causale, riferimento_esterno, creato_da)
       VALUES ('autofattura', $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [f.tipo, SEZIONALE_AUTOFATTURE, Number(dataAf.slice(0, 4)), dataAf, fornitoreId, ricevutoId, causaleAutofattura(f.numero, f.data!), f.numero.slice(0, 60), utenteId])).rows[0].id;
