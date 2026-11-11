@@ -200,7 +200,32 @@ export const CATEGORIE_RIVENDITA_SCHEDE = ['componenti', 'pcb', 'meccanica'];
 export type TipoVendita = 'nostro' | 'conto_lavoro' | 'servizio' | 'acconto' | 'non_so';
 export interface RigaVendita { anno: number; clienteId: number | null; cliente: string; codice: string; descrizione: string; importo: number; acconto: boolean }
 /** Dal preventivo più recente del prodotto conta solo se vendiamo componenti o PCB (sì/no). */
-export interface MaterialePreventivo { codice: string; clienteId: number | null; conMateriale: boolean }
+export interface MaterialePreventivo { codice: string; clienteId: number | null; conMateriale: boolean;
+  /** parte del prezzo a scheda che è vendita di componenti e di PCB (0–1), per dividere il fatturato vero delle schede chiavi in mano */
+  quotaComponenti?: number; quotaPcb?: number }
+
+/** Prezzo di vendita di una lamina dentro i costi una tantum (Adriano 11/11/2026: "normalmente è il prezzo di vendita"). */
+export const PREZZO_LAMINA = 110;
+
+/**
+ * Componenti e PCB venduti (Adriano 11/11/2026, "componenti acquistati, componenti venduti, PCB acquistate e PCB vendute"): sulle fatture vere con materiale nostro.
+ * Riga che fattura il materiale ("acquisto componenti", "PCB") = tutto quello; scheda chiavi in mano = importo vero × la parte di componenti e PCB del suo preventivo;
+ * scheda senza preventivo = la parte media delle schede con preventivo (pesata sull'importo).
+ */
+export function materialeVenduto(vendite: (RigaVendita & { tipo: TipoVendita })[], preventivi: MaterialePreventivo[]): { componenti: number; pcb: number }[] {
+  const prev = new Map(preventivi.filter(p => p.quotaComponenti != null || p.quotaPcb != null).map(p => [chiavePrev(p.codice, p.clienteId), p]));
+  const quote = vendite.map(r => {
+    if (r.tipo !== 'nostro') return { componenti: 0, pcb: 0, nota: true };
+    if (MATERIALE_SCRITTO.test(r.descrizione)) return /\bpcb\b|circuit/i.test(r.descrizione) && !/componenti|materiale/i.test(r.descrizione) ? { componenti: 0, pcb: 1, nota: true } : { componenti: 1, pcb: 0, nota: true };
+    const p = r.codice ? prev.get(chiavePrev(r.codice, r.clienteId)) : undefined;
+    return p ? { componenti: p.quotaComponenti ?? 0, pcb: p.quotaPcb ?? 0, nota: true } : null;
+  });
+  // media pesata delle schede con preventivo
+  let base = 0, c = 0, b = 0;
+  vendite.forEach((r, i) => { const q = quote[i]; if (r.tipo === 'nostro' && q && !MATERIALE_SCRITTO.test(r.descrizione) && r.importo > 0) { base += r.importo; c += r.importo * q.componenti; b += r.importo * q.pcb; } });
+  const media = base > 0 ? { componenti: c / base, pcb: b / base } : { componenti: 0, pcb: 0 };
+  return vendite.map((r, i) => { const q = quote[i] ?? media; return { componenti: r.importo * q.componenti, pcb: r.importo * q.pcb }; });
+}
 /** Lamine fatturate ai clienti in un anno: a parte (riga della lamina) e dentro i costi una tantum (riga "Avvio produzione - Programmazione - Lamina serigrafica"). */
 export interface LamineVendute { anno: number; pezzi: number; importo: number; pezziUnaTantum: number; importoUnaTantum: number }
 /** Riga di fattura (o NC, importo e quantità con il segno) che cita una lamina. */
@@ -345,16 +370,23 @@ export interface RivenditaAnno {
   pesoMateriale: number | null; pesoMaterialeMin: number | null;
   /** lamine comprate (pezzi), fatturate a parte (pezzi, €) e dentro i costi una tantum (pezzi, € delle righe intere) */
   lamineCompratePezzi: number; lamineVendutePezzi: number; lamineVendute: number; lamineUnaTantumPezzi: number; lamineUnaTantumRighe: number;
-  /** guadagno stimato: fatturate a parte + quelle nei costi una tantum al prezzo medio delle lamine fatturate a parte (110 € se non ce ne sono) − comprate */
+  /** guadagno stimato: fatturate a parte + quelle nei costi una tantum a PREZZO_LAMINA − comprate */
   margineLamine: number;
+  /** lamine vendute in tutto (a parte + dentro le una tantum a PREZZO_LAMINA): pezzi ed euro */
+  lamineVendutePezziTot: number; lamineVenduteTot: number;
+  /** componenti (con meccanica) e PCB venduti sulle fatture vere (`materialeVenduto`) e guadagno = venduto − comprato */
+  vendutoComponenti: number; vendutoPcb: number; guadagnoComponenti: number; guadagnoPcb: number;
 }
 
 const primi = (m: Map<string, { cliente: string; importo: number }>, n = 6) => [...m.entries()].filter(e => Math.abs(e[1].importo) >= 1)
   .sort((a, b) => b[1].importo - a[1].importo).slice(0, n).map(([chiave, x]) => ({ chiave, cliente: x.cliente, importo: r2(x.importo) }));
 
 /** Comprato contro fatturato vero, anno per anno. `vendite` = righe delle fatture già classificate (`classificaVendite`). */
-export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (RigaVendita & { tipo: TipoVendita })[]; lamine: LamineVendute[]; anni: number[] }): RivenditaAnno[] {
+export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (RigaVendita & { tipo: TipoVendita })[]; lamine: LamineVendute[]; anni: number[]; preventivi?: MaterialePreventivo[] }): RivenditaAnno[] {
+  const materiale = materialeVenduto(x.vendite, x.preventivi ?? []);
   return x.anni.map(anno => {
+    const vendutoComponenti = r2(x.vendite.reduce((s, r, i) => s + (r.anno === anno ? materiale[i].componenti : 0), 0));
+    const vendutoPcb = r2(x.vendite.reduce((s, r, i) => s + (r.anno === anno ? materiale[i].pcb : 0), 0));
     const delAnno = x.righe.filter(r => r.anno === anno);
     const comprato = (cat: string) => r2(delAnno.filter(r => r.categoria === cat).reduce((s, r) => s + r.importo, 0));
     const compratoComponenti = comprato('componenti'), compratoPcb = comprato('pcb'), compratoMeccanica = comprato('meccanica'), compratoLamine = comprato('lamine');
@@ -368,7 +400,6 @@ export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (Rig
     const vendutoNostro = somma('nostro'), vendutoNonSo = somma('non_so');
     const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0, pezziUnaTantum: 0, importoUnaTantum: 0 };
     const lamineCompratePezzi = delAnno.filter(r => r.categoria === 'lamine' && LAMINA_COMPRATA.test(r.descrizione) && r.importo > 0).reduce((s, r) => s + Math.max(1, Math.abs(r.quantita ?? 1)), 0);
-    const prezzoLamina = l.pezzi > 0 && l.importo > 0 ? l.importo / l.pezzi : 110;
     return {
       anno, compratoComponenti, compratoPcb, compratoMeccanica, compratoLamine, comprato: r2(compratoSchede + compratoLamine), compratoSchede, compratoEstero,
       vendutoNostro, vendutoContoLavoro: somma('conto_lavoro'), vendutoNonSo, vendutoServizi: somma('servizio'),
@@ -376,7 +407,9 @@ export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (Rig
       pesoMateriale: vendutoNostro > 0 ? r2((compratoSchede / vendutoNostro) * 100) : null,
       pesoMaterialeMin: vendutoNostro + vendutoNonSo > 0 ? r2((compratoSchede / (vendutoNostro + vendutoNonSo)) * 100) : null,
       lamineCompratePezzi, lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo), lamineUnaTantumPezzi: l.pezziUnaTantum, lamineUnaTantumRighe: r2(l.importoUnaTantum),
-      margineLamine: r2(l.importo + l.pezziUnaTantum * prezzoLamina - compratoLamine),
+      margineLamine: r2(l.importo + l.pezziUnaTantum * PREZZO_LAMINA - compratoLamine),
+      lamineVendutePezziTot: l.pezzi + l.pezziUnaTantum, lamineVenduteTot: r2(l.importo + l.pezziUnaTantum * PREZZO_LAMINA),
+      vendutoComponenti, vendutoPcb, guadagnoComponenti: r2(vendutoComponenti - compratoComponenti - compratoMeccanica), guadagnoPcb: r2(vendutoPcb - compratoPcb),
     };
   });
 }
@@ -430,24 +463,16 @@ export function riassuntoCosti(x: { costi: CostiPerAnno; rivendita: RivenditaAnn
   // 3. la rivendita, sulle fatture vere
   const riv = x.rivendita.find(r => r.anno === anno);
   if (riv && riv.comprato) {
-    if (riv.compratoSchede && riv.vendutoNostro > 0 && riv.pesoMateriale != null) {
-      const p = riv.pesoMateriale;
-      const liv: Livello = p >= 85 ? 'critico' : p >= 70 ? 'attenzione' : 'bene';
-      frasi.push({ livello: liv, testo: `Componenti e PCB: comprati ${euro(riv.compratoSchede)}${riv.compratoEstero ? ` (di cui ${euro(riv.compratoEstero)} dall'estero: Mouser, DigiKey…)` : ''}; `
-        + `fatturato delle vendite con materiale nostro ${euro(riv.vendutoNostro)}: il materiale ne vale il ${pct(p)}, per montaggio e guadagno resta il ${pct(r2(100 - p))}.`
-        + (riv.vendutoNonSo > 0 ? ` Altri ${euro(riv.vendutoNonSo)} di fatture non si sa se avevano materiale nostro (${riv.clientiNonSo.slice(0, 4).map(c => c.cliente).join(', ')}): se sì, il materiale scende al ${pct(riv.pesoMaterialeMin!)}.` : '')
-        + ' Senza magazzino non è una perdita sicura: materiale comprato per consegne del mese dopo e avanzi pesano sull\'anno.' });
-      if (p >= 85) proposte.push('Il materiale si mangia quasi tutto il fatturato delle schede chiavi in mano: per i clienti principali confrontare il prezzo a scheda con il costo vero della BOM (Quotazioni → BOM quotata → "Aggiorna prezzi") e addebitare gli avanzi e i minimi d\'ordine.');
-      else if (p >= 70) proposte.push('Il materiale pesa molto sulle schede chiavi in mano: controllare il ricarico sui componenti e sui PCB dei clienti principali e far comprare il materiale al cliente dove non si guadagna.');
-    } else if (riv.compratoSchede) {
-      frasi.push({ livello: 'nota', testo: `Componenti e PCB: comprati ${euro(riv.compratoSchede)}, ma nessuna fattura del ${anno} risulta con materiale nostro: confronto non possibile.` });
-    }
+    // tre coppie comprato / venduto, come le vuole Adriano (11/11/2026): "devo capire se guadagno o se perdo"
+    const coppia = (nome: string, f: string, comprato: number, venduto: number, guadagno: number) => {
+      if (!comprato && !venduto) return;
+      frasi.push({ livello: guadagno < 0 ? 'critico' : 'bene', testo: `${nome}: comprat${f} ${euro(comprato)}, vendut${f} ${euro(venduto)}: ${guadagno >= 0 ? 'guadagno' : 'perdita'} di ${euro(Math.abs(guadagno))}.` });
+    };
+    coppia('Componenti', 'i', r2(riv.compratoComponenti + riv.compratoMeccanica), riv.vendutoComponenti, riv.guadagnoComponenti);
+    coppia('PCB', 'i', riv.compratoPcb, riv.vendutoPcb, riv.guadagnoPcb);
+    coppia('Lamine', 'e', riv.compratoLamine, riv.lamineVenduteTot, riv.margineLamine);
+    if (riv.guadagnoComponenti < 0 || riv.guadagnoPcb < 0) proposte.push('Componenti o PCB venduti per meno di quanto si comprano: per i clienti principali confrontare il prezzo a scheda con il costo vero della BOM (Quotazioni → BOM quotata → "Aggiorna prezzi") e addebitare avanzi e minimi d\'ordine. Senza magazzino un anno può pesare materiale comprato per le consegne dell\'anno dopo.');
     if (riv.compratoLamine || riv.lamineVendute) {
-      const liv: Livello = riv.margineLamine < 0 ? 'attenzione' : 'bene';
-      const vendutePezzi = riv.lamineVendutePezzi + riv.lamineUnaTantumPezzi;
-      frasi.push({ livello: liv, testo: `Lamine: comprate ${riv.lamineCompratePezzi} per ${euro(riv.compratoLamine)}, fatturate ${vendutePezzi} (${riv.lamineVendutePezzi} a parte per ${euro(riv.lamineVendute)}, ${riv.lamineUnaTantumPezzi} dentro i costi una tantum): `
-        + `${riv.margineLamine >= 0 ? 'guadagno stimato' : 'perdita stimata'} di ${euro(Math.abs(riv.margineLamine))}.`
-        + (riv.lamineCompratePezzi > vendutePezzi + 2 ? ` ${riv.lamineCompratePezzi - vendutePezzi} lamine comprate non risultano nelle fatture: rifatte a nostro carico, ancora da fatturare o scritte in fattura con un altro nome.` : '') });
       if (riv.margineLamine < 0) proposte.push('Le lamine costano più di quanto si fattura: addebitare sempre la lamina (UT-LAMINA) nel primo lotto, anche quando il cliente la discute.');
     }
   }
