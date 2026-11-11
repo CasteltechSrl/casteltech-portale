@@ -208,3 +208,31 @@ test('acquisizioni: riga collegata a un prodotto in anagrafica (Adriano 10/11/20
   // senza prodotto non cambia niente
   assert.deepEqual(rigaConProdotto({ codice: '', tipo: 'servizio' as const }, null), { codice: '', tipo: 'servizio' });
 });
+
+test('acquisizioni: prodotto scelto a mano porta codice, descrizione e prezzo dell\'anagrafica (Adriano 11/11/2026)', async () => {
+  const { rigaDalProdottoScelto } = await import('../src/engine/acquisizioni.js');
+  const letta = { codice: 'M0928-A_V.F01', descrizione: '', prezzo: 4.39 };
+  assert.deepEqual(rigaDalProdottoScelto(letta, { codice: 'M0928-A_V.F02', descrizione: 'SBUPM09-F02 (SMD+THT)', prezzo: 4.46 }),
+    { codice: 'M0928-A_V.F02', descrizione: 'SBUPM09-F02 (SMD+THT)', prezzo: 4.46, prezzoLetto: 4.39 });
+  // senza prezzo in anagrafica resta quello del documento; senza descrizione resta quella letta
+  assert.deepEqual(rigaDalProdottoScelto({ codice: 'X', descrizione: 'LETTA', prezzo: 5 }, { codice: 'Y', descrizione: null, prezzo: null }),
+    { codice: 'Y', descrizione: 'LETTA', prezzo: 5, prezzoLetto: null });
+  // la pagina lo fa mentre si sceglie: legge il listino per la quantità
+  const { readFileSync } = await import('node:fs');
+  const js = readFileSync(new URL('../public/acquisizioni.js', import.meta.url), 'utf8');
+  assert.match(js, /\/anagrafiche\/prodotti\/\$\{encodeURIComponent\(menu\.value\)\}\/listino\?quantita=/);
+  assert.match(js, /descrizione\.value = scelta\.dataset\.descrizione/);
+});
+
+test('acquisizioni: ordine per telefono o a voce = proposta vuota con il cliente (Adriano 11/11/2026)', async () => {
+  const { propostaOrdineManuale, nomeOrdineManuale } = await import('../src/engine/acquisizioni.js');
+  const p = propostaOrdineManuale({ id: 7, nome: 'Control Systems srl' }, '2026-11-11');
+  assert.equal(p.manuale, true);
+  assert.equal(p.clienteId, 7);
+  assert.equal(p.cliente, 'CONTROL SYSTEMS SRL');
+  assert.equal(p.dataOrdine, '2026-11-11');
+  assert.deepEqual(p.righe, []);
+  assert.match(p.note, /TELEFONO/);
+  assert.match(propostaOrdineManuale({ id: 1, nome: 'a' }, '2026-11-11', 'voce').note, /A VOCE/);
+  assert.equal(nomeOrdineManuale('Selea', '2026-11-11'), 'Ordine per telefono – SELEA – 11/11/2026');
+});

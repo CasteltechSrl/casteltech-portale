@@ -17,12 +17,12 @@ import { fineLavorazioneDaScansione, leggiFineLavorazione } from '../engine/flus
 import { dividiDdt, prodottoDaDescrizione, rigaConProdotto, type DdtLetto, type RigaAperta, type RigaDdtLetta } from '../engine/acquisizioni.js';
 import { righeOrdini } from './ordini-servizio.js';
 import { collegaDdtRicevuto } from './ddt-ricevuti-servizio.js';
-import { leggiEmail, mimeDaNome, numeroOrdineEmail, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
+import { leggiEmail, mimeDaNome, nomeOrdineManuale, numeroOrdineEmail, propostaOrdineManuale, PRIMO_NUMERO_EMAIL, tipoFile, tipoRigaDa, type Proposta, type RigaProposta } from '../engine/acquisizioni.js';
 
 /** servizio: codice del servizio una tantum (UT-…, Adriano 3/11/2026) per le righe di servizio; proposto dalla descrizione. */
 export interface RigaPropostaDb extends RigaProposta { prodottoId: number | null; tipo: 'scheda' | 'servizio'; servizio?: string | null }
 /** Quello che si salva in acquisizioni.proposta: la lettura dell'IA più i collegamenti all'anagrafica. */
-export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string }
+export interface PropostaDb extends Omit<Proposta, 'righe'> { clienteId: number | null; righe: RigaPropostaDb[]; mittente?: string; oggetto?: string; manuale?: boolean }
 
 const DA_LEGGERE = ['ordine', 'email', 'scheda_produzione', 'ddt', 'ddt_ricevuto', 'fattura_estera'];
 
@@ -220,7 +220,7 @@ export async function salvaProposta(id: number, p: PropostaDb): Promise<Proposta
 export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi: string): Promise<number> {
   const pr = await collega(p, p.clienteId);
   if (!pr.clienteId) throw new Error("scegli il cliente dall'anagrafica");
-  const righe = pr.righe.filter(r => r.quantita > 0 && (r.codice || r.descrizione || r.prodottoId));
+  const righe = pr.righe.filter(r => r.quantita > 0 && (r.codice || r.descrizione || r.prodottoId || r.servizio));
   if (!righe.length) throw new Error('serve almeno una riga con la quantità');
   return transazione(async c => {
     const a = (await c.query(`SELECT id, nome_file, stato FROM acquisizioni WHERE id = $1 FOR UPDATE`, [id])).rows[0];
@@ -229,8 +229,9 @@ export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi
     const anno = Number(oggi.slice(0, 4));
     const massimo = (await c.query(`SELECT max(numero) AS m FROM ordini WHERE anno = $1 AND numero >= $2`, [anno, PRIMO_NUMERO_EMAIL])).rows[0].m;
     const { id: ordineId } = (await c.query(`INSERT INTO ordini (anno, numero, data_ordine, cliente_id, cliente_nome, rif_cliente, data_ordine_cliente, origine, file, note)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'email',$8,$9) RETURNING id`,
-      [anno, numeroOrdineEmail(massimo), oggi, pr.clienteId, pr.cliente, pr.rifCliente || null, pr.dataOrdine, a.nome_file, pr.note || null])).rows[0];
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [anno, numeroOrdineEmail(massimo), oggi, pr.clienteId, pr.cliente, pr.rifCliente || null, pr.dataOrdine, pr.manuale ? 'manuale' : 'email',
+        pr.manuale ? null : a.nome_file, pr.note || null])).rows[0];
     for (const [i, r] of righe.entries()) {
       const prodotto = r.prodottoId ? (await c.query(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [r.prodottoId])).rows[0] : null;
       await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, codice_cliente, descrizione_cliente, tipo, quantita, prezzo, consegna_richiesta)
@@ -242,6 +243,15 @@ export async function conferma(id: number, p: PropostaDb, utenteId: number, oggi
       [id, ordineId, utenteId, JSON.stringify(pr)]);
     return ordineId;
   });
+}
+
+/** Ordine ricevuto a voce o per telefono (Adriano 11/11/2026): una "acquisizione" senza file, da compilare e confermare come le altre. */
+export async function nuovoOrdineManuale(clienteId: number, oggi: string, come: 'telefono' | 'voce'): Promise<number> {
+  const c = await q1<{ id: number; nome: string }>(`SELECT id, ragione_sociale AS nome FROM clienti WHERE id = $1`, [clienteId]);
+  if (!c) throw new Error("scegli il cliente dall'anagrafica");
+  const r = await q1<{ id: number }>(`INSERT INTO acquisizioni (origine, nome_file, tipo, stato, proposta, elaborato_il) VALUES ('caricato', $1, 'ordine', 'da_confermare', $2, now()) RETURNING id`,
+    [nomeOrdineManuale(c.nome, oggi, come), JSON.stringify(propostaOrdineManuale(c, oggi, come))]);
+  return r!.id;
 }
 
 /** Scartato (non è un ordine, doppione…): il file si svuota, resta la riga per non rileggerlo da Drive. */

@@ -111,7 +111,8 @@ export function rotteOrdini() {
     res.send(pagina(req.session.utente, 'Ordini', vista, html`
       <form class="cerca" method="get">${vista !== 'aperti' ? html`<input type="hidden" name="vista" value="${vista}">` : ''}
         <input name="q" value="${req.query.q ?? ''}" placeholder="Cerca cliente, codice, n° ordine, rif. cliente…" type="search"><button>Cerca</button>
-        <a class="bottone" href="/ordini/elenco.xlsx?vista=${vista}${cerca ? `&q=${encodeURIComponent(cerca)}` : ''}" title="Scarica queste righe in Excel">Excel</a></form>
+        <a class="bottone" href="/ordini/elenco.xlsx?vista=${vista}${cerca ? `&q=${encodeURIComponent(cerca)}` : ''}" title="Scarica queste righe in Excel">Excel</a>
+        <a class="bottone" href="/ordini/acquisire#ordine-a-voce" title="Ordine ricevuto per telefono o a voce, senza documento">+ Nuovo ordine (telefono / a voce)</a></form>
       ${tutte.length ? '' : html`<p class="vuoto">Nessun ordine nel portale. Si caricano da <a href="/impostazioni/ordini">Impostazioni → Ordini</a>.</p>`}
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco ordini">
