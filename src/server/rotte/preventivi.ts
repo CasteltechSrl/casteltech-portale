@@ -1,6 +1,8 @@
 /**
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
+import { prezzoInAnagraficaDaPreventivo, salvaSceltaAnagrafica } from '../prezzo-anagrafica-servizio.js';
+import { leggiSceltaAnagrafica } from '../../engine/prezzo-anagrafica.js';
 import { elencoRevisioni, pdfRevisione } from '../revisioni-servizio.js';
 import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
 import { barraAnni } from '../views/barra-anni.js';
@@ -271,7 +273,9 @@ export function rottePreventivi() {
     const torna = (t: string) => res.redirect(`/preventivi/${id}/stampa?${new URLSearchParams({ ...parametriStampa(opz), msg: t })}`);
     try {
       const a = await inviaPreventivoEmail(id, req.body ?? {}, opz);
-      torna(`Preventivo mandato per email a ${a} con il PDF allegato.`);
+      // prezzo mandato al cliente → anagrafica (Adriano 11/11/2026)
+      const an = await prezzoInAnagraficaDaPreventivo(id, 'invio').catch((e: any) => `Prezzo in anagrafica non aggiornato: ${e?.message ?? e}`);
+      torna(`Preventivo mandato per email a ${a} con il PDF allegato.${an ? ` ${an}` : ''}`);
     } catch (e: any) {
       torna(`Email non partita: ${e?.message ?? e}`);
     }
@@ -282,10 +286,13 @@ export function rottePreventivi() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const id = Number(req.params.id);
     const togli = req.body?.togli === '1';
+    const giaInviato = !!(await q1(`SELECT 1 FROM preventivi WHERE id = $1 AND email_inviata_il IS NOT NULL`, [id]));
     await segnaPreventivoInviato(id, String(req.body?.a ?? ''), togli);
+    // segnato come inviato a mano = mandato al cliente: il prezzo va in anagrafica (Adriano 11/11/2026)
+    const an = !togli && !giaInviato ? await prezzoInAnagraficaDaPreventivo(id, 'invio').catch((e: any) => `Prezzo in anagrafica non aggiornato: ${e?.message ?? e}`) : null;
     const torna = String(req.body?.torna ?? '');
     const indirizzo = torna.startsWith(`/preventivi/${id}`) && !torna.includes('//') ? torna : `/preventivi/${id}`;
-    res.redirect(`${indirizzo}${indirizzo.includes('?') ? '&' : '?'}msg=${encodeURIComponent(togli ? 'Segno "inviato" tolto.' : 'Preventivo segnato come inviato.')}`);
+    res.redirect(`${indirizzo}${indirizzo.includes('?') ? '&' : '?'}msg=${encodeURIComponent(togli ? 'Segno "inviato" tolto.' : `Preventivo segnato come inviato.${an ? ` ${an}` : ''}`)}`);
   });
 
   // ── Versione salvata del preventivo: la pagina di stampa la controlla quando si torna sulla sua scheda del browser ──
@@ -433,7 +440,13 @@ export function rottePreventivi() {
     const nuovoId = await salvaPreventivo({ id, dati, catalogo: cat, utenteId: req.session.utente!.id });
     // preventivo compilato dai documenti del cliente: salvarlo dopo il controllo lo convalida
     await q(`UPDATE preventivi SET stato = 'bozza' WHERE id = $1 AND stato = 'da_validare'`, [nuovoId]);
-    res.json({ id: nuovoId });
+    // "Variazione quantità" (Adriano 11/11/2026): la scelta del riquadro vale subito per l'anagrafica e di nuovo all'invio
+    let anagrafica: string | null = null;
+    if (req.body.anagrafica !== undefined) {
+      await salvaSceltaAnagrafica(nuovoId, req.body.anagrafica);
+      anagrafica = await prezzoInAnagraficaDaPreventivo(nuovoId, 'salvataggio').catch((e: any) => `Prezzo in anagrafica non aggiornato: ${e?.message ?? e}`);
+    }
+    res.json({ id: nuovoId, anagrafica });
   });
 
   r.post('/:id/stato', async (req, res) => {
@@ -502,6 +515,29 @@ function riquadroPrezziPrecedenti(salvato: any) {
         : html`<li>Anagrafica di ${an?.codice ?? 'questo codice'}: nessun prezzo.</li>`}
     </ul>
     <small>Se il prezzo nuovo è diverso da quello dell'anagrafica, il cliente va avvisato della variazione.</small></div>`;
+}
+
+/**
+ * "Variazione quantità" (Adriano 11/11/2026): al salvataggio si chiede se il prezzo a scheda sostituisce quello in anagrafica per tutte
+ * le quantità o vale per uno scaglione di pezzi. Riquadro aperto da public/preventivo.js; la scelta resta nel preventivo (anagrafica_prezzo).
+ */
+function domandaAnagrafica(salvato: any) {
+  const sc = leggiSceltaAnagrafica(salvato?.anagrafica_prezzo);
+  const n = salvato?.n_schede ?? '';
+  const modo = sc?.modo ?? 'scaglione';
+  const spunta = (m: string) => (modo === m ? raw('checked') : '');
+  return html`<dialog id="domanda-anagrafica" class="domanda">
+    <form method="dialog">
+      <h3>Variazione quantità: il prezzo va in anagrafica?</h3>
+      <p class="nota">Il prezzo a scheda senza una tantum di questo preventivo (quello della stampa) va nel prodotto in anagrafica adesso e di nuovo quando lo mandi al cliente.</p>
+      <label><input type="radio" name="modo-anagrafica" value="unico" ${spunta('unico')}> Sostituisce il prezzo in anagrafica <b>per tutte le quantità</b> (gli scaglioni si tolgono)</label>
+      <label><input type="radio" name="modo-anagrafica" value="scaglione" ${spunta('scaglione')}> Vale solo da
+        <input name="da-anagrafica" inputmode="numeric" class="corto" value="${sc?.da ?? n}"> a
+        <input name="a-anagrafica" inputmode="numeric" class="corto" value="${sc?.modo === 'scaglione' ? sc.a ?? '' : n}" placeholder="e oltre"> pezzi
+        <small class="nota">(le altre quantità restano al prezzo di adesso; vuoto = "e oltre")</small></label>
+      <label><input type="radio" name="modo-anagrafica" value="nessuno" ${spunta('nessuno')}> Non toccare l'anagrafica</label>
+      <p><button value="ok" class="primario">Salva</button> <button value="annulla" formnovalidate>Annulla</button></p>
+    </form></dialog>`;
 }
 
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
@@ -826,6 +862,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     </section>
     </div>
     </form>
+    ${domandaAnagrafica(salvato)}
     ${salvato ? html`<form method="post" action="/preventivi/${salvato.id}/stato" id="stato-preventivo"></form>
     <form method="post" action="/preventivi/${salvato.id}/duplica" id="duplica-preventivo"></form>
     <form method="post" action="/preventivi/${salvato.id}/elimina" id="elimina-preventivo"></form>` : ''}

@@ -1159,3 +1159,8 @@ td.preventivo-commessa label, .preventivo-riga label { display: block; }
 .preventivo-riga { margin-top: .35rem; }
 .preventivo-riga select { max-width: 20rem; }
 .preventivo-riga small, td.preventivo-commessa small { display: block; white-space: normal; max-width: 20rem; }
+/* Preventivo: "Variazione quantità" e anagrafica (Adriano 11/11/2026) */
+dialog.domanda { max-width: 36rem; border: 1px solid #ccc; border-radius: 8px; padding: 1rem 1.25rem; }
+dialog.domanda label { display: block; margin: .5rem 0; }
+dialog.domanda input.corto { width: 5rem; }
+dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }

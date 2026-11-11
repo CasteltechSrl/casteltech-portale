@@ -503,6 +503,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    si salva solo con Salva. Preventivo senza prodotto collegato a una riga = prende il prodotto della riga (`collegaPreventivo`, codice vecchio in `intestazione.codiceVecchioPortale`).
    "Crea commessa" sulla riga = `/commesse/nuova?preventivo=&riga=` (quantità, ordine cliente, consegna), al salvataggio `collegaCommessaARiga`. Preventivo: riquadro "Prezzi da confrontare"
    (`riquadroPrezziPrecedenti`: vecchio portale + anagrafica con scaglioni).
+   Prezzo in anagrafica dal preventivo inviato (Adriano 11/11/2026, confermate A/B/C; migrazione 093 `preventivi.anagrafica_prezzo`, regole in `engine/prezzo-anagrafica.ts`,
+   `prezzo-anagrafica-servizio.ts`, test in `tests/prezzo-anagrafica.test.ts`): email del preventivo o "Segna come inviato" = `prezzoInAnagraficaDaPreventivo(id, 'invio')` col prezzo a scheda
+   SENZA una tantum della stampa (`prezzoSchedaDelPreventivo`, come "Crea ordine"), scaglione della quantità o prezzo unico, fonte 'preventivo' (il caricamento FIC non tocca 'preventivo'/'ordine').
+   Salvare senza inviare non tocca l'anagrafica, salvo "Variazione quantità": riquadro `#domanda-anagrafica` al Salva (unico = scaglioni tolti / scaglione da-a con `inserisciScaglione` / nessuno),
+   applicato subito e di nuovo all'invio. Ordine: righe aperte con prezzo ≠ anagrafica (`differenzaOrdine`) → riquadro "Prezzi dell'ordine diversi dall'anagrafica", POST `/ordini/:id/righe/:riga/prezzo`
+   (`sceltaPrezzoOrdine`: 'anagrafica' = la riga prende il prezzo dell'anagrafica, 'ordine' = anagrafica aggiornata, fonte 'ordine').
    Gantt a giorni su tutta la larghezza (Adriano 28/10/2026, `periodoGantt`): 1 mese (5 settimane dal lunedì) standard, Settimana o 3 mesi, nient'altro; ‹ Oggi ›.
    Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
    con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).

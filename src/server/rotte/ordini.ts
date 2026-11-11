@@ -31,6 +31,9 @@ import type { Utente } from '../views/layout.js';
 import { confrontoOrdiniFatturato, creaOrdiniPostumi } from '../ordini-postumi-servizio.js';
 import { ETICHETTA_POSTUMO, FATTURE_STORNATE, fattureDaCoprire } from '../../engine/ordini-postumi.js';
 import { collegaPreventivo, preventiviDelCliente } from '../preventivi-ordini-servizio.js';
+import { sceltaPrezzoOrdine } from '../prezzo-anagrafica-servizio.js';
+import { scaglioniDi } from '../prezzi-servizio.js';
+import { differenzaOrdine } from '../../engine/prezzo-anagrafica.js';
 import { etichettaPreventivo, preventiviDellaRiga, propostaPreventivo } from '../../engine/preventivi-ordini.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -367,6 +370,16 @@ export function rotteOrdini() {
       ${prodotti.map(k => html`<option value="${k.id}" data-descrizione="${k.descrizione ?? ''}" ${k.id === id ? raw('selected') : ''}>${k.codice}</option>`)}
       ${opzioniServizi(servizi, servizio?.codice, s => `ut:${s.codice}`)}</select>`;
     };
+    // prezzi diversi dall'anagrafica (Adriano 11/11/2026): righe ancora aperte con codice; l'ufficio sceglie quale tenere
+    const idProdotti = [...new Set(righe.filter(x => x.prodottoId).map(x => x.prodottoId!))];
+    const listino = new Map((idProdotti.length ? await q<{ id: number; codice: string; prezzo: number | null }>(
+      `SELECT id, codice, prezzo_vendita::float AS prezzo FROM prodotti WHERE id = ANY($1)`, [idProdotti]) : []).map(k => [k.id, k]));
+    const scaglioniProdotti = await scaglioniDi(idProdotti);
+    const prezziDiversi = righe.flatMap(x => {
+      if (x.tipo !== 'scheda' || !x.prodottoId || !['da_evadere', 'parziale'].includes(x.stato)) return [];
+      const d = differenzaOrdine(Number(x.prezzo), Number(x.quantita), listino.get(x.prodottoId)?.prezzo ?? null, scaglioniProdotti.get(x.prodottoId) ?? []);
+      return d ? [{ riga: x, codice: listino.get(x.prodottoId)?.codice ?? x.codice ?? '', anagrafica: d.anagrafica }] : [];
+    });
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
     const campoData = (nome: string, v: string | null | undefined) => html`<input type="date" name="${nome}" value="${v ?? ''}">`;
@@ -402,6 +415,15 @@ export function rotteOrdini() {
         ${conferme.length ? html`<dt>Conferme d'ordine</dt><dd>${conferme.map((k, i) => html`${i ? ' · ' : ''}<a href="/ordini/${o.id}/conferme/${k.id}">${k.numero ? `n. ${k.numero}/${k.anno}` : 'bozza'}</a>
           del ${data(k.data)} ${statoConferma(k.stato)} ${k.numero ? segnoInvioElenco({ ...k, tipo: 'conferma_ordine' }) : ''}`)}</dd>` : ''}
       </dl>
+      ${prezziDiversi.length ? html`<section class="avviso prezzi-ordine"><b>Prezzi dell'ordine diversi dall'anagrafica.</b> Scegli quale tenere per ogni riga:
+        "Tieni l'anagrafica" mette il prezzo dell'anagrafica nella riga (conferma d'ordine e fattura usciranno così), "Aggiorna l'anagrafica" prende il prezzo dell'ordine.
+        <table><thead><tr><th>Codice</th><th class="n">Q.tà</th><th class="n">Ordine</th><th class="n">Anagrafica</th><th></th></tr></thead>
+        <tbody>${prezziDiversi.map(k => html`<tr><td>${k.codice}</td><td class="n">${num(Number(k.riga.quantita), 0)}</td>
+          <td class="n">${euroUnitario(Number(k.riga.prezzo))}</td><td class="n">${k.anagrafica == null ? 'nessun prezzo' : euroUnitario(k.anagrafica)}</td>
+          <td class="nowrap">${k.anagrafica == null ? '' : html`<button form="prezzo-${k.riga.id}-anagrafica">Tieni l'anagrafica</button> `}
+            <button form="prezzo-${k.riga.id}-ordine" class="primario">${k.anagrafica == null ? 'Salva in anagrafica' : "Aggiorna l'anagrafica"}</button></td></tr>`)}</tbody></table>
+        ${prezziDiversi.map(k => html`<form method="post" action="/ordini/${o.id}/righe/${k.riga.id}/prezzo" id="prezzo-${k.riga.id}-anagrafica" hidden><input type="hidden" name="scelta" value="anagrafica"></form>
+          <form method="post" action="/ordini/${o.id}/righe/${k.riga.id}/prezzo" id="prezzo-${k.riga.id}-ordine" hidden><input type="hidden" name="scelta" value="ordine"></form>`)}</section>` : ''}
       <form method="post" action="/ordini/${o.id}">
       <div class="tabella-scorre"><table class="elenco righe-ordine">
         <thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th class="n">Spedite</th><th class="n">Prezzo</th><th class="n">Fatturato</th>
@@ -493,6 +515,14 @@ export function rotteOrdini() {
       return torna((nomi.length === 1 ? `Ordine ${nomi[0]} eliminato.` : nomi.length ? `Eliminati ${nomi.length} ordini: ${nomi.join(', ')}.` : 'Nessun ordine eliminato.') + coda);
     }
     torna('Azione non riconosciuta.');
+  });
+
+  // prezzo della riga diverso dall'anagrafica (Adriano 11/11/2026): tieni l'anagrafica o aggiornala col prezzo dell'ordine
+  r.post('/:id/righe/:riga/prezzo', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id) || !/^\d+$/.test(req.params.riga)) return next();
+    const id = Number(req.params.id);
+    const m = await sceltaPrezzoOrdine(id, Number(req.params.riga), req.body?.scelta === 'anagrafica' ? 'anagrafica' : 'ordine');
+    res.redirect(`/ordini/${id}?msg=${encodeURIComponent(m)}`);
   });
 
   r.post('/:id', async (req, res) => {
