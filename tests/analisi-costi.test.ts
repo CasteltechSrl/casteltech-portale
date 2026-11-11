@@ -124,6 +124,13 @@ test('componenti e PCB venduti: riga del materiale, quota del preventivo, media 
   assert.deepEqual(m.map(x => [Math.round(x.componenti), Math.round(x.pcb)]), [[600, 100], [300, 0], [0, 200], [300, 50], [0, 0]]);
 });
 
+test('For-Tek: i PCB sono 10 % PCB e 90 % consulenza (Adriano 11/11/2026)', () => {
+  const c = classificaCosti([riga({ rigaId: 7, fornitore: 'FOR-TEK DI LAURA NARDI', descrizione: 'PCB codice " moduli M"', quantita: 150, importo: 8850, data: '2026-01-12' })], []);
+  assert.deepEqual(c.map(r => [r.categoria, r.importo]), [['pcb', 885], ['progettazione', 7965]]);
+  const scritta = classificaCosti([riga({ rigaId: 7, fornitore: 'FOR-TEK DI LAURA NARDI', descrizione: 'PCB codice JR_RELE', importo: 700, data: '2026-01-08' })], [{ tipo: 'riga', chiave: '7', categoria: 'pcb' }]);
+  assert.deepEqual(scritta.map(r => [r.categoria, r.importo]), [['pcb', 700]], 'la regola scritta dall\'ufficio vince');
+});
+
 test('PCB nascosto nel prezzo: PCB comprato con lo stesso nome del prodotto (Adriano 11/11/2026)', () => {
   const righe = classificaCosti([
     riga({ rigaId: 1, fornitore: 'HTS PCB S.r.l.', descrizione: 'NASOMETERV11', quantita: 100, importo: 300, data: '2026-03-01' }),

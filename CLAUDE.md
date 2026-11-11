@@ -837,6 +837,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    PCB nascosto nel prezzo (Adriano 11/11/2026, "il PCB acquistato si nasconde nel totale fattura"; `costiPcbComprati` + terzo argomento di `materialeVenduto`, `RigaVendita.quantita`,
    test in `tests/analisi-costi.test.ts`): PCB comprato con lo stesso nome del prodotto e preventivo senza PCB → prezzo a pezzo ≤ 2 × costo del PCB = riga tutta PCB (Bitrabi, Plantbit),
    altrimenti PCB = max(media, costo a pezzo ÷ prezzo a pezzo). Il resto della differenza 2026 è di anno (TAP SoloKeys fatturati a dic. 2025, ADAPTER HRS2APV venduti nel 2025) e MOD-M Tree.
+   For-Tek / Laura Nardi (Adriano 11/11/2026, "90 % consulenza e 10 % PCB"): righe PCB non scritte a mano divise in `dividiPcbConsulenza` (`QUOTA_PCB_FORTEK` 0,1 PCB, resto progettazione, `RigaClassificata.parte`).
    Verifica della fatturazione delle lamine (Adriano 11/11/2026, "ogni lamina comprata va in fattura, avvisami se non l'ho venduta entro un mese"; `engine/lamine-fatturazione.ts`,
    `lamineDaFatturare`/`lamineACarico` in `analisi-costi-servizio.ts`, test in `tests/lamine-fatturazione.test.ts`): dal 2026 a pezzi, fatturate (`lamineDellaRiga`) + non da fatturare
    (impostazioni 'lamine_a_carico', migrazione 090: Univac 3, Audioscope 1; pagina Lamine) coprono le comprate dalla più vecchia; oltre 30 gg = controllo `lamine-da-fatturare` (urgente);
