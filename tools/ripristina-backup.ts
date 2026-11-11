@@ -19,6 +19,11 @@ await transazione(async c => {
   const esistenti = new Set((await c.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)).rows.map(r => r.tablename));
   const tabelle = Object.keys(backup.tabelle).filter(t => t !== 'migrazioni_applicate' && esistenti.has(t));
   for (const t of Object.keys(backup.tabelle)) if (!esistenti.has(t)) console.warn(`${t}: tabella non più presente, saltata`);
+  // rimandi in cerchio tra tabelle (es. acquisizioni ↔ ordini, 11/11/2026): i controlli dei rimandi si spengono durante il ripristino
+  // (serve un utente amministratore del database; senza, si va avanti con il riprovare riga per riga)
+  await c.query('SAVEPOINT replica');
+  try { await c.query(`SET LOCAL session_replication_role = replica`); await c.query('RELEASE SAVEPOINT replica'); }
+  catch { await c.query('ROLLBACK TO SAVEPOINT replica'); }
   await c.query(`TRUNCATE ${tabelle.map(t => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`);
   for (const t of tabelle) {
     const tipiJson = new Set((await c.query(

@@ -645,6 +645,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
 
   // ── Ordini ──
   {
+    id: 'ordine-preventivo-commessa', area: 'ordini', titolo: 'Collegare la riga dell\'ordine al suo preventivo e creare la commessa',
+    parole: 'ordine riga preventivo collegare collegamento agganciare associare trovare proposto quantità vicina codice vecchio portale menu tendina commessa crea commessa prezzo vecchio anagrafica variazione avvisare cliente',
+    testo: [
+      'Nella pagina dell\'ordine, sotto il codice di ogni riga di schede c\'è il menu "Preventivo". Il portale lo propone da solo: preventivi dello stesso prodotto (o, per quelli del vecchio portale, con lo stesso codice scritto anche con trattini o spazi diversi) e, se lo stesso codice ha più preventivi, quello con la quantità più vicina a quella dell\'ordine. A pari quantità vince quello inviato o accettato, poi il più recente.',
+      'La proposta è segnata in giallo "proposto: Salva per confermare": se va bene premi Salva. Se è sbagliata o non trovata, apri il menu: in alto i preventivi con lo stesso codice, sotto tutti gli altri del cliente (numero, codice, pezzi, prezzo a scheda, data); la casella "cerca" sopra il menu filtra mentre scrivi.',
+      'Un preventivo del vecchio portale che non aveva il codice dall\'anagrafica, collegato a una riga, prende il codice della riga (prezzi e fasi non cambiano): così si può farne la commessa.',
+      'Con il preventivo collegato, nella colonna Commessa compare "Crea commessa": apre la commessa nuova con quantità, ordine del cliente e consegna della riga; salvandola, la riga si collega da sola alla commessa.',
+      'Aprendo un preventivo, il riquadro "Prezzi da confrontare" mostra il prezzo a scheda del vecchio portale (se viene da lì) e il prezzo in anagrafica del codice, con gli scaglioni: se il prezzo nuovo è diverso, il cliente va avvisato. Il preventivo si può sempre modificare e salvare.',
+    ],
+    passi: ['Commerciale → Ordini clienti → apri l\'ordine.', 'Controlla il menu "Preventivo" di ogni riga (proposto in giallo) o sceglilo.', 'Salva.', 'Premi "Crea commessa" sulla riga, controlla e salva la commessa.'],
+    pagine: [['/ordini', 'Ordini clienti']],
+  },
+  {
     id: 'carica-ordine', area: 'ordini', titolo: 'Caricare un ordine del cliente (PDF, foto, email)',
     parole: 'ordine ordini carico caricare caricamento inserire nuovo file documenti pdf foto email eml acquisire da acquisire drive cartella ia leggere salvo dove',
     testo: [

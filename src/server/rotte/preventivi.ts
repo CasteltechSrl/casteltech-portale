@@ -4,6 +4,8 @@
 import { elencoRevisioni, pdfRevisione } from '../revisioni-servizio.js';
 import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
 import { barraAnni } from '../views/barra-anni.js';
+import { scaglioniDi } from '../prezzi-servizio.js';
+import { testoScaglione } from '../../engine/listino.js';
 import { paginata } from '../views/paginazione.js';
 import { CAMPI_SEMPLICE } from '../../engine/preventivo-semplice.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
@@ -211,6 +213,9 @@ export function rottePreventivi() {
     if (!p) return res.status(404).send('Preventivo non trovato');
     // documenti del cliente da cui è nato il preventivo: banner "da validare" e BOM da quotare con la spunta Componenti
     p.pacchetto = await q1(`SELECT id, nome, bom_id, fonti->>'bom' AS bom_file FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
+    // prezzo in anagrafica del codice (Adriano 11/11/2026): accanto al prezzo del vecchio portale, per capire se avvisare il cliente
+    p.anagrafica = p.prodotto_id ? await q1(`SELECT codice, prezzo_vendita::float AS prezzo, prezzo_fonte AS fonte, prezzo_data::text AS data FROM prodotti WHERE id = $1`, [p.prodotto_id]) : null;
+    if (p.anagrafica) p.anagrafica.scaglioni = (await scaglioniDi([p.prodotto_id])).get(p.prodotto_id) ?? [];
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
@@ -478,6 +483,27 @@ export function rottePreventivi() {
   return r;
 }
 
+// ───────────────────────────── prezzo vecchio e prezzo in anagrafica (Adriano 11/11/2026) ─────────────────────────────
+const FONTI_PREZZO: Record<string, string> = { manuale: 'scritto a mano', fic_anagrafica: 'anagrafica di Fatture in Cloud', fic_fattura: 'ultima fattura',
+  preventivo: 'preventivo inviato', ordine: "ordine del cliente" };
+
+/** Riquadro sopra i dati: prezzo a scheda del vecchio portale (se importato da lì) e prezzo in anagrafica del codice salvato. */
+function riquadroPrezziPrecedenti(salvato: any) {
+  const vecchio = salvato?.origine === 'vecchio_portale' ? salvato.dati_vecchio_portale : null;
+  const an = salvato?.anagrafica;
+  const conAnagrafica = an && (an.prezzo != null || an.scaglioni?.length);
+  if (!vecchio && !conAnagrafica) return '';
+  return html`<div class="avviso info prezzi-precedenti"><b>Prezzi da confrontare</b> con quelli calcolati qui (riquadri in alto, si aggiornano mentre modifichi):
+    <ul>
+      ${vecchio ? html`<li>Vecchio portale: <b>${euro(vecchio.totaleASchedaPrimoLotto)}</b> a scheda il 1° lotto, <b>${euro(vecchio.totaleASchedaSecondoLotto)}</b> i lotti successivi
+        (totale 1° lotto ${euro(vecchio.totalePrimoLotto)}); qui è ricalcolato con le fasi e le regole nuove.</li>` : ''}
+      ${conAnagrafica ? html`<li>Anagrafica di ${an.codice}: ${an.prezzo != null ? html`<b>${euro(an.prezzo)}</b> a scheda` : 'nessun prezzo unico'}${an.fonte ? ` (${FONTI_PREZZO[an.fonte] ?? an.fonte}${an.data ? `, ${data(an.data)}` : ''})` : ''}${an.scaglioni?.length
+        ? html`; scaglioni: ${an.scaglioni.map((k: any, i: number) => html`${i ? ' · ' : ''}${testoScaglione(k)} ${euro(k.prezzo)}`)}` : ''}.</li>`
+        : html`<li>Anagrafica di ${an?.codice ?? 'questo codice'}: nessun prezzo.</li>`}
+    </ul>
+    <small>Se il prezzo nuovo è diverso da quello dell'anagrafica, il cliente va avvisato della variazione.</small></div>`;
+}
+
 // ───────────────────────────── riquadro "Informazioni generali" ─────────────────────────────
 /** Spunte divise per tipologia; ogni riga ha un nome (es. SMD) e le sue scelte. Il testo completo è nel title. */
 const GRUPPI_SPUNTE: { titolo: string; classe: string; sotto: string; righe: { nome: string; codici: string[] }[] }[] = [
@@ -675,9 +701,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         ? html` (<a href="/preventivi/documenti/${salvato.pacchetto.id}">${salvato.pacchetto.nome}</a>)` : ''}: controlla i valori, completa quello che manca
         e premi <b>Salva</b>, così diventa una bozza normale.
         <ul>${String(salvato.note ?? '').split('\n').filter(r => r.startsWith('Da controllare:')).flatMap(r => r.replace(/^Da controllare: /, '').replace(/\.$/, '').split('; ')).map(x => html`<li>${x}</li>`)}</ul></div>` : ''}
-    ${salvato?.origine === 'vecchio_portale' && salvato.dati_vecchio_portale ? html`
-      <p class="avviso info">Importato dal vecchio portale. Lì il totale 1° lotto era ${euro(salvato.dati_vecchio_portale.totalePrimoLotto)};
-      qui è ricalcolato con le fasi e le regole nuove.</p>` : ''}
+    ${riquadroPrezziPrecedenti(salvato)}
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">
