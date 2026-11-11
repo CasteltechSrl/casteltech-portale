@@ -19,6 +19,8 @@ export interface TermineRicerca { parola: string; varianti: string[] }
 export const SINONIMI: { nome: string; radici: string[]; qualificatori?: string[] }[] = [
   { nome: 'lamine', radici: ['LAMIN', 'STENCIL'], qualificatori: ['SERIGRAF', 'INOX', 'ACCIAI'] },
   { nome: 'pasta saldante', radici: ['PASTA SALD', 'PASTE SALD', 'CREMA SALD', 'SOLDER PAST', 'SOLDERPAST'] },
+  // filo di saldatura (Adriano 11/11/2026: "filo di saldatura" trovava solo il 2025–2026; le righe vecchie dicono "STAGNO FILO 99C", "Filo Sn100Ni+")
+  { nome: 'filo di stagno', radici: ['FILO SALD', 'FILO DI SALD', 'FILO PER SALD', 'FILO STAGN', 'FILO DI STAGN', 'STAGNO FILO', 'FILO SN', 'FILO SAC', 'FILO SYNALOW', 'SOLDER WIRE'] },
   { nome: 'stagno', radici: ['STAGN', 'SOLDER WIRE', 'SOLDER BAR', 'SAC305'] },
   { nome: 'flussante', radici: ['FLUSS', 'FLUX'] },
   { nome: 'kapton', radici: ['KAPTON', 'POLIIMMID', 'POLYIMID'] },
