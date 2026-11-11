@@ -347,7 +347,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    onda → punti in `stagno` (reofori; g a reoforo = materiale stagnoLF di Impostazioni, 0,02 g, Adriano 4/11/2026), `stagnoPerSaldature` 0; punti scritti a mano → filo segue da solo (`public/preventivo.js`).
    File aggiornati del cliente e nome/cliente dei pacchetti (Adriano 11/11/2026; `svuotaPacchetto`, `aggiornaDatiPacchetto`, `aggiornaPreventivoDaPacchetto` in
    `schede-cliente-servizio.ts`, `aggiornaParametri`/`SCELTE_UFFICIO` in `engine/scheda/preventivo.ts`, test in `tests/aggiorna-pacchetto.test.ts`): "Aggiungi file" con la spunta
-   "sostituiscono" = POST `/:id/svuota` (file tolti anche dalle parti divise, `bom_id` del pacchetto azzerato) poi caricamento e analisi; "Aggiorna il preventivo con questi file"
+   "sostituiscono" = caricamento, poi POST `/:id/sostituisci` (`sostituisciFile` + `fileDaSostituire` in `engine/scheda/classifica.ts`: tolti solo i file di prima dello STESSO tipo,
+   Gerber e forature insieme, zip = tutto; anche dalle parti divise), analisi, e con BOM nuova POST `/:id/ricodifica` (`ricodificaBom`: BOM nuova in Quotazioni con prezzi, collegata
+   a pacchetto e preventivo non accettato; il preventivo apre con `?quota-bom=1` e prende il costo a quotazione finita); "Aggiorna il preventivo con questi file"
    (POST `/:id/aggiorna-preventivo`) = stesso preventivo e catalogo, cambiano solo i parametri letti (non prima produzione, lamine, controllo visivo) e la revisione se diversa,
    cambi nelle note; preventivo accettato o con ordine/commessa = nuovo da validare. Riquadro "Nome e cliente" (POST `/:id/dati`, cliente anche alle parti divise) e azione
    "Assegna il cliente" nell'elenco.

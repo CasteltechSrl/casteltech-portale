@@ -42,6 +42,13 @@
         }
       };
       await Promise.all([lavora(), lavora(), lavora(), lavora()]);
+      let bomNuova = false;
+      if (sostituisci) {
+        const rv = await fetch(`/preventivi/documenti/${id}/sostituisci`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nuovi: file.map(f => f.name) }) });
+        const jv = await rv.json().catch(() => ({}));
+        if (!rv.ok) throw new Error(jv.errore || 'File di prima non tolti');
+        bomNuova = !!jv.bom;
+      }
       esito.textContent = 'Analisi dei file…';
       const ra = await fetch(`/preventivi/documenti/${j.id}/analizza`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const ja = await ra.json().catch(() => ({}));
@@ -67,13 +74,9 @@
     if (!file.length) { esito.textContent = 'Scegli prima i file.'; return; }
     const id = aggiungi.dataset.id;
     const sostituisci = document.getElementById('sostituisci-file')?.checked;
-    if (sostituisci && !confirm('Togliere dal pacchetto tutti i file di prima e tenere solo quelli nuovi? (I file restano sul Drive.)')) return;
+    if (sostituisci && !confirm('I file nuovi prendono il posto di quelli di prima dello stesso tipo (es. Gerber al posto dei Gerber; la BOM resta se non ne carichi una nuova). Continuare? (I file restano sul Drive.)')) return;
     aggiungi.disabled = true;
     try {
-      if (sostituisci) {
-        const rv = await fetch(`/preventivi/documenti/${id}/svuota`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        if (!rv.ok) { const e = await rv.json().catch(() => ({})); throw new Error(e.errore || 'File di prima non tolti'); }
-      }
       const rs = await fetch(`/preventivi/documenti/${id}/scelta`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file: file.map(f => ({ nome: f.name, byte: f.size })) }) });
       const js = await rs.json().catch(() => ({}));
@@ -90,6 +93,12 @@
       const ra = await fetch(`/preventivi/documenti/${id}/analizza`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const ja = await ra.json().catch(() => ({}));
       if (!ra.ok) throw new Error(ja.errore || 'Analisi non riuscita');
+      if (bomNuova) {
+        esito.textContent = 'BOM nuova: codifica e prezzi in Quotazioni…';
+        const rc = await fetch(`/preventivi/documenti/${id}/ricodifica`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const jc = await rc.json().catch(() => ({}));
+        if (!rc.ok) throw new Error(jc.errore || 'Ricodifica della BOM non riuscita');
+      }
       location.reload();
     } catch (e) { esito.textContent = e.message; aggiungi.disabled = false; }
   });

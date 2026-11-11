@@ -8,7 +8,7 @@ import { q, q1 } from '../db.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiornaDatiPacchetto, aggiornaPreventivoDaPacchetto, aggiungiFile, analizzaPacchetto, svuotaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiornaDatiPacchetto, aggiornaPreventivoDaPacchetto, aggiungiFile, analizzaPacchetto, ricodificaBom, sostituisciFile, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
 import { richiesteDaEmail, versioniDaDividere } from '../../engine/scheda/versioni.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { caricamentoLimitato } from '../memoria.js';
@@ -155,10 +155,11 @@ export function rotteSchedeCliente() {
       <details class="blocco"><summary>Aggiungi file a questo pacchetto</summary>
         <div class="stretto-form">
           <p class="nota">Per i file arrivati dopo (es. BOM e pick and place in formato testo): si aggiungono a quelli già caricati e il pacchetto si rianalizza.
-            Se il cliente ha mandato BOM e Gerber <b>aggiornati</b>, spunta «sostituiscono»: i file di prima si tolgono (restano sul Drive) e poi
+            Se il cliente ha mandato file <b>aggiornati</b>, spunta «sostituiscono»: si tolgono solo i file di prima dello stesso tipo (Gerber nuovi = via i Gerber
+            e le forature vecchie, la BOM resta; BOM nuova = via la BOM vecchia, e la BOM nuova si ricodifica da sola con i prezzi; uno zip sostituisce tutto). Poi
             ${p.preventivo_id ? html`con «Aggiorna il preventivo» i numeri nuovi entrano nel preventivo già fatto.` : 'si crea il preventivo come sempre.'}</p>
           <label>File <input type="file" id="file-aggiunti" multiple></label>
-          <label class="spunta"><input type="checkbox" id="sostituisci-file"> I file nuovi sostituiscono tutti quelli di prima (BOM, Gerber… aggiornati dal cliente)</label>
+          <label class="spunta"><input type="checkbox" id="sostituisci-file"> I file nuovi sostituiscono quelli di prima dello stesso tipo (BOM, Gerber… aggiornati dal cliente)</label>
           <button class="primario" id="aggiungi-file" data-id="${p.id}">Aggiungi e rianalizza</button>
           <output id="esito-aggiunti" class="nota"></output>
         </div></details>
@@ -395,12 +396,18 @@ export function rotteSchedeCliente() {
     catch (e: any) { res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent(e.message)}`); }
   });
 
-  // file aggiornati dal cliente: prima si tolgono quelli vecchi (poi il browser carica i nuovi e chiede l'analisi)
-  r.post('/:id/svuota', async (req, res, next) => {
+  // file aggiornati dal cliente: caricati i nuovi, si tolgono i vecchi dello stesso tipo (poi il browser chiede l'analisi)
+  r.post('/:id/sostituisci', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [req.params.id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
-    await svuotaPacchetto(Number(req.params.id));
-    res.json({ ok: true });
+    const nuovi = (Array.isArray(req.body?.nuovi) ? req.body.nuovi : []).slice(0, 5000).map((n: unknown) => String(n ?? '').slice(0, 400)).filter(Boolean);
+    res.json(await sostituisciFile(Number(req.params.id), nuovi));
+  });
+  // BOM nuova del cliente: ricodifica e prezzi in automatico, collegata al pacchetto e al suo preventivo
+  r.post('/:id/ricodifica', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    try { res.json({ bomId: await ricodificaBom(Number(req.params.id), req.session.utente!.id) }); }
+    catch (e: any) { res.status(500).json({ errore: `Ricodifica della BOM non riuscita: ${e.message}` }); }
   });
 
   // nome e cliente del pacchetto (Adriano 11/11/2026)
@@ -421,7 +428,7 @@ export function rotteSchedeCliente() {
       const e = await aggiornaPreventivoDaPacchetto(Number(req.params.id), req.session.utente!.id);
       const msg = e.nuovo ? 'Il preventivo di prima è già accettato o ha un ordine: ne ho creato uno nuovo da validare con i file nuovi.'
         : `Preventivo aggiornato con i file nuovi: ${e.cambi || 'nessun numero cambiato'}.${e.revisione ? ` Revisione ${e.revisione}.` : ''} Controllalo e salvalo.`;
-      res.redirect(`/preventivi/${e.preventivoId}?msg=${encodeURIComponent(msg)}`);
+      res.redirect(`/preventivi/${e.preventivoId}?msg=${encodeURIComponent(msg)}${e.bomNuova ? '&quota-bom=1' : ''}`);
     } catch (e: any) { res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent(e.message)}`); }
   });
 

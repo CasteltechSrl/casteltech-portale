@@ -215,7 +215,8 @@
     await attendiBom(x.bomId);
     costoDaBom();
   }
-  if (selBom && new URLSearchParams(location.search).has('quota-bom') && selBom.value) costoDaBom();
+  // ?quota-bom=1: anche dopo la BOM nuova del cliente (Adriano 11/11/2026), si aspetta che la quotazione finisca e poi si prende il costo
+  if (selBom && new URLSearchParams(location.search).has('quota-bom') && selBom.value) attendiBom(selBom.value).then(costoDaBom);
   if (selBom) {
     selBom.addEventListener('change', () => {
       const apri = document.getElementById('apri-bom');
