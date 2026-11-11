@@ -126,7 +126,7 @@ export async function pdfFattura(x: DatiPdfFattura): Promise<Buffer> {
   casella(p, M + meta, y, meta, altoCli, 'Recapito per la fattura elettronica', righeRecapito);
   y -= altoCli + 8;
   if (d.causale) for (const r of aCapo(d.causale, L - 2 * M, font, 8.5)) { scrivi(p, r, M, y - 8, { dim: 8.5 }); y -= 10.5; }
-  y -= 6;
+  y -= 16;   // stacco tra intestazione e righe (Adriano 11/11/2026)
 
   // ── righe ──
   const percentuale = (codice: string | null) => totali.riepilogo.find(g => g.aliquota === codice);
