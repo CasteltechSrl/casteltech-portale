@@ -9,6 +9,7 @@ import { linkAnalisiComponente, linkAnalisiProdotto } from '../../engine/analisi
 import express, { Router, type Request } from 'express';
 import { filtraComponentiClienti, maiuscoloPulito } from '../../engine/componenti-clienti.js';
 import { conCampo } from '../../engine/errori-campo.js';
+import { motivoProdottoNonEliminabile, type UsiProdotto } from '../../engine/eliminazioni.js';
 import { gunzipSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { q, q1, transazione } from '../db.js';
@@ -294,7 +295,9 @@ export function rotteAnagrafiche() {
     const prodotti = await q(`SELECT p.id, p.codice, p.descrizione, p.cliente_id, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_nota, p.prezzo_data::text AS prezzo_data,
         (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi,
         (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
-          + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id) AS altri
+          + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id)
+          + (SELECT count(*)::int FROM documenti_righe d WHERE d.prodotto_id = p.id)
+          + (SELECT count(*)::int FROM segnalazioni s WHERE s.prodotto_id = p.id) AS altri
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
       ORDER BY (p.cliente_id IS NULL) DESC, p.codice LIMIT 2000`, [filtro]);
     const scaglioni = await scaglioniDi(prodotti.map((p: any) => p.id));
@@ -349,7 +352,8 @@ export function rotteAnagrafiche() {
               <a class="bottone" href="${linkAnalisiProdotto(p)}" title="Analisi del prodotto: pezzi e fatturato anno per anno, preventivi e consuntivo delle commesse">Analisi</a>
               <form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}" class="inline"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"
-                data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>` : ''}</td></tr>`)}
+                data-conferma="${`Eliminare il prodotto ${p.codice} dall'anagrafica?`}"><button class="link negativo">Elimina</button></form>`
+                : html`<a class="nota" href="/anagrafiche/prodotti/${p.id}/usi" title="Già usato in preventivi, ordini, commesse o documenti: non si elimina. Clic per sapere dove">in uso</a>`}</td></tr>`)}
         </tbody></table></div>
       ${prodotti.length === 2000 ? html`<p class="nota">Mostrati i primi 2.000: scegli un cliente per vedere gli altri.</p>` : ''}
       <p class="nota">Prezzo: di vendita a scheda, IVA esclusa. Passa sopra la casella per vedere da dove arriva (fattura, anagrafica di Fatture in Cloud o scritto a mano).
@@ -646,11 +650,22 @@ export function rotteAnagrafiche() {
     res.redirect(torna(`${c.ragione_sociale} eliminato.`));
   });
 
+  // Perché un prodotto non si elimina: il messaggio dice dove è usato (Adriano 11/11/2026)
+  r.get('/prodotti/:id/usi', async (req, res) => {
+    const id = Number(req.params.id);
+    const p = await q1(`SELECT codice, cliente_id FROM prodotti WHERE id = $1`, [id]);
+    if (!p) return res.redirect(torna('Prodotto non trovato.', '/prodotti'));
+    const motivo = motivoProdottoNonEliminabile(p.codice, await usiProdotto(id)) ?? `${p.codice} non è usato da nessuna parte: si può eliminare.`;
+    res.redirect(torna(motivo, '/prodotti', `&cliente=${p.cliente_id ?? 0}`));
+  });
+
   r.post('/prodotti/:id/elimina', async (req, res) => {
     const id = Number(req.params.id);
     const p = await q1(`SELECT codice, cliente_id FROM prodotti WHERE id = $1`, [id]);
     if (!p) return res.redirect(torna('Prodotto non trovato.', '/prodotti'));
     const dopo = `&cliente=${p.cliente_id ?? 0}`;
+    const motivo = motivoProdottoNonEliminabile(p.codice, await usiProdotto(id));
+    if (motivo) return res.redirect(torna(motivo, '/prodotti', dopo));
     try {
       await transazione(async t => {
         // le revisioni senza preventivi né commesse vanno via con il prodotto; se è usato, il database lo impedisce
@@ -665,6 +680,19 @@ export function rotteAnagrafiche() {
   });
 
   return r;
+}
+
+/** Dove è usato un prodotto: preventivi, commesse, righe d'ordine, segnalazioni e i documenti con il loro numero. */
+async function usiProdotto(id: number): Promise<UsiProdotto> {
+  const n = await q1(`SELECT
+      (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = $1) AS preventivi,
+      (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = $1) AS commesse,
+      (SELECT count(*)::int FROM ordini_righe WHERE prodotto_id = $1) AS righe_ordini,
+      (SELECT count(*)::int FROM segnalazioni WHERE prodotto_id = $1) AS segnalazioni`, [id]);
+  const documenti = await q(`SELECT DISTINCT d.id, d.tipo, d.numero, d.anno, d.stato, d.data FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
+      WHERE r.prodotto_id = $1 ORDER BY d.data DESC, d.id DESC`, [id]);
+  return { preventivi: n.preventivi, commesse: n.commesse, righeOrdini: n.righe_ordini, segnalazioni: n.segnalazioni,
+    documenti: documenti.map((d: any) => ({ tipo: d.tipo, numero: d.numero, anno: d.anno, stato: d.stato })) };
 }
 
 /** Il tasto Elimina compare solo se il cliente / prodotto non è mai stato usato. */

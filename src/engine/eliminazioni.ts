@@ -71,3 +71,42 @@ export function commesseEliminabiliDallElenco<T extends { stato: string; tempi: 
   for (const c of commesse) (c.stato === 'aperta' && !c.tempi ? si : no).push(c);
   return { si, no };
 }
+
+/** Dove è usato un prodotto dell'anagrafica (letto dal database prima di eliminarlo). */
+export interface UsiProdotto {
+  preventivi: number;
+  commesse: number;
+  righeOrdini: number;
+  segnalazioni: number;
+  /** DDT, fatture, note di credito, conferme… che hanno una riga con questo prodotto */
+  documenti: { tipo: string; numero: number | null; anno: number; stato: string }[];
+}
+
+const NOMI_DOCUMENTO: Record<string, string> = {
+  ddt: 'DDT', fattura: 'fattura', nota_credito: 'nota di credito', autofattura: 'autofattura',
+  conferma_ordine: 'conferma d\'ordine', ordine_fornitore: 'ordine a fornitore',
+};
+
+/**
+ * Si può eliminare un prodotto dall'anagrafica? (Adriano 11/11/2026, M0928-A_THT: il tasto non diceva perché no.)
+ * Restituisce il motivo del no, con i documenti che lo usano, oppure null se si può.
+ */
+export function motivoProdottoNonEliminabile(codice: string, u: UsiProdotto): string | null {
+  const dove: string[] = [];
+  const conta = (n: number, uno: string, tanti: string) => { if (n) dove.push(`${n} ${n === 1 ? uno : tanti}`); };
+  conta(u.preventivi, 'preventivo', 'preventivi');
+  conta(u.commesse, 'commessa', 'commesse');
+  conta(u.righeOrdini, 'riga d\'ordine', 'righe d\'ordine');
+  conta(u.segnalazioni, 'segnalazione nello storico', 'segnalazioni nello storico');
+  if (u.documenti.length) {
+    const elenco = u.documenti.slice(0, 8).map(d => {
+      const nome = NOMI_DOCUMENTO[d.tipo] ?? d.tipo;
+      return d.numero == null ? `${nome} in bozza (${d.anno})` : `${nome} ${d.numero}/${d.anno}${d.stato === 'annullato' ? ' annullato' : ''}`;
+    });
+    if (u.documenti.length > 8) elenco.push(`e altri ${u.documenti.length - 8}`);
+    dove.push(elenco.join(', '));
+  }
+  if (!dove.length) return null;
+  return `${codice} non si può eliminare: è usato in ${dove.join('; ')}. `
+    + 'Togli il prodotto da lì (o elimina la bozza fatta per errore) e riprova; se è stato venduto davvero deve restare in anagrafica.';
+}

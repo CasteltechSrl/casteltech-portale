@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { confermaEliminaCommessa, confermaEliminaOrdine, formulaUsa, motivoCatalogoNonEliminabile, nomiNelleFormule } from '../src/engine/eliminazioni.js';
+import { confermaEliminaCommessa, confermaEliminaOrdine, formulaUsa, motivoCatalogoNonEliminabile, motivoProdottoNonEliminabile, nomiNelleFormule } from '../src/engine/eliminazioni.js';
 
 test('elimina: una formula usa un nome solo se è la parola intera', () => {
   assert.equal(formulaUsa('nPCB * 3 + prezzo_pasta', 'nPCB'), true);
@@ -45,4 +45,18 @@ test('elimina: la conferma della commessa dice cosa sparisce e che il preventivo
   assert.match(t, /già rientrata/);
   assert.match(t, /preventivo resta/);
   assert.doesNotMatch(confermaEliminaCommessa({ numero: 'X', stato: 'aperta', tempi: 0 }), /già|registrat[oi]\./);
+});
+
+const usiVuoti = { preventivi: 0, commesse: 0, righeOrdini: 0, segnalazioni: 0, documenti: [] };
+test('prodotto: non usato = si elimina', () => {
+  assert.equal(motivoProdottoNonEliminabile('X', usiVuoti), null);
+});
+test('prodotto usato in DDT e bozza (M0928-A_THT, 11/11/2026): il motivo li elenca', () => {
+  const t = motivoProdottoNonEliminabile('M0928-A_THT', { ...usiVuoti, documenti: [
+    { tipo: 'ddt', numero: 222, anno: 2026, stato: 'emesso' }, { tipo: 'fattura', numero: null, anno: 2026, stato: 'bozza' }] })!;
+  assert.match(t, /DDT 222\/2026/);
+  assert.match(t, /fattura in bozza \(2026\)/);
+});
+test('prodotto: le segnalazioni nello storico contano', () => {
+  assert.match(motivoProdottoNonEliminabile('X', { ...usiVuoti, segnalazioni: 2 })!, /2 segnalazioni nello storico/);
 });
