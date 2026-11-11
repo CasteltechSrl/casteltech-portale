@@ -58,3 +58,19 @@ test('backup serale: le copie "prima di eliminare" del giorno non la sostituisco
   assert.equal(backupSeraleDaFare(['casteltech-backup-2026-11-03-08-00.json.gz'], g), true, 'una copia del mattino non è quella serale');
   assert.equal(backupSeraleDaFare([], g), true);
 });
+
+// Memoria del backup (Adriano 11/11/2026, picco 409 MB su 512): righe già in JSON dal database, pezzi da ~4 MB al massimo
+test('backup: righe già scritte in JSON dal database e meno righe per volta se pesano', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { testoBackup, righePerVolta, RIGHE_PER_VOLTA, BYTE_PER_VOLTA } = await import('../src/server/backup.js');
+  assert.equal(righePerVolta(100), RIGHE_PER_VOLTA, 'righe piccole: 100 per volta');
+  assert.equal(righePerVolta(BYTE_PER_VOLTA / 10), 10);
+  assert.equal(righePerVolta(BYTE_PER_VOLTA * 3), 1, 'righe enormi: una per volta');
+  assert.equal(righePerVolta(0), RIGHE_PER_VOLTA);
+  const righe = Array.from({ length: 7 }, (_, i) => `{"id":${i + 1},"dati":{"a":[1,2]},"file":{"__bytea":"Y2lhbw=="}}`);
+  const letture: string[] = [];
+  let testo = '';
+  for await (const p of testoBackup(['preventivi'], async (t, da, n) => { letture.push(`${da}+${n}`); return righe.slice(da, da + n); }, 'x', () => 3)) testo += p;
+  assert.deepEqual(letture, ['0+3', '3+3', '6+3']);
+  assert.deepEqual(JSON.parse(testo).tabelle.preventivi, righe.map(r => JSON.parse(r)));
+});
