@@ -37,11 +37,17 @@ export function oreDa(x: unknown): number {
   return numero(t);
 }
 
+/**
+ * Campo da scrivere come durata (h:mm). Anche i campi in ore dei cataloghi salvati prima delle durate (preventivi del vecchio portale):
+ * l'etichetta diceva "h:mm" ma il valore si leggeva come ore decimali, così "0:30" valeva 0 e "30" (minuti) diventava 30 ore (Adriano 11/11/2026, P2026-2219).
+ */
+export const eDurata = (p: { tipo?: string; unita?: string }) => p.tipo === 'durata' || p.unita === 'h';
+
 /** Ripulisce i dati arrivati dal browser. */
 export function normalizza(d: any, cat: Catalogo): DatiPreventivo {
   const parametri: Record<string, number> = {};
   for (const p of cat.parametri) if (d?.parametri?.[p.codice] !== undefined && d.parametri[p.codice] !== '')
-    parametri[p.codice] = p.tipo === 'durata' ? oreDa(d.parametri[p.codice]) : numero(d.parametri[p.codice]);
+    parametri[p.codice] = eDurata(p) ? oreDa(d.parametri[p.codice]) : numero(d.parametri[p.codice]);
   // spunte delle informazioni generali tolte: le quantità nascoste non devono contare
   const haSpunta = (cod: string) => cat.parametri.some(p => p.codice === cod && p.gruppo === 'INFORMAZIONI GENERALI');
   if (haSpunta('presenteSmd') && parametri.presenteSmd === 0)

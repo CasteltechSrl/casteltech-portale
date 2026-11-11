@@ -17,7 +17,7 @@ import { salvaBackupSuDisco } from '../backup.js';
 import { chiaveCodice, maiuscolo, prodottiPerCliente } from '../anagrafiche-servizio.js';
 import { controllaProdottoNuovo } from '../../engine/scheda/prodotto.js';
 import { caricaCatalogo, caricaTariffe, type Catalogo } from '../catalogo-db.js';
-import { calcola, datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
+import { calcola, datiDaRiga, eDurata, leggiPreventivo, normalizza, salvaPreventivo, nPannelli, type DatiPreventivo } from '../preventivi-servizio.js';
 import { layout, VERSIONE } from '../views/layout.js';
 import { html, euro, data, num, ore, durata, raw, type Raw } from '../views/html.js';
 import type { Risultato } from '../../engine/calcolo.js';
@@ -703,7 +703,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
   const campoBase = (p: Catalogo['parametri'][0]) => p.codice === 'provenienzaMateriale' ? sceltaProvenienza()
     : p.tipo === 'si_no'
     ? html`<label class="spunta ${soloBot(p) ? 'solo-bot' : ''}" title="${etichettaCompleta(p)}"><input type="checkbox" data-param="${p.codice}" ${valore(p.codice) ? raw('checked') : ''}> ${etichettaBreve(p)}</label>`
-    : p.tipo === 'durata'
+    : eDurata(p)
     ? html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''} ${CAMPI_SEMPLICE.has(p.codice) ? 'campo-semplice' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}
         <input inputmode="text" data-param="${p.codice}" data-tipo="durata" value="${d.parametri[p.codice] == null ? '' : durata(d.parametri[p.codice])}" placeholder="${p.default != null ? durata(p.default) : '0:00'}"></label>`
     : html`<label class="${soloBot(p) ? 'solo-bot' : ''} ${soloMagazzino(p) ? 'solo-magazzino' : ''} ${soloUT(p.codice) ? 'campo-ut' : ''} ${CAMPI_SEMPLICE.has(p.codice) ? 'campo-semplice' : ''}"${dipende(DIPENDE[p.codice])} title="${etichettaCompleta(p)}${soloUT(p.codice) ? ' — costo una tantum (solo 1° lotto)' : ''}">${etichettaBreve(p)}${info(p)}

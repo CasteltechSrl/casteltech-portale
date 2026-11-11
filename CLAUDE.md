@@ -252,6 +252,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
 ## Stato dei lavori (aggiornare quando cambia)
 1. ✅ Motore di calcolo, catalogo dalla scheda di produzione, tempo ciclo/uomo, energia forno/onda.
 2. ✅ Sito: login, preventivi (calcolo in tempo reale), impostazioni, utenti, import dal vecchio portale.
+   Campi in ore dei cataloghi salvati prima delle durate (preventivi del vecchio portale: `numero` con unità h, etichetta "h:mm") = durata come i nuovi
+   (`eDurata` in `preventivi-servizio.ts`, test in `tests/durate-preventivi-vecchi.test.ts`; Adriano 11/11/2026, P2026-2219: "0:30" valeva 0, "30" = 30 ore).
    INFORMAZIONI GENERALI del preventivo: 12 spunte (1ª produzione, TOP, TOP+BOT, THT onda, THT a mano, componenti, PCB,
    lamina std 110 €, lamina con trattamenti 165 €, etichette, pulizia saldature, lavaggio) che mostrano/nascondono
    sezioni e campi (`data-dipende`) e attivano fasi e costi (migrazioni 011, 014). Programmazioni solo con 1ª produzione.
