@@ -240,6 +240,8 @@ Ripristino provato il 4/11/2026 con la copia del 3/11 in un PostgreSQL vuoto (`t
 Neon gratuito: si torna indietro nel tempo solo di 6 ore; oltre servono i backup del portale.
 Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in streaming, una sola transazione in lettura): mai tutto il
 database in memoria (30/10/2026 il backup costruito in un colpo solo faceva uscire il portale con stato 134).
+Memoria del backup (Adriano 11/11/2026, avviso "picco 409 MB su 512"): righe già in JSON da PostgreSQL (`row_to_json`, bytea in base64), pezzi da ~4 MB
+(`righePerVolta`), un solo pezzo in coda; avvio con `--max-old-space-size=300` (`npm start`) così Node libera la memoria prima. In prova: picco da 537 a 286 MB.
 Nel backup TUTTE le tabelle (Adriano 31/10/2026) tranne `TABELLE_ESCLUSE` (sessioni, cache prezzi), in ordine di dipendenza
 (`ordinaPerDipendenze`); copie oltre 750 MB tolte dalle più vecchie (almeno 5). `tools/ripristina-backup.ts` segue l'ordine del file.
 

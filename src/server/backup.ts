@@ -39,32 +39,45 @@ export function ordinaPerDipendenze(tabelle: string[], legami: [string, string][
 /** Righe lette dal database per volta: il backup non tiene mai tutto il database in memoria. */
 export const RIGHE_PER_VOLTA = 100;
 
-/** Legge `n` righe della tabella a partire dalla riga `da` (null = la tabella non esiste). */
-export type LettoreTabelle = (tabella: string, da: number, n: number) => Promise<Record<string, unknown>[] | null>;
+/**
+ * Legge `n` righe della tabella a partire dalla riga `da` (null = la tabella non esiste). Una riga può arrivare già scritta
+ * in JSON dal database (testo): così il portale non la trasforma in oggetti e poi di nuovo in testo (11/11/2026, vedi `scriviBackup`).
+ */
+export type LettoreTabelle = (tabella: string, da: number, n: number) => Promise<(Record<string, unknown> | string)[] | null>;
+
+/** Testo JSON di una riga: i file (bytea) diventano { __bytea: base64 }. */
+const rigaJson = (r: Record<string, unknown> | string) => typeof r === 'string' ? r
+  : JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Buffer.isBuffer(v) ? { __bytea: v.toString('base64') } : v])));
+
+/** Memoria massima di un pezzo letto dal database: le tabelle con righe grandi (preventivi, documenti dei clienti) si leggono a meno righe per volta. */
+export const BYTE_PER_VOLTA = 4 * 1024 * 1024;
+/** Righe per volta di una tabella, dal peso medio di una riga (almeno 1, al massimo RIGHE_PER_VOLTA). */
+export const righePerVolta = (byteMedi: number) => Math.max(1, Math.min(RIGHE_PER_VOLTA, Math.floor(BYTE_PER_VOLTA / Math.max(1, byteMedi))));
 
 /**
  * Testo del backup un pezzo alla volta (stesso formato di sempre, letto da tools/ripristina-backup.ts):
  * { creato_il, versione: 1, tabelle: { nome: [righe] } }, tabelle in ordine di dipendenza. I file (bytea) diventano testo base64.
  * 30/10/2026: costruire tutto il JSON in una volta faceva uscire il portale per memoria esaurita (stato 134) alle 20:30.
  */
-export async function* testoBackup(tabelle: string[], leggi: LettoreTabelle, creatoIl = new Date().toISOString()): AsyncGenerator<string> {
+export async function* testoBackup(tabelle: string[], leggi: LettoreTabelle, creatoIl = new Date().toISOString(),
+  quante: (tabella: string) => number | Promise<number> = () => RIGHE_PER_VOLTA): AsyncGenerator<string> {
   yield `{"creato_il":${JSON.stringify(creatoIl)},"versione":1,"tabelle":{`;
   let primaTabella = true;
   for (const t of tabelle) {
-    let righe = await leggi(t, 0, RIGHE_PER_VOLTA);
+    const n = await quante(t);
+    let righe = await leggi(t, 0, n);
     if (!righe) continue;
     yield `${primaTabella ? '' : ','}${JSON.stringify(t)}:[`;
     primaTabella = false;
     let prima = true;
     for (let da = 0; righe; ) {
       if (righe.length) {
-        yield (prima ? '' : ',') + righe.map(r => JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) =>
-          [k, Buffer.isBuffer(v) ? { __bytea: v.toString('base64') } : v])))).join(',');
+        yield (prima ? '' : ',') + righe.map(rigaJson).join(',');
         prima = false;
       }
-      if (righe.length < RIGHE_PER_VOLTA) break;
-      da += RIGHE_PER_VOLTA;
-      righe = await leggi(t, da, RIGHE_PER_VOLTA);
+      if (righe.length < n) break;
+      da += n;
+      righe = await leggi(t, da, n);
     }
     yield ']';
   }
@@ -74,6 +87,9 @@ export async function* testoBackup(tabelle: string[], leggi: LettoreTabelle, cre
 /**
  * Scrive il backup compresso in `destinazione` (file o risposta del browser) mentre lo legge. Tutto da una sola
  * fotografia del database (transazione in sola lettura), così le righe cambiate durante il backup non si mescolano.
+ * Memoria (Adriano 11/11/2026, "memoria del server piena", picco 409 MB su 512): prima le righe arrivavano come oggetti (i jsonb dei
+ * preventivi interi) e si riscrivevano in testo, con fino a 16 pezzi in coda prima della compressione: il backup aggiungeva ~200 MB.
+ * Ora ogni riga arriva già in JSON da PostgreSQL (row_to_json, file in base64), i pezzi pesano al massimo ~4 MB e in coda ce n'è uno solo.
  */
 export async function scriviBackup(destinazione: Writable): Promise<void> {
   const c = await pool.connect();
@@ -83,8 +99,22 @@ export async function scriviBackup(destinazione: Writable): Promise<void> {
       .map(r => r.t).filter(t => !TABELLE_ESCLUSE.includes(t));
     const legami = (await c.query<{ da: string; a: string }>(`SELECT conrelid::regclass::text AS da, confrelid::regclass::text AS a
       FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace`)).rows.map(r => [r.da, r.a] as [string, string]);
-    const leggi: LettoreTabelle = async (t, da, n) => (await c.query(`SELECT * FROM "${t}" ORDER BY ctid LIMIT $1 OFFSET $2`, [n, da])).rows;
-    await pipeline(Readable.from(testoBackup(ordinaPerDipendenze(tabelle, legami), leggi)), createGzip(), destinazione);
+    const colonne = new Map<string, { nome: string; file: boolean }[]>();
+    for (const r of (await c.query<{ t: string; nome: string; tipo: string }>(`SELECT table_name AS t, column_name AS nome, data_type AS tipo
+      FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position`)).rows) {
+      if (!colonne.has(r.t)) colonne.set(r.t, []);
+      colonne.get(r.t)!.push({ nome: r.nome, file: r.tipo === 'bytea' });
+    }
+    const leggi: LettoreTabelle = async (t, da, n) => {
+      const scelte = (colonne.get(t) ?? []).map(k => { const q = `"${k.nome.replace(/"/g, '""')}"`;
+        return k.file ? `CASE WHEN ${q} IS NULL THEN NULL ELSE json_build_object('__bytea', translate(encode(${q}, 'base64'), E'\n', '')) END AS ${q}` : q; });
+      return (await c.query<{ j: string }>(`SELECT row_to_json(x)::text AS j FROM (SELECT ${scelte.join(', ') || '*'} FROM "${t}" ORDER BY ctid LIMIT $1 OFFSET $2) x`, [n, da])).rows.map(r => r.j);
+    };
+    const quante = async (t: string) => {
+      const r = (await c.query<{ b: string | null }>(`SELECT (pg_total_relation_size(c.oid) / greatest(c.reltuples, 1))::bigint AS b FROM pg_class c WHERE c.oid = $1::regclass`, [`"${t}"`])).rows[0];
+      return righePerVolta(Number(r?.b ?? 0));
+    };
+    await pipeline(Readable.from(testoBackup(ordinaPerDipendenze(tabelle, legami), leggi, undefined, quante), { highWaterMark: 1 }), createGzip(), destinazione);
     await c.query('COMMIT');
   } catch (e) {
     await c.query('ROLLBACK').catch(() => {});
