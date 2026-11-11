@@ -183,6 +183,7 @@ test('lamine vendute: a parte e dentro i costi una tantum, pezzi dalla descrizio
     { anno: 2026, codice: '', descrizione: 'Avvio produzione\n-Programmazione attrezzature\n-Lamina serigrafica', quantita: 2, importo: 500 },
     { anno: 2026, codice: 'M2204-C', descrizione: 'Campionatura M2204-C_SMD (prezzo a forfait)\n- 2 Lamine serigrafiche', quantita: 1, importo: 1500 },
     { anno: 2026, codice: '001', descrizione: 'LAMINA SERIGRAFICA', quantita: -1, importo: -110 },
+    { anno: 2026, codice: '', descrizione: 'Costi una tantum avvio produzione\n- Lamine serigrafiche (A - B)', quantita: 2, importo: 0 },
     { anno: 2025, codice: '', descrizione: 'Lamina', quantita: 1, importo: 110 },
   ], [2026]);
   assert.deepEqual(l, [{ anno: 2026, pezzi: 4, importo: 440, pezziUnaTantum: 4, importoUnaTantum: 2000 }]);
