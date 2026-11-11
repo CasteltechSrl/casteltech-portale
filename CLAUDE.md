@@ -525,6 +525,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Cartella Google Drive (`server/drive.ts`): account di servizio (GOOGLE_SERVICE_ACCOUNT = JSON della chiave, solo su Render;
    DRIVE_CARTELLA_ORDINI facoltativa, altrimenti l'unica cartella condivisa), ogni 15' lun–ven 8–20, database solo se ci sono
    file nuovi, i file letti vanno nella sottocartella "Acquisiti". Pulsante "Controlla adesso" in Da acquisire.
+   Prodotto scelto a mano e ordini a voce (Adriano 11/11/2026; `rigaDalProdottoScelto`, `propostaOrdineManuale` in `engine/acquisizioni.ts`, `public/acquisizioni.js`, test in `tests/acquisizioni.test.ts`):
+   scelto un prodotto nel menu della riga, codice letto, descrizione e prezzo (listino della quantità, GET `/anagrafiche/prodotti/:id/listino`) prendono quelli dell'anagrafica, il prezzo del
+   documento resta scritto sotto; servizio una tantum = codice, descrizione, prezzo e quantità 1 proposti, e la riga con il solo servizio non si perde più al salvataggio.
+   Ordine per telefono / a voce: riquadro "Ordine a voce o per telefono" in Da acquisire (POST `/ordini/acquisire/nuovo`, `nuovoOrdineManuale`; "+ Nuovo ordine" in Ordini clienti) =
+   acquisizione senza file con `proposta.manuale`, 5 righe vuote, niente controllo dei conti, ordine con origine 'manuale' (numero dal 9001).
    DDT di Casteltech in PDF (migrazione 029): l'IA li riconosce (Casteltech mittente), ogni riga si abbina alla riga d'ordine aperta del cliente
    con lo stesso codice (`abbinaDdt`: prima quelle ancora da spedire, poi l'ordine citato, poi la consegna più vicina); l'ufficio conferma →
    `ddt_righe` origine 'acquisito' (lo spedito della riga = import + DDT acquisiti). Ricaricando il file ordini restano, salvo che il file contenga lo stesso DDT.

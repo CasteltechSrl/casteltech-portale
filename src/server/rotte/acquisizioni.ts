@@ -4,7 +4,7 @@
  */
 import express, { Router } from 'express';
 import { q, q1 } from '../db.js';
-import { aggiungiFile, conferma, elabora, salvaProposta, scarta, type PropostaDb } from '../acquisizioni-servizio.js';
+import { aggiungiFile, conferma, elabora, nuovoOrdineManuale, salvaProposta, scarta, type PropostaDb } from '../acquisizioni-servizio.js';
 import { iaConfigurata } from '../lettura-ordini-ia.js';
 import { controllaDrive, driveConfigurato, emailAccountDrive } from '../drive.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
@@ -36,9 +36,10 @@ function propostaDa(body: any, prima: PropostaDb | null): PropostaDb {
       // servizio una tantum scelto nel menu ("ut:UT-LAMINA"): la riga diventa di servizio
       ...(/^ut:/i.test(String(x?.prodotto ?? '')) ? { servizio: String(x.prodotto).slice(3).toUpperCase(), tipo: 'servizio' as const } : {}),
     }))
-    .filter(r => r.codice || r.descrizione || r.prodottoId);
+    // riga con il solo servizio una tantum scelto dal menu: resta (prima si perdeva al salvataggio, Adriano 11/11/2026)
+    .filter(r => r.codice || r.descrizione || r.prodottoId || ('servizio' in r && r.servizio));
   return {
-    eOrdine: prima?.eOrdine ?? true, mittente: prima?.mittente, oggetto: prima?.oggetto,
+    eOrdine: prima?.eOrdine ?? true, mittente: prima?.mittente, oggetto: prima?.oggetto, ...(prima?.manuale ? { manuale: true } : {}),
     clienteId: Number(body?.cliente) || null, cliente: prima?.cliente ?? '', rifCliente: maiuscolo(body?.rif),
     dataOrdine: dataDa(body?.dataOrdine), note: String(body?.note ?? '').trim().slice(0, 500), righe,
     totaleDocumento: numeroDa(body?.totaleDocumento),
@@ -211,6 +212,7 @@ export function rotteAcquisizioni() {
       WHERE a.stato IN ('nuovo', 'da_confermare', 'errore') OR a.creato_il > now() - interval '60 days'
       ORDER BY (a.stato IN ('da_confermare', 'errore', 'nuovo')) DESC, a.creato_il DESC LIMIT 200`);
     const daFare = elenco.filter(a => a.stato === 'da_confermare').length;
+    const clientiElenco = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     // si scartano solo i file non ancora diventati ordine, DDT, fattura o rientro (quelli confermati non hanno la spunta)
     const modulo = moduloAzioni({
       azione: '/ordini/acquisire/azioni', nome: { singolare: 'file', plurale: 'file' },
@@ -224,6 +226,17 @@ export function rotteAcquisizioni() {
           ogni 15 minuti (lun–ven 8–20) e si spostano nella sottocartella «Acquisiti».</p>
           <form method="post" action="/ordini/acquisire/drive"><button>Controlla adesso la cartella</button></form>`
         : html`<p class="nota">Non collegata: manca la chiave dell'account di servizio (GOOGLE_SERVICE_ACCOUNT su Render). Intanto i file si caricano qui sotto.</p>`}
+      </section>
+      <section class="blocco" id="ordine-a-voce">
+        <h2>Ordine a voce o per telefono</h2>
+        <p class="nota">Il cliente ha chiamato o ha detto l'ordine a voce, senza documento: scegli il cliente e premi «Scrivi l'ordine».
+          Si apre la stessa pagina degli ordini letti dall'IA, con le righe vuote: scegli i prodotti dal menu (codice, descrizione e prezzo arrivano dall'anagrafica),
+          scrivi quantità e consegna, poi «Conferma e crea l'ordine».</p>
+        <form method="post" action="/ordini/acquisire/nuovo" class="in-linea">
+          <label>Cliente <select name="cliente" required><option value="">— scegli —</option>
+            ${clientiElenco.map(c => html`<option value="${c.id}">${c.ragione_sociale}</option>`)}</select></label>
+          <label>Ricevuto <select name="come"><option value="telefono">per telefono</option><option value="voce">a voce</option></select></label>
+          <button class="primario">Scrivi l'ordine</button></form>
       </section>
       <section class="blocco">
         <h2>Carica ordini</h2>
@@ -249,7 +262,7 @@ export function rotteAcquisizioni() {
           <td class="n">${a.righe || ''}</td>
           <td><span class="stato acq-${a.stato}">${(a.tipo === 'ddt' || a.tipo === 'ddt_ricevuto') && a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
             ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>${modulo.chiudi}`
-        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: ['acquisizioni.js', 'elenco.js'], avviso: req.query.drive ? String(req.query.drive) : req.query.msg ? String(req.query.msg) : undefined }));
+        : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: ['acquisizioni.js', 'elenco.js'], avviso: req.query.drive ? String(req.query.drive) : req.query.errore ? String(req.query.errore) : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
   r.post('/drive', async (req, res) => {
@@ -288,14 +301,17 @@ export function rotteAcquisizioni() {
     const clienti = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const prodotti = p?.clienteId ? await q(`SELECT id, codice, descrizione FROM prodotti WHERE cliente_id = $1 OR cliente_id IS NULL ORDER BY codice`, [p.clienteId]) : [];
     const servizi = await serviziAttivi();     // servizi una tantum (UT-…): per tutti i clienti
-    const righe = [...(p?.righe ?? []), ...(modificabile ? [null, null] : [])];
-    const conti = p ? controlloTotali(p.righe, p.totaleDocumento) : null;
+    // ordine a voce/telefono senza righe: cinque righe vuote da compilare; altrimenti due in più
+    const righe = [...(p?.righe ?? []), ...(modificabile ? Array(p?.manuale && !p.righe.length ? 5 : 2).fill(null) : [])];
+    // ordine a voce/telefono: niente documento con cui confrontare i conti
+    const somma = p ? controlloTotali(p.righe, p.totaleDocumento) : null;
+    const conti = p?.manuale ? null : somma;
     const righeSbagliate = new Set((conti?.avvisi ?? []).map(v => v.riga).filter(n => n != null));
     const avviso = req.query.errore ? String(req.query.errore) : req.query.msg ? String(req.query.msg) : req.query.salvato ? 'Salvato' : undefined;
     res.send(pagina(req.session.utente, a.nome_file, 'acquisire', html`
       <h2>${a.nome_file} <span class="stato acq-${a.stato}">${STATI[a.stato]}</span></h2>
       <dl class="dati-ordine">
-        <dt>Arrivato</dt><dd>${oraRoma(a.creato_il)} · ${a.origine === 'drive' ? 'cartella Google Drive' : 'caricato dal portale'} · ${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</dd>
+        <dt>Arrivato</dt><dd>${oraRoma(a.creato_il)} · ${p?.manuale ? 'scritto a mano (ordine a voce o per telefono)' : a.origine === 'drive' ? 'cartella Google Drive' : 'caricato dal portale'} · ${TIPI_ACQUISIZIONE[a.tipo as TipoAcquisizione] ?? a.tipo}</dd>
         ${p?.mittente ? html`<dt>Email</dt><dd>${p.mittente}${p.oggetto ? html` · «${p.oggetto}»` : ''}</dd>` : ''}
         ${a.contenuto ? html`<dt>File</dt><dd><a href="/ordini/acquisire/${a.id}/file" target="_blank" rel="noopener">apri il file originale</a></dd>` : ''}
         ${a.numero ? html`<dt>Ordine</dt><dd><a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>${a.confermato_nome ? html` · confermato da ${a.confermato_nome}` : ''}</dd>` : ''}
@@ -320,9 +336,9 @@ export function rotteAcquisizioni() {
           <thead><tr><th>Codice letto</th><th>Descrizione</th><th>Prodotto in anagrafica</th><th>Tipo</th><th class="n">Q.tà</th><th class="n">Prezzo</th><th>Consegna</th>${modificabile ? html`<th>Togli</th>` : ''}</tr></thead>
           <tbody>${righe.map((x, i) => modificabile ? html`<tr${righeSbagliate.has(i) ? raw(' class="da-controllare"') : ''}>
             <td><input name="righe[r${i}][codice]" value="${x?.codice ?? ''}" id="codice-r${i}"></td>
-            <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo"></td>
+            <td><input name="righe[r${i}][descrizione]" value="${x?.descrizione ?? ''}" class="lungo" id="descrizione-r${i}"></td>
             <td><select name="righe[r${i}][prodotto]" class="cercabile scelta-prodotto-riga" data-riga="r${i}" aria-label="Prodotto dall'anagrafica del cliente o servizio una tantum"><option value="">${x && !x.prodottoId && x.codice ? 'non trovato: scegli dal menu' : '— scegli dal menu (vuoto = cerca dal codice letto) —'}</option>
-              ${prodotti.length ? html`<optgroup label="Prodotti del cliente in anagrafica">${prodotti.map(k => html`<option value="${k.id}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</optgroup>` : ''}
+              ${prodotti.length ? html`<optgroup label="Prodotti del cliente in anagrafica">${prodotti.map(k => html`<option value="${k.id}" data-codice="${k.codice}" data-descrizione="${k.descrizione ?? ''}" ${k.id === x?.prodottoId ? raw('selected') : ''}>${k.codice} · ${k.descrizione ?? ''}</option>`)}</optgroup>` : ''}
               ${opzioniServizi(servizi, x?.servizio, s => `ut:${s.codice}`)}</select>
               ${x && !x.prodottoId && x.tipo !== 'servizio' && p.clienteId ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
                 <label>Codice <input name="righe[r${i}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
@@ -330,15 +346,16 @@ export function rotteAcquisizioni() {
                 <button formaction="/ordini/acquisire/${a.id}/prodotto?riga=${i}" title="Va in Anagrafiche → Prodotti del cliente scelto e si collega a questa riga">Aggiungi in anagrafica</button>
               </details>` : ''}</td>
             <td><select name="righe[r${i}][tipo]" id="tipo-r${i}">${[['scheda', 'schede'], ['servizio', 'servizio']].map(([v, t]) => html`<option value="${v}" ${(x?.tipo ?? 'scheda') === v ? raw('selected') : ''}>${t}</option>`)}</select></td>
-            <td class="n"><input name="righe[r${i}][quantita]" value="${x ? numCampo(x.quantita, 3) : ''}" inputmode="decimal" class="corto"></td>
-            <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto">${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
+            <td class="n"><input name="righe[r${i}][quantita]" value="${x ? numCampo(x.quantita, 3) : ''}" inputmode="decimal" class="corto" id="quantita-r${i}"></td>
+            <td class="n"><input name="righe[r${i}][prezzo]" value="${x?.prezzo != null ? numCampo(x.prezzo, 5) : ''}" inputmode="decimal" class="corto" id="prezzo-r${i}"><small class="nota prezzo-letto" id="prezzo-letto-r${i}"></small>${x?.importo != null ? html`<input type="hidden" name="righe[r${i}][importo]" value="${numCampo(x.importo, 2)}">` : ''}</td>
             <td><input type="date" name="righe[r${i}][consegna]" value="${x?.consegna ?? ''}"></td>
             <td><input type="checkbox" name="righe[r${i}][togli]" value="1" aria-label="Togli la riga"></td></tr>`
           : html`<tr><td>${x!.codice}</td><td>${x!.descrizione}</td><td>${x!.prodottoId ? 'sì' : x!.servizio ? x!.servizio : html`<span class="esito verifica">no</span>`}</td><td>${x!.tipo}</td>
             <td class="n">${num(x!.quantita, 0)}</td><td class="n">${euro(x!.prezzo)}</td><td>${data(x!.consegna)}</td></tr>`)}</tbody>
-          <tfoot><tr><td colspan="5">Somma delle righe${p.totaleDocumento != null ? html` · nell'ordine ${euro(p.totaleDocumento)}` : ''}</td><td class="n"><b>${euro(conti?.somma ?? 0)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
+          <tfoot><tr><td colspan="5">Somma delle righe${p.totaleDocumento != null ? html` · nell'ordine ${euro(p.totaleDocumento)}` : ''}</td><td class="n"><b>${euro(somma?.somma ?? 0)}</b></td><td colspan="${modificabile ? 2 : 1}"></td></tr></tfoot>
         </table></div>
         ${modificabile ? html`<p class="nota">Dopo aver cambiato il cliente premi «Salva le correzioni»: i prodotti si ricollegano alla sua anagrafica.
+          Scegliendo un prodotto dal menu, codice, descrizione e prezzo della riga prendono quelli dell'anagrafica (prezzo dello scaglione della quantità; sotto resta scritto il prezzo del documento).
           Con «Conferma e crea l'ordine» le righe collegate a un prodotto entrano con codice e descrizione dell'anagrafica (quelli letti restano come codice e descrizione del cliente);
           le righe con il prodotto non in anagrafica entrano con il codice e la descrizione letti (come nell'import).</p>
           ${conti && !conti.torna ? html`<p><label><input type="checkbox" name="contiControllati" value="1"> Ho controllato: confermo anche se i conti non tornano</label></p>` : ''}
@@ -349,6 +366,16 @@ export function rotteAcquisizioni() {
         ${a.contenuto && ['ordine', 'email', 'scheda_produzione', 'ddt', 'ddt_ricevuto'].includes(a.tipo) ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
         ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo documento? Non diventa un ordine e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
       { avviso, script: ['elenco.js', 'acquisizioni.js'] }));
+  });
+
+  // ordine a voce o per telefono (Adriano 11/11/2026): proposta vuota con il cliente, si compila nella pagina di conferma
+  r.post('/nuovo', async (req, res) => {
+    try {
+      const id = await nuovoOrdineManuale(Number(req.body?.cliente) || 0, oggiRoma(), req.body?.come === 'voce' ? 'voce' : 'telefono');
+      res.redirect(`/ordini/acquisire/${id}`);
+    } catch (e: any) {
+      res.redirect(`/ordini/acquisire?errore=${encodeURIComponent(e?.message ?? String(e))}#ordine-a-voce`);
+    }
   });
 
   r.get('/:id/file', async (req, res) => {
@@ -389,7 +416,7 @@ export function rotteAcquisizioni() {
     if (!a) return res.status(404).send('Non trovato');
     const p = propostaDa(req.body, a.proposta);
     const conti = controlloTotali(p.righe, p.totaleDocumento);
-    if (!conti.torna && !req.body?.contiControllati) {
+    if (!p.manuale && !conti.torna && !req.body?.contiControllati) {
       await salvaProposta(id, p);
       return res.redirect(`/ordini/acquisire/${id}?errore=${encodeURIComponent("I conti dell'ordine non tornano: controlla le righe segnalate oppure spunta «Ho controllato» e conferma")}`);
     }

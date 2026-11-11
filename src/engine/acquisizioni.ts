@@ -217,6 +217,31 @@ export function rigaConProdotto<T extends { codice: string; tipo: 'scheda' | 'se
   return { ...r, tipo: 'scheda', codice: r.codice.trim() ? r.codice : prodotto.codice };
 }
 
+/** Prodotto scelto a mano nel menu della riga (Adriano 11/11/2026, ordini Control Systems ricaricati con codici diversi per la produzione):
+ *  codice e descrizione letti prendono quelli dell'anagrafica e il prezzo quello del listino per la quantità (scaglione o prezzo unico);
+ *  senza prezzo in anagrafica resta il prezzo letto. Il prezzo del documento resta scritto accanto, e se poi l'ufficio lo rimette
+ *  nell'ordine diverso dall'anagrafica la pagina dell'ordine chiede "tieni l'anagrafica / aggiorna l'anagrafica". */
+export function rigaDalProdottoScelto(riga: { codice: string; descrizione: string; prezzo: number | null },
+  prodotto: { codice: string; descrizione: string | null; prezzo: number | null }) {
+  return {
+    codice: prodotto.codice,
+    descrizione: (prodotto.descrizione ?? '').trim() || riga.descrizione,
+    prezzo: prodotto.prezzo ?? riga.prezzo,
+    prezzoLetto: prodotto.prezzo != null && riga.prezzo != null && Math.abs(prodotto.prezzo - riga.prezzo) > 0.000001 ? riga.prezzo : null,
+  };
+}
+
+/** Ordine ricevuto a voce o per telefono (Adriano 11/11/2026): nessun file, la proposta parte vuota con il cliente scelto e si
+ *  compila nella stessa pagina degli ordini da e-mail e PDF; all'ordine confermato l'origine è 'manuale'. */
+export function propostaOrdineManuale(cliente: { id: number; nome: string }, oggi: string, come: 'telefono' | 'voce' = 'telefono') {
+  return {
+    eOrdine: true, manuale: true, clienteId: cliente.id, cliente: cliente.nome.trim().toUpperCase(), rifCliente: '',
+    dataOrdine: oggi, note: come === 'telefono' ? 'ORDINE RICEVUTO PER TELEFONO' : 'ORDINE RICEVUTO A VOCE', righe: [], totaleDocumento: null,
+  };
+}
+export const nomeOrdineManuale = (cliente: string, oggi: string, come: 'telefono' | 'voce' = 'telefono') =>
+  `Ordine ${come === 'telefono' ? 'per telefono' : 'a voce'} – ${cliente.trim().toUpperCase()} – ${oggi.slice(8, 10)}/${oggi.slice(5, 7)}/${oggi.slice(0, 4)}`;
+
 // ───────────────────────────── cartella Google Drive ─────────────────────────────
 /** La cartella si controlla solo nei giorni feriali dalle 8 alle 20 (ora italiana), come l'uso reale del portale. */
 export const orarioDrive = (p: { feriale: boolean; minuti: number }) => p.feriale && p.minuti >= 8 * 60 && p.minuti <= 20 * 60;
