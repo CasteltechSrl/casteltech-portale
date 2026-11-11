@@ -22,6 +22,7 @@ import { rotteAnalisiCosti } from './analisi-costi.js';
 import { classificaCosti } from '../../engine/analisi-costi.js';
 import { categoria as categoriaCosto, NOMI_MACRO } from '../../engine/categorie-acquisti.js';
 import { regoleCategorie, righeCosti } from '../analisi-costi-servizio.js';
+import { SQL_IMPONIBILE_COSTO, SQL_NON_DOPPIONE } from '../../engine/costo-fornitori.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -46,8 +47,8 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
       FROM preventivi pr JOIN prodotti_revisioni rv ON rv.id = pr.revisione_id JOIN prodotti p ON p.id = rv.prodotto_id
       WHERE pr.stato <> 'rifiutato' ORDER BY upper(p.codice), (pr.stato = 'accettato') DESC, pr.creato_il DESC`),
     q<AcquistoAnalisi>(`SELECT coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '(senza nome)') AS fornitore, d.categoria, d.tipo,
-        to_char(d.data, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile
-      FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE extract(year FROM d.data)::int IN ($1::int, $1::int - 1)`, [anno]),
+        to_char(d.data, 'YYYY-MM-DD') AS data, ${SQL_IMPONIBILE_COSTO}::float AS imponibile
+      FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE extract(year FROM d.data)::int IN ($1::int, $1::int - 1) AND ${SQL_NON_DOPPIONE}`, [anno]),
     q<IncassoAnalisi>(`SELECT ${NOME_CLIENTE} AS cliente, to_char(d.data, 'YYYY-MM-DD') AS "dataDocumento", to_char(s.data, 'YYYY-MM-DD') AS scadenza,
         to_char(s.pagata_il, 'YYYY-MM-DD') AS incassata, s.importo::float AS importo
       FROM documenti_scadenze s JOIN documenti d ON d.id = s.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id

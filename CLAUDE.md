@@ -800,6 +800,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    scheda fornitore: "Cosa compriamo da questo fornitore". `/amministrazione/analisi/acquisti?q=` (tasto Acquisti) = ricerca per P/N (anche senza trattini), codice o parole:
    articoli uniti (`articoliComprati`: volte, quantità, spesa, ultimo prezzo e da chi, min–max, fornitori con l'ultimo prezzo) + tutte le righe + Excel. Colonna `categoria` della riga
    libera per il thread del punto di pareggio (categorie di Adriano per riga).
+   Costo vero delle fatture fornitori nelle analisi (Adriano 11/11/2026, "energia 2025 solo 5.000 €": era 9.378; `engine/costo-fornitori.ts`, test in `tests/costo-fornitori.test.ts`):
+   righe N2.x "Importo a credito/debito cliente" o "doppi pagamenti" = partite finanziarie fuori dal costo (`SQL_IMPONIBILE_COSTO`, `sqlPartitaFinanziaria`), segno delle righe
+   dal verso del documento (`SQL_FATTORE_RIGHE`: NC Enel/DigiKey con importi negativi), doppioni di FIC esclusi (`SQL_NON_DOPPIONE`: fornitore, numero, data, tipo, totale).
+   Usati in Analisi → Fornitori, Costi per categoria, Pareggio, Andamento e acquisti dei cruscotti; registri IVA e scadenze NO. Una lettura nuova di costi fornitori usa questi.
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

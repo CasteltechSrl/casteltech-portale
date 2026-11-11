@@ -4,6 +4,7 @@
  * Tutto letto all'apertura della pagina, niente controlli periodici (Neon).
  */
 import { q, q1 } from './db.js';
+import { SQL_IMPONIBILE_COSTO, SQL_NON_DOPPIONE } from '../engine/costo-fornitori.js';
 import type { FatturaFornitore, OrdineFornitoreAnalisi, PagamentoFornitore, RigaAcquistoArticolo } from '../engine/analisi-acquisti.js';
 
 export const NOME_FORNITORE_SQL = `coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '(senza nome)')`;
@@ -11,11 +12,11 @@ export const NOME_FORNITORE_SQL = `coalesce(f.ragione_sociale, d.intestatario->>
 const CHIAVE_FORNITORE_SQL = `CASE WHEN d.fornitore_id IS NOT NULL THEN 'f' || d.fornitore_id ELSE 'n:' || upper(${NOME_FORNITORE_SQL}) END`;
 const ORDINI_OK = `d.tipo = 'ordine_fornitore' AND d.stato NOT IN ('bozza', 'annullato', 'scartato')`;
 
-/** Fatture e note di credito dei fornitori di tutti gli anni (imponibile del documento). */
+/** Fatture e note di credito dei fornitori di tutti gli anni (imponibile del documento senza partite finanziarie, niente doppioni: engine/costo-fornitori.ts). */
 export function fattureFornitoriTutte(): Promise<FatturaFornitore[]> {
   return q<FatturaFornitore>(`SELECT ${CHIAVE_FORNITORE_SQL} AS "fornitoreChiave", d.fornitore_id AS "fornitoreId", ${NOME_FORNITORE_SQL} AS fornitore,
-      d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data, d.imponibile::float AS imponibile, d.categoria
-    FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id ORDER BY d.data, d.id`);
+      d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data, ${SQL_IMPONIBILE_COSTO}::float AS imponibile, d.categoria
+    FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id WHERE ${SQL_NON_DOPPIONE} ORDER BY d.data, d.id`);
 }
 
 /** Il fornitore della scheda: dalla chiave (f12 o n:NOME) o dall'id dell'anagrafica. */

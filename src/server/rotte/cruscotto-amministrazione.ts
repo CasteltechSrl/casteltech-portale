@@ -10,6 +10,7 @@ import { html, data, euro, num, type Raw } from '../views/html.js';
 import { numeroCompleto } from '../../engine/amministrazione.js';
 import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE } from '../../engine/ddt.js';
 import { NOMI_FASCE, SQL_DATA_DA_INCASSARE, SQL_IMPORTO_DA_INCASSARE, fasciaScadenza, imponibilePerMese, riepilogoScadenze, variazione, type Fascia } from '../../engine/cruscotto-amministrazione.js';
+import { SQL_IMPONIBILE_COSTO, SQL_NON_DOPPIONE } from '../../engine/costo-fornitori.js';
 
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -41,7 +42,8 @@ export async function contenutoCruscotto(annoScelto?: number): Promise<Raw> {
   const [emessi, ricevuti, incassi, pagamenti, ddtTutti, bozze] = await Promise.all([
     q(`SELECT tipo, data, imponibile FROM documenti
       WHERE tipo IN ('fattura', 'nota_credito') AND stato NOT IN ('bozza', 'annullato', 'scartato') AND anno IN ($1::int, $1::int - 1)`, [anno]),
-    q(`SELECT tipo, data, imponibile FROM documenti_ricevuti WHERE extract(year FROM data)::int IN ($1::int, $1::int - 1)`, [anno]),
+    q(`SELECT d.tipo, d.data, ${SQL_IMPONIBILE_COSTO} AS imponibile FROM documenti_ricevuti d
+      WHERE extract(year FROM d.data)::int IN ($1::int, $1::int - 1) AND ${SQL_NON_DOPPIONE}`, [anno]),
     q<Scadenza & { numero_doc: number; sezionale: string; anno: number; tipo: string }>(`SELECT s.id, (${SQL_DATA_DA_INCASSARE})::text AS data,
         (${SQL_IMPORTO_DA_INCASSARE})::float AS importo, d.id AS documento_id, d.numero AS numero_doc, d.sezionale, d.anno, d.tipo,
         coalesce(c.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome', '') AS nome
