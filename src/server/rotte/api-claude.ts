@@ -22,12 +22,18 @@
  *   POST /api/claude/banca/iban              → { clienti: [{id, iban}] } = banca d'appoggio dei clienti RiBa (solo dove manca)
  *   POST /api/claude/xml-fic                 → { documenti: [{ xml }] } = XML delle fatture/NC/autofatture emesse con FIC (export di FIC), attaccati
  *                                              al documento dello storico con stesso tipo, numero e data se non ha già l'XML (Adriano 9/11/2026, anticipo fatture in banca)
+ *   GET  /api/claude/backup                  → copie del database sul disco di Render (nome, byte) e l'ultima (Adriano 11/11/2026: il controllo
+ *                                              settimanale prova il portale con la copia di venerdì, senza dipendere dal PC dell'ufficio e dal Drive)
+ *   GET  /api/claude/backup/:nome            → il file .json.gz di quella copia (solo file già sul disco: il database non si tocca)
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
+import { join } from 'node:path';
 import { q, q1 } from '../db.js';
+import { elencoBackup } from '../backup.js';
+import { NOME_BACKUP, ultimaCopia } from '../../engine/backup-pc.js';
 import { confrontoOrdiniFatturato, creaOrdiniPostumi } from '../ordini-postumi-servizio.js';
 import { chiaveGiusta } from '../../engine/gmail.js';
 import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
@@ -271,6 +277,20 @@ export function rotteApiClaude() {
       esiti.attaccati++;
     }
     res.json(esiti);
+  });
+
+  // Copia del database per il controllo settimanale (Adriano 11/11/2026): legge solo i file già sul disco di Render.
+  r.get('/backup', (_req, res) => {
+    const copie = elencoBackup().map(c => ({ nome: c.nome, byte: c.byte }));
+    res.json({ ultima: ultimaCopia(copie.map(c => c.nome)), copie });
+  });
+
+  r.get('/backup/:nome', (req, res) => {
+    const nome = String(req.params.nome);
+    const cartella = process.env.BACKUP_DIR;
+    if (!cartella || !NOME_BACKUP.test(nome) || !elencoBackup().some(c => c.nome === nome)) return res.status(404).json({ errore: 'Copia non trovata.' });
+    console.log(`backup: copia ${nome} scaricata da Claude per il controllo settimanale`);
+    res.download(join(cartella, nome), nome);
   });
 
   r.get('/spazio', async (_req, res) => {

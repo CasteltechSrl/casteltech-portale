@@ -1,7 +1,7 @@
 // Copia dei backup sul PC dell'ufficio, cartella Google Drive (Adriano 1/11/2026): src/engine/backup-pc.ts
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pianoCopiePc, installatoreBackupPc, NOME_BACKUP, CARTELLA_PC_PREDEFINITA } from '../src/engine/backup-pc.js';
+import { ultimaCopia, pianoCopiePc, installatoreBackupPc, NOME_BACKUP, CARTELLA_PC_PREDEFINITA } from '../src/engine/backup-pc.js';
 
 const b = (giorno: string, ora = '19-30', extra = '') => `casteltech-backup-${giorno}-${ora}${extra}.json.gz`;
 const copia = (nome: string) => ({ nome, byte: 1000 });
@@ -45,4 +45,15 @@ test('backup sul PC: installatore .bat in solo ASCII, con chiave, indirizzo e ca
   assert.ok(!/^'@/m.test(t.split("$testo = @'")[1].split("\r\n'@")[0]), 'il testo tra @\' e \'@ non chiude prima');
   // apice nella cartella raddoppiato
   assert.ok(installatoreBackupPc({ portale: 'x', chiave: 'k', cartella: "D:\\Dell'ufficio" }).includes("$Cartella = 'D:\\Dell''ufficio'"));
+});
+
+test('ultima copia per il controllo settimanale: la più recente per nome, altri file non contano', () => {
+  assert.equal(ultimaCopia([]), null);
+  assert.equal(ultimaCopia(['appunti.txt', '../casteltech-backup-2026-11-13-17-00.json.gz']), null);
+  assert.equal(ultimaCopia([
+    'casteltech-backup-2026-11-12-17-00.json.gz',
+    'casteltech-backup-2026-11-13-17-00.json.gz',
+    'casteltech-backup-2026-11-13-09-12-prima-di-eliminare-ordini.json.gz',
+    'zzz.json.gz',
+  ]), 'casteltech-backup-2026-11-13-17-00.json.gz');
 });

@@ -224,6 +224,8 @@ Copia su Google Drive (Adriano 1/11/2026; `engine/backup-pc.ts`, `rotte/api-back
 "Installa sul PC" scarica un .bat con la chiave (impostazioni 'backup_pc'); sul PC dell'ufficio crea l'attività pianificata delle 18:30 (alla prima accensione se
 spento) che chiede POST `/api/backup/piano` e scarica con GET `/api/backup/file/:nome` le copie nuove in `G:\Il mio Drive\01_LAVORO\CASTELTECH\16_Backup\Portale_Render`;
 sul PC 60 giorni + la prima copia di ogni mese. Il portale non tocca Google (niente account di servizio: senza spazio su "Il mio Drive").
+Copia per il controllo settimanale (Adriano 11/11/2026; `ultimaCopia` in `engine/backup-pc.ts`, test in `tests/backup-pc.test.ts`): GET `/api/claude/backup` = elenco delle copie
+sul disco di Render e l'ultima, GET `/api/claude/backup/:nome` = il file; così il controllo del sabato usa la copia di venerdì senza dipendere dal PC e dal Drive.
 Copia serale: contano solo le copie senza motivo nel nome (`backupSeraleDaFare`; il 3/11/2026 le copie "prima-di-eliminare" l'avevano fatta saltare), fatta tra le 18 e le 22.
 Ripristino provato il 4/11/2026 con la copia del 3/11 in un PostgreSQL vuoto (`tools/ripristina-backup.ts`): 63 tabelle, tutte le righe uguali, 20 secondi.
 Neon gratuito: si torna indietro nel tempo solo di 6 ore; oltre servono i backup del portale.
