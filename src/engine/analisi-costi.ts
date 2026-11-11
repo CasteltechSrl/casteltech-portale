@@ -8,8 +8,8 @@
  *  - `classificaCosti`: ogni riga (o fattura senza righe) prende la categoria con le regole di `categorie-acquisti.ts`;
  *    le regole scritte dall'ufficio (fornitore → categoria, riga → categoria, fattura → categoria) vincono sempre;
  *  - `costiPerAnno`: totali per macro e categoria, anno per anno, con il peso e la variazione;
- *  - `confrontoRivendita`: comprato (fatture dei fornitori, categorie di rivendita) contro rivenduto (pezzi fatturati × valore
- *    del materiale nel preventivo più recente del prodotto) e lamine vendute;
+ *  - `classificaVendite` + `confrontoRivendita`: comprato (fatture dei fornitori e autofatture dei fornitori esteri, categorie di rivendita)
+ *    contro il fatturato vero delle vendite con materiale nostro, e lamine vendute;
  *  - `riassuntoCosti`: le frasi del riassunto, l'opinione e le proposte, dai numeri.
  */
 import { categoria, classificaRiga, CATEGORIE, NOMI_MACRO, rigaDaIgnorare, type Macro } from './categorie-acquisti.js';
@@ -176,60 +176,145 @@ export function fornitoriDaControllare(righe: RigaClassificata[], max = 40): For
 
 /* ---------------------------------------------------------------- comprato e rivenduto ---------------------------------------------------------------- */
 
-/** Le categorie di rivendita che si confrontano con il venduto: componenti e PCB stanno nel prezzo delle schede, le lamine si fatturano a parte. */
+/**
+ * Comprato e rivenduto sulle FATTURE VERE (Adriano 11/11/2026: "i preventivi non c'entrano molto con la realtà: controlla gli acquisti fatti
+ * e le fatture che prevedono anche la vendita di componenti e PCB"). Prima il rivenduto era pezzi × materiale del preventivo: restavano fuori
+ * le righe senza codice (es. Nasometer di Arilan) e i prodotti senza preventivo, e il conto in pezzi faceva sembrare coperto quasi tutto.
+ * Ora ogni riga venduta (fatture e note di credito) va in uno di questi gruppi:
+ *  - 'nostro': vendita con il materiale comprato da Casteltech (chiavi in mano) o materiale rivenduto a parte (righe "Componenti…",
+ *    "Acquisto componenti / PCB", "PCB purchase");
+ *  - 'conto_lavoro': il materiale lo manda il cliente, si fattura solo il montaggio;
+ *  - 'servizio': lamine, avvio produzione, progettazione, trasporto, riparazioni… (non c'entrano con il materiale);
+ *  - 'acconto': anticipi (si scalano dal saldo: contarli sarebbe contare due volte);
+ *  - 'non_so': il portale non ha indizi; i clienti sono elencati perché l'ufficio li possa guardare.
+ * Indizi, in ordine: la riga stessa (materiale scritto, servizio, anticipo), il preventivo del prodotto (componenti o PCB venduti > 0 = nostro,
+ * = 0 = conto lavoro: si usa SOLO il "sì/no", non i prezzi), un PCB comprato con lo stesso nome del prodotto, poi il cliente (stessi indizi sulle
+ * sue altre righe; cliente con componenti in conto lavoro in anagrafica = conto lavoro).
+ * Il confronto vero è: materiale comprato contro fatturato delle vendite con materiale nostro. Senza magazzino gli anni non si chiudono
+ * pari (materiale comprato a fine anno e fatturato l'anno dopo, avanzi): il peso del materiale va letto su più anni, non come "perdita".
+ */
 export const CATEGORIE_RIVENDITA_SCHEDE = ['componenti', 'pcb', 'meccanica'];
 
-export interface VenditaProdotto { codice: string; cliente: string; anno: number; pezzi: number; importo: number }
-/** Il valore del materiale nel preventivo più recente del prodotto (riepilogo del preventivo, a scheda). */
-export interface MaterialePreventivo { codice: string; cliente: string; venditaComponenti: number; venditaPcb: number; costoAcquisto: number }
+export type TipoVendita = 'nostro' | 'conto_lavoro' | 'servizio' | 'acconto' | 'non_so';
+export interface RigaVendita { anno: number; clienteId: number | null; cliente: string; codice: string; descrizione: string; importo: number; acconto: boolean }
+/** Dal preventivo più recente del prodotto conta solo se vendiamo componenti o PCB (sì/no). */
+export interface MaterialePreventivo { codice: string; clienteId: number | null; conMateriale: boolean }
 export interface LamineVendute { anno: number; pezzi: number; importo: number }
+
+const MATERIALE_SCRITTO = /acquisto (dei )?(componenti|pcb|materiale)|^(componenti|materiale|components?)\b|\bpcb purchase\b|^componenti extra\b|^materiale (acquistato|x|per)\b/im;
+const ANTICIPO = /^\W*(anticipo|acconto|advance payment)\b|\bacconto \d+ ?%/im;
+const SERVIZIO = /\b(usat[oa]|loader|unloader|trasporto|spedizione|logistic|avvio produzione|attrezzaggio|programmazione (attrezzature|macchine)|progettazione|sviluppo|development|engineering|lamina|stencil|riparazione|supporto tecnico|consulenza|analisi del progetto|an[aá]lisis|smontaggio|recupero componenti|collaudo|sconto|campionatura|prototip)/i;
+/** Riga che fattura solo il lavoro ("Montaggio PTH scheda…", "Ripresa PTH"): conto lavoro, se nient'altro dice il contrario. */
+const SOLO_LAVORAZIONE = /^(montaggio|assemblaggio|ripresa|rilavorazione|lavorazione|saldatura|modifica|installazione)\b/i;
+/** Progettazione e sviluppo scritti anche nelle righe sotto ("Project SOLO V3 / -engineering…", "Dispositivo MOD-M / - Sviluppo hardware…"), e macchine usate vendute ("completa e funzionante"). */
+const PROGETTO = /\b(engineering|development|sviluppo (hardware|firmware|software)|progettazione|funzionante)\b/i;
+const compatta = (t: string) => t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+const RUMORE = new Set(['PCB', 'CODICE', 'PRINTED', 'CIRCUIT', 'BOARD', 'TARIFF', 'NUMBER', 'MODULI', 'SCHEDA', 'SCHEDE', 'PCBA', 'FR4']);
+
+/**
+ * Nomi dei PCB comprati (righe in categoria PCB): "DELAS-SQR/T" → "DELASSQR". Servono a riconoscere il prodotto venduto.
+ * Da una descrizione di più parole valgono solo le sigle con un numero ("PCB codice JR_RELE LABELPACK" non deve far scattare "PRODUZIONE");
+ * una descrizione di una parola sola (HTS: "NASOMETER_BUZZER") è il nome del prodotto.
+ */
+export function nomiPcbComprati(righe: Pick<RigaClassificata, 'categoria' | 'descrizione' | 'codici'>[]): string[] {
+  const nomi = new Set<string>();
+  for (const r of righe.filter(r => r.categoria === 'pcb')) {
+    const parole = r.descrizione.trim().split(/[\s"',;()]+/).filter(Boolean);
+    for (const t of [...parole, ...r.codici]) {
+      const c = compatta(t.replace(/\/T$/i, ''));
+      if (c.length < 5 || RUMORE.has(c) || /^CS\d{6}$/.test(c)) continue;
+      if (/\d/.test(c) || (parole.length === 1 && c.length >= 8)) nomi.add(c);
+    }
+  }
+  return [...nomi];
+}
+/** Stesso nome: uguale, oppure uno contiene l'altro e il più corto è una sigla con un numero (6+) o un nome lungo (8+). */
+const stessoNome = (a: string, b: string) => {
+  if (a === b) return true;
+  const [corto, lungo] = a.length <= b.length ? [a, b] : [b, a];
+  return lungo.includes(corto) && ((corto.length >= 6 && /\d/.test(corto)) || corto.length >= 8);
+};
+const pcbDelProdotto = (r: RigaVendita, nomi: string[]) => {
+  const parole = [r.codice, ...r.descrizione.split('\n')[0].split(/\s+/)].map(compatta).filter(p => p.length >= 5 && !RUMORE.has(p));
+  return parole.some(p => nomi.some(n => stessoNome(p, n)));
+};
+
+const chiavePrev = (codice: string, clienteId: number | null) => `${codice.toUpperCase().trim()}|${clienteId ?? ''}`;
+const chiaveCliente = (r: Pick<RigaVendita, 'clienteId' | 'cliente'>) => r.clienteId != null ? `c${r.clienteId}` : `n:${r.cliente.toUpperCase().trim()}`;
+
+/** Il gruppo di ogni riga venduta (stesso ordine dell'elenco). `contoLavoro` = clienti con componenti in conto lavoro in anagrafica (chiave c<id>). */
+export function classificaVendite(righe: RigaVendita[], preventivi: MaterialePreventivo[], nomiPcb: string[], contoLavoro: Set<string> = new Set()): TipoVendita[] {
+  const prev = new Map(preventivi.map(p => [chiavePrev(p.codice, p.clienteId), p.conMateriale]));
+  // 1. indizi della riga e del prodotto
+  const primo: (TipoVendita | null)[] = righe.map(r => {
+    const d = r.descrizione.trim(), d1 = d.split('\n')[0];
+    if (r.acconto || ANTICIPO.test(d)) return 'acconto';
+    if (MATERIALE_SCRITTO.test(d)) return 'nostro';
+    if (/^UT-/i.test(r.codice)) return 'servizio';
+    const p = r.codice ? prev.get(chiavePrev(r.codice, r.clienteId)) : undefined;
+    if (p != null) return p ? 'nostro' : 'conto_lavoro';
+    if (SERVIZIO.test(d1) || PROGETTO.test(d)) return 'servizio';
+    if (pcbDelProdotto(r, nomiPcb)) return 'nostro';
+    return null;
+  });
+  // 2. il cliente: chiavi in mano se ha almeno un prodotto con materiale nostro (preventivo o PCB comprato), conto lavoro se ha solo prodotti in conto lavoro
+  const perCliente = new Map<string, { nostro: boolean; cl: boolean }>();
+  righe.forEach((r, i) => {
+    const k = chiaveCliente(r), x = perCliente.get(k) ?? { nostro: false, cl: contoLavoro.has(k) };
+    const scritto = MATERIALE_SCRITTO.test(r.descrizione);
+    if (primo[i] === 'nostro' && !scritto) x.nostro = true;
+    if (primo[i] === 'conto_lavoro') x.cl = true;
+    perCliente.set(k, x);
+  });
+  return righe.map((r, i) => {
+    if (primo[i]) return primo[i]!;
+    // la riga che fattura solo il lavoro è conto lavoro, ma non decide per le altre righe del cliente (Tree: "Lavorazione frontalini")
+    if (SOLO_LAVORAZIONE.test(r.descrizione.trim())) return 'conto_lavoro';
+    const c = perCliente.get(chiaveCliente(r))!;
+    return c.nostro && !c.cl ? 'nostro' : c.cl && !c.nostro ? 'conto_lavoro' : c.nostro ? 'nostro' : 'non_so';
+  });
+}
 
 export interface RivenditaAnno {
   anno: number;
-  /** comprato per rivendere: dalle fatture dei fornitori */
-  compratoComponenti: number; compratoPcb: number; compratoMeccanica: number; compratoLamine: number; comprato: number;
-  /** rivenduto secondo i preventivi: pezzi fatturati × valore del materiale a scheda nel preventivo più recente */
-  rivendutoComponenti: number; rivendutoPcb: number; rivenduto: number;
-  /** quanto quel materiale doveva costare secondo i preventivi (voci MATERIALE PER PRODUZIONE) */
-  costoPrevisto: number;
+  /** comprato per rivendere: fatture dei fornitori italiani + autofatture dei fornitori esteri (Mouser, DigiKey…) */
+  compratoComponenti: number; compratoPcb: number; compratoMeccanica: number; compratoLamine: number; comprato: number; compratoSchede: number;
+  /** di cui dai fornitori esteri (autofatture) */
+  compratoEstero: number;
+  /** fatturato vero, diviso per gruppo (servizi e acconti esclusi dal confronto) */
+  vendutoNostro: number; vendutoContoLavoro: number; vendutoNonSo: number; vendutoServizi: number;
+  /** clienti con fatturato "non so" (i più grandi), per guardarli */
+  clientiNonSo: { cliente: string; importo: number }[];
+  /** clienti chiavi in mano (i più grandi) */
+  clientiNostro: { cliente: string; importo: number }[];
+  /** peso del materiale comprato sul fatturato con materiale nostro (%), e su nostro + non so (il caso peggiore e il migliore) */
+  pesoMateriale: number | null; pesoMaterialeMin: number | null;
   /** lamine fatturate ai clienti (UT-LAMINA e righe "lamina/stencil") */
-  lamineVendutePezzi: number; lamineVendute: number;
-  /** quanti pezzi fatturati hanno un preventivo (copertura della stima) e quanti no */
-  pezziConPreventivo: number; pezziSenzaPreventivo: number; prodottiSenzaPreventivo: string[];
-  /** margine della rivendita: rivenduto − comprato (schede) e lamine vendute − lamine comprate */
-  margineSchede: number; margineSchedePct: number | null; margineLamine: number;
-  /** comprato − costo previsto: materiale pagato in più rispetto ai preventivi (avanzi, prezzi saliti, prodotti senza preventivo) */
-  materialeOltrePreventivo: number;
+  lamineVendutePezzi: number; lamineVendute: number; margineLamine: number;
 }
 
-const chiaveProdotto = (codice: string, cliente: string) => `${codice.toUpperCase().trim()}|${cliente.toUpperCase().trim()}`;
+const primi = (m: Map<string, number>, n = 6) => [...m.entries()].filter(e => Math.abs(e[1]) >= 1).sort((a, b) => b[1] - a[1]).slice(0, n).map(([cliente, importo]) => ({ cliente, importo: r2(importo) }));
 
-/** Comprato contro rivenduto, anno per anno. Le stime valgono solo per i pezzi con un preventivo: la copertura è scritta. */
-export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: VenditaProdotto[]; preventivi: MaterialePreventivo[]; lamine: LamineVendute[]; anni: number[] }): RivenditaAnno[] {
-  const prev = new Map(x.preventivi.map(p => [chiaveProdotto(p.codice, p.cliente), p]));
+/** Comprato contro fatturato vero, anno per anno. `vendite` = righe delle fatture già classificate (`classificaVendite`). */
+export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (RigaVendita & { tipo: TipoVendita })[]; lamine: LamineVendute[]; anni: number[] }): RivenditaAnno[] {
   return x.anni.map(anno => {
-    const comprato = (cat: string) => r2(x.righe.filter(r => r.anno === anno && r.categoria === cat).reduce((s, r) => s + r.importo, 0));
+    const delAnno = x.righe.filter(r => r.anno === anno);
+    const comprato = (cat: string) => r2(delAnno.filter(r => r.categoria === cat).reduce((s, r) => s + r.importo, 0));
     const compratoComponenti = comprato('componenti'), compratoPcb = comprato('pcb'), compratoMeccanica = comprato('meccanica'), compratoLamine = comprato('lamine');
-    let rivendutoComponenti = 0, rivendutoPcb = 0, costoPrevisto = 0, pezziCon = 0, pezziSenza = 0;
-    const senza = new Map<string, number>();
-    for (const v of x.vendite.filter(v => v.anno === anno)) {
-      const p = prev.get(chiaveProdotto(v.codice, v.cliente));
-      if (!p) { pezziSenza += v.pezzi; senza.set(v.codice, (senza.get(v.codice) ?? 0) + v.pezzi); continue; }
-      pezziCon += v.pezzi;
-      rivendutoComponenti += v.pezzi * p.venditaComponenti; rivendutoPcb += v.pezzi * p.venditaPcb; costoPrevisto += v.pezzi * p.costoAcquisto;
-    }
-    const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0 };
     const compratoSchede = r2(compratoComponenti + compratoPcb + compratoMeccanica);
-    const rivenduto = r2(rivendutoComponenti + rivendutoPcb);
+    const compratoEstero = r2(delAnno.filter(r => CATEGORIE_RIVENDITA_SCHEDE.includes(r.categoria) && r.rigaId != null && r.rigaId < 0).reduce((s, r) => s + r.importo, 0));
+    const v = x.vendite.filter(r => r.anno === anno);
+    const somma = (t: TipoVendita) => r2(v.filter(r => r.tipo === t).reduce((s, r) => s + r.importo, 0));
+    const perCliente = (t: TipoVendita) => { const m = new Map<string, number>(); for (const r of v.filter(r => r.tipo === t)) m.set(r.cliente, (m.get(r.cliente) ?? 0) + r.importo); return m; };
+    const vendutoNostro = somma('nostro'), vendutoNonSo = somma('non_so');
+    const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0 };
     return {
-      anno, compratoComponenti, compratoPcb, compratoMeccanica, compratoLamine, comprato: r2(compratoSchede + compratoLamine),
-      rivendutoComponenti: r2(rivendutoComponenti), rivendutoPcb: r2(rivendutoPcb), rivenduto, costoPrevisto: r2(costoPrevisto),
-      lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo),
-      pezziConPreventivo: pezziCon, pezziSenzaPreventivo: pezziSenza,
-      prodottiSenzaPreventivo: [...senza.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(e => e[0]),
-      margineSchede: r2(rivenduto - compratoSchede), margineSchedePct: rivenduto ? r2(((rivenduto - compratoSchede) / rivenduto) * 100) : null,
-      margineLamine: r2(l.importo - compratoLamine),
-      materialeOltrePreventivo: r2(compratoSchede - costoPrevisto),
+      anno, compratoComponenti, compratoPcb, compratoMeccanica, compratoLamine, comprato: r2(compratoSchede + compratoLamine), compratoSchede, compratoEstero,
+      vendutoNostro, vendutoContoLavoro: somma('conto_lavoro'), vendutoNonSo, vendutoServizi: somma('servizio'),
+      clientiNonSo: primi(perCliente('non_so')), clientiNostro: primi(perCliente('nostro')),
+      pesoMateriale: vendutoNostro > 0 ? r2((compratoSchede / vendutoNostro) * 100) : null,
+      pesoMaterialeMin: vendutoNostro + vendutoNonSo > 0 ? r2((compratoSchede / (vendutoNostro + vendutoNonSo)) * 100) : null,
+      lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo), margineLamine: r2(l.importo - compratoLamine),
     };
   });
 }
@@ -280,22 +365,20 @@ export function riassuntoCosti(x: { costi: CostiPerAnno; rivendita: RivenditaAnn
     for (const c of scese) frasi.push({ livello: 'bene', testo: `${c.nome}: ${euro(c.perAnno[anno].importo)} contro ${euro(c.perAnno[prima]?.importo ?? 0)} nel ${prima} (${pct(c.variazione!)}).` });
   }
 
-  // 3. la rivendita
+  // 3. la rivendita, sulle fatture vere
   const riv = x.rivendita.find(r => r.anno === anno);
   if (riv && riv.comprato) {
-    const copertura = riv.pezziConPreventivo + riv.pezziSenzaPreventivo ? r2((riv.pezziConPreventivo / (riv.pezziConPreventivo + riv.pezziSenzaPreventivo)) * 100) : 0;
-    if (riv.rivenduto > 0) {
-      const liv: Livello = riv.margineSchede < 0 ? 'critico' : riv.margineSchedePct != null && riv.margineSchedePct < 10 ? 'attenzione' : 'bene';
-      frasi.push({ livello: liv, testo: `Rivendita di componenti e PCB: comprati ${euro(riv.compratoComponenti + riv.compratoPcb + riv.compratoMeccanica)}, rivenduti secondo i preventivi ${euro(riv.rivenduto)}: `
-        + `${riv.margineSchede >= 0 ? 'guadagno' : 'perdita'} di ${euro(Math.abs(riv.margineSchede))}${riv.margineSchedePct != null ? ` (${pct(riv.margineSchedePct)} del rivenduto)` : ''}. `
-        + `La stima copre il ${pct(copertura)} dei pezzi fatturati (gli altri non hanno un preventivo nel portale).` });
-      if (riv.materialeOltrePreventivo > 0 && riv.costoPrevisto > 0 && riv.materialeOltrePreventivo / riv.costoPrevisto > 0.15)
-        frasi.push({ livello: 'attenzione', testo: `Il materiale comprato (${euro(riv.compratoComponenti + riv.compratoPcb + riv.compratoMeccanica)}) supera di ${euro(riv.materialeOltrePreventivo)} quello che i preventivi prevedevano (${euro(riv.costoPrevisto)}): `
-          + 'avanzi non addebitati, prezzi saliti dopo il preventivo, scarti o prodotti senza preventivo. Senza magazzino quella differenza è un costo.' });
-      if (riv.margineSchede < 0) proposte.push('Nella rivendita si perde: controllare i prezzi dei componenti e dei PCB nei preventivi contro le fatture dei fornitori (Quotazioni → BOM quotata → "Aggiorna prezzi" prima di ogni ordine) e addebitare gli avanzi al cliente.');
-      else if (riv.margineSchedePct != null && riv.margineSchedePct < 10) proposte.push('Il ricarico sulla rivendita è basso: alzare il ricarico sui componenti e sui PCB nei preventivi, o far comprare il materiale al cliente dove non si guadagna.');
-    } else if (riv.pezziSenzaPreventivo) {
-      frasi.push({ livello: 'nota', testo: `Rivendita: comprati ${euro(riv.comprato)} di materiale, ma nessun pezzo fatturato nel ${anno} ha un preventivo nel portale: il confronto comprato/rivenduto si potrà fare quando i preventivi saranno nel portale (prodotti senza preventivo: ${riv.prodottiSenzaPreventivo.slice(0, 5).join(', ')}).` });
+    if (riv.compratoSchede && riv.vendutoNostro > 0 && riv.pesoMateriale != null) {
+      const p = riv.pesoMateriale;
+      const liv: Livello = p >= 85 ? 'critico' : p >= 70 ? 'attenzione' : 'bene';
+      frasi.push({ livello: liv, testo: `Componenti e PCB: comprati ${euro(riv.compratoSchede)}${riv.compratoEstero ? ` (di cui ${euro(riv.compratoEstero)} dall'estero: Mouser, DigiKey…)` : ''}; `
+        + `fatturato delle vendite con materiale nostro ${euro(riv.vendutoNostro)}: il materiale ne vale il ${pct(p)}, per montaggio e guadagno resta il ${pct(r2(100 - p))}.`
+        + (riv.vendutoNonSo > 0 ? ` Altri ${euro(riv.vendutoNonSo)} di fatture non si sa se avevano materiale nostro (${riv.clientiNonSo.slice(0, 4).map(c => c.cliente).join(', ')}): se sì, il materiale scende al ${pct(riv.pesoMaterialeMin!)}.` : '')
+        + ' Senza magazzino non è una perdita sicura: materiale comprato per consegne del mese dopo e avanzi pesano sull\'anno.' });
+      if (p >= 85) proposte.push('Il materiale si mangia quasi tutto il fatturato delle schede chiavi in mano: per i clienti principali confrontare il prezzo a scheda con il costo vero della BOM (Quotazioni → BOM quotata → "Aggiorna prezzi") e addebitare gli avanzi e i minimi d\'ordine.');
+      else if (p >= 70) proposte.push('Il materiale pesa molto sulle schede chiavi in mano: controllare il ricarico sui componenti e sui PCB dei clienti principali e far comprare il materiale al cliente dove non si guadagna.');
+    } else if (riv.compratoSchede) {
+      frasi.push({ livello: 'nota', testo: `Componenti e PCB: comprati ${euro(riv.compratoSchede)}, ma nessuna fattura del ${anno} risulta con materiale nostro: confronto non possibile.` });
     }
     if (riv.compratoLamine || riv.lamineVendute) {
       const liv: Livello = riv.margineLamine < 0 ? 'attenzione' : 'bene';
@@ -324,8 +407,9 @@ export function riassuntoCosti(x: { costi: CostiPerAnno; rivendita: RivenditaAnn
     if (quotaFornitori > 70) opinione = `Più di due terzi del fatturato (${pct(quotaFornitori)}) tornano ai fornitori: con il personale sopra resta poco. Il margine si fa comprando meglio e ricaricando il materiale, non solo lavorando di più.`;
     else if (quotaFornitori > 50) opinione = `Metà del fatturato (${pct(quotaFornitori)}) va ai fornitori: il materiale rivenduto è la leva più grossa, va comprato e ricaricato con attenzione; le spese di gestione vanno tenute ferme.`;
     else opinione = `I fornitori pesano il ${pct(quotaFornitori)} del fatturato: il peso è sostenibile, il margine dipende soprattutto dal personale e dalle ore vendute.`;
-    if (riv && riv.rivenduto > 0 && riv.margineSchede < 0) opinione += ' Il dubbio che la rivendita non renda è confermato dai numeri: oggi il materiale si rivende sotto costo.';
-    else if (riv && riv.rivenduto > 0 && riv.margineSchedePct != null) opinione += ` La rivendita rende circa il ${pct(riv.margineSchedePct)}: ${riv.margineSchedePct >= 15 ? 'in linea con un ricarico sano' : 'poco per il rischio e il capitale anticipato'}.`;
+    if (riv && riv.pesoMateriale != null) opinione += riv.pesoMateriale >= 85 ? ` Sulle schede chiavi in mano il materiale vale il ${pct(riv.pesoMateriale)} del fatturato: resta troppo poco per il montaggio.`
+      : riv.pesoMateriale >= 70 ? ` Sulle schede chiavi in mano il materiale vale il ${pct(riv.pesoMateriale)} del fatturato: il margine è stretto, il ricarico sul materiale va controllato cliente per cliente.`
+      : ` Sulle schede chiavi in mano il materiale vale il ${pct(riv.pesoMateriale)} del fatturato: il resto paga montaggio e margine.`;
   }
   if (!proposte.length) proposte.push('Nessun segnale forte: continuare a controllare ogni mese le categorie che salgono.');
   return { frasi, opinione, proposte };
