@@ -1165,3 +1165,6 @@ dialog.domanda label { display: block; margin: .5rem 0; }
 dialog.domanda input.corto { width: 5rem; }
 dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }
 .ddt-senza-prezzi { background: #fdf0ef; }
+/* resta-qui.js: spunte salvate senza ricaricare, invito ad aggiornare la pagina (Adriano 11/11/2026) */
+.barra-aggiorna { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; display: flex; align-items: center; gap: .6rem;
+  background: var(--carta); border: 1px solid #c9d6e8; border-radius: 8px; padding: .5rem .8rem; box-shadow: 0 4px 14px rgba(0,0,0,.15); font-size: .9rem; }
