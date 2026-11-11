@@ -10,7 +10,9 @@ const NOME_CLIENTE = `coalesce(c.ragione_sociale, d.intestatario->>'nome', '')`;
 
 export async function datiControlli(oggi: string): Promise<DatiControlli> {
   const [ddt, ordini, prodotti, clienti, fornitori, preventivi, commesse, tempi] = await Promise.all([
-    q<DatiControlli['ddtDaFatturare'][number]>(`SELECT d.id, d.numero::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_CLIENTE} AS cliente
+    q<DatiControlli['ddtDaFatturare'][number]>(`SELECT d.id, d.numero::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_CLIENTE} AS cliente,
+        (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id AND NOT r.solo_descrizione AND coalesce(r.quantita, 0) <> 0) AS righe,
+        (SELECT count(*)::int FROM documenti_righe r WHERE r.documento_id = d.id AND NOT r.solo_descrizione AND coalesce(r.quantita, 0) <> 0 AND coalesce(r.prezzo, 0) = 0) AS "senzaPrezzo"
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
       WHERE d.tipo = 'ddt' AND d.stato = 'emesso' AND d.fattura_id IS NULL AND d.data >= $1 AND ${SQL_DDT_DA_FATTURARE}
       ORDER BY d.data, d.id`, [INIZIO_DDT_DA_FATTURARE]),
@@ -55,7 +57,12 @@ export async function datiControlli(oggi: string): Promise<DatiControlli> {
     .slice(0, 100).map(r => ({ ordineId: r.ordineId, ordine: `${r.numero}/${r.anno}`, cliente: r.cliente ?? '', descrizione: r.descrizione ?? r.codice ?? '', importo: r.quantita * r.prezzo }));
   const lamineNonFatturate = (await lamineDaFatturare(oggi).catch(e => { console.error('Controllo lamine:', e); return null; }))?.inRitardo
     .map(l => ({ data: l.data, fornitore: l.fornitore, descrizione: l.descrizione, pezzi: l.pezzi, giorni: l.giorni })) ?? [];
-  return { oggi, lamineNonFatturate, ddtDaFatturare: ddt, ordiniSenzaConsegna: ordini, prodottiSenzaPrezzo: prodotti, clientiSenzaRecapitoSdi: clienti,
+  // DDT del portale emessi senza causale (Adriano 11/11/2026): non si sa se vanno fatturati
+  const ddtSenzaCausale = await q<NonNullable<DatiControlli['ddtSenzaCausale']>[number]>(`SELECT d.id, d.numero::text AS numero, to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_CLIENTE} AS cliente
+    FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id
+    WHERE d.tipo = 'ddt' AND d.origine = 'portale' AND d.stato = 'emesso' AND d.fattura_id IS NULL AND nullif(trim(coalesce(d.dati_trasporto->>'causale', '')), '') IS NULL
+    ORDER BY d.data, d.id LIMIT 100`);
+  return { oggi, lamineNonFatturate, ddtSenzaCausale, ddtDaFatturare: ddt, ordiniSenzaConsegna: ordini, prodottiSenzaPrezzo: prodotti, clientiSenzaRecapitoSdi: clienti,
     fattureFornitoriSenzaScadenza: fornitori, preventiviFermi: preventivi, commesseOltreConsegna: commesse, tempiApertiVecchi: tempi, serviziNonFatturati };
 }
 

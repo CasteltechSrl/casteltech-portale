@@ -42,7 +42,7 @@ import {
 } from '../documenti-servizio.js';
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { controlloStorno } from '../../engine/analisi.js';
-import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, TRASPORTO_A_CURA, indirizzoSu } from '../../engine/ddt.js';
+import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, SQL_DDT_DA_FATTURARE, TRASPORTO_A_CURA, avvisoPrezziDdt, indirizzoSu } from '../../engine/ddt.js';
 import { MODALITA, stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { allegatoFattura, fatturaLeggibile } from '../../engine/fattura-leggibile.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
@@ -523,17 +523,22 @@ export function rotteAmministrazione() {
     // riga con l'IVA "predefinita" = quella del cliente, poi 22 %: prima contava 0 %, controllo del 4/11/2026)
     const righe = await q(`SELECT d.id, d.tipo, d.numero, d.sezionale, d.data, d.stato, d.origine, d.fattura_id, d.sdi_stato,
         d.email_a, d.email_inviata_il, d.inviato_a_mano, ${SQL_SDI_INVIATO_IL} AS sdi_inviato_il,
-        CASE WHEN d.stato = 'bozza' THEN coalesce(b.imponibile, 0) + b.bollo ELSE d.imponibile END AS imponibile,
-        CASE WHEN d.stato = 'bozza' THEN coalesce(b.totale, 0) + b.bollo ELSE d.totale END AS totale,
+        CASE WHEN d.stato = 'bozza' OR d.tipo = 'ddt' THEN coalesce(b.imponibile, 0) + b.bollo ELSE d.imponibile END AS imponibile,
+        CASE WHEN d.stato = 'bozza' OR d.tipo = 'ddt' THEN coalesce(b.totale, 0) + b.bollo ELSE d.totale END AS totale,
+        -- DDT (Adriano 11/11/2026): causale, importi dalle righe e righe senza prezzo, per capire senza aprirli se vanno fatturati e se hanno i prezzi
+        d.dati_trasporto->>'causale' AS causale, coalesce(b.righe, 0) AS righe_prezzo, coalesce(b.senza_prezzo, 0) AS senza_prezzo,
+        (d.tipo = 'ddt' AND ${SQL_DDT_DA_FATTURARE}) AS da_fatturare,
         coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', d.intestatario->>'nome') AS intestatario
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id LEFT JOIN fornitori_anagrafica fa ON fa.id = d.fornitore_id
       LEFT JOIN LATERAL (SELECT sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)) AS imponibile,
           sum(round(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2) * (1 + coalesce(a.percentuale, 0) / 100), 2)) AS totale,
           -- bollo addebitato (7/11/2026): 2 € se le righe senza IVA soggette a bollo superano 77,47 € (non sulle note di credito)
-          CASE WHEN d.tipo <> 'nota_credito' AND coalesce(sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))
+          count(*) FILTER (WHERE coalesce(r.quantita, 0) <> 0)::int AS righe,
+          count(*) FILTER (WHERE coalesce(r.quantita, 0) <> 0 AND coalesce(r.prezzo, 0) = 0)::int AS senza_prezzo,
+          CASE WHEN d.tipo NOT IN ('nota_credito', 'ddt') AND coalesce(sum(round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))
             FILTER (WHERE a.soggetta_bollo AND coalesce(a.percentuale, 0) = 0), 0) > ${SOGLIA_BOLLO} THEN ${IMPORTO_BOLLO} ELSE 0 END AS bollo
         FROM documenti_righe r LEFT JOIN aliquote_iva a ON a.codice = coalesce(r.aliquota_iva, c.aliquota_iva, 'IVA22')
-        WHERE r.documento_id = d.id AND d.stato = 'bozza' AND NOT r.solo_descrizione) b ON true
+        WHERE r.documento_id = d.id AND (d.stato = 'bozza' OR d.tipo = 'ddt') AND NOT r.solo_descrizione) b ON true
       WHERE d.tipo = $1 AND (d.anno = $2 OR d.stato = 'bozza')
         AND ($3 = '' OR coalesce(c.ragione_sociale, fa.ragione_sociale, d.intestatario->>'ragione_sociale', '') ILIKE '%' || $3 || '%' OR d.numero::text = $3)
       ORDER BY d.numero IS NOT NULL, d.data DESC, d.numero DESC NULLS FIRST`, [tipo, anno, cerca]);
@@ -577,16 +582,21 @@ export function rotteAmministrazione() {
       </form>
       ${tipo === 'autofattura' ? await riquadroFattureEstere(spunte) : ''}
       <p class="nota">${righe.length} documenti${tipo !== 'ddt' ? html` · imponibile ${euro(totale)}` : ''}. I documenti di Fatture in Cloud sono marcati FIC.</p>
+      ${tipo === 'ddt' ? (() => { const n = righe.filter(d => avvisoPrezziDdt({ daFatturare: !!d.da_fatturare && !d.fattura_id, stato: d.stato, righe: Number(d.righe_prezzo), senzaPrezzo: Number(d.senza_prezzo) })).length;
+        return n ? html`<p class="avviso">${n === 1 ? '1 DDT da fatturare ha' : `${n} DDT da fatturare hanno`} righe senza prezzo (in rosso nella colonna Imponibile): scrivi i prezzi nel DDT o direttamente nella fattura.</p>` : ''; })() : ''}
       ${righe.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco">
-        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th><th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th>${tipo === 'fattura' ? html`<th title="Anticipata dalla banca: RiBa al salvo buon fine o anticipo con bonifico (80 %)">Anticipo</th><th title="Incassata dal cliente (rate segnate pagate: dal movimento della banca, a mano o da Fatture in Cloud)">Incasso</th>` : ''}<th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
+        <thead><tr>${spunte ? casellaTutti() : ''}<th>Numero</th><th>Data</th><th>Intestatario</th>${tipo === 'ddt' ? html`<th title="Causale del trasporto: in grigio quelle che di regola non si fatturano">Causale</th>` : ''}<th class="num">Imponibile</th><th class="num">Totale</th><th>Stato</th>${tipo === 'fattura' ? html`<th title="Anticipata dalla banca: RiBa al salvo buon fine o anticipo con bonifico (80 %)">Anticipo</th><th title="Incassata dal cliente (rate segnate pagate: dal movimento della banca, a mano o da Fatture in Cloud)">Incasso</th>` : ''}<th title="${INVIATO_TITOLO}">Inviato</th></tr></thead>
         <tbody>${pag.righe.map(d => html`<tr>
           ${spunte ? casella(d.id, d.numero == null ? 'bozza' : `${NOMI[tipo]?.uno ?? 'documento'} ${numeroCompleto(d.numero, d.sezionale)}`) : ''}
           <td><a href="/amministrazione/documenti/${d.id}"><strong>${d.numero == null ? 'bozza' : numeroCompleto(d.numero, d.sezionale)}</strong></a>
             ${d.origine === 'fic' ? html` <span class="etichetta">FIC</span>` : ''}</td>
           <td>${data(d.data)}</td><td>${d.intestatario ?? ''}</td>
-          <td class="num">${tipo === 'ddt' ? '' : euro(Number(d.imponibile))}</td><td class="num">${tipo === 'ddt' ? '' : euro(Number(d.totale))}</td>
+          ${tipo === 'ddt' ? html`<td>${d.causale ? (d.da_fatturare ? d.causale : html`<span class="nota" title="Causale che di regola non si fattura">${d.causale}</span>`) : html`<span class="nota">—</span>`}</td>` : ''}
+          ${tipo === 'ddt' ? (() => { const a = avvisoPrezziDdt({ daFatturare: !!d.da_fatturare && !d.fattura_id, stato: d.stato, righe: Number(d.righe_prezzo), senzaPrezzo: Number(d.senza_prezzo) });
+            return html`<td class="num${a ? ' ddt-senza-prezzi' : ''}">${euro(Number(d.imponibile))}${a ? html`<br><span class="etichetta prio-alta" title="${a.titolo}">${a.testo}</span>` : ''}</td>`; })()
+            : html`<td class="num">${euro(Number(d.imponibile))}</td>`}<td class="num">${euro(Number(d.totale))}</td>
           <td><span class="stato doc-${d.stato}">${STATI[d.stato] ?? d.stato}</span>
-            ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : html` <span class="nota">da fatturare</span>`) : ''}</td>
+            ${tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` <a href="/amministrazione/documenti/${d.fattura_id}" class="nota">fatturato</a>` : d.da_fatturare ? html` <span class="nota">da fatturare</span>` : html` <span class="nota">non da fatturare</span>`) : ''}</td>
           ${tipo === 'fattura' ? (() => { const a = segnoAnticipo(anticipi.get(d.id)); return html`<td>${a ? html`<span class="etichetta" title="${a.titolo}">${a.testo}</span>` : ''}</td>`; })() : ''}
           ${tipo === 'fattura' ? (() => { const i = d.numero == null ? null : statoIncasso(incassi.get(d.id) ?? [], oggiIt);
             return html`<td data-valore="${i?.data ?? (i ? `0-${i.stato}` : '')}">${i ? html`<span class="stato ${i.stato === 'incassata' ? 'doc-consegnato' : i.stato === 'scaduta' ? 'doc-scartato' : 'doc-bozza'}" title="${i.titolo}">${i.testo}</span>` : ''}</td>`; })() : ''}
