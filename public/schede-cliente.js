@@ -66,8 +66,14 @@
     const file = [...document.getElementById('file-aggiunti').files];
     if (!file.length) { esito.textContent = 'Scegli prima i file.'; return; }
     const id = aggiungi.dataset.id;
+    const sostituisci = document.getElementById('sostituisci-file')?.checked;
+    if (sostituisci && !confirm('Togliere dal pacchetto tutti i file di prima e tenere solo quelli nuovi? (I file restano sul Drive.)')) return;
     aggiungi.disabled = true;
     try {
+      if (sostituisci) {
+        const rv = await fetch(`/preventivi/documenti/${id}/svuota`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (!rv.ok) { const e = await rv.json().catch(() => ({})); throw new Error(e.errore || 'File di prima non tolti'); }
+      }
       const rs = await fetch(`/preventivi/documenti/${id}/scelta`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file: file.map(f => ({ nome: f.name, byte: f.size })) }) });
       const js = await rs.json().catch(() => ({}));

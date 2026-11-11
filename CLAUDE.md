@@ -345,6 +345,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (fissaggio da 3 mm in su, fori dei non montati e fori senza componente NON contano); THT senza piedini = fori che restano, senza fori 2 a pezzo ("stima", da controllare).
    Nel preventivo "Conta i punti dai componenti" (sezione THT; documenti del cliente, altrimenti BOM collegata con tecnologia T): THT a mano → punti a mano + filo 0,125 g,
    onda → punti in `stagno` (reofori; g a reoforo = materiale stagnoLF di Impostazioni, 0,02 g, Adriano 4/11/2026), `stagnoPerSaldature` 0; punti scritti a mano → filo segue da solo (`public/preventivo.js`).
+   File aggiornati del cliente e nome/cliente dei pacchetti (Adriano 11/11/2026; `svuotaPacchetto`, `aggiornaDatiPacchetto`, `aggiornaPreventivoDaPacchetto` in
+   `schede-cliente-servizio.ts`, `aggiornaParametri`/`SCELTE_UFFICIO` in `engine/scheda/preventivo.ts`, test in `tests/aggiorna-pacchetto.test.ts`): "Aggiungi file" con la spunta
+   "sostituiscono" = POST `/:id/svuota` (file tolti anche dalle parti divise, `bom_id` del pacchetto azzerato) poi caricamento e analisi; "Aggiorna il preventivo con questi file"
+   (POST `/:id/aggiorna-preventivo`) = stesso preventivo e catalogo, cambiano solo i parametri letti (non prima produzione, lamine, controllo visivo) e la revisione se diversa,
+   cambi nelle note; preventivo accettato o con ordine/commessa = nuovo da validare. Riquadro "Nome e cliente" (POST `/:id/dati`, cliente anche alle parti divise) e azione
+   "Assegna il cliente" nell'elenco.
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

@@ -102,3 +102,31 @@ export function parametriDaCicli(cicli: string[]): { parametri: Record<string, n
   if (voci.some(v => v.codice === 'presenteTht')) daControllare.push('saldatura THT a mano chiesta dal cliente: scrivere i punti di saldatura a mano');
   return { parametri: Object.fromEntries(voci.map(v => [v.codice, v.valore])), voci, daControllare };
 }
+
+/**
+ * Preventivo già fatto e file nuovi del cliente (Adriano 11/11/2026: «mi ha aggiornato BOM e Gerber, ricarico tutto?»): i numeri letti
+ * dai file nuovi entrano nel preventivo esistente, il resto (tariffe, scelte dell'ufficio, prezzi scritti a mano) non cambia.
+ * Le scelte che fa l'ufficio (prima produzione, lamine comprate da noi, controllo visivo) non si toccano mai.
+ */
+export const SCELTE_UFFICIO = ['primaProduzione', 'acquistoLamina', 'controlloVisivo'];
+export interface CambioParametro { codice: string; prima: number | null; dopo: number }
+
+export function aggiornaParametri(attuali: Record<string, number>, letti: Record<string, number>, esistenti?: Set<string>):
+  { parametri: Record<string, number>; cambi: CambioParametro[] } {
+  const parametri = { ...attuali };
+  const cambi: CambioParametro[] = [];
+  for (const [codice, dopo] of Object.entries(letti)) {
+    if (SCELTE_UFFICIO.includes(codice) || (esistenti && !esistenti.has(codice))) continue;
+    const prima = attuali[codice] ?? null;
+    if (prima === dopo) continue;
+    parametri[codice] = dopo;
+    cambi.push({ codice, prima, dopo });
+  }
+  return { parametri, cambi };
+}
+
+/** "SMD lato TOP 120 → 135; Feeder 18 → 20": i cambi in parole, con le etichette del catalogo del preventivo. */
+export function testoCambi(cambi: CambioParametro[], etichette: Record<string, string> = {}): string {
+  const v = (n: number | null) => n == null ? '—' : String(n).replace('.', ',');
+  return cambi.map(c => `${etichette[c.codice] ?? c.codice} ${v(c.prima)} → ${v(c.dopo)}`).join('; ');
+}
