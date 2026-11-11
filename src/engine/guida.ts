@@ -666,6 +666,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Con il preventivo collegato, nella colonna Commessa compare "Crea commessa": apre la commessa nuova con quantità, ordine del cliente e consegna della riga; salvandola, la riga si collega da sola alla commessa.',
       'Anche nel cruscotto, nelle finestre del flusso di produzione, sotto il codice di ogni riga c\'è lo stato del preventivo: "prev. P…" (collegato, con "Crea commessa" se manca), giallo "preventivo da verificare" con "Verifica nell\'ordine" (porta alla riga dell\'ordine), oppure "nessun preventivo" con "Fai il preventivo" (già per quel cliente) o "collegalo nell\'ordine".',
       'Aprendo un preventivo, il riquadro "Prezzi da confrontare" mostra il prezzo a scheda del vecchio portale (se viene da lì) e il prezzo in anagrafica del codice, con gli scaglioni: se il prezzo nuovo è diverso, il cliente va avvisato. Il preventivo si può sempre modificare e salvare.',
+      'Nei preventivi del vecchio portale le caselle in ore (programmazioni, documentazione, armadi…) si scrivono come durata, come nei preventivi nuovi: 0:30 o 30\' è mezz\'ora, 1,5 o 1:30 un\'ora e mezza. Un numero da solo sono ORE: 30 diventa 30:00, cioè 30 ore.',
     ],
     passi: ['Commerciale → Ordini clienti → apri l\'ordine.', 'Controlla il menu "Preventivo" di ogni riga (proposto in giallo) o sceglilo.', 'Salva.', 'Premi "Crea commessa" sulla riga, controlla e salva la commessa.'],
     pagine: [['/ordini', 'Ordini clienti']],
