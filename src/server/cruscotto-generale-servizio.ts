@@ -18,6 +18,7 @@ import { bolloPerTrimestre } from '../engine/fiscale.js';
 import { ordinaRiprendi, type VoceRiprendi } from '../engine/riprendi.js';
 import { limiteConfronto } from '../engine/anno-riferimento.js';
 import { fatturatoClienti } from './anno-riferimento.js';
+import { SQL_IMPONIBILE_COSTO, SQL_NON_DOPPIONE } from '../engine/costo-fornitori.js';
 
 const MOSTRATE = 4;   // righe per elenco in ogni riquadro
 const somma = (v: number[]) => Math.round(v.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -85,8 +86,8 @@ export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(og
       WHERE extract(year FROM o.data)::int IN ($1::int, $1::int - 1) AND ($2::date IS NULL OR o.data <= $2::date OR extract(year FROM o.data)::int = $1) GROUP BY 1`, [ar, limitePrima]),
     q<{ quanti: number; schede: number }>(`SELECT count(*)::int AS quanti, coalesce(sum(quantita), 0)::int AS schede FROM commesse
       WHERE extract(year FROM creato_il AT TIME ZONE 'Europe/Rome')::int = $1`, [ar]),
-    q<{ tipo: string; data: string; imponibile: number }>(`SELECT tipo, to_char(data, 'YYYY-MM-DD') AS data, imponibile::float AS imponibile FROM documenti_ricevuti
-      WHERE extract(year FROM data)::int IN ($1::int, $1::int - 1)`, [ar]),
+    q<{ tipo: string; data: string; imponibile: number }>(`SELECT d.tipo, to_char(d.data, 'YYYY-MM-DD') AS data, ${SQL_IMPONIBILE_COSTO}::float AS imponibile FROM documenti_ricevuti d
+      WHERE extract(year FROM d.data)::int IN ($1::int, $1::int - 1) AND ${SQL_NON_DOPPIONE}`, [ar]),
     q<{ anno: number; mese: number; costo: number }>(`SELECT anno, mese, sum(lordo + contributi + tfr + altri)::float AS costo FROM costi_personale
       WHERE anno IN ($1::int, $1::int - 1) GROUP BY 1, 2`, [ar]),
   ]);

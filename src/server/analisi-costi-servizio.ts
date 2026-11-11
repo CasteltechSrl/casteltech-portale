@@ -8,6 +8,7 @@ import { q, q1 } from './db.js';
 import { riepilogo } from '../engine/riepilogo.js';
 import { eServizio } from '../engine/ordini.js';
 import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type VenditaProdotto } from '../engine/analisi-costi.js';
+import { SQL_FATTORE_RIGHE, SQL_NON_DOPPIONE, sqlPartitaFinanziaria } from '../engine/costo-fornitori.js';
 import { categoria as categoriaDaCodice } from '../engine/categorie-acquisti.js';
 
 const NOME_FORNITORE = `coalesce(f.ragione_sociale, d.intestatario->>'nome', d.intestatario->>'ragione_sociale', '(senza nome)')`;
@@ -29,13 +30,13 @@ export async function righeCosti(anni: number[]): Promise<RigaCosto[]> {
       ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(d.descrizione, '') AS descrizione, ARRAY[]::text[] AS codici,
       (${SEGNO} * d.imponibile)::float AS importo, d.categoria AS "categoriaFic"
     FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
-    WHERE extract(year FROM d.data)::int = ANY($1::int[])${conRighe ? ` AND NOT EXISTS (SELECT 1 FROM documenti_ricevuti_righe r WHERE r.documento_id = d.id)` : ''}`, [anni]);
+    WHERE extract(year FROM d.data)::int = ANY($1::int[]) AND ${SQL_NON_DOPPIONE}${conRighe ? ` AND NOT EXISTS (SELECT 1 FROM documenti_ricevuti_righe r WHERE r.documento_id = d.id)` : ''}`, [anni]);
   if (!conRighe) return intere;
   const righe = q<RigaCosto>(`SELECT r.id AS "rigaId", d.id AS "documentoId", to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_FORNITORE} AS fornitore,
       ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(r.descrizione, '') AS descrizione, array_remove(ARRAY[r.codice, r.pn], NULL) AS codici,
-      (${SEGNO} * coalesce(r.imponibile, 0))::float AS importo, d.categoria AS "categoriaFic"
+      (${SQL_FATTORE_RIGHE} * coalesce(r.imponibile, 0))::float AS importo, d.categoria AS "categoriaFic"
     FROM documenti_ricevuti_righe r JOIN documenti_ricevuti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
-    WHERE extract(year FROM d.data)::int = ANY($1::int[])`, [anni]);
+    WHERE extract(year FROM d.data)::int = ANY($1::int[]) AND ${SQL_NON_DOPPIONE} AND NOT ${sqlPartitaFinanziaria('r')}`, [anni]);
   const [a, b] = await Promise.all([righe, intere]);
   return [...a, ...b];
 }
