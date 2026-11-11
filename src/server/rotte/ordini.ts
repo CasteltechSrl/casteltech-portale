@@ -54,6 +54,10 @@ export const pagina = (utente: Utente | undefined, titolo: string, attiva: strin
 
 const ritardo = (n: number | null) => (n == null ? '' : n > 0 ? html`<span class="ritardo">+${n} gg</span>` : html`<span class="nota">${n} gg</span>`);
 
+/** Da dove viene il prezzo in anagrafica (prodotti.prezzo_fonte). */
+const FONTI_PREZZO_ANAGRAFICA: Record<string, string> = { manuale: 'scritto a mano', fic_anagrafica: 'anagrafica di Fatture in Cloud', fic_fattura: 'ultima fattura di Fatture in Cloud',
+  preventivo: 'preventivo inviato', ordine: 'ordine del cliente' };
+
 export function rotteOrdini() {
   const r = Router();
 
@@ -341,6 +345,12 @@ export function rotteOrdini() {
     // preventivo di ogni riga (Adriano 11/11/2026): salvato, oppure proposto (stesso prodotto o stesso codice); menu con tutti quelli del cliente
     const preventivi = o.cliente_id ? await preventiviDelCliente(o.cliente_id) : [];
     const dataOrd = o.data_ordine ? (typeof o.data_ordine === 'string' ? o.data_ordine.slice(0, 10) : new Date(o.data_ordine).toISOString().slice(0, 10)) : null;
+    const preventivoDellaRiga = (x: RigaElenco) => {
+      if (x.preventivoId) { const k = preventivi.find(p => p.id === x.preventivoId); return k ? { k, proposto: false } : null; }
+      const pr = propostaPreventivo({ prodottoId: x.prodottoId, codici: [x.codice, x.codiceCliente], quantita: x.quantita, dataOrdine: dataOrd }, preventivi);
+      const k = pr ? preventivi.find(p => p.id === pr.id) : undefined;
+      return k ? { k, proposto: true } : null;
+    };
     const sceltaPreventivo = (x: RigaElenco) => {
       const rigaP = { prodottoId: x.prodottoId, codici: [x.codice, x.codiceCliente], quantita: x.quantita, dataOrdine: dataOrd };
       const proposta = x.preventivoId ? null : propostaPreventivo(rigaP, preventivi);
@@ -372,13 +382,13 @@ export function rotteOrdini() {
     };
     // prezzi diversi dall'anagrafica (Adriano 11/11/2026): righe ancora aperte con codice; l'ufficio sceglie quale tenere
     const idProdotti = [...new Set(righe.filter(x => x.prodottoId).map(x => x.prodottoId!))];
-    const listino = new Map((idProdotti.length ? await q<{ id: number; codice: string; prezzo: number | null }>(
-      `SELECT id, codice, prezzo_vendita::float AS prezzo FROM prodotti WHERE id = ANY($1)`, [idProdotti]) : []).map(k => [k.id, k]));
+    const listino = new Map((idProdotti.length ? await q<{ id: number; codice: string; prezzo: number | null; fonte: string | null; data: string | null; nota: string | null }>(
+      `SELECT id, codice, prezzo_vendita::float AS prezzo, prezzo_fonte AS fonte, prezzo_data::text AS data, prezzo_nota AS nota FROM prodotti WHERE id = ANY($1)`, [idProdotti]) : []).map(k => [k.id, k]));
     const scaglioniProdotti = await scaglioniDi(idProdotti);
     const prezziDiversi = righe.flatMap(x => {
       if (x.tipo !== 'scheda' || !x.prodottoId || !['da_evadere', 'parziale'].includes(x.stato)) return [];
       const d = differenzaOrdine(Number(x.prezzo), Number(x.quantita), listino.get(x.prodottoId)?.prezzo ?? null, scaglioniProdotti.get(x.prodottoId) ?? []);
-      return d ? [{ riga: x, codice: listino.get(x.prodottoId)?.codice ?? x.codice ?? '', anagrafica: d.anagrafica }] : [];
+      return d ? [{ riga: x, codice: listino.get(x.prodottoId)?.codice ?? x.codice ?? '', anagrafica: d.anagrafica, prodotto: listino.get(x.prodottoId) }] : [];
     });
     const stato = statoOrdine(righe.map(x => x.stato));
     const spedizioni = righe.flatMap(x => x.spedizioni).sort((a, b) => a.data.localeCompare(b.data));
@@ -417,11 +427,19 @@ export function rotteOrdini() {
       </dl>
       ${prezziDiversi.length ? html`<section class="avviso prezzi-ordine"><b>Prezzi dell'ordine diversi dall'anagrafica.</b> Scegli quale tenere per ogni riga:
         "Tieni l'anagrafica" mette il prezzo dell'anagrafica nella riga (conferma d'ordine e fattura usciranno così), "Aggiorna l'anagrafica" prende il prezzo dell'ordine.
-        <table><thead><tr><th>Codice</th><th class="n">Q.tà</th><th class="n">Ordine</th><th class="n">Anagrafica</th><th></th></tr></thead>
-        <tbody>${prezziDiversi.map(k => html`<tr><td>${k.codice}</td><td class="n">${num(Number(k.riga.quantita), 0)}</td>
+        <table><thead><tr><th>Codice</th><th class="n">Q.tà</th><th class="n">Ordine</th><th class="n">Anagrafica</th><th>Da dove viene il prezzo</th><th>Preventivo della riga</th><th></th></tr></thead>
+        <tbody>${prezziDiversi.map(k => {
+          const pv = preventivoDellaRiga(k.riga);
+          const fonte = k.prodotto?.fonte ? `${FONTI_PREZZO_ANAGRAFICA[k.prodotto.fonte] ?? k.prodotto.fonte}${k.prodotto.data ? ` del ${data(k.prodotto.data)}` : ''}` : '';
+          return html`<tr><td>${k.codice}</td><td class="n">${num(Number(k.riga.quantita), 0)}</td>
           <td class="n">${euroUnitario(Number(k.riga.prezzo))}</td><td class="n">${k.anagrafica == null ? 'nessun prezzo' : euroUnitario(k.anagrafica)}</td>
+          <td><small>${fonte}${k.prodotto?.nota ? html`<br><span class="nota">${k.prodotto.nota}</span>` : ''}</small></td>
+          <td>${pv ? html`<a href="/preventivi/${pv.k.id}" target="_blank" rel="noopener" title="Apri il preventivo per controllare">${pv.k.numero}</a>
+            <small class="nota">${pv.k.nSchede} pz${pv.k.prezzoScheda != null ? html` · ${euroUnitario(pv.k.prezzoScheda)} a scheda` : ''}${pv.proposto ? ' · proposto, da verificare' : ''}</small>`
+            : html`<small class="nota">nessuno: sceglilo nella riga sotto</small>`}</td>
           <td class="nowrap">${k.anagrafica == null ? '' : html`<button form="prezzo-${k.riga.id}-anagrafica">Tieni l'anagrafica</button> `}
-            <button form="prezzo-${k.riga.id}-ordine" class="primario">${k.anagrafica == null ? 'Salva in anagrafica' : "Aggiorna l'anagrafica"}</button></td></tr>`)}</tbody></table>
+            <button form="prezzo-${k.riga.id}-ordine" class="primario">${k.anagrafica == null ? 'Salva in anagrafica' : "Aggiorna l'anagrafica"}</button></td></tr>`;
+        })}</tbody></table>
         ${prezziDiversi.map(k => html`<form method="post" action="/ordini/${o.id}/righe/${k.riga.id}/prezzo" id="prezzo-${k.riga.id}-anagrafica" hidden><input type="hidden" name="scelta" value="anagrafica"></form>
           <form method="post" action="/ordini/${o.id}/righe/${k.riga.id}/prezzo" id="prezzo-${k.riga.id}-ordine" hidden><input type="hidden" name="scelta" value="ordine"></form>`)}</section>` : ''}
       <form method="post" action="/ordini/${o.id}">

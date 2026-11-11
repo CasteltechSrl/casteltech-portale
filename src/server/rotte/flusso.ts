@@ -109,7 +109,7 @@ export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLet
     const ordine = `/ordini/${r.ordineId}#riga-${r.id}`;
     if (!r.preventivo) return html`<br><small class="esito critico">nessun preventivo:</small> ${solaLettura ? '' : html`<a class="bottone piccolo" href="/preventivi/nuovo${r.clienteId ? `?cliente=${r.clienteId}` : ''}" title="Preventivo nuovo per questo cliente">Fai il preventivo</a>
       <a href="${ordine}" class="nota" title="Se il preventivo c'è già (scritto con un altro codice), sceglilo dal menu Preventivo nella riga dell'ordine">o collegalo nell'ordine</a>`}`;
-    if (r.preventivo.proposto) return html`<br><small class="esito verifica" title="Trovato dal portale (stesso codice, quantità più vicina): confermalo o cambialo nell'ordine">preventivo da verificare: ${r.preventivo.numero}</small>
+    if (r.preventivo.proposto) return html`<br><small class="esito verifica" title="Trovato dal portale (stesso codice, quantità più vicina): confermalo o cambialo nell'ordine">preventivo da verificare:</small> <a href="/preventivi/${r.preventivo.id}" target="_blank" rel="noopener" title="Apri il preventivo proposto per controllare che sia quello giusto">${r.preventivo.numero}</a>
       ${solaLettura ? '' : html`<a class="bottone piccolo" href="${ordine}">Verifica nell'ordine</a>`}`;
     return html`<br><small class="nota">prev. <a href="/preventivi/${r.preventivo.id}">${r.preventivo.numero}</a></small>${!r.commessaId && !solaLettura
       ? html` <a class="bottone piccolo" href="/commesse/nuova?preventivo=${r.preventivo.id}&riga=${r.id}" title="Commessa con quantità, ordine del cliente e consegna di questa riga">Crea commessa</a>` : ''}`;
