@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  lamineDaVendite, pezziLamina,
   chiaveFornitore, classificaCosti, classificaVendite, confrontoRivendita, costiPerAnno, fornitoriDaControllare, nomiPcbComprati, riassuntoCosti, type RigaCosto, type RigaVendita,
 } from '../src/engine/analisi-costi.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -108,7 +109,7 @@ test('comprato e rivenduto: comprato anche dall\'estero contro il fatturato vero
     { ...vendita({ cliente: 'C', descrizione: 'x', importo: 9000 }), tipo: 'conto_lavoro' as const },
     { ...vendita({ cliente: 'D', descrizione: 'x', importo: 500 }), tipo: 'acconto' as const },
   ];
-  const r = confrontoRivendita({ righe, vendite, anni: [2026], lamine: [{ anno: 2026, pezzi: 4, importo: 440 }] })[0];
+  const r = confrontoRivendita({ righe, vendite, anni: [2026], lamine: [{ anno: 2026, pezzi: 4, importo: 440, pezziUnaTantum: 0, importoUnaTantum: 0 }] })[0];
   assert.equal(r.compratoSchede, 10000); assert.equal(r.compratoEstero, 2000); assert.equal(r.comprato, 10300);
   assert.equal(r.vendutoNostro, 12000); assert.equal(r.vendutoNonSo, 3000); assert.equal(r.vendutoContoLavoro, 9000);
   assert.equal(r.pesoMateriale, 83.33); assert.equal(r.pesoMaterialeMin, 66.67);
@@ -170,4 +171,29 @@ test('costi: famiglia del punto di pareggio per ogni categoria di Casteltech', a
   assert.equal(famigliaDiCategoriaCasteltech('energia'), 'servizi');
   assert.equal(famigliaDiCategoriaCasteltech('montaggi_esterni'), 'servizi');
   for (const c of CATEGORIE) assert.notEqual(famigliaDiCategoriaCasteltech(c.codice), 'senza_categoria');
+});
+
+test('lamine vendute: a parte e dentro i costi una tantum, pezzi dalla descrizione o dalla quantità (Adriano 11/11/2026)', () => {
+  assert.equal(pezziLamina('Campionatura M2204-C\n- 2 Lamine serigrafiche', 1), 2);
+  assert.equal(pezziLamina('Costi una tantum\n- Lamine serigrafiche (CTRL_INV/A - DRIVER/A)', 2), 2);
+  assert.equal(pezziLamina('Avvio produzione\n-Lamina serigrafica', 1), 1);
+  const l = lamineDaVendite([
+    { anno: 2026, codice: '001', descrizione: 'LAMINA SERIGRAFICA\n- DE0102100\n- DE0103210', quantita: 4, importo: 440 },
+    { anno: 2026, codice: 'UT-LAMINA', descrizione: 'Lamina', quantita: 1, importo: 110 },
+    { anno: 2026, codice: '', descrizione: 'Avvio produzione\n-Programmazione attrezzature\n-Lamina serigrafica', quantita: 2, importo: 500 },
+    { anno: 2026, codice: 'M2204-C', descrizione: 'Campionatura M2204-C_SMD (prezzo a forfait)\n- 2 Lamine serigrafiche', quantita: 1, importo: 1500 },
+    { anno: 2026, codice: '001', descrizione: 'LAMINA SERIGRAFICA', quantita: -1, importo: -110 },
+    { anno: 2025, codice: '', descrizione: 'Lamina', quantita: 1, importo: 110 },
+  ], [2026]);
+  assert.deepEqual(l, [{ anno: 2026, pezzi: 4, importo: 440, pezziUnaTantum: 4, importoUnaTantum: 2000 }]);
+  const righe = classificaCosti([
+    riga({ rigaId: 1, fornitore: 'I-TRONIK S.R.L.', descrizione: 'LAMINA AUTOT. ZELFLEX 23" SP.0,12 UM', importo: 600, quantita: 8, data: '2026-03-10' }),
+    riga({ rigaId: 2, fornitore: 'LOPAR S.R.L.', descrizione: 'LAMINA COD.LA26-0306', importo: 75, quantita: 1, data: '2026-03-10' }),
+    riga({ rigaId: 3, fornitore: 'LOPAR S.R.L.', descrizione: 'Circuito Stampato Cod. DE0904-018 02', importo: 508, quantita: 1, data: '2026-03-10' }),
+    riga({ rigaId: 4, fornitore: 'LOPAR S.R.L.', descrizione: 'CAMPIONI FORFAIT', importo: 340, quantita: 1, data: '2026-03-10' }),
+  ], []);
+  assert.deepEqual(righe.map(r => r.categoria), ['lamine', 'lamine', 'pcb', 'pcb']);
+  const r = confrontoRivendita({ righe, vendite: [], anni: [2026], lamine: l })[0];
+  assert.equal(r.lamineCompratePezzi, 9); assert.equal(r.compratoLamine, 675);
+  assert.equal(r.margineLamine, 440 + 4 * 110 - 675);
 });

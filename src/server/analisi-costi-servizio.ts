@@ -6,7 +6,7 @@
  */
 import { q, q1 } from './db.js';
 import { riepilogo } from '../engine/riepilogo.js';
-import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita, type SceltaMateriale } from '../engine/analisi-costi.js';
+import { chiaveFornitore, type RigaLamina, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita, type SceltaMateriale } from '../engine/analisi-costi.js';
 import { SQL_FATTORE_RIGHE, SQL_NON_DOPPIONE, sqlPartitaFinanziaria } from '../engine/costo-fornitori.js';
 import { categoria as categoriaDaCodice } from '../engine/categorie-acquisti.js';
 
@@ -27,13 +27,13 @@ export async function righeCosti(anni: number[]): Promise<RigaCosto[]> {
   const conRighe = await tabellaRigheEsiste();
   const intere = q<RigaCosto>(`SELECT NULL::int AS "rigaId", d.id AS "documentoId", to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_FORNITORE} AS fornitore,
       ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(d.descrizione, '') AS descrizione, ARRAY[]::text[] AS codici,
-      (${SEGNO} * d.imponibile)::float AS importo, d.categoria AS "categoriaFic"
+      (${SEGNO} * d.imponibile)::float AS importo, d.categoria AS "categoriaFic", NULL::float AS quantita
     FROM documenti_ricevuti d LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
     WHERE extract(year FROM d.data)::int = ANY($1::int[]) AND ${SQL_NON_DOPPIONE}${conRighe ? ` AND NOT EXISTS (SELECT 1 FROM documenti_ricevuti_righe r WHERE r.documento_id = d.id)` : ''}`, [anni]);
   if (!conRighe) return intere;
   const righe = q<RigaCosto>(`SELECT r.id AS "rigaId", d.id AS "documentoId", to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_FORNITORE} AS fornitore,
       ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(r.descrizione, '') AS descrizione, array_remove(ARRAY[r.codice, r.pn], NULL) AS codici,
-      (${SQL_FATTORE_RIGHE} * coalesce(r.imponibile, 0))::float AS importo, d.categoria AS "categoriaFic"
+      (${SQL_FATTORE_RIGHE} * coalesce(r.imponibile, 0))::float AS importo, d.categoria AS "categoriaFic", r.quantita::float AS quantita
     FROM documenti_ricevuti_righe r JOIN documenti_ricevuti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
     WHERE extract(year FROM d.data)::int = ANY($1::int[]) AND ${SQL_NON_DOPPIONE} AND NOT ${sqlPartitaFinanziaria('r')}`, [anni]);
   const [a, b, c] = await Promise.all([righe, intere, righeAutofatture(anni)]);
@@ -50,7 +50,7 @@ export async function righeCosti(anni: number[]): Promise<RigaCosto[]> {
 export function righeAutofatture(anni: number[]): Promise<RigaCosto[]> {
   return q<RigaCosto>(`SELECT -r.id AS "rigaId", -d.id AS "documentoId", to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_FORNITORE} AS fornitore,
       ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(r.descrizione, '') AS descrizione, array_remove(ARRAY[nullif(trim(r.codice), '')], NULL) AS codici,
-      round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)::float AS importo, CASE WHEN d.tipo_sdi = 'TD17' THEN NULL ELSE 'B6_Materie prime c/acquisti' END AS "categoriaFic"
+      round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)::float AS importo, CASE WHEN d.tipo_sdi = 'TD17' THEN NULL ELSE 'B6_Materie prime c/acquisti' END AS "categoriaFic", r.quantita::float AS quantita
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
     WHERE d.tipo = 'autofattura' AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND d.ricevuto_id IS NULL
       AND extract(year FROM d.data)::int = ANY($1::int[])
@@ -128,14 +128,14 @@ export async function salvaSceltaMateriale(chiave: string, scelta: string): Prom
   return scelta === 'nostro' ? 'Segnato: materiale comprato da noi.' : scelta === 'conto_lavoro' ? 'Segnato: conto lavoro.' : 'Tolta la scelta: decide il portale.';
 }
 
-/** Lamine fatturate ai clienti per anno: codice UT-LAMINA o righe "lamina"/"stencil" (storico FIC). */
-export function lamineVendute(anni: number[], finoA = ''): Promise<LamineVendute[]> {
-  return q<LamineVendute>(`SELECT extract(year FROM d.data)::int AS anno, sum(${SEGNO} * r.quantita)::float AS pezzi,
-      sum(${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo
+/** Righe di fatture e note di credito che citano una lamina (UT-LAMINA, o "lamina/stencil" in qualunque riga della descrizione: anche dentro i costi una tantum). */
+export function righeLamine(anni: number[], finoA = ''): Promise<RigaLamina[]> {
+  return q<RigaLamina>(`SELECT extract(year FROM d.data)::int AS anno, coalesce(r.codice, '') AS codice, coalesce(r.descrizione, '') AS descrizione,
+      (${SEGNO} * r.quantita)::float AS quantita, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
     WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.acconto_id IS NULL
-      AND (upper(trim(r.codice)) = 'UT-LAMINA' OR split_part(coalesce(r.descrizione, ''), E'\\n', 1) ~* '\\m(LAMIN[AE]|STENCIL)\\M')
-      AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO} GROUP BY 1`, [anni, anni[0], finoA]);
+      AND (upper(trim(r.codice)) = 'UT-LAMINA' OR coalesce(r.descrizione, '') ~* '\\m(LAMIN[AE]|STENCIL)\\M')
+      AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO}`, [anni, anni[0], finoA]);
 }
 
 /** Fatturato (imponibile di fatture meno note di credito) per anno. */

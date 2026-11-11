@@ -28,6 +28,8 @@ export interface RigaCosto {
   importo: number;
   /** categoria di Fatture in Cloud della fattura (aiuta le fatture senza righe) */
   categoriaFic?: string | null;
+  /** quantità della riga (null = fattura intera) */
+  quantita?: number | null;
 }
 
 export interface RegolaCategoria { tipo: 'fornitore' | 'riga' | 'documento'; chiave: string; categoria: string }
@@ -199,7 +201,40 @@ export type TipoVendita = 'nostro' | 'conto_lavoro' | 'servizio' | 'acconto' | '
 export interface RigaVendita { anno: number; clienteId: number | null; cliente: string; codice: string; descrizione: string; importo: number; acconto: boolean }
 /** Dal preventivo più recente del prodotto conta solo se vendiamo componenti o PCB (sì/no). */
 export interface MaterialePreventivo { codice: string; clienteId: number | null; conMateriale: boolean }
-export interface LamineVendute { anno: number; pezzi: number; importo: number }
+/** Lamine fatturate ai clienti in un anno: a parte (riga della lamina) e dentro i costi una tantum (riga "Avvio produzione - Programmazione - Lamina serigrafica"). */
+export interface LamineVendute { anno: number; pezzi: number; importo: number; pezziUnaTantum: number; importoUnaTantum: number }
+/** Riga di fattura (o NC, importo e quantità con il segno) che cita una lamina. */
+export interface RigaLamina { anno: number; codice: string; descrizione: string; quantita: number; importo: number }
+
+const LAMINA = /\b(lamin[ae]|stencil)\b/i;
+/** Altre voci nella stessa riga: la lamina è dentro un forfait (costi una tantum, campionatura, materiale). */
+const ALTRE_VOCI = /programmaz|avvio|attrezz|documentaz|una tantum|campionatur|componenti|\bpcb\b|forfait|codifica|setup/i;
+
+/** Pezzi di lamina in una riga: numero scritto davanti ("2 Lamine", "4 lamine"), altrimenti la quantità della riga (lamine distinte per prodotto), altrimenti 1. */
+export function pezziLamina(descrizione: string, quantita: number): number {
+  const n = descrizione.match(/\b(\d{1,2})\s*(?:x\s*)?(?:lamin[ae]|stencil)/i);
+  if (n) return Number(n[1]);
+  const q = Math.abs(quantita);
+  return q >= 1 && q <= 20 && Number.isInteger(q) ? q : 1;
+}
+
+/** Lamine fatturate per anno (Adriano 11/11/2026: "per ogni lamina acquistata c'è una lamina venduta", spesso dentro i costi una tantum). */
+export function lamineDaVendite(righe: RigaLamina[], anni: number[]): LamineVendute[] {
+  return anni.map(anno => {
+    const l: LamineVendute = { anno, pezzi: 0, importo: 0, pezziUnaTantum: 0, importoUnaTantum: 0 };
+    for (const r of righe.filter(r => r.anno === anno)) {
+      const d = r.descrizione.trim(), d1 = d.split('\n')[0];
+      if (!/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) continue;
+      const segno = r.importo < 0 || r.quantita < 0 ? -1 : 1;
+      const pezzi = segno * pezziLamina(d, r.quantita);
+      const aParte = /^UT-LAMINA$/i.test(r.codice.trim()) || (LAMINA.test(d1) && !ALTRE_VOCI.test(d));
+      if (aParte) { l.pezzi += pezzi; l.importo += r.importo; } else { l.pezziUnaTantum += pezzi; l.importoUnaTantum += r.importo; }
+    }
+    return { anno, pezzi: l.pezzi, importo: r2(l.importo), pezziUnaTantum: l.pezziUnaTantum, importoUnaTantum: r2(l.importoUnaTantum) };
+  });
+}
+/** Lamine comprate (pezzi): righe di lamina della categoria lamine (non trasporti, sconti, PCB dello stesso fornitore). */
+const LAMINA_COMPRATA = /\b(lamin[ae]|stencil|zelflex)\b|\bla\d{2}-\d/i;
 
 const MATERIALE_SCRITTO = /acquisto (dei )?(componenti|pcb|materiale)|^(componenti|materiale|components?)\b|\bpcb purchase\b|^componenti extra\b|^materiale (acquistato|x|per)\b/im;
 const ANTICIPO = /^\W*(anticipo|acconto|advance payment)\b|\bacconto \d+ ?%/im;
@@ -299,8 +334,10 @@ export interface RivenditaAnno {
   clientiContoLavoro: { chiave: string; cliente: string; importo: number }[];
   /** peso del materiale comprato sul fatturato con materiale nostro (%), e su nostro + non so (il caso peggiore e il migliore) */
   pesoMateriale: number | null; pesoMaterialeMin: number | null;
-  /** lamine fatturate ai clienti (UT-LAMINA e righe "lamina/stencil") */
-  lamineVendutePezzi: number; lamineVendute: number; margineLamine: number;
+  /** lamine comprate (pezzi), fatturate a parte (pezzi, €) e dentro i costi una tantum (pezzi, € delle righe intere) */
+  lamineCompratePezzi: number; lamineVendutePezzi: number; lamineVendute: number; lamineUnaTantumPezzi: number; lamineUnaTantumRighe: number;
+  /** guadagno stimato: fatturate a parte + quelle nei costi una tantum al prezzo medio delle lamine fatturate a parte (110 € se non ce ne sono) − comprate */
+  margineLamine: number;
 }
 
 const primi = (m: Map<string, { cliente: string; importo: number }>, n = 6) => [...m.entries()].filter(e => Math.abs(e[1].importo) >= 1)
@@ -320,14 +357,17 @@ export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (Rig
       for (const r of v.filter(r => r.tipo === t)) { const k = chiaveCliente(r), y = m.get(k) ?? { cliente: r.cliente, importo: 0 }; y.importo += r.importo; m.set(k, y); }
       return m; };
     const vendutoNostro = somma('nostro'), vendutoNonSo = somma('non_so');
-    const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0 };
+    const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0, pezziUnaTantum: 0, importoUnaTantum: 0 };
+    const lamineCompratePezzi = delAnno.filter(r => r.categoria === 'lamine' && LAMINA_COMPRATA.test(r.descrizione) && r.importo > 0).reduce((s, r) => s + Math.max(1, Math.abs(r.quantita ?? 1)), 0);
+    const prezzoLamina = l.pezzi > 0 && l.importo > 0 ? l.importo / l.pezzi : 110;
     return {
       anno, compratoComponenti, compratoPcb, compratoMeccanica, compratoLamine, comprato: r2(compratoSchede + compratoLamine), compratoSchede, compratoEstero,
       vendutoNostro, vendutoContoLavoro: somma('conto_lavoro'), vendutoNonSo, vendutoServizi: somma('servizio'),
       clientiNonSo: primi(perCliente('non_so')), clientiNostro: primi(perCliente('nostro')), clientiContoLavoro: primi(perCliente('conto_lavoro')),
       pesoMateriale: vendutoNostro > 0 ? r2((compratoSchede / vendutoNostro) * 100) : null,
       pesoMaterialeMin: vendutoNostro + vendutoNonSo > 0 ? r2((compratoSchede / (vendutoNostro + vendutoNonSo)) * 100) : null,
-      lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo), margineLamine: r2(l.importo - compratoLamine),
+      lamineCompratePezzi, lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo), lamineUnaTantumPezzi: l.pezziUnaTantum, lamineUnaTantumRighe: r2(l.importoUnaTantum),
+      margineLamine: r2(l.importo + l.pezziUnaTantum * prezzoLamina - compratoLamine),
     };
   });
 }
@@ -395,7 +435,10 @@ export function riassuntoCosti(x: { costi: CostiPerAnno; rivendita: RivenditaAnn
     }
     if (riv.compratoLamine || riv.lamineVendute) {
       const liv: Livello = riv.margineLamine < 0 ? 'attenzione' : 'bene';
-      frasi.push({ livello: liv, testo: `Lamine: comprate ${euro(riv.compratoLamine)}, fatturate ai clienti ${euro(riv.lamineVendute)}${riv.lamineVendutePezzi ? ` (${riv.lamineVendutePezzi})` : ''}: ${riv.margineLamine >= 0 ? 'guadagno' : 'perdita'} di ${euro(Math.abs(riv.margineLamine))}.` });
+      const vendutePezzi = riv.lamineVendutePezzi + riv.lamineUnaTantumPezzi;
+      frasi.push({ livello: liv, testo: `Lamine: comprate ${riv.lamineCompratePezzi} per ${euro(riv.compratoLamine)}, fatturate ${vendutePezzi} (${riv.lamineVendutePezzi} a parte per ${euro(riv.lamineVendute)}, ${riv.lamineUnaTantumPezzi} dentro i costi una tantum): `
+        + `${riv.margineLamine >= 0 ? 'guadagno stimato' : 'perdita stimata'} di ${euro(Math.abs(riv.margineLamine))}.`
+        + (riv.lamineCompratePezzi > vendutePezzi + 2 ? ` ${riv.lamineCompratePezzi - vendutePezzi} lamine comprate non risultano nelle fatture: rifatte a nostro carico, ancora da fatturare o scritte in fattura con un altro nome.` : '') });
       if (riv.margineLamine < 0) proposte.push('Le lamine costano più di quanto si fattura: addebitare sempre la lamina (UT-LAMINA) nel primo lotto, anche quando il cliente la discute.');
     }
   }

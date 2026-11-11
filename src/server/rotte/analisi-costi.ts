@@ -12,9 +12,9 @@ import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { eUfficio } from '../../engine/ruoli.js';
 import { CATEGORIE, NOMI_MACRO, SPIEGAZIONE_MACRO, categoria as categoriaDaCodice, type Macro } from '../../engine/categorie-acquisti.js';
 import {
-  classificaCosti, classificaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
+  classificaCosti, classificaVendite, lamineDaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
 } from '../../engine/analisi-costi.js';
-import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, lamineVendute, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
+import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, righeLamine, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 0)} €`);
@@ -36,15 +36,15 @@ async function calcola(anno: number) {
   const inCorso = anno === Number(oggi.slice(0, 4));
   const finoA = inCorso ? oggi.slice(5) : '';
   const anni = [anno, anno - 1, anno - 2].filter(a => a >= ANNO_MINIMO);
-  const [righeTutte, regole, righeVendute, preventivi, contoLavoro, lamine, ricavi, coperture, scelte] = await Promise.all([
-    righeCosti(anni), regoleCategorie(), righeVenditeRivendita(anni, finoA), materialeDeiPreventivi(), clientiContoLavoro(), lamineVendute(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni), sceltaMaterialeClienti(),
+  const [righeTutte, regole, righeVendute, preventivi, contoLavoro, righeLam, ricavi, coperture, scelte] = await Promise.all([
+    righeCosti(anni), regoleCategorie(), righeVenditeRivendita(anni, finoA), materialeDeiPreventivi(), clientiContoLavoro(), righeLamine(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni), sceltaMaterialeClienti(),
   ]);
   // anno in corso: gli anni prima contano fino allo stesso giorno
   const righe = classificaCosti(righeTutte, regole).filter(r => !finoA || r.anno === anno || r.data.slice(5) <= finoA);
   const costi = costiPerAnno(righe, anni);
   const tipi = classificaVendite(righeVendute, preventivi, nomiPcbComprati(righe), contoLavoro, scelte);
   const vendite = righeVendute.map((r, i) => ({ ...r, tipo: tipi[i] }));
-  const rivendita = confrontoRivendita({ righe, vendite, lamine, anni });
+  const rivendita = confrontoRivendita({ righe, vendite, lamine: lamineDaVendite(righeLam, anni), anni });
   const riassunto = riassuntoCosti({ costi, rivendita, ricavi, mesi: inCorso ? Number(oggi.slice(5, 7)) : 12 });
   return { anno, anni, inCorso, finoA, righe, costi, rivendita, riassunto, ricavi, coperture, scelte, daControllare: fornitoriDaControllare(righe.filter(r => r.anno === anno)), nPreventivi: preventivi.length };
 }
@@ -92,9 +92,10 @@ function tabellaRivendita(riv: RivenditaAnno[], anno: number, inCorso: boolean):
     ${riga('Peso del materiale se anche quello era chiavi in mano', r => r.pesoMaterialeMin != null && r.vendutoNonSo ? pct(r.pesoMaterialeMin, false) : '—')}
     ${riga('Fatturato in conto lavoro (materiale del cliente)', r => euro(r.vendutoContoLavoro))}
     ${riga('Servizi (lamine, avvio produzione, progettazione, trasporti…)', r => euro(r.vendutoServizi))}
-    ${riga('Lamine comprate', r => euro(r.compratoLamine))}
-    ${riga('Lamine fatturate ai clienti', r => html`${euro(r.lamineVendute)}${r.lamineVendutePezzi ? html` <small class="tenue">(${num(r.lamineVendutePezzi, 0)})</small>` : ''}`)}
-    ${riga('Guadagno sulle lamine', r => (r.compratoLamine || r.lamineVendute) ? segno(r.margineLamine) : '—', 'riga-famiglia')}
+    ${riga('Lamine comprate', r => html`${euro(r.compratoLamine)}${r.lamineCompratePezzi ? html` <small class="tenue">(${num(r.lamineCompratePezzi, 0)})</small>` : ''}`)}
+    ${riga('Lamine fatturate a parte', r => html`${euro(r.lamineVendute)}${r.lamineVendutePezzi ? html` <small class="tenue">(${num(r.lamineVendutePezzi, 0)})</small>` : ''}`)}
+    ${riga('Lamine dentro i costi una tantum (pezzi)', r => r.lamineUnaTantumPezzi ? html`${num(r.lamineUnaTantumPezzi, 0)} <small class="tenue">(righe per ${euro(r.lamineUnaTantumRighe)})</small>` : '—')}
+    ${riga('Guadagno stimato sulle lamine', r => (r.compratoLamine || r.lamineVendute || r.lamineUnaTantumPezzi) ? segno(r.margineLamine) : '—', 'riga-famiglia')}
     </tbody></table></div>`;
 }
 
@@ -245,8 +246,9 @@ export function rotteAnalisiCosti() {
     const rr = (nome: string, v: (r: RivenditaAnno) => number) => righe.push({ categoria: nome, ...Object.fromEntries(riv.map(r => [`a${r.anno}`, v(r)])) });
     rr('Comprato per le schede (anche estero)', r => r.compratoSchede); rr('di cui dall\'estero (autofatture)', r => r.compratoEstero);
     rr('Fatturato con materiale nostro', r => r.vendutoNostro); rr('Fatturato non classificato', r => r.vendutoNonSo); rr('Fatturato in conto lavoro', r => r.vendutoContoLavoro);
-    rr('Peso del materiale % (su materiale nostro)', r => r.pesoMateriale ?? 0); rr('Lamine comprate', r => r.compratoLamine);
-    rr('Lamine fatturate', r => r.lamineVendute); rr('Guadagno sulle lamine', r => r.margineLamine);
+    rr('Peso del materiale % (su materiale nostro)', r => r.pesoMateriale ?? 0); rr('Lamine comprate', r => r.compratoLamine); rr('Lamine comprate (pezzi)', r => r.lamineCompratePezzi);
+    rr('Lamine fatturate a parte', r => r.lamineVendute); rr('Lamine fatturate a parte (pezzi)', r => r.lamineVendutePezzi);
+    rr('Lamine nei costi una tantum (pezzi)', r => r.lamineUnaTantumPezzi); rr('Guadagno stimato sulle lamine', r => r.margineLamine);
     righe.push({}, ...d.riassunto.frasi.map(f => ({ categoria: `${f.livello}: ${f.testo}` })), { categoria: `Opinione: ${d.riassunto.opinione}` }, ...d.riassunto.proposte.map(p => ({ categoria: `Proposta: ${p}` })));
     const dati = await excelSemplice(`Costi ${d.anno}`, [
       { header: 'Categoria', key: 'categoria', width: 60 }, ...d.anni.map(a => ({ header: `${a} €`, key: `a${a}`, width: 14, formato: 'euro' as const })),
