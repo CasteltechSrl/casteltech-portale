@@ -6,6 +6,9 @@
 import { avvisiServizi, chiaveAvvisoServizi, costoIa, giornoRoma, righeServizi, type Conteggio, type DatiServizi, type ErroreRecente, type UsoIa } from '../engine/servizi.js';
 import { BUDGET, memoriaInUso } from './memoria.js';
 
+/** Chiave primaria dell'IA (credito gratuito, ANTHROPIC_API_KEY_PRIMARIA): quando ha smesso di funzionare si usa la riserva fino al riavvio. */
+export const chiaviIa = { primariaEsaurita: null as { il: string; messaggio: string } | null };
+
 const MB = 1024 * 1024;
 export const LIMITE_MEMORIA_MB = Number(process.env.RENDER_MEMORIA_MB) || 512;
 export const LIMITE_DATABASE_MB = Number(process.env.NEON_SPAZIO_MB) || 512;
@@ -125,7 +128,8 @@ export function datiInMemoria(): DatiServizi {
   const creditoSpeso = c ? c.spesoPrima + (totale('ia', c.dal > c.contaDa ? c.dal : c.contaDa).costoUsd ?? 0) : 0;
   return {
     ia: {
-      configurata: !!process.env.ANTHROPIC_API_KEY, modello: modelloIa(),
+      configurata: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_PRIMARIA), modello: modelloIa(),
+      chiavi: { primaria: !!process.env.ANTHROPIC_API_KEY_PRIMARIA, riserva: !!process.env.ANTHROPIC_API_KEY, primariaEsaurita: chiaviIa.primariaEsaurita },
       oggi: totale('ia', g), mese: totale('ia', m),
       credito: ia.credito ? { importo: ia.credito.importo, dal: ia.credito.dal, speso: creditoSpeso } : null,
       tettoMese: ia.tettoMese, spesaUfficialeMese: ia.spesaUfficialeMese,

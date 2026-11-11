@@ -2,14 +2,16 @@
  * Unica porta verso l'API Anthropic (lettura di BOM, ordini, DDT, fatture estere, fogli tempi; guida).
  * Ogni risposta riuscita conta token e costo (Impostazioni → Servizi); ogni errore diventa un messaggio chiaro
  * (credito finito, tetto di spesa, chiave non valida, troppe richieste) e resta nello storico dei servizi.
- * Chiave: ANTHROPIC_API_KEY (solo su Render). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5).
+ * Chiave: ANTHROPIC_API_KEY (solo su Render); se c'è ANTHROPIC_API_KEY_PRIMARIA si usa prima quella (credito gratuito
+ * dell'altro account) e, finito il credito, si passa da sola ad ANTHROPIC_API_KEY (`engine/chiavi-ia.ts`). Modello: ANTHROPIC_MODEL (default claude-sonnet-5-5).
  * Ricerca su internet (Adriano 5/11/2026, componenti non trovati): `strumenti: [STRUMENTO_RICERCA_WEB]` fa cercare l'IA sul web
  * (strumento web_search di Anthropic, nessun servizio in più); ogni ricerca costa 1 centesimo di dollaro e si conta nei consumi.
  */
 import { erroreIa, type TipoErroreIa } from '../engine/servizi.js';
-import { erroreServizio, modelloIa, rispostaIa } from './stato-servizi.js';
+import { chiaviIa, erroreServizio, modelloIa, rispostaIa } from './stato-servizi.js';
+import { chiaviDaProvare, passaAllaRiserva } from '../engine/chiavi-ia.js';
 
-export const iaConfigurata = () => !!process.env.ANTHROPIC_API_KEY;
+export const iaConfigurata = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY_PRIMARIA);
 
 export class ErroreIa extends Error {
   constructor(public tipo: TipoErroreIa, messaggio: string) { super(messaggio); }
@@ -32,21 +34,30 @@ export async function chiediTestoIa(voce: string, corpo: { system: string; max_t
   try {
     // con la ricerca su internet l'IA può fermarsi a metà (pause_turn): si continua la stessa conversazione, al massimo 3 volte
     for (let giro = 0; giro < 3; giro++) {
-      let r: Response;
-      try {
-        r = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', signal: ctrl.signal,
-          headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-          body: JSON.stringify({ model: modello, ...resto, messages, ...(strumenti?.length ? { tools: strumenti } : {}) }),
-        });
-      } catch (e: any) {
-        const msg = e?.name === 'AbortError' ? "l'IA non ha risposto in tempo: riprova" : `l'IA non è raggiungibile: ${e?.message ?? e}`;
-        erroreServizio('ia', 'tempo', msg);
-        throw new ErroreIa('tempo', msg);
-      }
-      const j: any = await r.json().catch(() => null);
-      if (!r.ok) {
+      let r!: Response;
+      let j: any = null;
+      const chiavi = chiaviDaProvare(process.env, !!chiaviIa.primariaEsaurita);
+      for (let k = 0; k < chiavi.length; k++) {
+        try {
+          r = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST', signal: ctrl.signal,
+            headers: { 'x-api-key': chiavi[k].chiave, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+            body: JSON.stringify({ model: modello, ...resto, messages, ...(strumenti?.length ? { tools: strumenti } : {}) }),
+          });
+        } catch (e: any) {
+          const msg = e?.name === 'AbortError' ? "l'IA non ha risposto in tempo: riprova" : `l'IA non è raggiungibile: ${e?.message ?? e}`;
+          erroreServizio('ia', 'tempo', msg);
+          throw new ErroreIa('tempo', msg);
+        }
+        j = await r.json().catch(() => null);
+        if (r.ok) break;
         const e = erroreIa(r.status, j);
+        // chiave primaria finita (credito, tetto, chiave non valida): si passa alla riserva e ci si resta
+        if (chiavi[k].nome === 'primaria' && k < chiavi.length - 1 && passaAllaRiserva(e.tipo)) {
+          chiaviIa.primariaEsaurita = { il: new Date().toISOString(), messaggio: e.messaggio };
+          console.warn(`IA: chiave primaria non più utilizzabile (${e.tipo}), passo ad ANTHROPIC_API_KEY`);
+          continue;
+        }
         erroreServizio('ia', e.tipo, e.messaggio);
         throw new ErroreIa(e.tipo, e.messaggio);
       }

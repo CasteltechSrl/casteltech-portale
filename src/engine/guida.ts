@@ -1467,8 +1467,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'chiavi', area: 'impostazioni', titolo: 'Chiavi dei servizi esterni (IA, distributori, Google Drive)',
-    parole: 'chiave api render ia anthropic digikey mouser tme farnell google drive account servizio configurare',
-    testo: ['Le chiavi dei servizi esterni (IA, distributori, Google Drive, SdI) si inseriscono solo su Render (servizio casteltech-portale → Environment), mai nel portale né in chat. Dopo averle salvate Render riavvia il portale. In Impostazioni → Componenti si può provare se funzionano.'],
+    parole: 'chiave api render ia anthropic digikey mouser tme farnell google drive account servizio configurare credito gratuito primaria riserva due account',
+    testo: ['Le chiavi dei servizi esterni (IA, distributori, Google Drive, SdI) si inseriscono solo su Render (servizio casteltech-portale → Environment), mai nel portale né in chat. Dopo averle salvate Render riavvia il portale. In Impostazioni → Componenti si può provare se funzionano.',
+      'IA con due account (11/11/2026): se su Render c\'è anche ANTHROPIC_API_KEY_PRIMARIA (per esempio la chiave dell\'account con il credito gratuito), il portale usa prima quella; quando il suo credito finisce (o la chiave non vale più) passa da solo ad ANTHROPIC_API_KEY (account di info@casteltech.net, con la ricarica automatica) e ci resta fino al prossimo riavvio. Nessun documento resta da leggere: la stessa richiesta riparte subito con l\'altra chiave. In Impostazioni → Servizi, riga IA, c\'è scritto quale chiave si sta usando. Per tornare a una sola chiave basta togliere ANTHROPIC_API_KEY_PRIMARIA su Render.'],
     pagine: [['/impostazioni/componenti', 'Impostazioni → Componenti']],
   },
   {

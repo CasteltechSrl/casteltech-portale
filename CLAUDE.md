@@ -568,6 +568,9 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Credito Anthropic prepagato scritto dall'ufficio (l'API non lo dà); avviso giallo/rosso in cima alle pagine dell'ufficio dall'80% (`avvisoServizi`, niente query).
    X per chiudere gli avvisi in cima (Adriano 2/11/2026; `public/avvisi.js`, classe `chiudibile`): avviso servizi nascosto nel browser finché non cambia
    `chiaveAvvisoServizi` (testo + ultimo riavvio), messaggi `?msg=` tolti dall'indirizzo. GET `/api/claude/eventi-render`: avvii/arresti di Render degli ultimi 7 giorni.
+   Due chiavi dell'IA (Adriano 11/11/2026; `engine/chiavi-ia.ts`, test in `tests/chiavi-ia.test.ts`): ANTHROPIC_API_KEY_PRIMARIA facoltativa (credito gratuito dell'account
+   adriano.gmb) si usa per prima; errore credito/tetto/chiave → la stessa richiesta riparte con ANTHROPIC_API_KEY (info@, ricarica automatica) e si resta lì fino al riavvio
+   (`chiaviIa.primariaEsaurita` in `stato-servizi.ts`, nota nella riga IA di Impostazioni → Servizi). Senza la primaria tutto come prima.
    Facoltativi su Render: ANTHROPIC_ADMIN_KEY (costo ufficiale del mese), NEON_API_KEY + NEON_PROJECT_ID (ore di calcolo), RENDER_MEMORIA_MB, NEON_SPAZIO_MB.
 4i. ✅ Cruscotto generale = pagina iniziale dell'ufficio (Adriano 31/10/2026; `/cruscotto`, `rotte/cruscotto-generale.ts`, letture in `cruscotto-generale-servizio.ts`,
    conti in `engine/cruscotto-generale.ts`, test in `tests/cruscotto-generale.test.ts`; `paginaIniziale('ufficio')`): "Da fare oggi" (pulsanti rosso/giallo/verde con il numero,

@@ -88,6 +88,8 @@ export interface DatiServizi {
   ia?: {
     configurata: boolean;
     modello: string;
+    /** chiave primaria (credito gratuito) e riserva (info@): vedi engine/chiavi-ia.ts */
+    chiavi?: { primaria: boolean; riserva: boolean; primariaEsaurita: { il: string; messaggio: string } | null };
     oggi: Conteggio;
     mese: Conteggio;
     /** credito caricato su Anthropic (scritto dall'ufficio in Impostazioni → Servizi) e speso da quel giorno, in dollari */
@@ -137,6 +139,13 @@ const quando = (iso?: string | null) => {
   return isNaN(+d) ? iso : d.toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 
+/** Quale chiave dell'IA si sta usando (solo se è impostata la chiave primaria del credito gratuito). */
+export function notaChiaviIa(c: { primaria: boolean; riserva: boolean; primariaEsaurita: { il: string; messaggio: string } | null } | undefined): string {
+  if (!c?.primaria) return '';
+  if (c.primariaEsaurita) return `Chiave del credito gratuito (ANTHROPIC_API_KEY_PRIMARIA) finita ${quando(c.primariaEsaurita.il)}: ora si usa ANTHROPIC_API_KEY${c.riserva ? '' : ' (che però manca)'}. Torna alla gratuita solo al prossimo riavvio.`;
+  return `In uso la chiave del credito gratuito (ANTHROPIC_API_KEY_PRIMARIA)${c.riserva ? '; quando finisce si passa da sola ad ANTHROPIC_API_KEY.' : ': manca ANTHROPIC_API_KEY di riserva.'}`;
+}
+
 /** Le righe del riquadro, nell'ordine: IA, Render, Neon, distributori, Google, Invoicetronic. */
 export function righeServizi(d: DatiServizi, adesso = new Date()): RigaServizio[] {
   const out: RigaServizio[] = [];
@@ -170,6 +179,8 @@ export function righeServizi(d: DatiServizi, adesso = new Date()): RigaServizio[
       }
       if (bloccato) { stato = 'critico'; avviso = bloccato.messaggio; note.unshift(`Ultimo errore ${quando(bloccato.il)}: ${bloccato.messaggio}`); }
       else if (ia.ultimoErrore) note.push(`Ultimo errore ${quando(ia.ultimoErrore.il)}: ${ia.ultimoErrore.messaggio}`);
+      const nc = notaChiaviIa(ia.chiavi);
+      if (nc) note.unshift(nc);
       const lm = ia.limiteMinuto;
       if (lm?.token && lm.tokenRimasti != null) note.push(`Limite del piano: ${nf(lm.token)} token al minuto${lm.richieste ? `, ${nf(lm.richieste)} richieste al minuto` : ''}.`);
       out.push({ chiave: 'ia', servizio: 'IA (Anthropic)', cosa: `Lettura di ordini, DDT, fatture estere, fogli tempi, righe di BOM; guida (modello ${ia.modello})`,
