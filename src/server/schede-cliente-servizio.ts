@@ -14,7 +14,7 @@ import { datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo } from './prev
 import { aggiornaParametri, parametriDaAnalisi, parametriDaCicli, testoCambi } from '../engine/scheda/preventivo.js';
 import { conAccettate } from '../engine/scheda/accettate.js';
 import { analizzaScheda, leggiBomScheda, type AnalisiScheda, type RigaBomScheda, type StratoGerberInfo } from '../engine/scheda/analisi.js';
-import { ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
+import { fileDaSostituire, ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
 import { leggiForatura, type Foratura } from '../engine/scheda/foratura.js';
 import { leggiGenCad } from '../engine/scheda/gencad.js';
 import { leggiGerber, type Piazzola, type Riquadro } from '../engine/scheda/gerber.js';
@@ -464,14 +464,43 @@ export async function sincronizzaVersioni(padreId: number): Promise<void> {
 // ───────────────────────────── file nuovi del cliente, nome e cliente ─────────────────────────────
 
 /**
- * BOM e Gerber aggiornati dal cliente (Adriano 11/11/2026): i file di prima si tolgono dal pacchetto (anche dalle parti divise per
- * versione o codice) prima di caricare quelli nuovi; i file veri restano sul Drive. La BOM mandata a Quotazioni resta lì, ma il pacchetto
- * non la usa più: «Codifica la BOM» ne crea una nuova con il file nuovo.
+ * BOM o Gerber aggiornati dal cliente (Adriano 11/11/2026): dopo il caricamento dei file nuovi si tolgono dal pacchetto (e dalle parti divise)
+ * solo i file di prima dello STESSO tipo (Gerber nuovi = via i Gerber e le forature vecchie, la BOM resta; BOM nuova = via la BOM vecchia).
+ * I file veri restano sul Drive. Ritorna i file tolti e se è cambiata la BOM (allora va ricodificata: `ricodificaBom`).
  */
-export async function svuotaPacchetto(id: number): Promise<void> {
+export async function sostituisciFile(id: number, nuovi: string[]): Promise<{ tolti: string[]; bom: boolean }> {
+  const p = await q1<{ file_elenco: FileElenco[] | null }>(`SELECT file_elenco FROM pacchetti_scheda WHERE id = $1`, [id]);
+  const tipoNoto = new Map((p?.file_elenco ?? []).map(f => [f.nome, f.tipo as TipoFile]));
+  const righe = await q<{ nome: string; dati: Buffer }>(`SELECT nome, dati FROM pacchetti_scheda_file WHERE pacchetto_id = $1`, [id]);
+  const nomiNuovi = new Set(nuovi);
+  const tipoDi = (r: { nome: string; dati: Buffer }, nuovo: boolean): TipoFile => {
+    if (!nuovo && tipoNoto.has(r.nome)) return tipoNoto.get(r.nome)!;
+    const testo = r.dati.length ? gunzipSync(r.dati).subarray(0, 200_000).toString('latin1') : null;
+    return tipoFile(r.nome, testo);
+  };
+  const scelta = fileDaSostituire(
+    righe.filter(r => !nomiNuovi.has(r.nome)).map(r => ({ nome: r.nome, tipo: tipoDi(r, false) })),
+    righe.filter(r => nomiNuovi.has(r.nome)).map(r => ({ nome: r.nome, tipo: tipoDi(r, true) })));
   const ids = [id, ...(await q<{ id: number }>(`SELECT id FROM pacchetti_scheda WHERE padre_id = $1`, [id])).map(x => x.id)];
-  await q(`DELETE FROM pacchetti_scheda_file WHERE pacchetto_id = ANY($1::int[])`, [ids]);
+  if (scelta.togliere.length) await q(`DELETE FROM pacchetti_scheda_file WHERE pacchetto_id = ANY($1::int[]) AND nome = ANY($2::text[])`, [ids, scelta.togliere]);
+  return { tolti: scelta.togliere, bom: scelta.bom };
+}
+
+/**
+ * BOM nuova del cliente (Adriano 11/11/2026: «automaticamente mi devi ricodificare la BOM e riverificare i prezzi»): BOM nuova in Quotazioni con il file
+ * nuovo (codifica + prezzi dai distributori: chiesti solo i P/N che non sono già in cache), collegata al pacchetto e al suo preventivo.
+ * La BOM vecchia resta in Quotazioni. Ritorna l'id della BOM nuova, o null se il pacchetto non ha una BOM.
+ */
+export async function ricodificaBom(id: number, utenteId: number): Promise<number | null> {
+  const p = await q1<{ preventivo_id: number | null; quantita: number | null }>(`SELECT preventivo_id, quantita FROM pacchetti_scheda WHERE id = $1`, [id]);
+  if (!p) return null;
+  const prev = p.preventivo_id ? await q1<{ n_schede: number; stato: string }>(`SELECT n_schede, stato FROM preventivi WHERE id = $1`, [p.preventivo_id]) : null;
+  const ids = [id, ...(await q<{ id: number }>(`SELECT id FROM pacchetti_scheda WHERE padre_id = $1`, [id])).map(x => x.id)];
   await q(`UPDATE pacchetti_scheda SET bom_id = NULL WHERE id = ANY($1::int[])`, [ids]);
+  const bomId = await bomDelPacchetto(id, prev?.n_schede ?? p.quantita ?? 100, utenteId);
+  // il preventivo del pacchetto usa la BOM nuova (se non è già accettato: quello non si tocca)
+  if (bomId && p.preventivo_id && prev?.stato !== 'accettato') await q(`UPDATE preventivi SET bom_id = $2 WHERE id = $1`, [p.preventivo_id, bomId]);
+  return bomId;
 }
 
 /** Nome e cliente del pacchetto (Adriano 11/11/2026: nomi che non dicono nulla, cliente mancante). Le parti divise seguono il cliente. */
@@ -486,7 +515,7 @@ export async function aggiornaDatiPacchetto(id: number, opz: { nome?: string; cl
  * restano. Se il preventivo è già accettato o ha un ordine o una commessa non si tocca: se ne crea uno nuovo da validare.
  */
 export async function aggiornaPreventivoDaPacchetto(id: number, utenteId: number):
-  Promise<{ preventivoId: number; nuovo: boolean; cambi: string; revisione: string | null }> {
+  Promise<{ preventivoId: number; nuovo: boolean; cambi: string; revisione: string | null; bomNuova: boolean }> {
   const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
   if (!p?.analisi) throw new Error('Il pacchetto non è ancora analizzato.');
   if (!p.preventivo_id) throw new Error('Il pacchetto non ha ancora un preventivo: usa «Crea il preventivo da validare».');
@@ -496,7 +525,7 @@ export async function aggiornaPreventivoDaPacchetto(id: number, utenteId: number
   if (bloccato) {
     await q(`UPDATE pacchetti_scheda SET preventivo_id = NULL WHERE id = $1`, [id]);
     const nuovoId = await creaPreventivoDaPacchetto(id, r.n_schede, utenteId);
-    return { preventivoId: nuovoId, nuovo: true, cambi: '', revisione: null };
+    return { preventivoId: nuovoId, nuovo: true, cambi: '', revisione: null, bomNuova: false };
   }
   const dati = datiDaRiga(r);
   const etichette = Object.fromEntries((r.catalogo?.parametri ?? []).map((x: any) => [x.codice, x.etichetta]));
@@ -508,8 +537,8 @@ export async function aggiornaPreventivoDaPacchetto(id: number, utenteId: number
   const testo = testoCambi(cambi, etichette);
   const nota = [`Aggiornato il ${oggi} con i file nuovi del cliente («${p.nome}»): ${testo || 'nessun numero cambiato'}.`,
     revisione ? `Revisione letta dai file nuovi: ${revisione} (prima ${dati.revisione || '—'}).` : '',
-    r.bom_id ? 'Componenti: se la BOM è cambiata, «Codifica la BOM» nella pagina dei documenti e poi scegliere la BOM nuova nel preventivo.' : ''].filter(Boolean).join(' ');
+    p.bom_id && r.bom_id === p.bom_id ? 'Componenti: BOM nuova ricodificata in Quotazioni; quando è pronta il costo dei componenti si aggiorna dal preventivo (riquadro della BOM).' : ''].filter(Boolean).join(' ');
   await salvaPreventivo({ id: r.id, catalogo: r.catalogo, utenteId, dati: {
     ...dati, parametri, revisione: revisione ?? dati.revisione, note: [dati.note, nota].filter(Boolean).join('\n') } });
-  return { preventivoId: r.id, nuovo: false, cambi: testo, revisione };
+  return { preventivoId: r.id, nuovo: false, cambi: testo, revisione, bomNuova: !!p.bom_id && r.bom_id === p.bom_id };
 }

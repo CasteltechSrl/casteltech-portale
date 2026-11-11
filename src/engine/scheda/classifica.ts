@@ -87,3 +87,20 @@ export function ruoloStrato(nome: string, testo = ''): { ruolo: RuoloStrato; lat
   if (/COPPER|RAME|ETCH|SIGNAL|^TOP$|^BOTTOM$|_TOP$|_BOTTOM$|_TOP_|_BOTTOM_|F_CU|B_CU|^L[CS]Z$|^BOT$/.test(n)) return { ruolo: 'rame', lato };
   return { ruolo: 'altro', lato };
 }
+
+/**
+ * File aggiornati dal cliente con la spunta "sostituiscono" (Adriano 11/11/2026: «se aggiorno solo i Gerber non deve cancellare la BOM»):
+ * si tolgono solo i file di prima dello stesso tipo di quelli nuovi. Gerber e forature vanno insieme (sono la stessa uscita del CAD).
+ * Uno zip non si sa cosa contiene: con uno zip si tolgono tutti i file di prima.
+ */
+const famigliaTipo = (t: TipoFile) => t === 'foratura' ? 'gerber' : t;
+export interface FileTipo { nome: string; tipo: TipoFile }
+export function fileDaSostituire(vecchi: FileTipo[], nuovi: FileTipo[]): { togliere: string[]; tipi: TipoFile[]; bom: boolean } {
+  const nomiNuovi = new Set(nuovi.map(f => f.nome));
+  const prima = vecchi.filter(f => !nomiNuovi.has(f.nome));
+  const tipi = [...new Set(nuovi.map(f => f.tipo))];
+  const bom = tipi.includes('bom') || tipi.includes('archivio');
+  if (tipi.includes('archivio')) return { togliere: prima.map(f => f.nome), tipi, bom };
+  const famiglie = new Set(tipi.map(famigliaTipo));
+  return { togliere: prima.filter(f => famiglie.has(famigliaTipo(f.tipo))).map(f => f.nome), tipi, bom };
+}

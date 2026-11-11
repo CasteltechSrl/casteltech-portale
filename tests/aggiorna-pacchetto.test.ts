@@ -24,3 +24,21 @@ test('guida: aggiornare il preventivo con BOM e Gerber nuovi', () => {
 test('guida: rinominare i pacchetti e assegnare il cliente', () => {
   assert.equal(cercaGuida('rinominare pacchetto cliente')[0]?.argomento.id, 'documenti-cliente-aggiornati');
 });
+
+test('file aggiornati: si tolgono solo i file di prima dello stesso tipo', async () => {
+  const { fileDaSostituire } = await import('../src/engine/scheda/classifica.js');
+  const vecchi = [{ nome: 'bom_rev1.xlsx', tipo: 'bom' as const }, { nome: 'top.gtl', tipo: 'gerber' as const }, { nome: 'drill.drl', tipo: 'foratura' as const },
+    { nome: 'pp.txt', tipo: 'pick-place' as const }];
+  // solo Gerber nuovi: via Gerber e forature vecchie, BOM e pick and place restano
+  let r = fileDaSostituire(vecchi, [{ nome: 'top_rev2.gtl', tipo: 'gerber' }]);
+  assert.deepEqual(r.togliere, ['top.gtl', 'drill.drl']); assert.equal(r.bom, false);
+  // solo BOM nuova: via la BOM vecchia, da ricodificare
+  r = fileDaSostituire(vecchi, [{ nome: 'bom_rev2.xlsx', tipo: 'bom' }]);
+  assert.deepEqual(r.togliere, ['bom_rev1.xlsx']); assert.equal(r.bom, true);
+  // stesso nome = file riscritto, non si toglie
+  r = fileDaSostituire(vecchi, [{ nome: 'pp.txt', tipo: 'pick-place' }]);
+  assert.deepEqual(r.togliere, []);
+  // uno zip: non si sa cosa contiene, si sostituisce tutto
+  r = fileDaSostituire(vecchi, [{ nome: 'pacchetto_rev2.zip', tipo: 'archivio' }]);
+  assert.equal(r.togliere.length, 4); assert.equal(r.bom, true);
+});
