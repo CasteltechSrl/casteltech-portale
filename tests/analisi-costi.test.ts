@@ -80,6 +80,21 @@ test('vendite: ogni riga nel suo gruppo con la riga, il preventivo (solo sì/no)
   assert.deepEqual(tipi, ['nostro', 'nostro', 'nostro', 'nostro', 'conto_lavoro', 'conto_lavoro', 'nostro', 'nostro', 'conto_lavoro', 'servizio', 'servizio', 'servizio', 'acconto', 'non_so', 'conto_lavoro', 'servizio']);
 });
 
+test('vendite: la scelta dell\'ufficio per cliente vince sul portale, tranne anticipi, materiale scritto e servizi (JOX, Tree, Control Systems)', () => {
+  const righe = [
+    vendita({ cliente: 'TREE', clienteId: 247, descrizione: 'Dispositivo MOD-M', importo: 6700 }),
+    vendita({ cliente: 'TREE', clienteId: 247, descrizione: 'Lavorazione frontalini', importo: 180 }),
+    vendita({ cliente: 'JOX', clienteId: 150, descrizione: 'Acconto 75% Ordine Nr. 261185gl', importo: 18825 }),
+    vendita({ cliente: 'JOX', clienteId: 150, descrizione: 'Scheda JX-01', importo: 26554 }),
+    vendita({ cliente: 'CONTROL', clienteId: 136, codice: 'M9906', descrizione: 'SCHEDA2', importo: 11500 }),
+    vendita({ cliente: 'CONTROL', clienteId: 136, descrizione: 'Programmazione attrezzature', importo: 200 }),
+    vendita({ cliente: 'CONTROL', clienteId: 136, descrizione: 'Acquisto componenti mancanti', importo: 90 }),
+  ];
+  const scelte = new Map([['c247', 'nostro'], ['c150', 'nostro'], ['c136', 'conto_lavoro']] as const);
+  const tipi = classificaVendite(righe, [{ codice: 'M9906', clienteId: 136, conMateriale: true }], ['SCHEDA2'], new Set(), new Map(scelte));
+  assert.deepEqual(tipi, ['nostro', 'nostro', 'acconto', 'nostro', 'conto_lavoro', 'servizio', 'nostro']);
+});
+
 test('comprato e rivenduto: comprato anche dall\'estero contro il fatturato vero con materiale nostro, peso del materiale, lamine', () => {
   const righe = classificaCosti([
     riga({ rigaId: 1, fornitore: 'TME', descrizione: 'IC', importo: 6000, data: '2026-01-10' }),
@@ -97,7 +112,7 @@ test('comprato e rivenduto: comprato anche dall\'estero contro il fatturato vero
   assert.equal(r.compratoSchede, 10000); assert.equal(r.compratoEstero, 2000); assert.equal(r.comprato, 10300);
   assert.equal(r.vendutoNostro, 12000); assert.equal(r.vendutoNonSo, 3000); assert.equal(r.vendutoContoLavoro, 9000);
   assert.equal(r.pesoMateriale, 83.33); assert.equal(r.pesoMaterialeMin, 66.67);
-  assert.deepEqual(r.clientiNonSo, [{ cliente: 'B', importo: 3000 }]);
+  assert.deepEqual(r.clientiNonSo, [{ chiave: 'n:B', cliente: 'B', importo: 3000 }]);
   assert.equal(r.margineLamine, 140);
 });
 

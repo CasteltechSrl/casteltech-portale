@@ -6,7 +6,7 @@
  */
 import { q, q1 } from './db.js';
 import { riepilogo } from '../engine/riepilogo.js';
-import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita } from '../engine/analisi-costi.js';
+import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita, type SceltaMateriale } from '../engine/analisi-costi.js';
 import { SQL_FATTORE_RIGHE, SQL_NON_DOPPIONE, sqlPartitaFinanziaria } from '../engine/costo-fornitori.js';
 import { categoria as categoriaDaCodice } from '../engine/categorie-acquisti.js';
 
@@ -112,6 +112,20 @@ export async function materialeDeiPreventivi(): Promise<MaterialePreventivo[]> {
 export async function clientiContoLavoro(): Promise<Set<string>> {
   const r = await q<{ id: number }>(`SELECT DISTINCT cliente_id AS id FROM componenti_clienti WHERE cliente_id IS NOT NULL`);
   return new Set(r.map(x => `c${x.id}`));
+}
+
+/** Clienti segnati a mano in Costi per categoria (impostazioni 'materiale_clienti' = { "c<id>": "nostro" | "conto_lavoro" }). */
+export async function sceltaMaterialeClienti(): Promise<Map<string, SceltaMateriale>> {
+  const v = (await q<{ valore: Record<string, unknown> }>(`SELECT valore FROM impostazioni WHERE chiave = 'materiale_clienti'`))[0]?.valore ?? {};
+  return new Map(Object.entries(v).filter((e): e is [string, SceltaMateriale] => /^c\d+$/.test(e[0]) && (e[1] === 'nostro' || e[1] === 'conto_lavoro')));
+}
+/** Salva (o toglie, con 'auto') la scelta per un cliente. */
+export async function salvaSceltaMateriale(chiave: string, scelta: string): Promise<string> {
+  if (!/^c\d+$/.test(chiave)) return 'Cliente non in anagrafica: la scelta vale solo per i clienti in anagrafica.';
+  const m = await sceltaMaterialeClienti();
+  if (scelta === 'nostro' || scelta === 'conto_lavoro') m.set(chiave, scelta); else m.delete(chiave);
+  await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('materiale_clienti', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(Object.fromEntries(m))]);
+  return scelta === 'nostro' ? 'Segnato: materiale comprato da noi.' : scelta === 'conto_lavoro' ? 'Segnato: conto lavoro.' : 'Tolta la scelta: decide il portale.';
 }
 
 /** Lamine fatturate ai clienti per anno: codice UT-LAMINA o righe "lamina"/"stencil" (storico FIC). */
