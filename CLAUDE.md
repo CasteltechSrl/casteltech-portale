@@ -812,6 +812,12 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    righe N2.x "Importo a credito/debito cliente" o "doppi pagamenti" = partite finanziarie fuori dal costo (`SQL_IMPONIBILE_COSTO`, `sqlPartitaFinanziaria`), segno delle righe
    dal verso del documento (`SQL_FATTORE_RIGHE`: NC Enel/DigiKey con importi negativi), doppioni di FIC esclusi (`SQL_NON_DOPPIONE`: fornitore, numero, data, tipo, totale).
    Usati in Analisi → Fornitori, Costi per categoria, Pareggio, Andamento e acquisti dei cruscotti; registri IVA e scadenze NO. Una lettura nuova di costi fornitori usa questi.
+   Acquisti esteri e rivendita sulle fatture vere (Adriano 11/11/2026, "i preventivi non c'entrano con la realtà"; `righeAutofatture` in `analisi-costi-servizio.ts`,
+   `classificaVendite`/`nomiPcbComprati`/`confrontoRivendita` in `engine/analisi-costi.ts`, test in `tests/analisi-costi.test.ts`): `righeCosti` (Costi per categoria, Andamento,
+   Pareggio) comprende le righe delle AUTOFATTURE (Mouser, DigiKey… ~40.000 € nel 2026 che mancavano), id negativi, fuori quelle con `ricevuto_id` o con la copia FIC "nAF" tra le ricevute.
+   "Comprato e rivenduto" = materiale comprato contro fatturato VERO delle vendite con materiale nostro (riga "acquisto componenti/PCB", preventivo con componenti/PCB = solo sì/no,
+   PCB comprato con lo stesso nome, cliente chiavi in mano), conto lavoro, servizi, anticipi, non classificati; numero = peso del materiale su quel fatturato (≥70 % attenzione, ≥85 % critico).
+   I-TRONIK: assistenza e ricambi Essemtec in Manutenzione, non in Stagno (`FORNITORI_DOPPI`).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):
    incassi = rate aperte (NC in negativo) alla scadenza + ritardo medio del cliente (pesato sull'importo, incassi ultimi 12 mesi, esclusi compensati/stornati) se ha

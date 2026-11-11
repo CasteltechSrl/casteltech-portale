@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  chiaveFornitore, classificaCosti, confrontoRivendita, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type RigaCosto,
+  chiaveFornitore, classificaCosti, classificaVendite, confrontoRivendita, costiPerAnno, fornitoriDaControllare, nomiPcbComprati, riassuntoCosti, type RigaCosto, type RigaVendita,
 } from '../src/engine/analisi-costi.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -44,23 +44,60 @@ test('costi per anno: totali per macro e categoria, peso, variazione e fornitori
   assert.equal(c.daVerificare[2026], 0);
 });
 
-test('comprato e rivenduto: pezzi fatturati × materiale del preventivo, copertura, lamine; prodotti senza preventivo contati a parte', () => {
+const vendita = (x: Partial<RigaVendita> & { cliente: string; descrizione: string; importo: number }): RigaVendita =>
+  ({ anno: 2026, clienteId: null, codice: '', acconto: false, ...x });
+
+test('vendite: ogni riga nel suo gruppo con la riga, il preventivo (solo sì/no), il PCB comprato e il cliente', () => {
+  const pcb = classificaCosti([
+    riga({ rigaId: 1, fornitore: 'HTS PCB', descrizione: 'NASOMETER_BUZZER', importo: 259, data: '2026-06-29' }),
+    riga({ rigaId: 2, fornitore: 'HTS PCB', descrizione: 'PCB codice JR_RELE LABELPACK produzione', importo: 700, data: '2026-01-08' }),
+    riga({ rigaId: 3, fornitore: 'HTS PCB', descrizione: 'DELAS-SQR/T', importo: 180, data: '2026-04-28', codici: ['CS260053/T'] }),
+  ], []);
+  const nomi = nomiPcbComprati(pcb);
+  assert.ok(nomi.includes('NASOMETERBUZZER') && nomi.includes('DELASSQR'));
+  assert.ok(!nomi.includes('PRODUZIONE') && !nomi.includes('LABELPACK'), 'parole comuni di una descrizione lunga non sono nomi di prodotto');
+  const righe = [
+    vendita({ cliente: 'ARILAN', descrizione: 'Nasometer', importo: 13289 }),                                     // PCB comprato con lo stesso nome
+    vendita({ cliente: 'CABLESTEEL', clienteId: 1, codice: 'DE0904-025', descrizione: 'DELAS05-24', importo: 5000 }), // preventivo con componenti
+    vendita({ cliente: 'CABLESTEEL', clienteId: 1, codice: 'DE0904-01', descrizione: 'DELAS SQR', importo: 12648 }),   // senza preventivo: PCB comprato
+    vendita({ cliente: 'CABLESTEEL', clienteId: 1, codice: 'DE0103-106', descrizione: 'DE0103-106', importo: 3500 }),  // niente indizi: il cliente è chiavi in mano
+    vendita({ cliente: 'SELEA', clienteId: 2, codice: 'WPAJZERO6', descrizione: 'JZERO6', importo: 3663 }),           // preventivo senza materiale
+    vendita({ cliente: 'IDEA', clienteId: 3, codice: 'SL_0103', descrizione: 'PCA SL_0103', importo: 1980 }),         // cliente con componenti in conto lavoro
+    vendita({ cliente: 'LPS', clienteId: 4, codice: '004', descrizione: 'COMPONENTI PRODUZIONE APRILE 2026', importo: 1450 }),
+    vendita({ cliente: 'BOTISUM', descrizione: 'PCA MODULE PESEE\n- Acquisto componenti: 2€\n- Montaggio', importo: 45300 }),
+    vendita({ cliente: 'CONTROL', descrizione: 'Montaggio PTH scheda M9906-B', importo: 855 }),
+    vendita({ cliente: 'X', descrizione: 'Avvio produzione\n-Programmazione attrezzature', importo: 250 }),
+    vendita({ cliente: 'X', codice: 'UT-LAMINA', descrizione: 'Lamina', importo: 110 }),
+    vendita({ cliente: 'SOLOKEYS', descrizione: 'Project SOLO V3\n-engineering technical supervision', importo: 3250 }),
+    vendita({ cliente: 'JOX', descrizione: 'Acconto 75% Ordine Nr. 261185gl', importo: 18825 }),
+    vendita({ cliente: 'TREE', descrizione: 'Dispositivo MOD-M', importo: 6700 }),
+    vendita({ cliente: 'TREE', descrizione: 'Lavorazione frontalini', importo: 180 }),
+    vendita({ cliente: 'MC', descrizione: 'Mycronic MY200\ncompleta e funzionante', importo: 32000 }),
+  ];
+  const tipi = classificaVendite(righe, [
+    { codice: 'DE0904-025', clienteId: 1, conMateriale: true }, { codice: 'WPAJZERO6', clienteId: 2, conMateriale: false },
+  ], nomi, new Set(['c3']));
+  assert.deepEqual(tipi, ['nostro', 'nostro', 'nostro', 'nostro', 'conto_lavoro', 'conto_lavoro', 'nostro', 'nostro', 'conto_lavoro', 'servizio', 'servizio', 'servizio', 'acconto', 'non_so', 'conto_lavoro', 'servizio']);
+});
+
+test('comprato e rivenduto: comprato anche dall\'estero contro il fatturato vero con materiale nostro, peso del materiale, lamine', () => {
   const righe = classificaCosti([
-    riga({ rigaId: 1, fornitore: 'Mouser', descrizione: 'IC', importo: 6000, data: '2026-01-10' }),
+    riga({ rigaId: 1, fornitore: 'TME', descrizione: 'IC', importo: 6000, data: '2026-01-10' }),
+    riga({ rigaId: -7, documentoId: -3, fornitore: 'MOUSER ELECTRONICS', descrizione: 'LM358', importo: 2000, data: '2026-02-10', categoriaFic: 'B6_Materie prime c/acquisti' }),
     riga({ rigaId: 2, fornitore: 'HTS PCB', descrizione: 'circuiti stampati', importo: 2000, data: '2026-01-10' }),
     riga({ rigaId: 3, fornitore: 'Gea', descrizione: 'lamina serigrafica', importo: 300, data: '2026-01-10' }),
   ], []);
-  const r = confrontoRivendita({
-    righe, anni: [2026],
-    vendite: [{ codice: 'A1', cliente: 'SELEA', anno: 2026, pezzi: 100, importo: 20000 }, { codice: 'B2', cliente: 'LPS', anno: 2026, pezzi: 40, importo: 4000 }],
-    preventivi: [{ codice: 'a1', cliente: 'Selea', venditaComponenti: 70, venditaPcb: 20, costoAcquisto: 75 }],
-    lamine: [{ anno: 2026, pezzi: 4, importo: 440 }],
-  })[0];
-  assert.equal(r.comprato, 8300); assert.equal(r.compratoLamine, 300);
-  assert.equal(r.rivendutoComponenti, 7000); assert.equal(r.rivendutoPcb, 2000); assert.equal(r.rivenduto, 9000);
-  assert.equal(r.margineSchede, 1000); assert.equal(r.margineSchedePct, 11.11);
-  assert.equal(r.costoPrevisto, 7500); assert.equal(r.materialeOltrePreventivo, 500);
-  assert.equal(r.pezziConPreventivo, 100); assert.equal(r.pezziSenzaPreventivo, 40); assert.deepEqual(r.prodottiSenzaPreventivo, ['B2']);
+  const vendite = [
+    { ...vendita({ cliente: 'A', descrizione: 'x', importo: 12000 }), tipo: 'nostro' as const },
+    { ...vendita({ cliente: 'B', descrizione: 'x', importo: 3000 }), tipo: 'non_so' as const },
+    { ...vendita({ cliente: 'C', descrizione: 'x', importo: 9000 }), tipo: 'conto_lavoro' as const },
+    { ...vendita({ cliente: 'D', descrizione: 'x', importo: 500 }), tipo: 'acconto' as const },
+  ];
+  const r = confrontoRivendita({ righe, vendite, anni: [2026], lamine: [{ anno: 2026, pezzi: 4, importo: 440 }] })[0];
+  assert.equal(r.compratoSchede, 10000); assert.equal(r.compratoEstero, 2000); assert.equal(r.comprato, 10300);
+  assert.equal(r.vendutoNostro, 12000); assert.equal(r.vendutoNonSo, 3000); assert.equal(r.vendutoContoLavoro, 9000);
+  assert.equal(r.pesoMateriale, 83.33); assert.equal(r.pesoMaterialeMin, 66.67);
+  assert.deepEqual(r.clientiNonSo, [{ cliente: 'B', importo: 3000 }]);
   assert.equal(r.margineLamine, 140);
 });
 
@@ -72,17 +109,17 @@ test('riassunto: dove vanno i soldi, cosa sale, rivendita in perdita, proposte',
     r('Enel Energia', 'energia elettrica', 20000, 2026, 5), r('Enel Energia', 'energia elettrica', 19000, 2025, 6),
   ], []);
   const costi = costiPerAnno(righe, [2026, 2025]);
-  const rivendita = confrontoRivendita({ righe, anni: [2026, 2025], lamine: [], preventivi: [{ codice: 'A', cliente: 'X', venditaComponenti: 50, venditaPcb: 0, costoAcquisto: 48 }],
-    vendite: [{ codice: 'A', cliente: 'X', anno: 2026, pezzi: 1000, importo: 150000 }] });
+  const rivendita = confrontoRivendita({ righe, anni: [2026, 2025], lamine: [],
+    vendite: [{ ...vendita({ cliente: 'X', descrizione: 'scheda', importo: 66000 }), tipo: 'nostro' as const }] });
   const s = riassuntoCosti({ costi, rivendita, ricavi: { 2026: 150000, 2025: 140000 }, mesi: 12 });
   const testi = s.frasi.map(f => f.testo).join('\n');
   assert.match(testi, /valgono 92\.000 €, il 61,3% del fatturato/);
   assert.ok(s.frasi.some(f => f.livello === 'critico' && /costi salgono più del fatturato/.test(f.testo)));
   assert.ok(s.frasi.some(f => f.livello === 'attenzione' && /^Commercialista, paghe, notaio, consulenze amministrative: 12\.000 € nel 2026 contro 6\.000 €/.test(f.testo)));
-  assert.ok(s.frasi.some(f => f.livello === 'critico' && /perdita di 10\.000 €/.test(f.testo)), 'rivendita: comprati 60.000, rivenduti 50.000');
-  assert.ok(s.proposte.some(p => /Nella rivendita si perde/.test(p)));
+  assert.ok(s.frasi.some(f => f.livello === 'critico' && /comprati 60\.000 €.*con materiale nostro 66\.000 €: il materiale ne vale il 90,9%/.test(f.testo)), 'materiale 60.000 su 66.000 fatturati');
+  assert.ok(s.proposte.some(p => /si mangia quasi tutto/.test(p)));
   assert.ok(s.proposte.some(p => /consulenze amministrative 12\.000 €/.test(p)));
-  assert.match(s.opinione, /rivende sotto costo/);
+  assert.match(s.opinione, /resta troppo poco per il montaggio/);
   // senza fatture: nessun conto
   assert.equal(riassuntoCosti({ costi: costiPerAnno([], [2024]), rivendita: [], ricavi: {}, mesi: 12 }).frasi.length, 1);
 });

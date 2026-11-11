@@ -6,8 +6,7 @@
  */
 import { q, q1 } from './db.js';
 import { riepilogo } from '../engine/riepilogo.js';
-import { eServizio } from '../engine/ordini.js';
-import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type VenditaProdotto } from '../engine/analisi-costi.js';
+import { chiaveFornitore, type LamineVendute, type MaterialePreventivo, type RegolaCategoria, type RigaCosto, type RigaVendita } from '../engine/analisi-costi.js';
 import { SQL_FATTORE_RIGHE, SQL_NON_DOPPIONE, sqlPartitaFinanziaria } from '../engine/costo-fornitori.js';
 import { categoria as categoriaDaCodice } from '../engine/categorie-acquisti.js';
 
@@ -37,8 +36,25 @@ export async function righeCosti(anni: number[]): Promise<RigaCosto[]> {
       (${SQL_FATTORE_RIGHE} * coalesce(r.imponibile, 0))::float AS importo, d.categoria AS "categoriaFic"
     FROM documenti_ricevuti_righe r JOIN documenti_ricevuti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
     WHERE extract(year FROM d.data)::int = ANY($1::int[]) AND ${SQL_NON_DOPPIONE} AND NOT ${sqlPartitaFinanziaria('r')}`, [anni]);
-  const [a, b] = await Promise.all([righe, intere]);
-  return [...a, ...b];
+  const [a, b, c] = await Promise.all([righe, intere, righeAutofatture(anni)]);
+  return [...a, ...b, ...c];
+}
+
+/**
+ * Acquisti dai fornitori esteri (Mouser, DigiKey, Alantys…): la loro fattura entra nel portale come AUTOFATTURA (TD17/18/19), non tra le
+ * fatture dei fornitori (Adriano 11/11/2026, "rivendita di componenti e PCB": nel 2026 mancavano circa 41.000 € di componenti). Le righe
+ * dell'autofattura sono le righe della fattura estera in euro. Non si contano due volte: fuori le autofatture la cui fattura del fornitore
+ * è già tra le ricevute (`ricevuto_id`, caricate dal portale) e quelle di cui Fatture in Cloud teneva la copia ricevuta ("12AF", fino al 2025).
+ * Gli id sono NEGATIVI (riga e documento dell'autofattura), così le regole scritte a mano per riga o per documento non si confondono con le ricevute.
+ */
+export function righeAutofatture(anni: number[]): Promise<RigaCosto[]> {
+  return q<RigaCosto>(`SELECT -r.id AS "rigaId", -d.id AS "documentoId", to_char(d.data, 'YYYY-MM-DD') AS data, ${NOME_FORNITORE} AS fornitore,
+      ${CHIAVE_FORNITORE} AS "fornitoreChiave", coalesce(r.descrizione, '') AS descrizione, array_remove(ARRAY[nullif(trim(r.codice), '')], NULL) AS codici,
+      round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)::float AS importo, CASE WHEN d.tipo_sdi = 'TD17' THEN NULL ELSE 'B6_Materie prime c/acquisti' END AS "categoriaFic"
+    FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id
+    WHERE d.tipo = 'autofattura' AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND d.ricevuto_id IS NULL
+      AND extract(year FROM d.data)::int = ANY($1::int[])
+      AND NOT EXISTS (SELECT 1 FROM documenti_ricevuti x WHERE x.numero = d.numero::text || 'AF' AND extract(year FROM x.data) = extract(year FROM d.data))`, [anni]);
 }
 
 /** Quante fatture hanno le righe lette e quante no (per dire da dove vengono i numeri). */
@@ -65,33 +81,37 @@ export async function salvaRegola(tipo: RegolaCategoria['tipo'], chiave: string,
   return tipo === 'fornitore' ? `Fatto: tutte le fatture di ${k} vanno in "${categoriaDaCodice(categoria).nome}".` : `Fatto: categoria "${categoriaDaCodice(categoria).nome}" scritta.`;
 }
 
-/** Pezzi e importo fatturati per prodotto (codice + cliente) e anno: fatture e note di credito, servizi esclusi. */
 /** `finoA` (MM-GG): per confrontare un anno in corso con gli anni prima sugli stessi mesi, gli anni passati si fermano a quel giorno. */
 const STESSO_PERIODO = `AND (extract(year FROM d.data)::int = $2::int OR $3::text = '' OR to_char(d.data, 'MM-DD') <= $3::text)`;
 
-export async function venditePerProdotto(anni: number[], finoA = ''): Promise<VenditaProdotto[]> {
-  const righe = await q<VenditaProdotto & { descrizione: string | null }>(`SELECT upper(trim(r.codice)) AS codice, ${NOME_CLIENTE} AS cliente, extract(year FROM d.data)::int AS anno,
-      max(r.descrizione) AS descrizione, sum(${SEGNO} * r.quantita)::float AS pezzi, sum(${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo
+/** Ogni riga venduta (fatture e note di credito emesse, anche storico FIC), con il segno: la classificano `classificaVendite`. */
+export function righeVenditeRivendita(anni: number[], finoA = ''): Promise<RigaVendita[]> {
+  return q<RigaVendita>(`SELECT extract(year FROM d.data)::int AS anno, d.cliente_id AS "clienteId", ${NOME_CLIENTE} AS cliente, upper(trim(coalesce(r.codice, ''))) AS codice,
+      coalesce(r.descrizione, '') AS descrizione, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo, (r.acconto_id IS NOT NULL) AS acconto
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
-    WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND coalesce(trim(r.codice), '') <> ''
-      AND r.acconto_id IS NULL AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO}
-    GROUP BY 1, 2, 3`, [anni, anni[0], finoA]);
-  return righe.filter(r => !eServizio(r.codice, r.descrizione)).map(({ descrizione: _d, ...r }) => r);
+    WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.quantita * r.prezzo <> 0
+      AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO}`, [anni, anni[0], finoA]);
 }
 
-/** Valore del materiale (componenti, PCB) e costo d'acquisto a scheda dal preventivo più recente di ogni prodotto (accettati prima). */
+/** Per ogni prodotto con un preventivo: si vendono componenti o PCB (preventivo più recente, accettati prima)? Si usa solo il sì/no, non i prezzi. */
 export async function materialeDeiPreventivi(): Promise<MaterialePreventivo[]> {
-  const righe = await q<{ codice: string; cliente: string; risultato: any }>(`SELECT DISTINCT ON (p.id) upper(p.codice) AS codice, coalesce(c.ragione_sociale, '') AS cliente, pr.risultato
-    FROM preventivi pr JOIN prodotti_revisioni rv ON rv.id = pr.revisione_id JOIN prodotti p ON p.id = rv.prodotto_id LEFT JOIN clienti c ON c.id = p.cliente_id
+  const righe = await q<{ codice: string; clienteId: number | null; risultato: any }>(`SELECT DISTINCT ON (p.id) upper(p.codice) AS codice, p.cliente_id AS "clienteId", pr.risultato
+    FROM preventivi pr JOIN prodotti_revisioni rv ON rv.id = pr.revisione_id JOIN prodotti p ON p.id = rv.prodotto_id
     WHERE pr.stato <> 'rifiutato' AND pr.risultato IS NOT NULL ORDER BY p.id, (pr.stato = 'accettato') DESC, pr.creato_il DESC`);
   const out: MaterialePreventivo[] = [];
   for (const r of righe) {
     try {
       const rp = riepilogo(r.risultato);
-      out.push({ codice: r.codice, cliente: r.cliente, venditaComponenti: rp.venditaComponentiScheda, venditaPcb: rp.venditaPcbScheda, costoAcquisto: rp.costoAcquistoScheda });
+      out.push({ codice: r.codice, clienteId: r.clienteId, conMateriale: rp.venditaComponentiScheda + rp.venditaPcbScheda > 0 });
     } catch { /* preventivo con un risultato non leggibile: non conta */ }
   }
   return out;
+}
+
+/** Clienti che mandano il materiale (componenti in conto lavoro in anagrafica), chiave c<id>. */
+export async function clientiContoLavoro(): Promise<Set<string>> {
+  const r = await q<{ id: number }>(`SELECT DISTINCT cliente_id AS id FROM componenti_clienti WHERE cliente_id IS NOT NULL`);
+  return new Set(r.map(x => `c${x.id}`));
 }
 
 /** Lamine fatturate ai clienti per anno: codice UT-LAMINA o righe "lamina"/"stencil" (storico FIC). */
