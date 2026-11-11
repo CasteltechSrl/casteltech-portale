@@ -4,6 +4,7 @@
  */
 import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
 import { barraAnni } from '../views/barra-anni.js';
+import { collegaCommessaARiga, rigaPerCommessa } from '../preventivi-ordini-servizio.js';
 import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { dichiaraFineLavorazione } from '../flusso-servizio.js';
@@ -131,7 +132,12 @@ export function rotteCommesse() {
       primoLotto: prev.parametri?.primaProduzione !== 0 && (prev.prodotto_id ? !(await haCommessePrecedenti(prev.prodotto_id)) : true),
       segnalazioni: '', scheda: daCopiare ? schedaTecnica(daCopiare.scheda_tecnica) : await schedaTecnicaDaProporre(prev.revisione_id, prev.prodotto_id),
     };
-    res.send(await paginaCommessa(req, prev, dati));
+    // dalla riga dell'ordine del cliente (Adriano 11/11/2026): quantità, ordine del cliente e consegna della riga; salvando, la riga si collega
+    const riga = Number(req.query.riga) ? await rigaPerCommessa(Number(req.query.riga)) : undefined;
+    if (riga?.commessa_id) return res.redirect(`/commesse/${riga.commessa_id}`);
+    if (riga) Object.assign(dati, { quantita: Math.round(riga.quantita) || dati.quantita, ordineCliente: riga.rif_cliente ?? `${riga.numero}/${riga.anno}`,
+      dataOrdine: riga.data_ordine_cliente, dataConsegna: riga.consegna_richiesta });
+    res.send(await paginaCommessa(req, prev, dati, undefined, undefined, undefined, riga?.id));
   });
 
   r.post('/salva', async (req, res) => {
@@ -143,8 +149,9 @@ export function rotteCommesse() {
       const prev = await leggiPreventivo(Number(b.preventivoId));
       if (!prev) return res.status(404).send('Preventivo non trovato');
       const comm = id ? await leggiCommessa(id) : undefined;
-      return res.status(400).send(await paginaCommessa(req, prev, dati, comm, esito.errore));
+      return res.status(400).send(await paginaCommessa(req, prev, dati, comm, esito.errore, undefined, Number(b.rigaOrdine) || undefined));
     }
+    if (!id && Number(b.rigaOrdine) && esito.id) await collegaCommessaARiga(Number(b.rigaOrdine), esito.id);
     res.redirect(`/commesse/${esito.id}?salvata=1`);
   });
 
@@ -353,7 +360,7 @@ function datiDaForm(b: any): DatiCommessa {
 
 // ───────────────────────────── pagina della commessa (form) ─────────────────────────────
 
-async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?: any, errore?: string, messaggio?: string): Promise<string> {
+async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?: any, errore?: string, messaggio?: string, rigaOrdine?: number): Promise<string> {
   const i = prev.intestazione ?? {};
   const doppia = !!prev.parametri?.doppiaFaccia;
   const fasi = salvata ? await fasiCommessa(salvata) : fasiPreviste(prev, d.quantita || prev.n_schede, d.primoLotto);
@@ -373,7 +380,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
     <form method="post" action="/commesse/salva" autocomplete="off">
-    <input type="hidden" name="id" value="${salvata?.id ?? ''}"><input type="hidden" name="preventivoId" value="${prev.id}">
+    <input type="hidden" name="id" value="${salvata?.id ?? ''}"><input type="hidden" name="preventivoId" value="${prev.id}">${rigaOrdine && !salvata ? html`<input type="hidden" name="rigaOrdine" value="${rigaOrdine}">` : ''}
     <div class="intestazione-pagina">
       <h1>${salvata ? html`Commessa ${salvata.numero} <span class="stato ${salvata.stato}">${STATI_TESTO[salvata.stato]}</span>` : 'Nuova commessa'}</h1>
       <div class="azioni">

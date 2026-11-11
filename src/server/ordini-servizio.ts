@@ -130,7 +130,7 @@ export async function importaOrdini(f: FileOrdini) {
 export interface RigaElenco extends RigaOrdine {
   spedizioni: Abbinamento[];   // DDT del portale abbinati in automatico (oltre a quelli dell'import)
   numero: number; anno: number; origine?: string; dataOrdine: string | null; cliente: string; clienteId: number | null; rifCliente: string | null;
-  codice: string | null; descrizione: string | null; codiceCliente: string | null; descrizioneCliente?: string | null; prodottoId: number | null; commessaId: number | null; note: string | null;
+  codice: string | null; descrizione: string | null; codiceCliente: string | null; descrizioneCliente?: string | null; prodottoId: number | null; commessaId: number | null; preventivoId: number | null; note: string | null;
   stato: StatoRiga; lavorazione: string | null; prevista: string | null; ritardo: number | null; consegna: string | null;
   residuoQuantita: number; residuoValore: number;
 }
@@ -196,7 +196,7 @@ export async function righeOrdini(ordineId?: number): Promise<RigaElenco[]> {
     const prossima = b.consegne?.length && b.tipo === 'scheda' ? prossimaConsegna(b) : null;
     return [{
       ...b, numero: r.numero, anno: r.anno, origine: r.origine, dataOrdine: r.data_ordine, cliente: r.cliente_nome, clienteId: r.cliente_id, rifCliente: r.rif_cliente,
-      codice: r.codice, descrizione: r.descrizione, codiceCliente: r.codice_cliente, descrizioneCliente: r.descrizione_cliente, prodottoId: r.prodotto_id, commessaId: r.commessa_id, note: r.note,
+      codice: r.codice, descrizione: r.descrizione, codiceCliente: r.codice_cliente, descrizioneCliente: r.descrizione_cliente, prodottoId: r.prodotto_id, commessaId: r.commessa_id, preventivoId: r.preventivo_id ?? null, note: r.note,
       stato, lavorazione: d.lavorazione, prevista: d.prevista, ritardo: d.ritardo, consegna: prossima ?? d.consegna,
       residuoQuantita: res.quantita, residuoValore: res.valore, spedizioni: spedizioni.get(b.id) ?? [],
     }];

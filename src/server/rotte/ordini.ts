@@ -30,6 +30,8 @@ import { codiceProposto, numeroDa } from '../../engine/acquisizioni.js';
 import type { Utente } from '../views/layout.js';
 import { confrontoOrdiniFatturato, creaOrdiniPostumi } from '../ordini-postumi-servizio.js';
 import { ETICHETTA_POSTUMO, FATTURE_STORNATE, fattureDaCoprire } from '../../engine/ordini-postumi.js';
+import { collegaPreventivo, preventiviDelCliente } from '../preventivi-ordini-servizio.js';
+import { etichettaPreventivo, preventiviDellaRiga, propostaPreventivo } from '../../engine/preventivi-ordini.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
@@ -332,7 +334,27 @@ export function rotteOrdini() {
     const righe = await righeOrdini(o.id);
     const ddt = await q(`SELECT d.*, r.chiave FROM ddt_righe d JOIN ordini_righe r ON r.id = d.riga_id WHERE r.ordine_id = $1 ORDER BY d.data, d.numero`, [o.id]);
     const fatture = await q(`SELECT f.*, r.chiave FROM fatture_righe f JOIN ordini_righe r ON r.id = f.riga_id WHERE r.ordine_id = $1 ORDER BY f.data, f.numero`, [o.id]);
-    const commesse = await q(`SELECT id, numero FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
+    const commesse = await q(`SELECT id, numero, preventivo_id FROM commesse WHERE cliente_id = $1 ORDER BY creato_il DESC LIMIT 50`, [o.cliente_id ?? -1]);
+    // preventivo di ogni riga (Adriano 11/11/2026): salvato, oppure proposto (stesso prodotto o stesso codice); menu con tutti quelli del cliente
+    const preventivi = o.cliente_id ? await preventiviDelCliente(o.cliente_id) : [];
+    const dataOrd = o.data_ordine ? (typeof o.data_ordine === 'string' ? o.data_ordine.slice(0, 10) : new Date(o.data_ordine).toISOString().slice(0, 10)) : null;
+    const sceltaPreventivo = (x: RigaElenco) => {
+      const rigaP = { prodottoId: x.prodottoId, codici: [x.codice, x.codiceCliente], quantita: x.quantita, dataOrdine: dataOrd };
+      const proposta = x.preventivoId ? null : propostaPreventivo(rigaP, preventivi);
+      const scelto = x.preventivoId ?? proposta?.id ?? null;
+      const stessi = new Set(preventiviDellaRiga(rigaP, preventivi).candidati.map(k => k.id));
+      const voce = (k: (typeof preventivi)[number]) => html`<option value="${k.id}" ${k.id === scelto ? raw('selected') : ''}>${etichettaPreventivo(k)}</option>`;
+      const salvato = x.preventivoId ? preventivi.find(k => k.id === x.preventivoId) : undefined;
+      return html`<label class="nota">Preventivo
+        <select name="righe[r${x.id}][preventivo]" class="cercabile" aria-label="Preventivo della riga">
+          <option value="">— nessuno —</option>
+          ${stessi.size ? html`<optgroup label="Stesso codice">${preventivi.filter(k => stessi.has(k.id)).map(voce)}</optgroup>` : ''}
+          <optgroup label="${stessi.size ? 'Altri preventivi del cliente' : 'Preventivi del cliente'}">${preventivi.filter(k => !stessi.has(k.id)).map(voce)}</optgroup>
+        </select></label>
+        ${proposta ? html`<small class="esito verifica" title="Trovato dal portale: premi Salva per confermarlo">proposto (${proposta.motivo === 'prodotto' ? 'stesso prodotto' : 'stesso codice'}): Salva per confermare</small>` : ''}
+        ${!scelto && x.tipo === 'scheda' && preventivi.length ? html`<small class="esito verifica">nessun preventivo con questo codice: sceglilo dal menu</small>` : ''}
+        ${salvato ? html`<a href="/preventivi/${salvato.id}" class="nota">apri ${salvato.numero}</a>` : ''}`;
+    };
     const conferme = await confermeDellOrdine(o.id);
     // codice delle righe solo dall'anagrafica del cliente (regola dei documenti, Adriano 31/10/2026)
     const prodotti: { id: number; codice: string; descrizione: string | null }[] = o.cliente_id ? await prodottiPerCliente(o.cliente_id) : [];
@@ -388,7 +410,8 @@ export function rotteOrdini() {
           <td class="nowrap">${sceltaProdotto(`righe[r${x.id}][prodotto]`, x.prodottoId, x.codice)}${!x.prodottoId && x.tipo !== 'servizio' && o.cliente_id ? html`<details class="nuovo-prodotto-riga"><summary>+ Nuovo prodotto</summary>
             <label>Codice <input name="righe[r${x.id}][np_codice]" value="${codiceProposto(x.codice, x.descrizione)}" class="maiuscolo"></label>
             <label>Descrizione <input name="righe[r${x.id}][np_descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo"></label>
-            <button formaction="/ordini/${o.id}/prodotto?riga=${x.id}" title="Va in Anagrafiche → Prodotti del cliente e si collega a questa riga">Aggiungi in anagrafica</button></details>` : ''}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}</td>
+            <button formaction="/ordini/${o.id}/prodotto?riga=${x.id}" title="Va in Anagrafiche → Prodotti del cliente e si collega a questa riga">Aggiungi in anagrafica</button></details>` : ''}${x.codiceCliente && x.codiceCliente !== x.codice ? html`<br><small class="nota">cliente: ${x.codiceCliente}</small>` : ''}
+            ${x.tipo === 'scheda' || x.preventivoId ? html`<div class="preventivo-riga">${sceltaPreventivo(x)}</div>` : ''}</td>
           <td><input name="righe[r${x.id}][descrizione]" value="${x.descrizione ?? ''}" class="maiuscolo lungo">${x.descrizioneCliente && x.descrizioneCliente !== x.descrizione ? html`<br><small class="nota">cliente: ${x.descrizioneCliente}</small>` : ''}</td>
           <td class="n">${x.consegne?.length ? num(x.quantita, 0) : html`<input name="righe[r${x.id}][quantita]" value="${numCampo(x.quantita, 3)}" inputmode="decimal" class="corto">`}</td>
           <td class="n">${x.tipo === 'scheda' ? num(x.quantitaSpedita, 0) : ''}</td>
@@ -403,7 +426,10 @@ export function rotteOrdini() {
             <select name="righe[r${x.id}][stato]" title="Stato deciso dall'ufficio (vince sul calcolo)">
               ${[['', 'automatico'], ['evaso', 'evaso'], ['da_evadere', 'da evadere'], ['annullato', 'annullato']].map(([v, t]) => html`<option value="${v}" ${(x.statoManuale ?? '') === v ? raw('selected') : ''}>${t}</option>`)}
             </select></td>
-          <td><select name="righe[r${x.id}][commessa]"><option value="">—</option>${commesse.map(k => html`<option value="${k.id}" ${k.id === x.commessaId ? raw('selected') : ''}>${k.numero}</option>`)}</select></td>
+          <td class="preventivo-commessa"><label class="nota">Commessa <select name="righe[r${x.id}][commessa]"><option value="">—</option>${commesse.map(k => html`<option value="${k.id}" ${k.id === x.commessaId ? raw('selected') : ''}>${k.numero}</option>`)}</select></label>
+            ${x.commessaId ? html`<a href="/commesse/${x.commessaId}" class="nota">apri</a>`
+              : x.preventivoId && x.tipo === 'scheda' ? html`<a class="bottone piccolo" href="/commesse/nuova?preventivo=${x.preventivoId}&riga=${x.id}"
+                title="Commessa con il preventivo collegato, quantità, ordine del cliente e consegna di questa riga">Crea commessa</a>` : ''}</td>
           <td><input name="righe[r${x.id}][note]" value="${x.note ?? ''}"></td>
           <td><button form="elimina-riga-${x.id}" class="link negativo" title="Elimina questa riga"
             data-conferma="${`Eliminare la riga ${x.codice || x.descrizione || ''} (${num(x.quantita, 0)} pz) dall'ordine ${o.numero}/${o.anno}? Le modifiche non salvate delle altre righe si perdono.`}">Elimina</button></td>
@@ -471,8 +497,8 @@ export function rotteOrdini() {
 
   r.post('/:id', async (req, res) => {
     const id = Number(req.params.id);
-    await salvaRigheOrdine(id, req.body);
-    res.redirect(`/ordini/${id}?salvato=1`);
+    const messaggi = await salvaRigheOrdine(id, req.body);
+    res.redirect(messaggi.length ? `/ordini/${id}?msg=${encodeURIComponent(`Salvato. ${messaggi.join(' ')}`)}` : `/ordini/${id}?salvato=1`);
   });
 
   // prodotto nuovo da una riga dell'ordine (Adriano 3/11/2026): va nell'anagrafica del cliente dell'ordine e si collega alla riga
@@ -488,8 +514,9 @@ export function rotteOrdini() {
       ? `${esito.codice} ${esito.esisteva ? 'era già in anagrafica: collegato' : 'aggiunto in anagrafica e collegato'} alla riga.` : `Prodotto non aggiunto: ${esito.errore}`)}`);
   });
 
-  async function salvaRigheOrdine(id: number, body: any) {
+  async function salvaRigheOrdine(id: number, body: any): Promise<string[]> {
     const req = { body };
+    const messaggi: string[] = [];
     const dataO = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : null);
     // chiavi "r<id>": con numeri piccoli il lettore del modulo creerebbe un elenco al posto delle righe per id
     for (const [chiave, x] of Object.entries<any>(req.body?.righe ?? {})) {
@@ -502,12 +529,15 @@ export function rotteOrdini() {
         [Number(rigaId), id, dataO(x?.arrivo), dataO(x?.lavorazione), ritardi, dataO(x?.prevista), stato, Number(x?.commessa) || null, String(x?.note ?? '').trim() || null]);
       // correzioni della riga (Adriano 3/11/2026): codice solo dai prodotti del cliente, descrizione, quantità, prezzo, consegna richiesta
       if (x && 'prezzo' in x) await correggiRiga(id, Number(rigaId), x);
+      // preventivo della riga (Adriano 11/11/2026)
+      if (x && 'preventivo' in x) { const m = await collegaPreventivo(id, Number(rigaId), Number(x.preventivo) || null); if (m) messaggi.push(m); }
     }
     const n = req.body?.nuova;
     const servizio = /^ut:/i.test(String(n?.prodotto ?? ''));     // servizio una tantum: senza quantità vale 1
     if (n && (String(n.descrizione ?? '').trim() || Number(n.prodotto) || servizio) && ((numeroDa(n.quantita) ?? 0) > 0 || (servizio && !String(n.quantita ?? '').trim())))
       await aggiungiRiga(id, n);
     await q(`UPDATE ordini SET aggiornato_il = now() WHERE id = $1`, [id]);
+    return messaggi;
   }
 
   // ── Ordine consegnato ma non riconosciuto dai DDT (codici diversi, consegna senza DDT): l'ufficio lo chiude ──

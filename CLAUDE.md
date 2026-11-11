@@ -497,6 +497,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    riga di fattura coperta = collegata (fatture_righe.riga_id, riga_ordine_id, DDT fatturato collegato) o stesso cliente + codice con quantità libera (FIFO, ordini fino a 31 gg dopo);
    fatture stornate 6, 13, 26/2026 escluse (`FATTURE_STORNATE`). "Crea gli ordini postumi" (o POST `/api/claude/ordini-postumi`) = un ordine 8001+ per fattura, "ORDINE POSTUMO creato ad hoc",
    già evaso (fuori da produzione, Gantt, flusso, acquisti; niente conferma). Cruscotto ordini: fatturato da `documenti` (prima `fatture_righe`, ferme all'import del 25/10).
+   Riga d'ordine → preventivo → commessa (Adriano 11/11/2026; migrazione 092 `ordini_righe.preventivo_id`, regole in `engine/preventivi-ordini.ts`, letture in
+   `preventivi-ordini-servizio.ts`, test in `tests/preventivi-ordini.test.ts`): menu "Preventivo" sotto il codice di ogni riga di schede, proposta `propostaPreventivo` = stesso prodotto,
+   altrimenti stesso codice scritto (`codiceNormale`, vecchio portale); a parità di codice la QUANTITÀ più vicina all'ordine, poi inviati/accettati, fatti prima dell'ordine, più recente;
+   si salva solo con Salva. Preventivo senza prodotto collegato a una riga = prende il prodotto della riga (`collegaPreventivo`, codice vecchio in `intestazione.codiceVecchioPortale`).
+   "Crea commessa" sulla riga = `/commesse/nuova?preventivo=&riga=` (quantità, ordine cliente, consegna), al salvataggio `collegaCommessaARiga`. Preventivo: riquadro "Prezzi da confrontare"
+   (`riquadroPrezziPrecedenti`: vecchio portale + anagrafica con scaglioni).
    Gantt a giorni su tutta la larghezza (Adriano 28/10/2026, `periodoGantt`): 1 mese (5 settimane dal lunedì) standard, Settimana o 3 mesi, nient'altro; ‹ Oggi ›.
    Dati: import JSON(.gz) da Impostazioni → Ordini, preparato fuori dal repository incrociando gli export di Fatture in Cloud
    con gli ordini PDF dei clienti (ricaricabile: restano date, ritardi, stati e note scritti nel portale).

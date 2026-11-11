@@ -89,10 +89,11 @@ export async function creaOrdineDaPreventivi(ids: number[], b: ModuloOrdine, ute
   const rif = String(b.rifCliente ?? '').trim().toUpperCase().slice(0, 60) || null;
   const note = [String(b.note ?? '').trim(), notaPreventivi(prev.map(x => x.numero))].filter(Boolean).join('\n');
   // prodotti dei preventivi: la riga di schede con lo stesso codice si collega al prodotto in anagrafica
-  const prodotti = new Map<string, { id: number; descrizione: string }>();
+  // (e al preventivo da cui viene: collegamento riga d'ordine → preventivo, Adriano 11/11/2026)
+  const prodotti = new Map<string, { id: number; descrizione: string; preventivoId: number }>();
   for (const x of prev) if (x.prodotto_id) {
     const pr = await q1<{ codice: string; descrizione: string }>(`SELECT codice, descrizione FROM prodotti WHERE id = $1`, [x.prodotto_id]);
-    if (pr) prodotti.set(pr.codice.toUpperCase(), { id: x.prodotto_id, descrizione: pr.descrizione });
+    if (pr) prodotti.set(pr.codice.toUpperCase(), { id: x.prodotto_id, descrizione: pr.descrizione, preventivoId: x.id });
   }
   const id = await transazione(async c => {
     const anno = Number(oggi.slice(0, 4));
@@ -103,9 +104,10 @@ export async function creaOrdineDaPreventivi(ids: number[], b: ModuloOrdine, ute
       [anno, numeroOrdineEmail(massimo), oggi, p.cliente_id, cliente?.ragione_sociale ?? p.intestazione?.cliente ?? '', rif, dataOrdineCliente, note, p.id])).rows[0];
     for (const [i, r] of righe.entries()) {
       const prodotto = r.tipo === 'scheda' && r.codice ? prodotti.get(r.codice) : undefined;
-      await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, tipo, quantita, prezzo, consegna_richiesta)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, `P${p.id}-${i + 1}`, i, prodotto?.id ?? null, r.codice, prodotto ? prodotto.descrizione : r.descrizione, r.tipo, r.quantita, r.prezzo, r.tipo === 'scheda' ? consegna : null]);
+      await c.query(`INSERT INTO ordini_righe (ordine_id, chiave, posizione, prodotto_id, codice, descrizione, tipo, quantita, prezzo, consegna_richiesta, preventivo_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [id, `P${p.id}-${i + 1}`, i, prodotto?.id ?? null, r.codice, prodotto ? prodotto.descrizione : r.descrizione, r.tipo, r.quantita, r.prezzo, r.tipo === 'scheda' ? consegna : null,
+          prodotto?.preventivoId ?? null]);
     }
     for (const x of prev) if (['bozza', 'inviato'].includes(x.stato)) await c.query(`UPDATE preventivi SET stato = 'accettato', aggiornato_il = now() WHERE id = $1`, [x.id]);
     return id as number;
