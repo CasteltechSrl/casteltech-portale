@@ -296,7 +296,7 @@ export function rotteAnagrafiche() {
         (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi,
         (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
           + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id)
-          + (SELECT count(*)::int FROM documenti_righe d WHERE d.prodotto_id = p.id)
+          + (SELECT count(*)::int FROM documenti_righe d WHERE d.prodotto_id = p.id AND NOT ${SQL_RIGA_ANNULLATA('d')})
           + (SELECT count(*)::int FROM segnalazioni s WHERE s.prodotto_id = p.id) AS altri
       FROM prodotti p WHERE ($1 = 0 OR p.cliente_id = $1 OR ($1 = -1 AND p.cliente_id IS NULL))
       ORDER BY (p.cliente_id IS NULL) DESC, p.codice LIMIT 2000`, [filtro]);
@@ -669,6 +669,8 @@ export function rotteAnagrafiche() {
     try {
       await transazione(async t => {
         // le revisioni senza preventivi né commesse vanno via con il prodotto; se è usato, il database lo impedisce
+        // conferme, ordini a fornitore e DDT annullati non tengono il prodotto: la riga resta con il suo codice scritto, senza collegamento
+        await t.query(`UPDATE documenti_righe r SET prodotto_id = NULL WHERE r.prodotto_id = $1 AND ${SQL_RIGA_ANNULLATA('r')}`, [id]);
         await t.query(`DELETE FROM prodotti_revisioni WHERE prodotto_id = $1`, [id]);
         await t.query(`DELETE FROM prodotti WHERE id = $1`, [id]);
       });
@@ -682,6 +684,13 @@ export function rotteAnagrafiche() {
   return r;
 }
 
+/**
+ * Riga di un documento annullato senza valore fiscale (conferma d'ordine, ordine a fornitore, DDT): non impedisce di eliminare
+ * il prodotto (Adriano 11/11/2026, M0928-A_THT nella conferma 82/2026 annullata). `a` = alias di documenti_righe.
+ */
+const SQL_RIGA_ANNULLATA = (a: string) => `EXISTS (SELECT 1 FROM documenti dx WHERE dx.id = ${a}.documento_id AND dx.stato = 'annullato'
+  AND dx.tipo IN ('conferma_ordine', 'ordine_fornitore', 'ddt'))`;
+
 /** Dove è usato un prodotto: preventivi, commesse, righe d'ordine, segnalazioni e i documenti con il loro numero. */
 async function usiProdotto(id: number): Promise<UsiProdotto> {
   const n = await q1(`SELECT
@@ -690,7 +699,7 @@ async function usiProdotto(id: number): Promise<UsiProdotto> {
       (SELECT count(*)::int FROM ordini_righe WHERE prodotto_id = $1) AS righe_ordini,
       (SELECT count(*)::int FROM segnalazioni WHERE prodotto_id = $1) AS segnalazioni`, [id]);
   const documenti = await q(`SELECT DISTINCT d.id, d.tipo, d.numero, d.anno, d.stato, d.data FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
-      WHERE r.prodotto_id = $1 ORDER BY d.data DESC, d.id DESC`, [id]);
+      WHERE r.prodotto_id = $1 AND NOT ${SQL_RIGA_ANNULLATA('r')} ORDER BY d.data DESC, d.id DESC`, [id]);
   return { preventivi: n.preventivi, commesse: n.commesse, righeOrdini: n.righe_ordini, segnalazioni: n.segnalazioni,
     documenti: documenti.map((d: any) => ({ tipo: d.tipo, numero: d.numero, anno: d.anno, stato: d.stato })) };
 }

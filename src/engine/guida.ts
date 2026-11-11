@@ -244,7 +244,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'In tutte le sezioni c\'è il tasto Elimina per le righe inserite per errore. Prima di eliminare il portale chiede conferma. Negli elenchi si possono spuntare più righe ed eliminarle insieme (vedi "Fare un\'operazione su più righe insieme").',
       'Quello che è già usato non si elimina, per non rovinare lo storico: un preventivo con commessa, un cliente o un prodotto usato in preventivi o ordini, le fasi e i parametri del catalogo di partenza, gli utenti che hanno lavorato. In questi casi si toglie la spunta "Attiva" (o "Attivo"): non compaiono più nelle scelte ma lo storico resta.',
-      'Anagrafiche → Prodotti: al posto di Elimina compare "in uso" se il prodotto è già in preventivi, commesse, ordini, segnalazioni o in una riga di DDT, fatture, conferme. Clic su "in uso": il portale dice dove (es. "DDT 222/2026", "fattura in bozza"). Se era una bozza fatta per errore, elimina la bozza o togli la riga, poi il prodotto si elimina.',
+      'Anagrafiche → Prodotti: al posto di Elimina compare "in uso" se il prodotto è già in preventivi, commesse, ordini, segnalazioni o in una riga di DDT, fatture, conferme. Clic su "in uso": il portale dice dove (es. "DDT 222/2026", "fattura in bozza"). Se era una bozza fatta per errore, elimina la bozza o togli la riga, poi il prodotto si elimina. Conferme d\'ordine, ordini a fornitore e DDT annullati non contano: la riga resta nel documento con il suo codice scritto.',
       'Le fatture e le note di credito emesse non si eliminano: una fattura sbagliata si storna con una nota di credito. Si elimina solo una bozza.',
     ],
     pagine: [],
