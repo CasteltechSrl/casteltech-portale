@@ -5,7 +5,7 @@
  */
 import { Router } from 'express';
 import { FINESTRE, finestraValida, quandoFirma, type Finestra } from '../../engine/flusso.js';
-import { cambiaPriorita, dichiaraFineLavorazione, passaInProduzione, segnaSpedito, spunta, togliSpedito, type DatiFlusso, type RigaCruscottoFlusso } from '../flusso-servizio.js';
+import { cambiaPriorita, chiudiRiga, dichiaraFineLavorazione, passaInProduzione, segnaSpedito, spunta, togliSpedito, type DatiFlusso, type RigaCruscottoFlusso } from '../flusso-servizio.js';
 import { html, data, num, type Raw } from '../views/html.js';
 
 const gm = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
@@ -46,6 +46,12 @@ export function rotteFlusso() {
     const ids = [req.body.ddt ?? []].flat().map(Number).filter(n => n > 0);
     const n = await segnaSpedito(ids, utente(req));
     res.redirect(torna(req, id, n ? `Spedito: ${n} DDT ${n === 1 ? 'partito' : 'partiti'} (ora in "Spedite nel mese").` : 'Nessun DDT da segnare.'));
+  });
+  // Riga con le ultime schede che non partiranno (scarto, consegna con un altro DDT): la riga diventa evasa, come "Segna evase" degli Ordini
+  r.post('/riga/:id/evasa', async (req, res) => {
+    const id = Number(req.params.id);
+    await chiudiRiga(id);
+    res.redirect(torna(req, undefined, 'Riga chiusa: segnata come evasa (si torna indietro dall\'ordine con "Stato dai DDT").'));
   });
   r.post('/ddt/:id/annulla-spedito', async (req, res) => {
     await togliSpedito(Number(req.params.id));
@@ -156,11 +162,12 @@ export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLet
         return html`<tr id="riga-${r.id}">${intestazione(r)}
         <td class="n">${num(v.pronte + v.inAttesaCorriere, 0)}${v.finite < r.quantita ? html`<br><small class="nota">${num(r.quantita - v.finite, 0)} ancora in produzione</small>` : ''}</td>
         <td>${inAttesa.length ? html`${chip('✓ In attesa di corriere', 'si')} <small class="nota">${inAttesa.map(x => html`<a href="/amministrazione/documenti/${x.id}">DDT ${x.numero ?? 'bozza'}${x.sezionale ? '/' + x.sezionale : ''}</a> del ${gm(x.data)} (${num(x.quantita, 0)} pz)`)}</small>`
-          : html`${chip('☐ In attesa di corriere', '')} <small class="nota">nessun DDT ancora</small>`}</td>
+          : html`${chip('☐ In attesa di corriere', '')} <small class="nota">${(r.giaPartiti ?? []).length ? `nessun DDT per ${v.pronte === 1 ? "l'ultima scheda" : `le ultime ${num(v.pronte, 0)} schede`}` : 'nessun DDT ancora'}</small>`}
+          ${(r.giaPartiti ?? []).length ? html`<br><small class="nota">già partite: ${(r.giaPartiti ?? []).map((g, i) => html`${i ? ', ' : ''}${g.documento} (${num(g.quantita, 0)} pz)`)}</small>` : ''}</td>
         <td class="azioni-riga">${solaLettura ? '' : inAttesa.length ? html`<form method="post" action="/produzione/flusso/riga/${r.id}/spedito"><input type="hidden" name="torna" value="${torna}">${inAttesa.map(x => html`<input type="hidden" name="ddt" value="${x.id}">`)}
             <button class="piccolo primario" title="Il corriere è passato: passa in «Spedite nel mese»">Spedito ✓</button></form>`
-          : r.commessaId ? html`<form method="post" action="/amministrazione/documenti/ddt-da-commessa/${r.commessaId}"><button class="piccolo" title="Prepara il DDT con le schede della commessa">Crea DDT</button></form>`
-          : html`<form method="post" action="/amministrazione/documenti/ddt-da-ordine/${r.ordineId}"><button class="piccolo" title="Prepara il DDT con le schede dell'ordine">Crea DDT</button></form>`}</td></tr>`;
+          : html`${r.quantitaSpedita > 0 ? html`<form method="post" action="/produzione/flusso/riga/${r.id}/evasa" data-conferma="${`Chiudere la riga ${r.numero}/${r.anno} ${r.codice ?? ''}? Le ${num(v.pronte, 0)} schede che mancano non partiranno (scarto, o consegnate con un altro DDT). Si torna indietro dall'ordine scegliendo "Stato dai DDT".`}"><input type="hidden" name="torna" value="${torna}"><button class="piccolo" title="Le schede che mancano non partiranno: la riga diventa evasa">Chiudi riga</button></form> ` : ''}${r.commessaId ? html`<form method="post" action="/amministrazione/documenti/ddt-da-commessa/${r.commessaId}"><button class="piccolo" title="Prepara il DDT con le schede della commessa">Crea DDT</button></form>`
+          : html`<form method="post" action="/amministrazione/documenti/ddt-da-ordine/${r.ordineId}"><button class="piccolo" title="Prepara il DDT con le schede dell'ordine">Crea DDT</button></form>`}`}</td></tr>`;
       })}</tbody>`;
   }
   return html`<section class="elenco-flusso">${testata}<div class="tabella-scorre"><table class="elenco flusso-tabella" data-non-ordinare>${corpo}</table></div>

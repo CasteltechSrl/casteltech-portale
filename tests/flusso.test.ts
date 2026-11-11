@@ -134,3 +134,26 @@ test('flusso: cruscotto con le cinque finestre, telefono, scheda stampata, guida
   for (const q of ['flusso di produzione', 'da spedire in attesa di corriere', 'fine lavorazione parziale'])
     assert.ok(cercaGuida(q).slice(0, 3).some(r => r.argomento.id === 'flusso-produzione'), q);
 });
+
+// Adriano 11/11/2026: ordine 61/2026 WPACAMJR3, 500 ordinate, DDT 217 di 499 pz dallo storico FIC (abbinato per codice, non collegato alla commessa):
+// "Da spedire" diceva "nessun DDT ancora". Ora mostra i DDT già partiti, l'ultima scheda che manca e "Chiudi riga".
+test('Da spedire: DDT già partiti abbinati per codice si vedono, e la riga si chiude', async () => {
+  process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno';
+  const { elencoFinestra } = await import('../src/server/rotte/flusso.js');
+  const base: RigaFlusso = {
+    id: 136, quantita: 500, quantitaSpedita: 499, residuoQuantita: 1, stato: 'parziale', consegnaRichiesta: '2026-09-15', dataOrdine: '2026-09-08',
+    commessa: { id: 13, numero: 'C2026-0081', stato: 'rientrata', quantita: 500, fineLavorazione: [{ quantita: 500, da: 'A', il: '2026-11-06T16:49:48Z' }], fasi: [], fasiConTempi: [] },
+    ddt: [], giaPartiti: [{ documento: 'DDT 217 del 30/10/2026', quantita: 499 }],
+    flusso: { priorita: null, acquisti: {}, materiale: {}, produzione: {}, inProduzione: null },
+  };
+  const valutazione = valutaRiga(base);
+  assert.equal(valutazione.pronte, 1);
+  const riga = { ...base, ordineId: 60, numero: 61, anno: 2026, cliente: 'SELEA S.R.L.', codice: 'WPACAMJR3', descrizione: 'CAMJR3_STANDARD', prodottoId: 647,
+    consegna: '2026-09-15', prevista: null, ritardo: null, commessaNumero: 'C2026-0081', commessaId: 13, valutazione, posizione: 1 };
+  const d: any = { righe: [riga], perFinestra: { acquistare: [], preparare: [], produzione: [], spedire: [riga], spedite: [] }, spedite: [], conta: {}, schedeSpedite: 0, inAttesaCorriere: 0, inRitardo: 0, parziali: 0 };
+  const testo = String(elencoFinestra(d, 'spedire', '2026-11-11', false));
+  assert.ok(testo.includes('DDT 217 del 30/10/2026 (499 pz)'));
+  assert.ok(!testo.includes('nessun DDT ancora'));
+  assert.ok(testo.includes("nessun DDT per l&#39;ultima scheda") || testo.includes("nessun DDT per l'ultima scheda"));
+  assert.ok(testo.includes('/produzione/flusso/riga/136/evasa'));
+});
