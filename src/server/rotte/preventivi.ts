@@ -1,6 +1,8 @@
 /**
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
+import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
+import { barraAnni } from '../views/barra-anni.js';
 import { paginata } from '../views/paginazione.js';
 import { CAMPI_SEMPLICE } from '../../engine/preventivo-semplice.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
@@ -57,7 +59,7 @@ export function rottePreventivi() {
       ORDER BY creato_il DESC, id DESC LIMIT ${limite}`, [cerca]);
   // Excel dell'elenco con gli stessi filtri (1/11/2026)
   r.get('/elenco.xlsx', async (req, res) => {
-    const righe = await elencoPreventivi(String(req.query.q ?? '').trim());
+    const righe = filtraPerAnno(await elencoPreventivi(String(req.query.q ?? '').trim()), p => p.creato_il, annoScelto(req.query));
     inviaExcel(res, nomeExcel('preventivi'), await excelSemplice('Preventivi', [
       { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
       { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
@@ -70,7 +72,9 @@ export function rottePreventivi() {
 
   r.get('/', async (req, res) => {
     const cerca = String(req.query.q ?? '').trim();
-    const tutte = await elencoPreventivi(cerca);
+    const tuttiGliAnni = await elencoPreventivi(cerca);
+    const anno = annoScelto(req.query);
+    const tutte = filtraPerAnno(tuttiGliAnni, p => p.creato_il, anno);
     const { righe, barra } = paginata(tutte, req.query as Record<string, unknown>);
     const msg = String(req.query.msg ?? '');
     const modulo = moduloAzioni({
@@ -92,7 +96,8 @@ export function rottePreventivi() {
         <a class="bottone primario" href="/preventivi/nuovo">+ Nuovo preventivo</a></div>
       </div>
       <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca cliente, codice, descrizione, numero…" type="search"><button>Cerca</button>
-        <a class="bottone" href="/preventivi/elenco.xlsx${cerca ? `?q=${encodeURIComponent(cerca)}` : ''}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
+        <a class="bottone" href="${indirizzoAnno('/preventivi/elenco.xlsx', { q: cerca }, anno)}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
+      ${barraAnni(contaPerAnno(tuttiGliAnni, p => p.creato_il), anno, '/preventivi', req.query as Record<string, unknown>)}
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco preventivi">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th title="Revisione">Rev.</th><th>Descrizione</th><th class="n">Nr. PCB</th>

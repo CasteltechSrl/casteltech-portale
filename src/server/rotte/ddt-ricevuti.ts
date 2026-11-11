@@ -3,6 +3,8 @@
  * ordini), letti da Da acquisire e confermati dall'ufficio, con le anomalie trovate dall'incrocio con gli ordini.
  * I DDT ancora da confermare stanno in cima e portano alla pagina di controllo in Ordini da e-mail e PDF.
  */
+import { annoScelto, contaPerAnno, filtraPerAnno } from '../../engine/anni-elenco.js';
+import { barraAnni } from '../views/barra-anni.js';
 import { Router } from 'express';
 import { layout } from '../views/layout.js';
 import { html, data, num, raw } from '../views/html.js';
@@ -17,7 +19,9 @@ export function rotteDdtRicevuti() {
   r.get('/', async (req, res) => {
     const [daConfermare, elenco] = await Promise.all([ddtRicevutiDaConfermare(), elencoDdtRicevuti()]);
     const filtro = String(req.query.mittente ?? '');
-    const righe = elenco.filter(x => !filtro || x.mittente === filtro);
+    const anno = annoScelto(req.query);
+    const delMittente = elenco.filter(x => !filtro || x.mittente === filtro);
+    const righe = filtraPerAnno(delMittente, x => x.data, anno);
     const conAnomalie = righe.filter(x => x.anomalie.length).length;
     res.send(String(layout({ titolo: 'DDT ricevuti', utente: req.session.utente, attiva: 'acquisti', largo: true, script: 'elenco.js',
       avviso: req.query.msg ? String(req.query.msg) : undefined, contenuto: html`
@@ -40,7 +44,8 @@ export function rotteDdtRicevuti() {
         <h2>Registrati</h2>
         <form method="get" class="filtri"><label>Mittente <select name="mittente">
           <option value="">tutti</option><option value="fornitore" ${filtro === 'fornitore' ? raw('selected') : ''}>fornitori</option><option value="cliente" ${filtro === 'cliente' ? raw('selected') : ''}>clienti</option></select></label>
-          <button>Filtra</button> ${conAnomalie ? html`<span class="nota">${conAnomalie} con anomalie</span>` : ''}</form>
+          ${anno != null ? html`<input type="hidden" name="anno" value="${anno}">` : ''}<button>Filtra</button> ${conAnomalie ? html`<span class="nota">${conAnomalie} con anomalie</span>` : ''}</form>
+        ${barraAnni(contaPerAnno(delMittente, x => x.data), anno, '/acquisti/ddt', req.query as Record<string, unknown>)}
         ${righe.length ? html`<div class="tabella-scorre"><table class="elenco">
           <thead><tr><th>Data</th><th>N. DDT</th><th>Mittente</th><th>Da</th><th>Ordine citato</th><th>Ordini collegati</th><th class="n">Righe</th><th>Anomalie</th><th>File</th><th></th></tr></thead>
           <tbody>${righe.map(x => {
