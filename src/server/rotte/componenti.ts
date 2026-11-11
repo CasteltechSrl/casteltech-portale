@@ -278,7 +278,7 @@ export function rotteComponenti() {
     const attributi: Record<string, string | null> = {};
     for (const k of [...ATTR, 'tecnologia']) attributi[k] = String(req.body[k] ?? '').trim() || null;
     const fam = String(req.body.famiglia ?? '').toUpperCase();
-    const riga = await correggiRiga(Number(req.params.id), Number(req.params.n), { famiglia: fam in FAMIGLIE ? fam : null, attributi, clienteFornisce: !!req.body.cliente });
+    const riga = await correggiRiga(Number(req.params.id), Number(req.params.n), { famiglia: fam in FAMIGLIE ? fam : null, attributi, clienteFornisce: !!req.body.cliente }, req.session.utente!.nome);
     // si resta sulla pagina della riga con il risultato o l'errore (Adriano 4/11/2026: "in BOM ci ritorno io con il pulsante")
     res.redirect(`/quotazioni/bom/${req.params.id}/riga/${req.params.n}?msg=${encodeURIComponent(esitoRicalcolo(riga))}`);
   });

@@ -36,7 +36,7 @@ test('BOM solo codifica: niente acquisti né reperibilità, i codici restano', a
 test('BOM solo codifica: non si chiama nessun distributore e non entra nei preventivi', () => {
   const s = readFileSync(new URL('../src/server/codifica-servizio.ts', import.meta.url), 'utf8');
   assert.match(s, /solo \? \{ perPn: new Map\(\), errori: \{\} \}\s*: await cercaPn/);
-  assert.match(s, /if \(solo\) \{ await salvaRighe\(id, righe\); return notaIa; \}/);
+  assert.match(s, /if \(solo\) \{ await salvaRighe\(id, righe\); await archiviaCorrette\(id, righe, [^)]*\); return notaIa; \}/);
   assert.match(s, /AND NOT solo_codifica/);
   assert.match(readFileSync(new URL('../src/server/rotte/preventivi.ts', import.meta.url), 'utf8'), /AND NOT solo_codifica/);
 });

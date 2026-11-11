@@ -104,3 +104,22 @@ export function confermaVerifica<R extends { esito: string; codiceGestionale: st
   const note = r.note.filter(n => !n.startsWith(notaDaValidare) && !n.startsWith(NOTA_VERIFICATO));
   return { ok: true, riga: { ...r, esito: esiti.NUOVO, note: [...note, `${NOTA_VERIFICATO} ${chi} il ${oggi}`] } };
 }
+
+/** Famiglia e campi corretti con "Ricalcola" su una riga. */
+export type CodificaMano = NonNullable<ManoRiga['codifica']>;
+
+/**
+ * Correzioni "Ricalcola" fatte nelle ALTRE BOM, una per P/N (Adriano 11/11/2026, Argo_I_Inclinazione: "una volta registrato il P/N,
+ * deve restare associato a quel codice di produzione e gestionale"): la BOM ricaricata o nuova le riprende. Vince la BOM più recente
+ * (id più alto), nella stessa BOM l'ultima riga. Le correzioni senza P/N non valgono fuori dalla loro BOM.
+ */
+export function correzioniPerPn(elenco: { bomId: number; codifica: CodificaMano | null | undefined }[], chiave: (pn: string | null) => string | null): Map<string, CodificaMano> {
+  const fuori = new Map<string, { bomId: number; codifica: CodificaMano }>();
+  for (const x of elenco) {
+    const k = x.codifica?.pn ? chiave(x.codifica.pn) : null;
+    if (!k || !x.codifica?.famiglia) continue;
+    const prima = fuori.get(k);
+    if (!prima || x.bomId >= prima.bomId) fuori.set(k, { bomId: x.bomId, codifica: x.codifica });
+  }
+  return new Map([...fuori].map(([k, v]) => [k, v.codifica]));
+}
