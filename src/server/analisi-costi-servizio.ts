@@ -89,7 +89,8 @@ const STESSO_PERIODO = `AND (extract(year FROM d.data)::int = $2::int OR $3::tex
 /** Ogni riga venduta (fatture e note di credito emesse, anche storico FIC), con il segno: la classificano `classificaVendite`. */
 export function righeVenditeRivendita(anni: number[], finoA = ''): Promise<RigaVendita[]> {
   return q<RigaVendita>(`SELECT extract(year FROM d.data)::int AS anno, d.cliente_id AS "clienteId", ${NOME_CLIENTE} AS cliente, upper(trim(coalesce(r.codice, ''))) AS codice,
-      coalesce(r.descrizione, '') AS descrizione, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo, (r.acconto_id IS NOT NULL) AS acconto
+      coalesce(r.descrizione, '') AS descrizione, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo, (r.acconto_id IS NOT NULL) AS acconto,
+      (${SEGNO} * r.quantita)::float AS quantita
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
     WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.quantita * r.prezzo <> 0
       AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO}`, [anni, anni[0], finoA]);

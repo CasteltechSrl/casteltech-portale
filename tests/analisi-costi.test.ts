@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  lamineDaVendite, pezziLamina, materialeVenduto,
+  lamineDaVendite, pezziLamina, materialeVenduto, costiPcbComprati,
   chiaveFornitore, classificaCosti, classificaVendite, confrontoRivendita, costiPerAnno, fornitoriDaControllare, nomiPcbComprati, riassuntoCosti, type RigaCosto, type RigaVendita,
 } from '../src/engine/analisi-costi.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -122,6 +122,24 @@ test('componenti e PCB venduti: riga del materiale, quota del preventivo, media 
   const m = materialeVenduto([v('A', 'scheda A', 1000), v('', 'Acquisto componenti', 300), v('', 'Acquisto PCB', 200), v('B', 'scheda B', 500), v('', 'Lamina', 110, 'servizio')],
     [{ codice: 'A', clienteId: null, conMateriale: true, quotaComponenti: 0.6, quotaPcb: 0.1 }]);
   assert.deepEqual(m.map(x => [Math.round(x.componenti), Math.round(x.pcb)]), [[600, 100], [300, 0], [0, 200], [300, 50], [0, 0]]);
+});
+
+test('PCB nascosto nel prezzo: PCB comprato con lo stesso nome del prodotto (Adriano 11/11/2026)', () => {
+  const righe = classificaCosti([
+    riga({ rigaId: 1, fornitore: 'HTS PCB S.r.l.', descrizione: 'NASOMETERV11', quantita: 100, importo: 300, data: '2026-03-01' }),
+    riga({ rigaId: 2, fornitore: 'HTS PCB S.r.l.', descrizione: 'NASOMETERV11/T', quantita: 1, importo: 180, data: '2026-03-01' }),
+    riga({ rigaId: 3, fornitore: 'NCAB Group', descrizione: 'CSMISV0203_V4 PRINTED CIRCUIT BOARD', quantita: 500, importo: 1190, data: '2026-06-01' }),
+  ], [{ tipo: 'fornitore', chiave: 'HTS PCB S.R.L.', categoria: 'pcb' }, { tipo: 'fornitore', chiave: 'NCAB GROUP', categoria: 'pcb' }]);
+  const costi = costiPcbComprati(righe);
+  assert.equal(costi.get('NASOMETERV11'), 3, 'attrezzatura /T fuori dal costo a pezzo');
+  assert.equal(Math.round(costi.get('CSMISV0203V4')! * 100), 238);
+  const v = (codice: string, descrizione: string, importo: number, quantita: number) => ({ ...vendita({ cliente: 'X', codice, descrizione, importo }), quantita, tipo: 'nostro' as const });
+  const vendite = [v('CSMISV0203', 'CS Nuovo Palmare', 1450, 500), v('', 'NASOMETERV11', 1000, 100), v('', 'NASOMETERV11', 6000, 100), v('S1', 'scheda', 1000, 10)];
+  const prev = [{ codice: 'S1', clienteId: null, conMateriale: true, quotaComponenti: 0.5, quotaPcb: 0.1 }];
+  const m = materialeVenduto(vendite, prev, costi);
+  assert.deepEqual(m.map(x => [Math.round(x.componenti), Math.round(x.pcb)]), [[0, 1450], [500, 300], [3000, 600], [500, 100]],
+    'PCB venduto da solo = tutta la riga; scheda = almeno il costo del PCB (300) o la media (600); col preventivo vale il preventivo');
+  assert.deepEqual(materialeVenduto(vendite, prev).map(x => Math.round(x.pcb)), [145, 100, 600, 100], 'senza i PCB comprati: la media');
 });
 
 test('riassunto: dove vanno i soldi, cosa sale, rivendita in perdita, proposte', () => {

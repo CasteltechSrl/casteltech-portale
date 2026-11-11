@@ -198,7 +198,9 @@ export function fornitoriDaControllare(righe: RigaClassificata[], max = 40): For
 export const CATEGORIE_RIVENDITA_SCHEDE = ['componenti', 'pcb', 'meccanica'];
 
 export type TipoVendita = 'nostro' | 'conto_lavoro' | 'servizio' | 'acconto' | 'non_so';
-export interface RigaVendita { anno: number; clienteId: number | null; cliente: string; codice: string; descrizione: string; importo: number; acconto: boolean }
+export interface RigaVendita { anno: number; clienteId: number | null; cliente: string; codice: string; descrizione: string; importo: number; acconto: boolean;
+  /** pezzi della riga (NC in negativo): servono a dare al PCB comprato il suo peso sulla scheda venduta */
+  quantita?: number }
 /** Dal preventivo più recente del prodotto conta solo se vendiamo componenti o PCB (sì/no). */
 export interface MaterialePreventivo { codice: string; clienteId: number | null; conMateriale: boolean;
   /** parte del prezzo a scheda che è vendita di componenti e di PCB (0–1), per dividere il fatturato vero delle schede chiavi in mano */
@@ -211,8 +213,10 @@ export const PREZZO_LAMINA = 110;
  * Componenti e PCB venduti (Adriano 11/11/2026, "componenti acquistati, componenti venduti, PCB acquistate e PCB vendute"): sulle fatture vere con materiale nostro.
  * Riga che fattura il materiale ("acquisto componenti", "PCB") = tutto quello; scheda chiavi in mano = importo vero × la parte di componenti e PCB del suo preventivo;
  * scheda senza preventivo = la parte media delle schede con preventivo (pesata sull'importo).
+ * PCB comprato con lo stesso nome del prodotto (Adriano 11/11/2026, "il PCB acquistato si nasconde nel totale fattura"; `costiPcb` = `costiPcbComprati`), se il preventivo
+ * non ha già un prezzo del PCB: prezzo a pezzo fino al doppio del costo del PCB = la riga È il PCB (Bitrabi, Plantbit); sopra, il PCB è venduto almeno al suo costo a pezzo.
  */
-export function materialeVenduto(vendite: (RigaVendita & { tipo: TipoVendita })[], preventivi: MaterialePreventivo[]): { componenti: number; pcb: number }[] {
+export function materialeVenduto(vendite: (RigaVendita & { tipo: TipoVendita })[], preventivi: MaterialePreventivo[], costiPcb: Map<string, number> = new Map()): { componenti: number; pcb: number }[] {
   const prev = new Map(preventivi.filter(p => p.quotaComponenti != null || p.quotaPcb != null).map(p => [chiavePrev(p.codice, p.clienteId), p]));
   const quote = vendite.map(r => {
     if (r.tipo !== 'nostro') return { componenti: 0, pcb: 0, nota: true };
@@ -224,7 +228,16 @@ export function materialeVenduto(vendite: (RigaVendita & { tipo: TipoVendita })[
   let base = 0, c = 0, b = 0;
   vendite.forEach((r, i) => { const q = quote[i]; if (r.tipo === 'nostro' && q && !MATERIALE_SCRITTO.test(r.descrizione) && r.importo > 0) { base += r.importo; c += r.importo * q.componenti; b += r.importo * q.pcb; } });
   const media = base > 0 ? { componenti: c / base, pcb: b / base } : { componenti: 0, pcb: 0 };
-  return vendite.map((r, i) => { const q = quote[i] ?? media; return { componenti: r.importo * q.componenti, pcb: r.importo * q.pcb }; });
+  return vendite.map((r, i) => {
+    let q = quote[i] ?? media;
+    const costo = r.tipo === 'nostro' && !MATERIALE_SCRITTO.test(r.descrizione) && !(quote[i]?.pcb) ? costoPcbDelProdotto(r, costiPcb) : null;
+    const pezzi = Math.abs(r.quantita ?? 0);
+    if (costo && pezzi >= 1 && r.importo) {
+      const prezzoPezzo = Math.abs(r.importo) / pezzi;
+      q = prezzoPezzo <= 2 * costo ? { componenti: 0, pcb: 1 } : { componenti: q.componenti, pcb: Math.min(1 - q.componenti, Math.max(q.pcb, costo / prezzoPezzo)) };
+    }
+    return { componenti: r.importo * q.componenti, pcb: r.importo * q.pcb };
+  });
 }
 /** Lamine fatturate ai clienti in un anno: a parte (riga della lamina) e dentro i costi una tantum (riga "Avvio produzione - Programmazione - Lamina serigrafica"). */
 export interface LamineVendute { anno: number; pezzi: number; importo: number; pezziUnaTantum: number; importoUnaTantum: number }
@@ -287,15 +300,30 @@ const RUMORE = new Set(['PCB', 'CODICE', 'PRINTED', 'CIRCUIT', 'BOARD', 'TARIFF'
  */
 export function nomiPcbComprati(righe: Pick<RigaClassificata, 'categoria' | 'descrizione' | 'codici'>[]): string[] {
   const nomi = new Set<string>();
-  for (const r of righe.filter(r => r.categoria === 'pcb')) {
-    const parole = r.descrizione.trim().split(/[\s"',;()]+/).filter(Boolean);
-    for (const t of [...parole, ...r.codici]) {
-      const c = compatta(t.replace(/\/T$/i, ''));
-      if (c.length < 5 || RUMORE.has(c) || /^CS\d{6}$/.test(c)) continue;
-      if (/\d/.test(c) || (parole.length === 1 && c.length >= 8)) nomi.add(c);
-    }
-  }
+  for (const r of righe.filter(r => r.categoria === 'pcb')) for (const n of nomiDellaRiga(r)) nomi.add(n);
   return [...nomi];
+}
+function nomiDellaRiga(r: Pick<RigaClassificata, 'descrizione' | 'codici'>): string[] {
+  const nomi: string[] = [];
+  const parole = r.descrizione.trim().split(/[\s"',;()]+/).filter(Boolean);
+  for (const t of [...parole, ...r.codici]) {
+    const c = compatta(t.replace(/[/-]T$/i, ''));
+    if (c.length < 5 || RUMORE.has(c) || /^CS\d{6}$/.test(c)) continue;
+    if (/\d/.test(c) || (parole.length === 1 && c.length >= 8)) nomi.push(c);
+  }
+  return nomi;
+}
+/**
+ * Costo a pezzo dei PCB comprati, per nome: l'acquisto più recente di almeno 2 pezzi (fuori attrezzature "/T", forfait e campioni).
+ * Serve a `materialeVenduto` per trovare il PCB nascosto nel prezzo della scheda venduta.
+ */
+export function costiPcbComprati(righe: Pick<RigaClassificata, 'categoria' | 'descrizione' | 'codici' | 'data' | 'importo' | 'quantita'>[]): Map<string, number> {
+  const costi = new Map<string, number>();
+  for (const r of righe.filter(r => r.categoria === 'pcb' && r.importo > 0 && (r.quantita ?? 0) >= 2 && !/[/-]T\s*$/i.test(r.descrizione.split('\n')[0].trim()))
+    .sort((a, b) => a.data.localeCompare(b.data))) {
+    for (const n of nomiDellaRiga(r)) costi.set(n, r.importo / r.quantita!);
+  }
+  return costi;
 }
 /** Stesso nome: uguale, oppure uno contiene l'altro e il più corto è una sigla con un numero (6+) o un nome lungo (8+). */
 const stessoNome = (a: string, b: string) => {
@@ -303,10 +331,18 @@ const stessoNome = (a: string, b: string) => {
   const [corto, lungo] = a.length <= b.length ? [a, b] : [b, a];
   return lungo.includes(corto) && ((corto.length >= 6 && /\d/.test(corto)) || corto.length >= 8);
 };
+const paroleProdotto = (r: RigaVendita) => [r.codice, ...r.descrizione.split('\n')[0].split(/\s+/)].map(compatta).filter(p => p.length >= 5 && !RUMORE.has(p));
 const pcbDelProdotto = (r: RigaVendita, nomi: string[]) => {
-  const parole = [r.codice, ...r.descrizione.split('\n')[0].split(/\s+/)].map(compatta).filter(p => p.length >= 5 && !RUMORE.has(p));
+  const parole = paroleProdotto(r);
   return parole.some(p => nomi.some(n => stessoNome(p, n)));
 };
+/** Costo a pezzo del PCB comprato con lo stesso nome del prodotto venduto (il più alto se ne trova più d'uno), o null. */
+function costoPcbDelProdotto(r: RigaVendita, costi: Map<string, number>): number | null {
+  if (!costi.size) return null;
+  let max: number | null = null;
+  for (const p of paroleProdotto(r)) for (const [n, c] of costi) if (stessoNome(p, n) && (max == null || c > max)) max = c;
+  return max;
+}
 
 const chiavePrev = (codice: string, clienteId: number | null) => `${codice.toUpperCase().trim()}|${clienteId ?? ''}`;
 const chiaveCliente = (r: Pick<RigaVendita, 'clienteId' | 'cliente'>) => r.clienteId != null ? `c${r.clienteId}` : `n:${r.cliente.toUpperCase().trim()}`;
@@ -383,7 +419,7 @@ const primi = (m: Map<string, { cliente: string; importo: number }>, n = 6) => [
 
 /** Comprato contro fatturato vero, anno per anno. `vendite` = righe delle fatture già classificate (`classificaVendite`). */
 export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (RigaVendita & { tipo: TipoVendita })[]; lamine: LamineVendute[]; anni: number[]; preventivi?: MaterialePreventivo[] }): RivenditaAnno[] {
-  const materiale = materialeVenduto(x.vendite, x.preventivi ?? []);
+  const materiale = materialeVenduto(x.vendite, x.preventivi ?? [], costiPcbComprati(x.righe));
   return x.anni.map(anno => {
     const vendutoComponenti = r2(x.vendite.reduce((s, r, i) => s + (r.anno === anno ? materiale[i].componenti : 0), 0));
     const vendutoPcb = r2(x.vendite.reduce((s, r, i) => s + (r.anno === anno ? materiale[i].pcb : 0), 0));
