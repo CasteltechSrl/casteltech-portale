@@ -10,8 +10,8 @@ import { unzipSync } from 'fflate';
 import { q, q1 } from './db.js';
 import { avviaElaborazione, costoBomPerPreventivo, creaAnalisi, leggiFileBom } from './codifica-servizio.js';
 import { caricaCatalogo, caricaTariffe } from './catalogo-db.js';
-import { normalizza, salvaPreventivo } from './preventivi-servizio.js';
-import { parametriDaAnalisi, parametriDaCicli } from '../engine/scheda/preventivo.js';
+import { datiDaRiga, leggiPreventivo, normalizza, salvaPreventivo } from './preventivi-servizio.js';
+import { aggiornaParametri, parametriDaAnalisi, parametriDaCicli, testoCambi } from '../engine/scheda/preventivo.js';
 import { conAccettate } from '../engine/scheda/accettate.js';
 import { analizzaScheda, leggiBomScheda, type AnalisiScheda, type RigaBomScheda, type StratoGerberInfo } from '../engine/scheda/analisi.js';
 import { ruoloStrato, tipoFile, type TipoFile } from '../engine/scheda/classifica.js';
@@ -315,6 +315,20 @@ export async function fileBom(id: number): Promise<{ nome: string; dati: Buffer 
   return f ? { nome, dati: gunzipSync(f.dati) } : null;
 }
 
+/** Numeri del pacchetto per il preventivo: analisi dei file più i cicli scritti nella mail (più codici nella stessa mail: quello del pacchetto diviso). */
+function letturaPacchetto(p: { analisi: AnalisiScheda; accettate: any; email: any; versione: string | null }) {
+  const { parametri, voci, daControllare } = parametriDaAnalisi(conAccettate(p.analisi, p.accettate));
+  const richieste = richiesteDaEmail(p.email);
+  const richiesta = p.versione ? richieste.find(x => x.versione === p.versione) : richieste.length === 1 ? richieste[0] : undefined;
+  if (richiesta?.cicli?.length) {
+    const daCicli = parametriDaCicli(richiesta.cicli);
+    Object.assign(parametri, daCicli.parametri);
+    for (const v of daCicli.voci) { const i = voci.findIndex(x => x.codice === v.codice); if (i >= 0) voci[i] = v; else voci.push(v); }
+    daControllare.push(...daCicli.daControllare);
+  }
+  return { parametri, voci, daControllare, richiesta };
+}
+
 /**
  * Preventivo compilato dai documenti (Adriano 28/10/2026): catalogo e tariffe attuali, valori standard come un preventivo nuovo,
  * più i numeri dell'incrocio. Resta "da validare": lo si controlla e salvando diventa una bozza normale.
@@ -327,16 +341,7 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
   if (!p?.analisi) throw new Error('Il pacchetto non è ancora analizzato.');
   const [cat, tariffe] = await Promise.all([caricaCatalogo(), caricaTariffe()]);
   const standard = Object.fromEntries(cat.parametri.filter(x => x.default != null && x.gruppo !== 'GENERALE' && x.gruppo !== 'PRE-PRODUZIONE').map(x => [x.codice, x.default]));
-  const { parametri, voci, daControllare } = parametriDaAnalisi(conAccettate(p.analisi, p.accettate));
-  // codice, descrizione e cicli scritti nella mail (più codici nella stessa mail: quello del pacchetto diviso)
-  const richieste = richiesteDaEmail(p.email);
-  const richiesta = p.versione ? richieste.find(x => x.versione === p.versione) : richieste.length === 1 ? richieste[0] : undefined;
-  if (richiesta?.cicli?.length) {
-    const daCicli = parametriDaCicli(richiesta.cicli);
-    Object.assign(parametri, daCicli.parametri);
-    for (const v of daCicli.voci) { const i = voci.findIndex(x => x.codice === v.codice); if (i >= 0) voci[i] = v; else voci.push(v); }
-    daControllare.push(...daCicli.daControllare);
-  }
+  const { parametri, voci, daControllare, richiesta } = letturaPacchetto(p);
   const esistenti = new Set(cat.parametri.map(x => x.codice));
   const letta = (p.analisi as AnalisiScheda).prodotto ?? null;
   const proposta = richiesta?.codice
@@ -454,4 +459,57 @@ export async function sincronizzaVersioni(padreId: number): Promise<void> {
       ON CONFLICT (pacchetto_id, nome) DO UPDATE SET byte = EXCLUDED.byte, dati = EXCLUDED.dati`, [f.id, padreId, suoi]);
     await analizzaPacchetto(f.id);
   }
+}
+
+// ───────────────────────────── file nuovi del cliente, nome e cliente ─────────────────────────────
+
+/**
+ * BOM e Gerber aggiornati dal cliente (Adriano 11/11/2026): i file di prima si tolgono dal pacchetto (anche dalle parti divise per
+ * versione o codice) prima di caricare quelli nuovi; i file veri restano sul Drive. La BOM mandata a Quotazioni resta lì, ma il pacchetto
+ * non la usa più: «Codifica la BOM» ne crea una nuova con il file nuovo.
+ */
+export async function svuotaPacchetto(id: number): Promise<void> {
+  const ids = [id, ...(await q<{ id: number }>(`SELECT id FROM pacchetti_scheda WHERE padre_id = $1`, [id])).map(x => x.id)];
+  await q(`DELETE FROM pacchetti_scheda_file WHERE pacchetto_id = ANY($1::int[])`, [ids]);
+  await q(`UPDATE pacchetti_scheda SET bom_id = NULL WHERE id = ANY($1::int[])`, [ids]);
+}
+
+/** Nome e cliente del pacchetto (Adriano 11/11/2026: nomi che non dicono nulla, cliente mancante). Le parti divise seguono il cliente. */
+export async function aggiornaDatiPacchetto(id: number, opz: { nome?: string; clienteId?: number | null }): Promise<void> {
+  if (opz.nome) await q(`UPDATE pacchetti_scheda SET nome = $2 WHERE id = $1`, [id, opz.nome.slice(0, 200)]);
+  if (opz.clienteId !== undefined) await q(`UPDATE pacchetti_scheda SET cliente_id = $2 WHERE id = $1 OR padre_id = $1`, [id, opz.clienteId]);
+}
+
+/**
+ * Il preventivo del pacchetto prende i numeri dei file nuovi (SMD, feeder, lati, THT, punti di saldatura, item, consumi): stesso preventivo,
+ * stesso numero, stesso catalogo (la "fotografia" non cambia); dal secondo invio al cliente diventa «Rev. N» da solo. Le scelte dell'ufficio
+ * restano. Se il preventivo è già accettato o ha un ordine o una commessa non si tocca: se ne crea uno nuovo da validare.
+ */
+export async function aggiornaPreventivoDaPacchetto(id: number, utenteId: number):
+  Promise<{ preventivoId: number; nuovo: boolean; cambi: string; revisione: string | null }> {
+  const p = await q1<any>(`SELECT * FROM pacchetti_scheda WHERE id = $1`, [id]);
+  if (!p?.analisi) throw new Error('Il pacchetto non è ancora analizzato.');
+  if (!p.preventivo_id) throw new Error('Il pacchetto non ha ancora un preventivo: usa «Crea il preventivo da validare».');
+  const r = await leggiPreventivo(p.preventivo_id);
+  if (!r) throw new Error('Il preventivo del pacchetto non c\'è più.');
+  const bloccato = r.stato === 'accettato' || await q1(`SELECT 1 FROM ordini WHERE preventivo_id = $1 UNION ALL SELECT 1 FROM commesse WHERE preventivo_id = $1 LIMIT 1`, [r.id]);
+  if (bloccato) {
+    await q(`UPDATE pacchetti_scheda SET preventivo_id = NULL WHERE id = $1`, [id]);
+    const nuovoId = await creaPreventivoDaPacchetto(id, r.n_schede, utenteId);
+    return { preventivoId: nuovoId, nuovo: true, cambi: '', revisione: null };
+  }
+  const dati = datiDaRiga(r);
+  const etichette = Object.fromEntries((r.catalogo?.parametri ?? []).map((x: any) => [x.codice, x.etichetta]));
+  const { parametri: letti } = letturaPacchetto(p);
+  const { parametri, cambi } = aggiornaParametri(dati.parametri, letti, new Set(Object.keys(etichette)));
+  const revLetta = (p.analisi as AnalisiScheda).prodotto?.revisione ?? null;
+  const revisione = revLetta && revLetta.toUpperCase() !== String(dati.revisione ?? '').toUpperCase() ? revLetta.toUpperCase() : null;
+  const oggi = new Date().toLocaleDateString('it-IT');
+  const testo = testoCambi(cambi, etichette);
+  const nota = [`Aggiornato il ${oggi} con i file nuovi del cliente («${p.nome}»): ${testo || 'nessun numero cambiato'}.`,
+    revisione ? `Revisione letta dai file nuovi: ${revisione} (prima ${dati.revisione || '—'}).` : '',
+    r.bom_id ? 'Componenti: se la BOM è cambiata, «Codifica la BOM» nella pagina dei documenti e poi scegliere la BOM nuova nel preventivo.' : ''].filter(Boolean).join(' ');
+  await salvaPreventivo({ id: r.id, catalogo: r.catalogo, utenteId, dati: {
+    ...dati, parametri, revisione: revisione ?? dati.revisione, note: [dati.note, nota].filter(Boolean).join('\n') } });
+  return { preventivoId: r.id, nuovo: false, cambi: testo, revisione };
 }

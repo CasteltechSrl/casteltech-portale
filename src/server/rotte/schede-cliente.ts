@@ -8,7 +8,7 @@ import { q, q1 } from '../db.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
-import { aggiungiFile, analizzaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
+import { aggiornaDatiPacchetto, aggiornaPreventivoDaPacchetto, aggiungiFile, analizzaPacchetto, svuotaPacchetto, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
 import { richiesteDaEmail, versioniDaDividere } from '../../engine/scheda/versioni.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
 import { caricamentoLimitato } from '../memoria.js';
@@ -33,9 +33,12 @@ export function rotteSchedeCliente() {
 
   // ── elenco e caricamento ──
   r.get('/', async (req, res) => {
+    const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const modulo = moduloAzioni({
       azione: '/preventivi/documenti/azioni', nome: { singolare: 'pacchetto', plurale: 'pacchetti' },
-      pulsanti: [{ azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
+      extra: html`<label class="inline">Cliente per i pacchetti spuntati <select name="cliente"><option value="">— scegli —</option>${clienti.map(c => html`<option value="${c.id}">${c.ragione_sociale}</option>`)}</select></label>`,
+      pulsanti: [{ azione: 'cliente', testo: 'Assegna il cliente', serve: '1+', titolo: 'Mette il cliente scelto qui a sinistra sui pacchetti spuntati' },
+        { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
         chiedi: 'Eliminare {n} pacchett{o|i} e la loro analisi? I file originali sul Drive non cambiano; i preventivi già fatti restano.' }],
     });
     const elenco = await q<any>(`SELECT p.id, p.nome, p.stato, p.creato_il, p.analisi->'conteggi' AS conteggi, p.analisi->'lavorazione' AS lavorazione,
@@ -43,7 +46,6 @@ export function rotteSchedeCliente() {
         c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
       FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN utenti u ON u.id = p.creato_da
       ORDER BY p.creato_il DESC LIMIT 200`);
-    const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     res.send(pag(req, 'Documenti del cliente', html`
       <div class="intestazione-pagina"><h1>Documenti del cliente</h1><a href="/preventivi">← Preventivi</a></div>
       <section class="blocco stretto-form" id="carica-pacchetto">
@@ -62,6 +64,8 @@ export function rotteSchedeCliente() {
         <output id="esito-pacchetto" class="nota"></output>
       </section>
       <h2>Pacchetti caricati</h2>
+      <p class="nota">Il nome e il cliente si cambiano aprendo il pacchetto («Nome e cliente»); per più pacchetti insieme: spunta, scegli il cliente in alto e «Assegna il cliente».</p>
+      ${req.query.msg ? html`<p class="avviso info chiudibile">${String(req.query.msg)}</p>` : ''}
       ${elenco.length ? html`${modulo.apri}<div class="tabella-scorre"><table class="elenco"><thead><tr>${casellaTutti()}<th>Nome</th><th>Cliente</th><th>Caricato</th><th>Lati SMD</th>
         <th class="n">SMD TOP</th><th class="n">SMD BOT</th><th class="n">THT</th><th>Saldatura THT</th><th class="n">Da chiarire</th></tr></thead><tbody>
         ${elenco.map(p => html`<tr class="cliccabile" data-href="/preventivi/documenti/${p.id}">
@@ -127,6 +131,7 @@ export function rotteSchedeCliente() {
     const versioni = await q<any>(`SELECT f.id, f.nome, f.versione, f.quantita, f.stato, v.id AS preventivo_id, v.numero AS preventivo_numero, v.stato AS preventivo_stato
       FROM pacchetti_scheda f LEFT JOIN preventivi v ON v.id = f.preventivo_id WHERE f.padre_id = $1 ORDER BY f.id`, [p.id]);
     const padre = p.padre_id ? await q1<{ id: number; nome: string }>(`SELECT id, nome FROM pacchetti_scheda WHERE id = $1`, [p.padre_id]) : null;
+    const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const richieste = richiesteDaEmail(p.email);
     const daDividere = versioni.length || padre ? [] : versioniDaDividere(richieste);
     const schedeProposte = p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
@@ -149,11 +154,22 @@ export function rotteSchedeCliente() {
     const aggiungiFileForm = html`
       <details class="blocco"><summary>Aggiungi file a questo pacchetto</summary>
         <div class="stretto-form">
-          <p class="nota">Per i file arrivati dopo (es. BOM e pick and place in formato testo): si aggiungono a quelli già caricati e il pacchetto si rianalizza.</p>
+          <p class="nota">Per i file arrivati dopo (es. BOM e pick and place in formato testo): si aggiungono a quelli già caricati e il pacchetto si rianalizza.
+            Se il cliente ha mandato BOM e Gerber <b>aggiornati</b>, spunta «sostituiscono»: i file di prima si tolgono (restano sul Drive) e poi
+            ${p.preventivo_id ? html`con «Aggiorna il preventivo» i numeri nuovi entrano nel preventivo già fatto.` : 'si crea il preventivo come sempre.'}</p>
           <label>File <input type="file" id="file-aggiunti" multiple></label>
+          <label class="spunta"><input type="checkbox" id="sostituisci-file"> I file nuovi sostituiscono tutti quelli di prima (BOM, Gerber… aggiornati dal cliente)</label>
           <button class="primario" id="aggiungi-file" data-id="${p.id}">Aggiungi e rianalizza</button>
           <output id="esito-aggiunti" class="nota"></output>
-        </div></details>`;
+        </div></details>
+      <details class="blocco"${p.cliente_id ? '' : html` open`}><summary>Nome e cliente${p.cliente_id ? '' : html` <span class="livello attenzione">manca il cliente</span>`}</summary>
+        <form method="post" action="/preventivi/documenti/${p.id}/dati" class="stretto-form">
+          <label>Nome <input name="nome" value="${p.nome}" required maxlength="200"></label>
+          <label>Cliente <small class="unita">dall'anagrafica</small>
+            <select name="cliente"><option value="">—</option>${clienti.map(c => html`<option value="${c.id}"${c.id === p.cliente_id ? html` selected` : ''}>${c.ragione_sociale}</option>`)}</select></label>
+          ${versioni.length ? html`<p class="nota">Il cliente vale anche per le parti divise.</p>` : ''}
+          <button class="primario">Salva</button>
+        </form></details>`;
     if (!a) return res.send(pag(req, p.nome, html`
       <div class="intestazione-pagina"><h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1><a href="/preventivi/documenti">← Documenti del cliente</a></div>
       ${p.errore ? html`<p class="avviso">${p.errore}</p>` : ''}
@@ -178,6 +194,7 @@ export function rotteSchedeCliente() {
           <a href="/preventivi/documenti">← Documenti del cliente</a>
         </div>
       </div>
+      ${req.query.msg ? html`<p class="avviso info chiudibile">${String(req.query.msg)}</p>` : ''}
       ${riquadroEmail(p.email)}
       ${aggiungiFileForm}
       <div class="griglia-scheda-cliente">
@@ -185,7 +202,10 @@ export function rotteSchedeCliente() {
           <h2>Per il preventivo</h2>
           ${riquadroVersioni}
           ${versioni.length ? '' : p.preventivo_id
-            ? html`<p class="avviso info">Preventivo <a href="/preventivi/${p.preventivo_id}">${p.preventivo_numero}</a> <span class="stato ${p.preventivo_stato}">${p.preventivo_stato.replace('_', ' ')}</span></p>`
+            ? html`<p class="avviso info">Preventivo <a href="/preventivi/${p.preventivo_id}">${p.preventivo_numero}</a> <span class="stato ${p.preventivo_stato}">${p.preventivo_stato.replace('_', ' ')}</span></p>
+              <form method="post" action="/preventivi/documenti/${p.id}/aggiorna-preventivo" class="inline"
+                data-conferma="Mettere nel preventivo ${p.preventivo_numero} i numeri letti da questi file (SMD, feeder, lati, THT, punti di saldatura, item)? Tariffe, scelte dell'ufficio e prezzi scritti a mano restano; i cambi si scrivono nelle note. Se il preventivo è già accettato o ha un ordine se ne crea uno nuovo.">
+                <button title="Dopo aver caricato i file aggiornati del cliente">Aggiorna il preventivo con questi file</button></form>`
             : html`<form method="post" action="/preventivi/documenti/${p.id}/preventivo" class="crea-preventivo">
                 <label>Schede da quotare <input name="schede" inputmode="numeric" value="${schedeProposte}" required></label>
                 <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare">Crea il preventivo da validare</button></form>`}
@@ -359,6 +379,12 @@ export function rotteSchedeCliente() {
   r.post('/azioni', async (req, res) => {
     const ids = idsSpuntati(req.body);
     if (ids.length && req.body?.azione === 'elimina') await q(`DELETE FROM pacchetti_scheda WHERE id = ANY($1)`, [ids]);
+    if (ids.length && req.body?.azione === 'cliente') {
+      const cliente = /^\d+$/.test(String(req.body?.cliente ?? '')) ? await q1<{ id: number }>(`SELECT id FROM clienti WHERE id = $1`, [req.body.cliente]) : null;
+      if (!cliente) return res.redirect(`/preventivi/documenti?errore=${encodeURIComponent('Scegli il cliente dall\'elenco accanto al pulsante.')}`);
+      for (const id of ids) await aggiornaDatiPacchetto(id, { clienteId: cliente.id });
+      return res.redirect(`/preventivi/documenti?msg=${encodeURIComponent(`Cliente assegnato a ${ids.length} pacchett${ids.length === 1 ? 'o' : 'i'}.`)}`);
+    }
     res.redirect('/preventivi/documenti');
   });
 
@@ -367,6 +393,36 @@ export function rotteSchedeCliente() {
     if (!/^\d+$/.test(req.params.id)) return next();
     try { await dividiPerVersioni(Number(req.params.id), req.session.utente!.id); res.redirect(`/preventivi/documenti/${req.params.id}`); }
     catch (e: any) { res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent(e.message)}`); }
+  });
+
+  // file aggiornati dal cliente: prima si tolgono quelli vecchi (poi il browser carica i nuovi e chiede l'analisi)
+  r.post('/:id/svuota', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    if (!await q1(`SELECT 1 FROM pacchetti_scheda WHERE id = $1`, [req.params.id])) return res.status(404).json({ errore: 'Pacchetto non trovato.' });
+    await svuotaPacchetto(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // nome e cliente del pacchetto (Adriano 11/11/2026)
+  r.post('/:id/dati', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const nome = String(req.body?.nome ?? '').trim();
+    const clienteId = /^\d+$/.test(String(req.body?.cliente ?? '')) ? Number(req.body.cliente) : null;
+    if (clienteId && !await q1(`SELECT 1 FROM clienti WHERE id = $1`, [clienteId]))
+      return res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent('Cliente non trovato in anagrafica.')}`);
+    await aggiornaDatiPacchetto(Number(req.params.id), { nome: nome || undefined, clienteId });
+    res.redirect(`/preventivi/documenti/${req.params.id}?msg=${encodeURIComponent('Nome e cliente salvati.')}`);
+  });
+
+  // preventivo già fatto + file nuovi del cliente: i numeri nuovi nel preventivo (Adriano 11/11/2026)
+  r.post('/:id/aggiorna-preventivo', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    try {
+      const e = await aggiornaPreventivoDaPacchetto(Number(req.params.id), req.session.utente!.id);
+      const msg = e.nuovo ? 'Il preventivo di prima è già accettato o ha un ordine: ne ho creato uno nuovo da validare con i file nuovi.'
+        : `Preventivo aggiornato con i file nuovi: ${e.cambi || 'nessun numero cambiato'}.${e.revisione ? ` Revisione ${e.revisione}.` : ''} Controllalo e salvalo.`;
+      res.redirect(`/preventivi/${e.preventivoId}?msg=${encodeURIComponent(msg)}`);
+    } catch (e: any) { res.redirect(`/preventivi/documenti/${req.params.id}?errore=${encodeURIComponent(e.message)}`); }
   });
 
   r.post('/:id/elimina', async (req, res, next) => {

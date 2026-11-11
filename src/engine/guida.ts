@@ -503,6 +503,20 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/preventivi/documenti', 'Da documenti del cliente']],
   },
   {
+    id: 'documenti-cliente-aggiornati', area: 'preventivi', titolo: 'Documenti del cliente aggiornati (BOM e Gerber nuovi), nome e cliente dei pacchetti',
+    parole: 'aggiornare aggiornato aggiornata nuova nuovi revisione rev bom gerber file sostituire sostituiscono ricaricare ricarico preventivo esistente già fatto rinominare rinomina nome cliente assegnare pacchetto pacchetti caricati doppioni',
+    testo: [
+      'Se il cliente manda BOM e Gerber aggiornati non serve ricaricare tutto da capo: apri il pacchetto in Documenti del cliente, "Aggiungi file a questo pacchetto", scegli i file nuovi e spunta "I file nuovi sostituiscono tutti quelli di prima". I file di prima si tolgono dal pacchetto (restano sul Drive) e il pacchetto si rianalizza con quelli nuovi.',
+      'Se il pacchetto ha già il suo preventivo, premi "Aggiorna il preventivo con questi file": nel preventivo cambiano solo i numeri letti dai file (SMD e feeder per lato, lati, THT, punti di saldatura, stagno, pasta, item) e la revisione se nei file nuovi è diversa. Tariffe, prezzi scritti a mano e le scelte dell\'ufficio (prima produzione, lamine del cliente, controllo visivo) restano. Nelle note del preventivo c\'è l\'elenco di cosa è cambiato (es. "SMD 120 → 135").',
+      'È lo stesso preventivo con lo stesso numero: se lo mandi di nuovo al cliente diventa da solo "Rev. 1" con "annulla e sostituisce l\'invio precedente".',
+      'Se il preventivo è già accettato o ha un ordine o una commessa non si tocca: il portale ne crea uno nuovo da validare con i file nuovi.',
+      'Componenti: la BOM nuova va codificata di nuovo ("Codifica la BOM" nella pagina dei documenti), poi nel preventivo si sceglie la BOM nuova.',
+      'Nome e cliente di un pacchetto si cambiano nel riquadro "Nome e cliente" della sua pagina (se manca il cliente è aperto e segnato). Per più pacchetti insieme: nell\'elenco spunta le righe, scegli il cliente in alto e premi "Assegna il cliente". I doppioni si tolgono con le spunte ed Elimina.',
+    ],
+    passi: ['Apri il pacchetto in Preventivi → Da documenti del cliente.', 'Aggiungi file a questo pacchetto: scegli i file nuovi, spunta "sostituiscono", Aggiungi e rianalizza.', 'Premi "Aggiorna il preventivo con questi file", controlla le note e Salva.'],
+    pagine: [['/preventivi/documenti', 'Da documenti del cliente']],
+  },
+  {
     id: 'preventivo-da-validare', area: 'preventivi', titolo: 'Preventivo "da validare" compilato dai documenti',
     parole: 'validare validazione automatico compilato bozza controllare preventivo documenti piazzole case 0603 0805 ipc cicli lavorazione ciclo mail onda aoi etichette',
     testo: [
