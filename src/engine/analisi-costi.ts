@@ -35,7 +35,9 @@ export interface RigaCosto {
 export interface RegolaCategoria { tipo: 'fornitore' | 'riga' | 'documento'; chiave: string; categoria: string }
 
 export type Come = 'regola' | 'parola' | 'fornitore' | 'fic' | 'storico' | 'nessuna';
-export interface RigaClassificata extends RigaCosto { anno: number; categoria: string; macro: Macro; come: Come; accessoria: boolean }
+export interface RigaClassificata extends RigaCosto { anno: number; categoria: string; macro: Macro; come: Come; accessoria: boolean;
+  /** parte della riga del fornitore (For-Tek: 0,1 PCB e 0,9 progettazione), se la riga è divisa */
+  parte?: number }
 
 /** La chiave del fornitore nelle regole: il nome in maiuscolo senza spazi doppi (vale anche per chi non è in anagrafica). */
 export const chiaveFornitore = (nome: string) => nome.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -76,7 +78,22 @@ export function classificaCosti(righe: RigaCosto[], regole: RegolaCategoria[]): 
     const [cat] = [...m].sort((a, b) => b[1] - a[1])[0];
     r.categoria = cat; r.macro = categoria(cat).macro; r.come = 'storico'; r.accessoria = false;
   }
-  return out;
+  return dividiPcbConsulenza(out);
+}
+
+/**
+ * For-Tek di Laura Nardi (Adriano 11/11/2026): "non mi fattura la consulenza ma mi ricarica molto di più i PCB. A spanne è 90 % consulenza e 10 % PCB".
+ * Una riga di PCB di For-Tek (non scritta a mano dall'ufficio) si divide: `QUOTA_PCB_FORTEK` resta PCB, il resto va in Progettazione.
+ */
+export const QUOTA_PCB_FORTEK = 0.1;
+const FORTEK = /for-?tek|laura nardi|nardi laura/i;
+function dividiPcbConsulenza(righe: RigaClassificata[]): RigaClassificata[] {
+  return righe.flatMap(r => {
+    if (r.categoria !== 'pcb' || r.come === 'regola' || !FORTEK.test(r.fornitore)) return [r];
+    const pcb = Math.round(r.importo * QUOTA_PCB_FORTEK * 100) / 100;
+    return [{ ...r, importo: pcb, parte: QUOTA_PCB_FORTEK },
+      { ...r, importo: Math.round((r.importo - pcb) * 100) / 100, categoria: 'progettazione', macro: categoria('progettazione').macro, quantita: null, parte: 1 - QUOTA_PCB_FORTEK }];
+  });
 }
 
 function classificaConRegole(righe: RigaCosto[], regole: RegolaCategoria[]): RigaClassificata[] {
