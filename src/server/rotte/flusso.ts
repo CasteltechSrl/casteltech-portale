@@ -104,10 +104,21 @@ export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLet
     <input name="numero" value="${r.posizione}" inputmode="numeric" title="Scrivi la posizione e premi Invio" class="${r.flusso.priorita != null ? 'mano' : ''}">
     <button name="azione" value="giu" title="Meno urgente">▼</button>
     ${r.flusso.priorita != null ? html`<button name="azione" value="auto" class="auto" title="Torna alla priorità automatica (consegna richiesta)">auto</button>` : ''}</form>`;
+  // preventivo della riga (Adriano 11/11/2026): collegato, proposto da verificare nell'ordine, o da fare
+  const statoPreventivo = (r: RigaCruscottoFlusso) => {
+    const ordine = `/ordini/${r.ordineId}#riga-${r.id}`;
+    if (!r.preventivo) return html`<br><small class="esito critico">nessun preventivo:</small> ${solaLettura ? '' : html`<a class="bottone piccolo" href="/preventivi/nuovo${r.clienteId ? `?cliente=${r.clienteId}` : ''}" title="Preventivo nuovo per questo cliente">Fai il preventivo</a>
+      <a href="${ordine}" class="nota" title="Se il preventivo c'è già (scritto con un altro codice), sceglilo dal menu Preventivo nella riga dell'ordine">o collegalo nell'ordine</a>`}`;
+    if (r.preventivo.proposto) return html`<br><small class="esito verifica" title="Trovato dal portale (stesso codice, quantità più vicina): confermalo o cambialo nell'ordine">preventivo da verificare: ${r.preventivo.numero}</small>
+      ${solaLettura ? '' : html`<a class="bottone piccolo" href="${ordine}">Verifica nell'ordine</a>`}`;
+    return html`<br><small class="nota">prev. <a href="/preventivi/${r.preventivo.id}">${r.preventivo.numero}</a></small>${!r.commessaId && !solaLettura
+      ? html` <a class="bottone piccolo" href="/commesse/nuova?preventivo=${r.preventivo.id}&riga=${r.id}" title="Commessa con quantità, ordine del cliente e consegna di questa riga">Crea commessa</a>` : ''}`;
+  };
   const intestazione = (r: RigaCruscottoFlusso) => html`
     <td class="prio-cella">${prio(r)}</td>
     <td><a href="/ordini/${r.ordineId}">${r.numero}/${r.anno}</a><br><small class="nota">${r.cliente} · ${gm(r.dataOrdine)}</small></td>
-    <td><b>${r.codice ?? ''}</b><br><small class="nota">${r.descrizione ?? ''}${r.commessaId ? html` · <a href="/commesse/${r.commessaId}">comm. ${r.commessaNumero}</a>` : html` · <span class="nota">nessuna commessa</span>`}</small></td>
+    <td><b>${r.codice ?? ''}</b><br><small class="nota">${r.descrizione ?? ''}${r.commessaId ? html` · <a href="/commesse/${r.commessaId}">comm. ${r.commessaNumero}</a>` : html` · <span class="nota">nessuna commessa</span>`}</small>
+      ${statoPreventivo(r)}</td>
     <td class="n">${num(r.quantita, 0)}${r.quantitaSpedita ? html`<br><small class="nota">${num(r.quantitaSpedita, 0)} già partite</small>` : ''}</td>
     <td class="${r.consegna && r.consegna < oggi ? 'negativo' : ''}">${data(r.consegna)}${r.prevista && r.prevista !== r.consegna ? html`<br><small class="nota">prevista ${gm(r.prevista)}${r.ritardo ? ` (${r.ritardo > 0 ? '+' : ''}${r.ritardo})` : ''}</small>` : ''}</td>`;
   const colonne = (pz: string) => html`<th>Priorità</th><th>Ordine · cliente</th><th>Codice · descrizione</th><th class="n">${pz}</th><th>Consegna</th>`;
@@ -137,7 +148,7 @@ export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLet
         <td>${v.acquisti.length ? html`<div class="spunte">${v.acquisti.map(a => chip(`${a.firma ? '✓' : '✗'} ${a.voce.nome}`, a.firma ? 'ok' : 'manca', a.firma ? `acquistato: ${quandoFirma(a.firma)}` : 'non ancora acquistato (finestra 1)'))}</div>` : html`<span class="nota">niente da comprare</span>`}</td>
         <td>${v.materiale.length ? html`<div class="spunte">${v.materiale.map(m => spuntaForm(r.id, 'materiale', m.fase, m.nome, m.firma, torna, { manca: m.manca && !m.firma, solaLettura, titolo: `${m.nota}${m.manca ? ' — manca ancora un acquisto' : ''}. Premi quando hai verificato che c'è tutto il materiale per questa fase` }))}</div>
           <small class="nota">${v.materiale.map(m => `${m.nome}: ${m.nota}`).filter(x => !x.endsWith(': ')).join(' · ')}</small>`
-          : html`<span class="nota">fasi non note: serve il preventivo o la commessa</span>`}</td>
+          : html`<span class="nota">fasi non note: collega o fai il preventivo (sotto il codice)</span>`}</td>
         <td>${chiQuando(v.materiale)}</td>
         <td class="azioni-riga">${r.commessaId ? html`<a class="bottone piccolo" href="/commesse/${r.commessaId}/pre-produzione" title="Scheda di pre-produzione: documenti, BOM, materiale, checklist">Pre-produzione</a>` : html`<a class="bottone piccolo" href="/commesse" title="La commessa non c'è ancora: si crea dal preventivo">Commesse</a>`}
           ${solaLettura ? '' : html`<form method="post" action="/produzione/flusso/riga/${r.id}/in-produzione"><input type="hidden" name="torna" value="${torna}"><input type="hidden" name="commessa" value="${r.commessaId ?? ''}">
@@ -148,7 +159,7 @@ export function elencoFinestra(d: DatiFlusso, f: Finestra, oggi: string, solaLet
       <tbody>${righe.map(r => {
         const v = r.valutazione;
         return html`<tr id="riga-${r.id}" class="${r.consegna && r.consegna < oggi ? 'scaduta' : ''}">${intestazione(r)}
-        <td>${v.produzione.length ? html`<div class="spunte">${v.produzione.map(p => spuntaForm(r.id, 'produzione', p.fase, p.nome, p.firma, torna, { auto: p.auto, solaLettura }))}</div>` : html`<span class="nota">fasi non note: serve il preventivo o la commessa</span>`}</td>
+        <td>${v.produzione.length ? html`<div class="spunte">${v.produzione.map(p => spuntaForm(r.id, 'produzione', p.fase, p.nome, p.firma, torna, { auto: p.auto, solaLettura }))}</div>` : html`<span class="nota">fasi non note: collega o fai il preventivo (sotto il codice)</span>`}</td>
         <td>${v.finite ? html`<b>${num(v.finite, 0)} su ${num(r.quantita, 0)}</b> <small class="nota">${v.finite < r.quantita ? 'parziale' : 'totale'}</small>${v.pronte ? html`<br><small class="nota">${num(v.pronte, 0)} in "Da spedire"</small>` : ''}` : html`<span class="nota">—</span>`}
           ${solaLettura || !r.commessaId ? (r.commessaId ? '' : html`<br><small class="nota">serve la commessa</small>`) : html`<form method="post" action="/produzione/flusso/riga/${r.id}/fine-lavorazione" class="fine-lav"><input type="hidden" name="torna" value="${torna}"><input type="hidden" name="commessa" value="${r.commessaId}">
             <input name="quantita" inputmode="numeric" placeholder="schede" title="Schede finite (parziale)"><button class="piccolo" name="totale" value="0">Fine parziale</button><button class="piccolo primario" name="totale" value="1" title="Tutte le schede che mancano sono finite">Fine lavorazione</button></form>`}</td>
