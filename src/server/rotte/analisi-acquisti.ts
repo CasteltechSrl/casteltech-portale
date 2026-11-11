@@ -22,6 +22,7 @@ import {
   righeAcquistoComponente, righeAcquistoMateriale, ultimeFattureFornitore, type RigaAcquistoLetta,
 } from '../analisi-acquisti-servizio.js';
 import { cercaAcquisti, comeRigheAcquisto, righeFattureComponente, righeFattureFornitore, righeFattureMateriale, statoRighe } from '../righe-fornitori-servizio.js';
+import { acquistiPerAnno, spiegaTermini } from '../../engine/ricerca-acquisti.js';
 import { articoliComprati, prezzoRiga, type ArticoloComprato, type RigaAcquistoStorica } from '../../engine/righe-fattura.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
@@ -222,36 +223,55 @@ export function rotteAnalisiAcquisti() {
     res.status(p.stato).send(p.html);
   });
 
-  // ── Ricerca negli acquisti: "dove l'ho comprato e a quanto" ──
+  // ── Ricerca negli acquisti: "dove l'ho comprato e a quanto", divisa per anno (Adriano 11/11/2026) ──
   async function datiRicerca(req: Request) {
     const testo = String(req.query.q ?? '').trim().slice(0, 80);
-    const righe = testo.length >= 2 ? await cercaAcquisti(testo) : [];
-    return { testo, righe, articoli: articoliComprati(righe) };
+    const esatta = req.query.esatta === '1';
+    const { righe: tutte, termini, tollerante } = testo.length >= 2 ? await cercaAcquisti(testo, { esatta }) : { righe: [], termini: [], tollerante: false };
+    const anni = acquistiPerAnno(tutte);
+    const anno = Number(req.query.anno) || null;
+    const righe = anno ? tutte.filter(r => r.data.startsWith(String(anno))) : tutte;
+    return { testo, esatta, termini, tollerante, tutte, anni, anno: anno && anni.some(x => x.anno === anno) ? anno : null, righe, articoli: articoliComprati(righe) };
   }
 
   r.get('/acquisti', async (req: Request, res) => {
     const d = await datiRicerca(req);
     const stato = await statoRighe();
+    const link = (extra: string) => `/amministrazione/analisi/acquisti?q=${encodeURIComponent(d.testo)}${d.esatta ? '&esatta=1' : ''}${extra}`;
+    const spesaTotale = d.anni.reduce((s, a) => s + a.spesa, 0);
     const p = pagina(req, d.testo ? `Acquisti di ${d.testo}` : 'Ricerca negli acquisti', html`
       <div class="intestazione-pagina"><h1>Dove l'ho comprato e a quanto</h1>
-        <div class="azioni non-stampare">${d.righe.length ? html`<a class="bottone" href="/amministrazione/analisi/acquisti.xlsx?q=${encodeURIComponent(d.testo)}">Excel</a> ` : ''}<button type="button" id="stampa">Stampa</button></div></div>
+        <div class="azioni non-stampare">${d.righe.length ? html`<a class="bottone" href="/amministrazione/analisi/acquisti.xlsx?q=${encodeURIComponent(d.testo)}${d.esatta ? '&esatta=1' : ''}${d.anno ? `&anno=${d.anno}` : ''}">Excel</a> ` : ''}<button type="button" id="stampa">Stampa</button></div></div>
       <div class="non-stampare">${menuAmministrazione('analisi')}</div>
       ${tastiAnalisi('acquisti')}
       <form method="get" class="cerca non-stampare">
-        <label>Componente o materiale <input type="search" name="q" value="${d.testo}" placeholder="P/N, codice o parole della descrizione (es. STM32F103, 0603 10K, pasta saldante)" size="50" autofocus></label>
+        <label>Componente o materiale <input type="search" name="q" value="${d.testo}" placeholder="P/N, codice o parole della descrizione (es. STM32F103, 0603 10K, lamine, pasta saldante)" size="50" autofocus></label>
+        <label class="spunta"><input type="checkbox" name="esatta" value="1" ${d.esatta ? 'checked' : ''}> parole esatte</label>
         <button class="primario">Cerca</button></form>
       <p class="nota">Cerca nelle righe delle fatture dei fornitori: storico di Fatture in Cloud dal 2019 e fatture arrivate dallo SdI (${stato ? `${num(stato.righe, 0)} righe di ${num(stato.conRighe, 0)} fatture` : ''}).
-        Tutte le parole devono esserci; un P/N si trova anche scritto senza trattini. Prezzo = imponibile della riga ÷ quantità (note di credito in negativo).</p>
-      ${!d.testo ? '' : !d.righe.length ? html`<p class="vuoto">Nessun acquisto con "${d.testo}".</p>` : html`
+        Tutte le parole devono esserci, ma singolare e plurale, accenti e sinonimi non contano ("lamina" trova anche "lamine" e "stencil"); un P/N si trova anche senza trattini;
+        se non c'è niente si riprova ammettendo un errore di battitura. "Parole esatte" = cerca le parole così come sono scritte. Prezzo = imponibile della riga ÷ quantità (note di credito in negativo).</p>
+      ${d.termini.length && !d.esatta ? html`<p class="nota">Cercato: <b>${spiegaTermini(d.termini)}</b>${d.tollerante ? html` · <span class="etichetta">nessun risultato esatto: righe con parole simili (un errore di battitura)</span>` : ''}</p>` : ''}
+      ${!d.testo ? '' : !d.tutte.length ? html`<p class="vuoto">Nessun acquisto con "${d.testo}".</p>` : html`
         <div class="cifre">
-          <div class="cifra"><span>Articoli trovati</span><b>${d.articoli.length}</b><small>${d.righe.length}${d.righe.length >= 3000 ? '+' : ''} righe di fattura</small></div>
-          <div class="cifra"><span>Spesa totale</span><b>${euro(d.articoli.reduce((s, a) => s + a.spesa, 0))}</b><small>dal ${dataIt(d.righe[d.righe.length - 1].data)} al ${dataIt(d.righe[0].data)}</small></div>
-          <div class="cifra"><span>Fornitori</span><b>${new Set(d.righe.map(r => r.fornitoreChiave)).size}</b><small>${[...new Set(d.righe.map(r => r.fornitore))].slice(0, 4).join(', ')}</small></div>
+          <div class="cifra"><span>Spesa totale</span><b>${euro(spesaTotale)}</b><small>${d.tutte.length}${d.tutte.length >= 10000 ? '+' : ''} righe di fattura dal ${dataIt(d.tutte[d.tutte.length - 1].data)} al ${dataIt(d.tutte[0].data)}</small></div>
+          <div class="cifra"><span>Ultimo anno ${d.anni[0].anno}</span><b>${euro(d.anni[0].spesa)}</b><small>${num(d.anni[0].quantita, 0)} pezzi/unità${d.anni[0].variazione != null ? ` · ${pct(d.anni[0].variazione)} sul ${d.anni[0].anno - 1}` : ''}</small></div>
+          <div class="cifra"><span>Fornitori</span><b>${new Set(d.tutte.map(r => r.fornitoreChiave)).size}</b><small>${[...new Set(d.tutte.map(r => r.fornitore))].slice(0, 4).join(', ')}</small></div>
         </div>
-        <h2>Per articolo</h2>
+        <h2>Anno per anno</h2>
+        <p class="nota">Spesa = imponibile delle righe trovate (note di credito in negativo); quantità = somma delle quantità delle righe (pezzi, kg… come scritte in fattura); prezzo medio = spesa ÷ quantità.
+          Clic sull'anno per vedere solo gli articoli e le righe di quell'anno.</p>
+        <div class="tabella-scorre"><table class="elenco" data-non-ordinare>
+          <thead><tr><th>Anno</th><th class="num">Spesa</th><th class="num">Variazione</th><th class="num">Quantità</th><th class="num">Prezzo medio</th><th class="num">Righe</th><th class="num">Fatture</th><th>Fornitori</th></tr></thead>
+          <tbody>${d.anni.map(a => html`<tr class="${d.anno === a.anno ? 'anno-scelto' : ''}"><td><a href="${link(`&anno=${a.anno}`)}"><b>${a.anno}</b></a></td><td class="num">${euro(a.spesa)}</td><td class="num">${pct(a.variazione)}</td>
+            <td class="num">${num(a.quantita, 0)}</td><td class="num">${euroUnitario(a.prezzoMedio)}</td><td class="num">${a.righe}</td><td class="num">${a.fatture}</td>
+            <td>${a.fornitori.slice(0, 3).map((f, i) => html`${i ? ', ' : ''}<a href="${linkFornitore(f.fornitoreChiave)}">${f.fornitore}</a> <small>${euro(f.spesa)}</small>`)}${a.fornitori.length > 3 ? html` <small>e altri ${a.fornitori.length - 3}</small>` : ''}</td></tr>`)}
+            <tr class="totale-riga"><td><strong>Totale</strong></td><td class="num"><strong>${euro(spesaTotale)}</strong></td><td></td><td class="num"><strong>${num(d.anni.reduce((s, a) => s + a.quantita, 0), 0)}</strong></td><td></td>
+              <td class="num"><strong>${d.tutte.length}</strong></td><td class="num"><strong>${new Set(d.tutte.map(r => r.documentoId)).size}</strong></td><td></td></tr></tbody></table></div>
+        <h2>Per articolo${d.anno ? html` nel ${d.anno} <a class="nota non-stampare" href="${link('')}">(tutti gli anni)</a>` : ''}</h2>
         <p class="nota">Le righe con lo stesso componente (o P/N, codice del fornitore, descrizione) sono unite; i fornitori con l'ultimo prezzo pagato e il più basso. In cima gli acquisti più recenti.</p>
         ${tabellaArticoli(d.articoli)}
-        <h2>Tutte le righe${d.righe.length > 300 ? html` <span class="nota">(le ultime 300 di ${d.righe.length})</span>` : ''}</h2>
+        <h2>Tutte le righe${d.anno ? ` del ${d.anno}` : ''}${d.righe.length > 300 ? html` <span class="nota">(le ultime 300 di ${d.righe.length})</span>` : ''}</h2>
         ${tabellaRigheStoriche(d.righe.slice(0, 300))}`}`);
     res.status(p.stato).send(p.html);
   });
@@ -259,12 +279,13 @@ export function rotteAnalisiAcquisti() {
   r.get('/acquisti.xlsx', async (req: Request, res) => {
     const d = await datiRicerca(req);
     const dati = await excelSemplice(`Acquisti ${d.testo}`.slice(0, 31), [
+      { header: 'Anno', key: 'anno', width: 7, formato: 'intero' },
       { header: 'Data', key: 'data', width: 12, formato: 'data' }, { header: 'Tipo', key: 'tipo', width: 12 }, { header: 'Numero', key: 'numero', width: 14 },
       { header: 'Fornitore', key: 'fornitore', width: 32 }, { header: 'Codice', key: 'codice', width: 18 }, { header: 'P/N', key: 'pn', width: 20 },
       { header: 'Descrizione', key: 'descrizione', width: 60 }, { header: 'Quantità', key: 'quantita', width: 10 }, { header: 'UM', key: 'um', width: 6 },
       { header: 'Prezzo unitario €', key: 'prezzo', width: 14 }, { header: 'Imponibile €', key: 'imponibile', width: 14, formato: 'euro' },
-    ], d.righe.map(r => ({ ...r, tipo: r.tipo === 'nota_credito' ? 'nota di credito' : 'fattura', prezzo: prezzoRiga(r), descrizione: pulita(r.descrizione) })));
-    inviaExcel(res, nomeExcel(`acquisti-${d.testo.replace(/[^A-Za-z0-9]+/g, '-') || 'ricerca'}`), dati);
+    ], d.righe.map(r => ({ ...r, anno: Number(r.data.slice(0, 4)), tipo: r.tipo === 'nota_credito' ? 'nota di credito' : 'fattura', prezzo: prezzoRiga(r), descrizione: pulita(r.descrizione) })));
+    inviaExcel(res, nomeExcel(`acquisti-${d.testo.replace(/[^A-Za-z0-9]+/g, '-') || 'ricerca'}${d.anno ? `-${d.anno}` : ''}`), dati);
   });
 
   // ── Scheda del componente ──

@@ -800,6 +800,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    scheda fornitore: "Cosa compriamo da questo fornitore". `/amministrazione/analisi/acquisti?q=` (tasto Acquisti) = ricerca per P/N (anche senza trattini), codice o parole:
    articoli uniti (`articoliComprati`: volte, quantità, spesa, ultimo prezzo e da chi, min–max, fornitori con l'ultimo prezzo) + tutte le righe + Excel. Colonna `categoria` della riga
    libera per il thread del punto di pareggio (categorie di Adriano per riga).
+   Anno per anno e ricerca tollerante (Adriano 11/11/2026, "quanto ho comprato di lamine nel 2026, 2025, 2024…"; `engine/ricerca-acquisti.ts`, test in `tests/ricerca-acquisti.test.ts`):
+   tabella "Anno per anno" (`acquistiPerAnno`: spesa, variazione, quantità, prezzo medio, fornitori; `?anno=` filtra articoli, righe ed Excel); `terminiRicerca` = radici
+   (singolare/plurale), accenti, parole vuote, `SINONIMI` (lamina = stencil, "serigrafica" non obbligatoria), materiale abbinato della categoria; niente risultati = riprova con un errore
+   di battitura (`terminiTolleranti`); spunta "parole esatte" (`?esatta=1`). Un sinonimo nuovo = una voce in `SINONIMI`.
    Costo vero delle fatture fornitori nelle analisi (Adriano 11/11/2026, "energia 2025 solo 5.000 €": era 9.378; `engine/costo-fornitori.ts`, test in `tests/costo-fornitori.test.ts`):
    righe N2.x "Importo a credito/debito cliente" o "doppi pagamenti" = partite finanziarie fuori dal costo (`SQL_IMPONIBILE_COSTO`, `sqlPartitaFinanziaria`), segno delle righe
    dal verso del documento (`SQL_FATTORE_RIGHE`: NC Enel/DigiKey con importi negativi), doppioni di FIC esclusi (`SQL_NON_DOPPIONE`: fornitore, numero, data, tipo, totale).

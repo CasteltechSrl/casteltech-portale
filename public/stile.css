@@ -1146,3 +1146,4 @@ details.pagato-cliente[open] { display: block; margin: .4rem 0 0; }
 details.pagato-cliente summary { list-style: none; cursor: pointer; }
 details.pagato-cliente summary::-webkit-details-marker { display: none; }
 form.pagato-rata input.corto { width: 7rem; }
+table.elenco tr.anno-scelto td { background: #fff4c2; }

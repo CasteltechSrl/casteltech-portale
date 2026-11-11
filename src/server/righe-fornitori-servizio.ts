@@ -7,6 +7,8 @@ import { q, q1, transazione } from './db.js';
 import { righeFattureDaXml, codiciFornitoreMateriale, chiavePn, paroleDescrizione, pnDallaRiga, candidatiRiga, type RigaFatturaXml, type RigaAcquistoStorica } from '../engine/righe-fattura.js';
 import { NOME_FORNITORE_SQL, type RigaAcquistoLetta } from './analisi-acquisti-servizio.js';
 import { leggiXml, trova, tutti } from '../engine/fattura-ricevuta.js';
+import { normalizzaAcquisti, terminiRicerca, terminiTolleranti, type TermineRicerca } from '../engine/ricerca-acquisti.js';
+import { CATEGORIE_MATERIALI } from '../engine/materiali-consumo.js';
 
 type Cliente = { query: (sql: string, valori?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> };
 
@@ -142,13 +144,37 @@ const SQL_RIGHE_STORICHE = `SELECT d.id AS "documentoId", d.tipo, d.numero, to_c
     r.codice, r.descrizione, r.pn, r.quantita::float AS quantita, r.um, r.imponibile::float AS imponibile, r.componente_id AS "componenteId", r.materiale_id AS "materialeId"
   FROM documenti_ricevuti_righe r JOIN documenti_ricevuti d ON d.id = r.documento_id LEFT JOIN fornitori_anagrafica f ON f.id = d.fornitore_id`;
 
-/** Ricerca negli acquisti: P/N, codice o parole della descrizione (tutte le parole devono esserci; P/N anche senza trattini). */
-export function cercaAcquisti(testo: string, max = 3000): Promise<RigaAcquistoStorica[]> {
-  const parole = testo.trim().toUpperCase().split(/\s+/).filter(Boolean).slice(0, 6);
-  if (!parole.length) return Promise.resolve([]);
-  const condizioni = parole.map((_, i) => `(upper(r.descrizione) LIKE '%' || $${i + 1} || '%' OR upper(coalesce(r.codice, '')) LIKE '%' || $${i + 1} || '%'
-      OR regexp_replace(upper(coalesce(r.pn, '')), '[^A-Z0-9]', '', 'g') LIKE '%' || regexp_replace($${i + 1}, '[^A-Z0-9]', '', 'g') || '%')`);
-  return q<RigaAcquistoStorica>(`${SQL_RIGHE_STORICHE} WHERE ${condizioni.join(' AND ')} ORDER BY d.data DESC, d.id DESC, r.posizione LIMIT ${max}`, parole);
+const SQL_NORM = (x: string) => `translate(upper(${x}), 'ÀÁÂÄÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜ', 'AAAAEEEEIIIIOOOOUUUU')`;
+
+/** Righe che contengono tutti i termini (ognuno con almeno una variante) nella descrizione, nel codice, nel P/N (anche senza trattini)
+ *  o nel materiale di consumo abbinato (codice, descrizione, nome della categoria). */
+function righePerTermini(termini: TermineRicerca[], max: number): Promise<RigaAcquistoStorica[]> {
+  const parametri: unknown[] = [];
+  const condizioni = termini.map(t => t.varianti.map(v => {
+    parametri.push(v);
+    const n = `$${parametri.length}`;
+    const categorie = (Object.entries(CATEGORIE_MATERIALI) as [string, string][]).filter(([, nome]) => normalizzaAcquisti(nome).includes(v.replace(/_/g, ''))).map(([c]) => c);
+    parametri.push(categorie);
+    const c = `$${parametri.length}`;
+    return `${SQL_NORM('r.descrizione')} LIKE '%' || ${n} || '%' OR upper(coalesce(r.codice, '')) LIKE '%' || ${n} || '%'
+      OR regexp_replace(upper(coalesce(r.pn, '')), '[^A-Z0-9]', '', 'g') LIKE '%' || regexp_replace(${n}, '[^A-Z0-9_]', '', 'g') || '%'
+      OR (r.materiale_id IS NOT NULL AND EXISTS (SELECT 1 FROM materiali_consumo m WHERE m.id = r.materiale_id
+        AND (${SQL_NORM("m.codice || ' ' || m.descrizione")} LIKE '%' || ${n} || '%' OR m.categoria = ANY(${c}::text[]))))`;
+  }).map(x => `(${x})`).join(' OR '));
+  return q<RigaAcquistoStorica>(`${SQL_RIGHE_STORICHE} WHERE ${condizioni.map(x => `(${x})`).join(' AND ')} ORDER BY d.data DESC, d.id DESC, r.posizione LIMIT ${max}`, parametri);
+}
+
+/** Ricerca negli acquisti (Adriano 6/11 e 11/11/2026): P/N, codice o parole della descrizione; singolare/plurale, accenti e sinonimi
+ *  ("lamina" = "lamine" = "stencil") non contano; se non trova niente riprova ammettendo un errore di battitura. `esatta` = parole così come sono. */
+export async function cercaAcquisti(testo: string, opz: { esatta?: boolean; max?: number } = {}): Promise<{ righe: RigaAcquistoStorica[]; termini: TermineRicerca[]; tollerante: boolean }> {
+  const max = opz.max ?? 10000;
+  const termini = terminiRicerca(testo, { esatta: opz.esatta });
+  if (!termini.length) return { righe: [], termini, tollerante: false };
+  const righe = await righePerTermini(termini, max);
+  if (righe.length || opz.esatta) return { righe, termini, tollerante: false };
+  const tolleranti = terminiTolleranti(termini);
+  if (tolleranti.every((t, i) => t.varianti.length === termini[i].varianti.length)) return { righe, termini, tollerante: false };
+  return { righe: await righePerTermini(tolleranti, max), termini, tollerante: true };
 }
 
 /** Tutte le righe di fattura di un componente (abbinate, o con lo stesso P/N / codice). */
