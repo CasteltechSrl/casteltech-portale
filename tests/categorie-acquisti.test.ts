@@ -75,3 +75,15 @@ test('Laura Nardi: PCB o progettazione secondo la riga; Federico Cetani consulen
   assert.equal(c('LAURA NARDI', 'Consulenza tecnica su layout'), 'progettazione');
   assert.equal(c('CETANI FEDERICO', 'Prestazione professionale ottobre 2026'), 'consulenze_tecniche');
 });
+
+test('I-TRONIK: stagno e flussanti sì, assistenza e ricambi delle macchine no; fornitori esteri delle autofatture (Adriano 11/11/2026)', () => {
+  const c = (fornitore: string, descrizione: string) => classificaRiga({ fornitore, descrizione }).categoria;
+  assert.equal(c('I-TRONIK S.R.L.', 'STAGNO IN VERGHE LEGA SN100Ce (SNCU0,0NIGE)'), 'stagno');
+  assert.equal(c('I-TRONIK S.R.L.', 'FLUSSANTE LOCTITE MF 210 ALCOLICO TAN.25LT'), 'stagno');
+  for (const d of ['RIMBORSO KILOMETRICO (AL KM)', 'ORE DI VIAGGIO (COSTO ORARIO)', 'PEDAGGIO AUTOSTRADALE', 'FILTRI PER INLET VACUUM SERIE ZB (SET 10 PEZZI)',
+    'SILENZIATORE SERIE ZB PARAQUDA/COBRA (SET 10PZ)', 'CONNECTION BOARD', 'SPESE TRASPORTO ESTERO DA ESSEMTEC SVIZZERA AD I-TRONIK', 'HOTEL'])
+    assert.equal(c('I-TRONIK S.R.L.', d), 'manutenzioni', d);
+  assert.equal(c('I-TRONIK S.R.L.', 'SPESE AMMINISTRATIVE'), 'stagno', 'le spese accessorie restano con il fornitore');
+  assert.equal(c('ALANTYS Technology SAS', 'STM32F407VGT6'), 'componenti');
+  assert.equal(c('ANTHROPIC IRELAND, LIMITED', 'Claude Pro'), 'software');
+});

@@ -104,7 +104,7 @@ const PAROLE: [RegExp, string][] = [
  */
 const FORNITORI: [RegExp, string, boolean?][] = [
   // materiale rivenduto
-  [/\btme\b|mouser|digi-?key|farnell|arrow electronics|w[uü]e?rth elektronik|redtide|cbs europe|pc components|i\.?c\.? blue|samtec|lemo|steliau|rs components|camel geco|d\.s\.e\.|rebix|gse srl|idc\b|ics industrial|mc' ?tronic|celte|startec|pietrobelli|el\.co\. elettronica|fast elettronica|fgl srl|tecnosens|conrad|electronic center|prod\.el|albe innovation|accumulatori gidi|batter fly|keers|fuocofreddo|wuerth s\.r\.l|w[uü]rth s\.r\.l|italfit magneti|cofermetal|allied international/, 'componenti'],
+  [/\btme\b|mouser|digi-?key|farnell|arrow electronics|w[uü]e?rth elektronik|redtide|cbs europe|pc components|i\.?c\.? blue|samtec|lemo|steliau|rs components|camel geco|d\.s\.e\.|rebix|gse srl|idc\b|ics industrial|mc' ?tronic|celte|startec|pietrobelli|el\.co\. elettronica|fast elettronica|fgl srl|tecnosens|conrad|electronic center|prod\.el|albe innovation|accumulatori gidi|batter fly|keers|fuocofreddo|wuerth s\.r\.l|w[uü]rth s\.r\.l|italfit magneti|cofermetal|allied international|alantys|microchip technology|dane elec/, 'componenti'],
   [/hts pcb|ncab|serigroup|p\.a\.c\. di bezzetto|laura nardi|nardi laura/, 'pcb'],
   [/tecnolab|lopar/, 'lamine'],
   [/mikecompositi|b\.m\.p\. srl|bimetal|ma\.ba\b|filippi e moletti|nuova caser/, 'meccanica'],
@@ -124,14 +124,14 @@ const FORNITORI: [RegExp, string, boolean?][] = [
   [/sardaleasing|leasing/, 'leasing'],
   [/enel energia|a2a energia|yada energia|pad multienergy/, 'energia'],
   [/eni plenitude|iren acqua|ireti|socogas|metano|b petrol|petrol point|sulis monica|boschi pietro|servizi e gestioni italia|steal s\.r\.l|virginio alberti|singh jagdeep|luca mattiazzi/, 'gas_acqua'],
-  [/ste\.al\.tech|essegi|fainardi|sopran|cabiotec/, 'manutenzioni'],
+  [/ste\.al\.tech|essegi|essemtec|fainardi|sopran|cabiotec/, 'manutenzioni'],
   [/elettronica servizi jox/, 'attrezzature'],
   [/guglielmetti|u\.p\.a\.|federimpresa|studio notarile|marco granata|iubenda|umana spa|for\.p\.in/, 'consulenze_amministrative'],
   [/metronotte|mete srl|giava servizi|antincendio|vega formazione|teco srl|istituto nazionale previdenza|alis societ/, 'sicurezza'],
   [/fedex|brt s\.p\.a|dhl|united parcel|gls enterprise|yuhang/, 'trasporti'],
   [/programma auto|autostrade|telepass|calestani gomme|tesla italy|metanauto|metano auto|daniele cattoni/, 'auto'],
   [/dimensione s\.?r\.?l/, 'telefonia'],
-  [/google cloud|microsoft|ovh|aruba|teamsystem|madbit|openai|computer\.milano/, 'software'],
+  [/google cloud|microsoft|ovh|anthropic|paddle\.com|cleverbridge|aruba|teamsystem|madbit|openai|computer\.milano/, 'software'],
   [/amazon|shopty|star tech|a2zworld|tancredi|zayron|shijie|shenzhen|jiniss|peng wutao|diamond bfg|vm group|megaditta|ferramenta|eurocali|futural|b & w handels|sp\. z o\.o|b\.f\.m\.|bastante salvatore|creality|b\.s\. macchine/, 'ufficio', true],
   [/emmegieffe|kimicart|pro-tec|refial|s\.g\.s\.|md s\.p\.a/, 'pulizie'],
   [/orasesta|ristorante|peracchi|robu petru|ninety s|salumificio/, 'mensa'],
@@ -143,6 +143,8 @@ const FORNITORI: [RegExp, string, boolean?][] = [
  * Laura Nardi (Adriano 7/11/2026): a volte vende PCB, a volte fa consulenza/progettazione.
  */
 const FORNITORI_DOPPI: [RegExp, RegExp, string][] = [
+  // I-TRONIK (Adriano 11/11/2026, "stagno +146 %"): vende stagno e flussanti ma è anche l'assistenza delle macchine Essemtec: interventi e ricambi non sono stagno
+  [/i-tronik/, /rimborso kilometric|ore di (viaggio|intervento|lavoro)|\bhotel\b|spese vive|pedaggi|\bfiltr|silenziator|tubicino|connection board|essemtec|vacuum|intervento|\bricamb/i, 'manutenzioni'],
   [/laura nardi|nardi laura/, /progettaz|consulen|svilupp|\blayout\b|sbrogli|disegn|\bschem|prototip|\bore\b|\bassistenza\b|\bmodific/i, 'progettazione'],
 ];
 
@@ -163,10 +165,10 @@ export function classificaRiga(r: RigaDaClassificare): Esito {
   const f = (r.fornitore ?? '').toLowerCase();
   const regola = FORNITORI.find(([re]) => re.test(f));
   const fornitore = regola?.[1], generico = !!regola?.[2];   // generico = negozio che vende di tutto (Amazon): decidono le parole
-  // spese accessorie (trasporto, imballo, bollo) di un fornitore di materiale: restano nella categoria del fornitore
-  if (fornitore && ACCESSORIA.test(d)) return { categoria: fornitore, macro: categoria(fornitore).macro, come: 'fornitore', accessoria: true };
   const doppio = FORNITORI_DOPPI.find(([re, parole]) => re.test(f) && parole.test(d));
   if (doppio) return { categoria: doppio[2], macro: categoria(doppio[2]).macro, come: 'parola' };
+  // spese accessorie (trasporto, imballo, bollo) di un fornitore di materiale: restano nella categoria del fornitore
+  if (fornitore && ACCESSORIA.test(d)) return { categoria: fornitore, macro: categoria(fornitore).macro, come: 'fornitore', accessoria: true };
   const parola = PAROLE.find(([re]) => re.test(d))?.[1];
   const vale = parola && (!fornitore ? true : generico ? !CATEGORIE_DEBOLI.has(parola) : CATEGORIE_FORTI.has(parola));
   if (parola && vale) return { categoria: parola, macro: categoria(parola).macro, come: 'parola' };

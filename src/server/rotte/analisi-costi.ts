@@ -12,9 +12,9 @@ import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { eUfficio } from '../../engine/ruoli.js';
 import { CATEGORIE, NOMI_MACRO, SPIEGAZIONE_MACRO, categoria as categoriaDaCodice, type Macro } from '../../engine/categorie-acquisti.js';
 import {
-  classificaCosti, confrontoRivendita, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
+  classificaCosti, classificaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
 } from '../../engine/analisi-costi.js';
-import { copertureRighe, lamineVendute, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, salvaRegola, venditePerProdotto } from '../analisi-costi-servizio.js';
+import { clientiContoLavoro, copertureRighe, lamineVendute, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 0)} €`);
@@ -36,13 +36,15 @@ async function calcola(anno: number) {
   const inCorso = anno === Number(oggi.slice(0, 4));
   const finoA = inCorso ? oggi.slice(5) : '';
   const anni = [anno, anno - 1, anno - 2].filter(a => a >= ANNO_MINIMO);
-  const [righeTutte, regole, vendite, preventivi, lamine, ricavi, coperture] = await Promise.all([
-    righeCosti(anni), regoleCategorie(), venditePerProdotto(anni, finoA), materialeDeiPreventivi(), lamineVendute(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni),
+  const [righeTutte, regole, righeVendute, preventivi, contoLavoro, lamine, ricavi, coperture] = await Promise.all([
+    righeCosti(anni), regoleCategorie(), righeVenditeRivendita(anni, finoA), materialeDeiPreventivi(), clientiContoLavoro(), lamineVendute(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni),
   ]);
   // anno in corso: gli anni prima contano fino allo stesso giorno
   const righe = classificaCosti(righeTutte, regole).filter(r => !finoA || r.anno === anno || r.data.slice(5) <= finoA);
   const costi = costiPerAnno(righe, anni);
-  const rivendita = confrontoRivendita({ righe, vendite, preventivi, lamine, anni });
+  const tipi = classificaVendite(righeVendute, preventivi, nomiPcbComprati(righe), contoLavoro);
+  const vendite = righeVendute.map((r, i) => ({ ...r, tipo: tipi[i] }));
+  const rivendita = confrontoRivendita({ righe, vendite, lamine, anni });
   const riassunto = riassuntoCosti({ costi, rivendita, ricavi, mesi: inCorso ? Number(oggi.slice(5, 7)) : 12 });
   return { anno, anni, inCorso, finoA, righe, costi, rivendita, riassunto, ricavi, coperture, daControllare: fornitoriDaControllare(righe.filter(r => r.anno === anno)), nPreventivi: preventivi.length };
 }
@@ -83,14 +85,13 @@ function tabellaRivendita(riv: RivenditaAnno[], anno: number, inCorso: boolean):
     ${riga('Comprato: componenti', r => euro(r.compratoComponenti))}
     ${riga('Comprato: PCB', r => euro(r.compratoPcb))}
     ${riga('Comprato: meccanica e altro materiale', r => euro(r.compratoMeccanica))}
-    ${riga('Comprato per le schede', r => euro(r.compratoComponenti + r.compratoPcb + r.compratoMeccanica), 'riga-famiglia')}
-    ${riga('Rivenduto nelle schede: componenti (dai preventivi)', r => euro(r.rivendutoComponenti))}
-    ${riga('Rivenduto nelle schede: PCB (dai preventivi)', r => euro(r.rivendutoPcb))}
-    ${riga('Rivenduto nelle schede', r => euro(r.rivenduto), 'riga-famiglia')}
-    ${riga('Guadagno della rivendita (rivenduto − comprato)', r => r.rivenduto ? html`${segno(r.margineSchede)} <small class="tenue">${pct(r.margineSchedePct, false)}</small>` : '—', 'riga-famiglia')}
-    ${riga('Materiale previsto nei preventivi (costo)', r => euro(r.costoPrevisto))}
-    ${riga('Comprato oltre il previsto', r => r.costoPrevisto ? segno(-r.materialeOltrePreventivo) : '—')}
-    ${riga('Pezzi fatturati con un preventivo', r => `${num(r.pezziConPreventivo, 0)} su ${num(r.pezziConPreventivo + r.pezziSenzaPreventivo, 0)}`)}
+    ${riga('Comprato per le schede', r => html`${euro(r.compratoSchede)}${r.compratoEstero ? html` <small class="tenue">di cui estero ${euro(r.compratoEstero)}</small>` : ''}`, 'riga-famiglia')}
+    ${riga('Fatturato con materiale nostro (chiavi in mano e materiale venduto)', r => euro(r.vendutoNostro))}
+    ${riga('Peso del materiale su quel fatturato', r => r.pesoMateriale != null ? html`<span class="${r.pesoMateriale >= 85 ? 'rosso' : r.pesoMateriale >= 70 ? '' : 'verde'}">${pct(r.pesoMateriale, false)}</span>` : '—', 'riga-famiglia')}
+    ${riga('Fatturato non classificato (materiale nostro o no?)', r => euro(r.vendutoNonSo))}
+    ${riga('Peso del materiale se anche quello era chiavi in mano', r => r.pesoMaterialeMin != null && r.vendutoNonSo ? pct(r.pesoMaterialeMin, false) : '—')}
+    ${riga('Fatturato in conto lavoro (materiale del cliente)', r => euro(r.vendutoContoLavoro))}
+    ${riga('Servizi (lamine, avvio produzione, progettazione, trasporti…)', r => euro(r.vendutoServizi))}
     ${riga('Lamine comprate', r => euro(r.compratoLamine))}
     ${riga('Lamine fatturate ai clienti', r => html`${euro(r.lamineVendute)}${r.lamineVendutePezzi ? html` <small class="tenue">(${num(r.lamineVendutePezzi, 0)})</small>` : ''}`)}
     ${riga('Guadagno sulle lamine', r => (r.compratoLamine || r.lamineVendute) ? segno(r.margineLamine) : '—', 'riga-famiglia')}
@@ -134,10 +135,14 @@ function pagina(req: Request, d: Awaited<ReturnType<typeof calcola>>): Raw {
     ${tabellaCategorie(d)}
 
     <h2>Comprato e rivenduto</h2>
-    <p class="nota">Comprato = fatture dei fornitori nelle categorie di rivendita. Rivenduto = pezzi fatturati × valore dei componenti e dei PCB a scheda nel preventivo più recente del prodotto
-      (${d.nPreventivi} preventivi nel portale): è una stima, vale per i pezzi che hanno un preventivo. Le lamine si confrontano con quelle fatturate (UT-LAMINA). Senza magazzino, il materiale comprato e non rivenduto è un costo.</p>
+    <p class="nota">Comprato = fatture dei fornitori nelle categorie componenti, PCB e meccanica, più le autofatture dei fornitori esteri (Mouser, DigiKey…).
+      Fatturato = righe vere delle fatture e delle note di credito, divise così: con materiale nostro (riga che lo dice, prodotto il cui preventivo vende componenti o PCB,
+      PCB comprato con lo stesso nome, oppure cliente che compra chiavi in mano), conto lavoro (preventivo senza materiale, cliente con componenti in conto lavoro),
+      servizi, anticipi (esclusi: si scalano dal saldo). Dei preventivi conta solo se il materiale è nostro, non i prezzi. Senza magazzino gli anni non chiudono pari:
+      il materiale comprato a fine anno si fattura l'anno dopo.</p>
     ${tabellaRivendita(rivendita, anno, d.inCorso)}
-    ${rivendita[0]?.prodottiSenzaPreventivo.length ? html`<p class="nota">Prodotti fatturati nel ${anno} senza un preventivo nel portale (i più venduti): ${rivendita[0].prodottiSenzaPreventivo.join(', ')}.</p>` : ''}
+    ${rivendita[0]?.clientiNostro.length ? html`<p class="nota">Chiavi in mano nel ${anno} (i più grandi): ${rivendita[0].clientiNostro.map(c => `${c.cliente} ${euro(c.importo)}`).join(' · ')}.</p>` : ''}
+    ${rivendita[0]?.clientiNonSo.length ? html`<p class="nota">Non classificati nel ${anno}: ${rivendita[0].clientiNonSo.map(c => `${c.cliente} ${euro(c.importo)}`).join(' · ')}. Un preventivo nel portale per i loro prodotti li mette al posto giusto.</p>` : ''}
 
     <h2>Da controllare</h2>
     ${d.daControllare.length ? html`<p class="nota">Fornitori con fatture del ${anno} che nessuna regola ha riconosciuto (stanno in "Altre spese"): scegli la categoria e vale per tutte le loro fatture, di ogni anno.</p>
@@ -163,7 +168,7 @@ function paginaRighe(req: Request, anno: number, categoria: string, chiaveF: str
     ${tastiAnalisi('costi')}
     <div class="tabella-scorre"><table class="elenco righe-costi"><thead><tr><th>Data</th><th>Fornitore</th><th>Descrizione</th><th class="num">Importo</th><th>Come</th>${ufficio ? html`<th>Cambia categoria</th>` : ''}</tr></thead>
     <tbody>${mostrate.map(r => html`<tr><td class="nowrap">${r.data.split('-').reverse().join('/')}</td><td><a href="${linkFornitore(r.fornitoreChiave)}">${r.fornitore}</a></td>
-      <td>${r.descrizione.slice(0, 120)}${r.codici.length ? html` <small class="tenue">${r.codici.join(' · ')}</small>` : ''}${r.rigaId == null ? html` <span class="etichetta">fattura intera</span>` : ''}${r.accessoria ? html` <small class="tenue">(spesa accessoria)</small>` : ''}</td>
+      <td>${r.descrizione.slice(0, 120)}${r.codici.length ? html` <small class="tenue">${r.codici.join(' · ')}</small>` : ''}${r.rigaId == null ? html` <span class="etichetta">fattura intera</span>` : r.rigaId < 0 ? html` <span class="etichetta">fornitore estero (autofattura)</span>` : ''}${r.accessoria ? html` <small class="tenue">(spesa accessoria)</small>` : ''}</td>
       <td class="num">${euro(r.importo)}</td><td><small class="tenue">${COME[r.come]}</small></td>
       ${ufficio ? html`<td><form method="post" action="/amministrazione/analisi/costi/regola" class="in-riga">
         <input type="hidden" name="tipo" value="${r.rigaId != null ? 'riga' : 'documento'}"><input type="hidden" name="chiave" value="${r.rigaId ?? r.documentoId}">
@@ -210,8 +215,9 @@ export function rotteAnalisiCosti() {
     righe.push({ categoria: 'Totale', ...Object.fromEntries(d.anni.map(a => [`a${a}`, d.costi.totale[a]])) }, {});
     const riv = d.rivendita;
     const rr = (nome: string, v: (r: RivenditaAnno) => number) => righe.push({ categoria: nome, ...Object.fromEntries(riv.map(r => [`a${r.anno}`, v(r)])) });
-    rr('Comprato per le schede', r => r.compratoComponenti + r.compratoPcb + r.compratoMeccanica); rr('Rivenduto nelle schede (preventivi)', r => r.rivenduto);
-    rr('Guadagno della rivendita', r => r.margineSchede); rr('Materiale previsto nei preventivi', r => r.costoPrevisto); rr('Lamine comprate', r => r.compratoLamine);
+    rr('Comprato per le schede (anche estero)', r => r.compratoSchede); rr('di cui dall\'estero (autofatture)', r => r.compratoEstero);
+    rr('Fatturato con materiale nostro', r => r.vendutoNostro); rr('Fatturato non classificato', r => r.vendutoNonSo); rr('Fatturato in conto lavoro', r => r.vendutoContoLavoro);
+    rr('Peso del materiale % (su materiale nostro)', r => r.pesoMateriale ?? 0); rr('Lamine comprate', r => r.compratoLamine);
     rr('Lamine fatturate', r => r.lamineVendute); rr('Guadagno sulle lamine', r => r.margineLamine);
     righe.push({}, ...d.riassunto.frasi.map(f => ({ categoria: `${f.livello}: ${f.testo}` })), { categoria: `Opinione: ${d.riassunto.opinione}` }, ...d.riassunto.proposte.map(p => ({ categoria: `Proposta: ${p}` })));
     const dati = await excelSemplice(`Costi ${d.anno}`, [
