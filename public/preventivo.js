@@ -391,16 +391,36 @@
   });
 
   /** Salva il preventivo; true se è andato a buon fine. */
+  // "Variazione quantità" (Adriano 11/11/2026): prima di salvare si chiede se il prezzo va in anagrafica per tutte le quantità o per uno scaglione
+  function chiediAnagrafica() {
+    const d = document.getElementById('domanda-anagrafica');
+    const v = casella('variazioneQuantita');
+    if (!d || !v || !v.checked || typeof d.showModal !== 'function') return Promise.resolve(undefined);
+    return new Promise(risolvi => {
+      d.addEventListener('close', () => {
+        if (d.returnValue !== 'ok') return risolvi(null);
+        const modo = (d.querySelector('input[name=modo-anagrafica]:checked') || {}).value || 'nessuno';
+        risolvi({ modo, da: d.querySelector('[name=da-anagrafica]').value, a: d.querySelector('[name=a-anagrafica]').value });
+      }, { once: true });
+      d.returnValue = '';
+      d.showModal();
+    });
+  }
+
   async function salva() {
+    const anagrafica = await chiediAnagrafica();
+    if (anagrafica === null) { statoEl.textContent = 'Non salvato.'; return false; }
     statoEl.textContent = 'Salvataggio…';
-    const res = await fetch('/preventivi/salva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, dati: raccogli() }) }).catch(() => null);
+    const corpo = { id, dati: raccogli() };
+    if (anagrafica) corpo.anagrafica = anagrafica;
+    const res = await fetch('/preventivi/salva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }).catch(() => null);
     if (!res) { statoEl.textContent = 'Portale non raggiungibile: controlla la connessione e riprova a salvare.'; statoEl.classList.add('negativo'); return false; }
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { statoEl.textContent = j.errore || 'Errore nel salvataggio'; statoEl.classList.add('negativo'); return false; }
     modificato = false;
     if (!id) { location.href = '/preventivi/' + j.id; return true; }
     statoEl.classList.remove('negativo');
-    statoEl.textContent = 'Salvato ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    statoEl.textContent = 'Salvato ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + (j.anagrafica ? '. ' + j.anagrafica : '');
     return true;
   }
   document.getElementById('salva').addEventListener('click', salva);

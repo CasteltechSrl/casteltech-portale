@@ -645,6 +645,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
 
   // ── Ordini ──
   {
+    id: 'prezzo-anagrafica-preventivo', area: 'preventivi', titolo: 'Il prezzo del preventivo mandato al cliente va in anagrafica; l\'ordine con un prezzo diverso',
+    parole: 'prezzo anagrafica listino aggiornare preventivo inviato mandato email segna come inviato variazione quantità scaglione range pezzi ordine prezzo diverso tieni aggiorna',
+    testo: [
+      'Quando mandi il preventivo al cliente (email dalla stampa o "Segna come inviato"), il prezzo a scheda SENZA una tantum, quello che il cliente legge nella stampa (anche se riscritto a mano o scontato), va in Anagrafiche → Prodotti per quel codice: nello scaglione della quantità del preventivo se il prodotto ha gli scaglioni, altrimenti come prezzo unico. Il messaggio in alto dice cosa è cambiato.',
+      'Salvare o modificare un preventivo senza mandarlo NON tocca l\'anagrafica.',
+      'Unica eccezione, la spunta "Variazione quantità": premendo Salva il portale chiede se il prezzo sostituisce quello in anagrafica per tutte le quantità (gli scaglioni si tolgono), se vale solo da … a … pezzi (vuoto = "e oltre"; le altre quantità restano al prezzo di prima) o se l\'anagrafica non si tocca. La scelta vale subito e di nuovo quando il preventivo parte.',
+      'Nella pagina dell\'ordine, se una riga ancora aperta ha un prezzo diverso da quello in anagrafica per la sua quantità, in alto compare "Prezzi dell\'ordine diversi dall\'anagrafica": "Tieni l\'anagrafica" mette nella riga il prezzo dell\'anagrafica (conferma d\'ordine e fattura usciranno così; una conferma già fatta si aggiorna con "Riprendi le righe dall\'ordine"), "Aggiorna l\'anagrafica" prende il prezzo dell\'ordine.',
+    ],
+    passi: ['Prepara il preventivo e mandalo dalla stampa (o segnalo come inviato).', 'Controlla il messaggio: prezzo aggiornato in anagrafica.', 'Quando arriva l\'ordine, se compare il riquadro dei prezzi diversi scegli quale tenere.'],
+    pagine: [['/preventivi', 'Preventivi'], ['/anagrafiche/prodotti', 'Anagrafiche → Prodotti']],
+  },
+  {
     id: 'ordine-preventivo-commessa', area: 'ordini', titolo: 'Collegare la riga dell\'ordine al suo preventivo e creare la commessa',
     parole: 'ordine riga preventivo collegare collegamento agganciare associare trovare proposto quantità vicina codice vecchio portale menu tendina commessa crea commessa prezzo vecchio anagrafica variazione avvisare cliente',
     testo: [

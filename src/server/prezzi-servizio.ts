@@ -37,7 +37,7 @@ export async function caricaPrezzi(f: FilePrezzi, opz: { anteprima: boolean }) {
       const pezzo = p.abbinati.slice(i, i + 500);
       await t.query(`UPDATE prodotti p SET prezzo_vendita = x.prezzo, prezzo_fonte = x.fonte, prezzo_data = x.data, prezzo_nota = x.nota
         FROM unnest($1::int[], $2::numeric[], $3::text[], $4::date[], $5::text[]) AS x(id, prezzo, fonte, data, nota)
-        WHERE p.id = x.id AND p.prezzo_fonte IS DISTINCT FROM 'manuale'`,
+        WHERE p.id = x.id AND p.prezzo_fonte IS DISTINCT FROM 'manuale' AND p.prezzo_fonte IS DISTINCT FROM 'preventivo' AND p.prezzo_fonte IS DISTINCT FROM 'ordine'`,
         [pezzo.map(a => a.prodotto_id), pezzo.map(a => a.voce.prezzo), pezzo.map(a => a.voce.fonte), pezzo.map(a => a.voce.data), pezzo.map(a => a.voce.nota)]);
     }
     for (let i = 0; i < c.abbinati.length; i += 500) {
@@ -147,7 +147,7 @@ export async function listinoProdotto(id: number, quantita: number, prezzoScritt
 }
 
 /** L'ufficio ha detto sì: si aggiorna lo scaglione di quella quantità, altrimenti il prezzo unico (fonte 'manuale'). */
-export async function aggiornaPrezzoDaDocumento(id: number, quantita: number, prezzo: number, documento: string): Promise<string> {
+export async function aggiornaPrezzoDaDocumento(id: number, quantita: number, prezzo: number, documento: string, fonte = 'manuale'): Promise<string> {
   const p = await q1<{ codice: string; prezzo: number | null }>(`SELECT codice, prezzo_vendita::float AS prezzo FROM prodotti WHERE id = $1`, [id]);
   if (!p) throw new Error('Prodotto non trovato.');
   const sc = (await scaglioniDi([id])).get(id) ?? [];
@@ -157,8 +157,8 @@ export async function aggiornaPrezzoDaDocumento(id: number, quantita: number, pr
     await q(`UPDATE prodotti_scaglioni SET prezzo = $3 WHERE prodotto_id = $1 AND da = $2`, [id, c.scaglione.da, prezzo]);
     return `${p.codice}: scaglione ${testoScaglione(c.scaglione)} aggiornato in anagrafica.`;
   }
-  await q(`UPDATE prodotti SET prezzo_vendita = $2, prezzo_fonte = 'manuale', prezzo_data = current_date, prezzo_nota = $3 WHERE id = $1`,
-    [id, prezzo, `Aggiornato da ${documento || 'un documento'}`.slice(0, 200)]);
+  await q(`UPDATE prodotti SET prezzo_vendita = $2, prezzo_fonte = $4, prezzo_data = current_date, prezzo_nota = $3 WHERE id = $1`,
+    [id, prezzo, `Aggiornato da ${documento || 'un documento'}`.slice(0, 200), fonte]);
   return `${p.codice}: prezzo aggiornato in anagrafica.`;
 }
 
