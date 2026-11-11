@@ -14,7 +14,7 @@ import { CATEGORIE, NOMI_MACRO, SPIEGAZIONE_MACRO, categoria as categoriaDaCodic
 import {
   classificaCosti, classificaVendite, lamineDaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
 } from '../../engine/analisi-costi.js';
-import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, righeLamine, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
+import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, righeLamine, righePerLamine, salvaLamineRiga, type RigaPerLamine, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 0)} €`);
@@ -95,6 +95,7 @@ function tabellaRivendita(riv: RivenditaAnno[], anno: number, inCorso: boolean):
     ${riga('Lamine comprate', r => html`${euro(r.compratoLamine)}${r.lamineCompratePezzi ? html` <small class="tenue">(${num(r.lamineCompratePezzi, 0)})</small>` : ''}`)}
     ${riga('Lamine fatturate a parte', r => html`${euro(r.lamineVendute)}${r.lamineVendutePezzi ? html` <small class="tenue">(${num(r.lamineVendutePezzi, 0)})</small>` : ''}`)}
     ${riga('Lamine dentro i costi una tantum (pezzi)', r => r.lamineUnaTantumPezzi ? html`${num(r.lamineUnaTantumPezzi, 0)} <small class="tenue">(righe per ${euro(r.lamineUnaTantumRighe)})</small>` : '—')}
+    <tr><td colspan="${riv.length + 1}"><small><a href="/amministrazione/analisi/costi/lamine?anno=${anno}">Lamine dentro altre righe di fattura: controlla e segna →</a></small></td></tr>
     ${riga('Guadagno stimato sulle lamine', r => (r.compratoLamine || r.lamineVendute || r.lamineUnaTantumPezzi) ? segno(r.margineLamine) : '—', 'riga-famiglia')}
     </tbody></table></div>`;
 }
@@ -177,6 +178,25 @@ function pagina(req: Request, d: Awaited<ReturnType<typeof calcola>>): Raw {
     <p class="nota">Le categorie scritte a mano (per fornitore, per fattura o per riga) vincono sulle regole automatiche; dalla pagina delle righe si corregge una riga sola.</p>`;
 }
 
+function paginaLamine(req: Request, anno: number, numero: number | undefined, righe: RigaPerLamine[]): Raw {
+  const ufficio = eUfficio(req.session.utente?.ruolo);
+  const torna = `/amministrazione/analisi/costi/lamine?anno=${anno}${numero ? `&fattura=${numero}` : ''}`;
+  return html`${menuAmministrazione('analisi')}
+    <div class="intestazione-pagina"><div><h1>Lamine dentro altre righe · ${anno}</h1>
+      <p class="nota">Le lamine fatturate dentro i costi una tantum o in un pacchetto, senza la parola "lamina" nella riga, il portale non le vede.
+        Scrivi qui quante lamine contiene la riga (0 = nessuna, vuoto = decide la descrizione): contano in "Comprato e rivenduto". Per il futuro basta scrivere "lamina" nella riga della fattura.</p></div>
+      <div class="azioni non-stampare"><a class="bottone" href="/amministrazione/analisi/costi?anno=${anno}">← Costi per categoria</a></div></div>
+    ${tastiAnalisi('costi')}
+    <form method="get" action="/amministrazione/analisi/costi/lamine" class="cerca"><input type="hidden" name="anno" value="${anno}">
+      <label>Mostra anche tutte le righe della fattura n. <input name="fattura" value="${numero ?? ''}" size="6" inputmode="numeric"></label> <button type="submit">Mostra</button></form>
+    <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Data</th><th>Fattura</th><th>Cliente</th><th>Riga</th><th class="num">Importo</th><th>Lamine</th></tr></thead>
+    <tbody>${righe.map(r => html`<tr><td class="nowrap">${r.data.split('-').reverse().join('/')}</td><td>${r.numero}/${anno}</td><td>${r.cliente}</td>
+      <td>${r.descrizione.slice(0, 160)}${r.scritta && r.lamine == null ? html` <small class="tenue">(già contata: scrive "lamina")</small>` : ''}</td><td class="num">${euro(r.importo)}</td>
+      <td>${ufficio ? html`<form method="post" action="/amministrazione/analisi/costi/lamine-riga" class="in-riga"><input type="hidden" name="id" value="${r.id}"><input type="hidden" name="torna" value="${torna}">
+        <input name="lamine" value="${r.lamine ?? ''}" size="3" inputmode="numeric"> <button type="submit">Salva</button></form>` : (r.lamine ?? '—')}</td></tr>`)}</tbody></table></div>
+    ${righe.length ? '' : html`<p class="nota">Nessuna riga di avvio produzione o costi una tantum nel ${anno}.</p>`}`;
+}
+
 function paginaRighe(req: Request, anno: number, categoria: string, chiaveF: string, righe: RigaClassificata[]): Raw {
   const cat = categoriaDaCodice(categoria);
   const ufficio = eUfficio(req.session.utente?.ruolo);
@@ -224,6 +244,20 @@ export function rotteAnalisiCosti() {
     const msg = await salvaRegola(tipo, String(b.chiave ?? ''), String(b.categoria ?? ''));
     const torna = /^\/amministrazione\/analisi\/costi/.test(String(b.torna ?? '')) ? String(b.torna) : `/amministrazione/analisi/costi?anno=${Number(b.anno) || ''}`;
     res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(msg)}`);
+  });
+
+  r.get('/costi/lamine', async (req: Request, res) => {
+    const anno = annoScelto(req);
+    const numero = Number(req.query.fattura) > 0 ? Number(req.query.fattura) : undefined;
+    invia(req, res, 'Lamine dentro altre righe', paginaLamine(req, anno, numero, await righePerLamine(anno, numero)));
+  });
+
+  r.post('/costi/lamine-riga', async (req: Request, res) => {
+    if (!eUfficio(req.session.utente?.ruolo)) return res.status(403).send('Solo l\'ufficio può segnare le lamine.');
+    const b = req.body ?? {};
+    const msg = await salvaLamineRiga(Number(b.id), String(b.lamine ?? ''));
+    const torna = /^\/amministrazione\/analisi\/costi\/lamine\?/.test(String(b.torna ?? '')) ? String(b.torna) : '/amministrazione/analisi/costi/lamine';
+    res.redirect(`${torna}&msg=${encodeURIComponent(msg)}`);
   });
 
   r.post('/costi/materiale-cliente', async (req: Request, res) => {

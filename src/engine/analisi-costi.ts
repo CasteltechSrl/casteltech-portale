@@ -204,7 +204,9 @@ export interface MaterialePreventivo { codice: string; clienteId: number | null;
 /** Lamine fatturate ai clienti in un anno: a parte (riga della lamina) e dentro i costi una tantum (riga "Avvio produzione - Programmazione - Lamina serigrafica"). */
 export interface LamineVendute { anno: number; pezzi: number; importo: number; pezziUnaTantum: number; importoUnaTantum: number }
 /** Riga di fattura (o NC, importo e quantità con il segno) che cita una lamina. */
-export interface RigaLamina { anno: number; codice: string; descrizione: string; quantita: number; importo: number }
+export interface RigaLamina { anno: number; codice: string; descrizione: string; quantita: number; importo: number;
+  /** lamine segnate a mano sulla riga (documenti_righe.lamine): vincono sulla descrizione, 0 = nessuna */
+  lamine?: number | null }
 
 const LAMINA = /\b(lamin[ae]|stencil)\b/i;
 /** Altre voci nella stessa riga: la lamina è dentro un forfait (costi una tantum, campionatura, materiale). */
@@ -224,10 +226,11 @@ export function lamineDaVendite(righe: RigaLamina[], anni: number[]): LamineVend
     const l: LamineVendute = { anno, pezzi: 0, importo: 0, pezziUnaTantum: 0, importoUnaTantum: 0 };
     for (const r of righe.filter(r => r.anno === anno)) {
       const d = r.descrizione.trim(), d1 = d.split('\n')[0];
-      if (!/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) continue;
-      if (!r.importo) continue;   // lamina riconsegnata a 0 € (JOX FT 60/2026): già fatturata prima
+      const aMano = r.lamine != null;
+      if (!aMano && !/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) continue;
+      if (!r.importo || r.lamine === 0) continue;   // lamina riconsegnata a 0 € (JOX FT 60/2026): già fatturata prima
       const segno = r.importo < 0 || r.quantita < 0 ? -1 : 1;
-      const pezzi = segno * pezziLamina(d, r.quantita);
+      const pezzi = segno * (aMano ? r.lamine! : pezziLamina(d, r.quantita));
       const aParte = /^UT-LAMINA$/i.test(r.codice.trim()) || (LAMINA.test(d1) && !ALTRE_VOCI.test(d));
       if (aParte) { l.pezzi += pezzi; l.importo += r.importo; } else { l.pezziUnaTantum += pezzi; l.importoUnaTantum += r.importo; }
     }

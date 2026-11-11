@@ -184,9 +184,11 @@ test('lamine vendute: a parte e dentro i costi una tantum, pezzi dalla descrizio
     { anno: 2026, codice: 'M2204-C', descrizione: 'Campionatura M2204-C_SMD (prezzo a forfait)\n- 2 Lamine serigrafiche', quantita: 1, importo: 1500 },
     { anno: 2026, codice: '001', descrizione: 'LAMINA SERIGRAFICA', quantita: -1, importo: -110 },
     { anno: 2026, codice: '', descrizione: 'Costi una tantum avvio produzione\n- Lamine serigrafiche (A - B)', quantita: 2, importo: 0 },
+    { anno: 2026, codice: '', descrizione: 'Avvio Produzione SL_0112', quantita: 2, importo: 650, lamine: 1 },         // segnata a mano: senza la parola lamina
+    { anno: 2026, codice: '', descrizione: 'Avvio produzione\nLamina serigrafica', quantita: 1, importo: 250, lamine: 0 }, // a mano: nessuna
     { anno: 2025, codice: '', descrizione: 'Lamina', quantita: 1, importo: 110 },
   ], [2026]);
-  assert.deepEqual(l, [{ anno: 2026, pezzi: 4, importo: 440, pezziUnaTantum: 4, importoUnaTantum: 2000 }]);
+  assert.deepEqual(l, [{ anno: 2026, pezzi: 4, importo: 440, pezziUnaTantum: 5, importoUnaTantum: 2650 }]);
   const righe = classificaCosti([
     riga({ rigaId: 1, fornitore: 'I-TRONIK S.R.L.', descrizione: 'LAMINA AUTOT. ZELFLEX 23" SP.0,12 UM', importo: 600, quantita: 8, data: '2026-03-10' }),
     riga({ rigaId: 2, fornitore: 'LOPAR S.R.L.', descrizione: 'LAMINA COD.LA26-0306', importo: 75, quantita: 1, data: '2026-03-10' }),
@@ -196,5 +198,5 @@ test('lamine vendute: a parte e dentro i costi una tantum, pezzi dalla descrizio
   assert.deepEqual(righe.map(r => r.categoria), ['lamine', 'lamine', 'pcb', 'pcb']);
   const r = confrontoRivendita({ righe, vendite: [], anni: [2026], lamine: l })[0];
   assert.equal(r.lamineCompratePezzi, 9); assert.equal(r.compratoLamine, 675);
-  assert.equal(r.margineLamine, 440 + 4 * 110 - 675);
+  assert.equal(r.margineLamine, 440 + 5 * 110 - 675);
 });
