@@ -17,7 +17,7 @@ import { commesseEliminabiliDallElenco, confermaEliminaCommessa } from '../../en
 import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
-  programmaForno, salvaCommessa, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
+  programmaForno, salvaCommessa, spedizioniDelleCommesse, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
 import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
@@ -27,6 +27,8 @@ import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { documentiDellaCommessa } from '../documenti-servizio.js';
+import { nellaVista, VISTE_COMMESSE, vistaCommesse, type SpedizioneCommessa, type VistaCommesse } from '../../engine/commesse-spedite.js';
+const NESSUNA_SPEDIZIONE: SpedizioneCommessa = { spedite: 0, spedita: false, ddt: [] };
 import { datiPreProduzione, salvaPreProduzione } from '../pre-produzione-servizio.js';
 import { paginaPreProduzione } from '../views/pre-produzione.js';
 import { layout, VERSIONE } from '../views/layout.js';
@@ -48,19 +50,29 @@ export function rotteCommesse() {
       WHERE $1 = '' OR c.numero ILIKE '%'||$1||'%' OR (c.intestazione->>'cliente') ILIKE '%'||$1||'%'
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
       ORDER BY c.creato_il DESC, c.id DESC LIMIT ${limite}`, [cerca]);
+  // vista "Da fare" (predefinita) / "Spedite o chiuse" / "Tutte": spedita = schede uscite con DDT (engine/commesse-spedite.ts)
+  const conSpedizioni = async (cerca: string, vista: VistaCommesse) => {
+    const [righe, sped] = await Promise.all([elencoCommesse(cerca), spedizioniDelleCommesse()]);
+    return righe.map(c => ({ ...c, sped: (sped.get(c.id) ?? NESSUNA_SPEDIZIONE) as SpedizioneCommessa }))
+      .filter(c => cerca !== '' && vista === 'dafare' ? true : nellaVista(vista, c.stato, c.sped.spedita));
+  };
+  const statoTesto = (stato: string, spedita: boolean) => spedita && stato !== 'chiusa' ? `${STATI_TESTO[stato] ?? stato}, spedita` : (STATI_TESTO[stato] ?? stato);
   r.get('/elenco.xlsx', async (req, res) => {
-    const righe = filtraPerAnno(await elencoCommesse(String(req.query.q ?? '').trim()), c => c.creato_il, annoScelto(req.query));
+    const righe = filtraPerAnno(await conSpedizioni(String(req.query.q ?? '').trim(), vistaCommesse(req.query.vista)), c => c.creato_il, annoScelto(req.query));
     inviaExcel(res, nomeExcel('commesse'), await excelSemplice('Commesse', [
       { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
       { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
       { header: 'Q.tà', key: 'quantita', formato: 'intero' }, { header: 'Ordine cliente', key: 'ordine_cliente', width: 18 }, { header: 'Consegna', key: 'data_consegna', formato: 'data' },
-      { header: 'Preventivo', key: 'preventivo', width: 14 }, { header: 'Stato', key: 'stato', width: 14 },
-    ], righe.map(c => ({ ...c, cliente: c.intestazione?.cliente, codice: c.intestazione?.codice, revisione: c.intestazione?.revisione, descrizione: c.intestazione?.descrizione, stato: STATI_TESTO[c.stato] ?? c.stato }))));
+      { header: 'Preventivo', key: 'preventivo', width: 14 }, { header: 'Spedite', key: 'spedite', formato: 'intero' },
+      { header: 'DDT', key: 'ddt', width: 14 }, { header: 'Stato', key: 'stato', width: 22 },
+    ], righe.map(c => ({ ...c, cliente: c.intestazione?.cliente, codice: c.intestazione?.codice, revisione: c.intestazione?.revisione, descrizione: c.intestazione?.descrizione,
+      spedite: c.sped.spedite || null, ddt: c.sped.ddt.map((x: SpedizioneCommessa['ddt'][number]) => x.numero).join(', '), stato: statoTesto(c.stato, c.sped.spedita) }))));
   });
 
   r.get('/', async (req, res) => {
     const cerca = String(req.query.q ?? '').trim();
-    const tuttiGliAnni = await elencoCommesse(cerca);
+    const vista = vistaCommesse(req.query.vista);
+    const tuttiGliAnni = await conSpedizioni(cerca, vista);
     const anno = annoScelto(req.query);
     const tutte = filtraPerAnno(tuttiGliAnni, c => c.creato_il, anno);
     const { righe, barra } = paginata(tutte, req.query as Record<string, unknown>);
@@ -97,13 +109,18 @@ export function rotteCommesse() {
               : html`<span class="nota">${x.numero}${x.fatto ? ' (fatto)' : ' (commessa non trovata)'}</span> `)}</td></tr>`)}</tbody></table>`
           : html`<p class="nota">Nessuna scheda scansionata da portare nel rientro.</p>`}
       </section>
-      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search"><button>Cerca</button>
-        <a class="bottone" href="${indirizzoAnno('/commesse/elenco.xlsx', { q: cerca }, anno)}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
+      <nav class="pagine anni non-stampare" aria-label="Vista"><span class="nota">Mostra:</span> ${VISTE_COMMESSE.map((v, k) => html`${v.valore === vista
+        ? html`<b aria-current="page">${v.testo}</b>`
+        : html`<a href="${indirizzoAnno('/commesse', { q: cerca, vista: v.valore === 'dafare' ? '' : v.valore }, anno)}">${v.testo}</a>`}`)}
+        <span class="nota">"Da fare" nasconde le commesse chiuse e quelle già spedite con DDT (tutte le schede, o almeno il 90 % a rientro confermato).</span></nav>
+      <form class="cerca" method="get"><input name="q" value="${cerca}" placeholder="Cerca numero, cliente, codice, ordine…" type="search">
+        ${vista !== 'dafare' ? html`<input type="hidden" name="vista" value="${vista}">` : ''}<button>Cerca</button>
+        <a class="bottone" href="${indirizzoAnno('/commesse/elenco.xlsx', { q: cerca, vista: vista === 'dafare' ? '' : vista }, anno)}" title="Scarica l'elenco (con questo filtro) in Excel">Excel</a></form>
       ${barraAnni(contaPerAnno(tuttiGliAnni, c => c.creato_il), anno, '/commesse', req.query as Record<string, unknown>)}
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
-          <th>Ordine cliente</th><th>Consegna</th><th>Preventivo</th><th>Stato</th></tr></thead>
+          <th>Ordine cliente</th><th>Consegna</th><th>Preventivo</th><th class="n">Spedite</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(c => html`
           <tr class="cliccabile" data-href="/commesse/${c.id}">
             ${casella(c.id, c.numero)}
@@ -111,10 +128,11 @@ export function rotteCommesse() {
             <td>${c.intestazione?.cliente}</td><td>${c.intestazione?.codice}</td><td>${c.intestazione?.revisione}</td>
             <td class="taglia">${c.intestazione?.descrizione}</td><td class="n">${num(c.quantita, 0)}</td>
             <td>${c.ordine_cliente}</td><td>${data(c.data_consegna)}</td><td>${c.preventivo}</td>
-            <td><span class="stato ${c.stato}">${STATI_TESTO[c.stato] ?? c.stato}</span></td>
+            <td class="n nowrap" data-valore="${c.sped.spedite}">${c.sped.spedite ? html`${num(c.sped.spedite, 0)}${c.sped.ddt.map((x: SpedizioneCommessa['ddt'][number]) => html` <a href="/amministrazione/documenti/${x.id}" title="${num(x.quantita, 0)} pz">DDT ${x.numero}</a>`)}` : ''}</td>
+            <td><span class="stato ${c.sped.spedita ? 'chiusa' : c.stato}">${statoTesto(c.stato, c.sped.spedita)}</span></td>
           </tr>`)}</tbody></table></div>${barra}
       ${modulo.chiudi}
-      ${righe.length ? '' : html`<p class="vuoto">Nessuna commessa${cerca ? ' trovata' : ''}.</p>`}`,
+      ${righe.length ? '' : html`<p class="vuoto">Nessuna commessa${cerca ? ' trovata' : vista === 'dafare' ? ' da fare' : ''}.</p>`}`,
     })));
   });
 

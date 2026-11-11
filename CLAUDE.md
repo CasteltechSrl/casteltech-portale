@@ -365,6 +365,10 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    nello storico del prodotto (tabella segnalazioni) e si stampano sulle prossime schede.
    Numerazione fasi (migrazione 019): lettere per pre-produzione, M1… gestione materiale, poi 1, 2, 3… progressivi.
    Sigle operatori: Impostazioni → Operatori (dati reali: solo nel database, mai nel repository).
+3-bis. ✅ Commesse spedite (Adriano 11/11/2026, THS C2026-0075 col DDT 224 restava nell'elenco; `engine/commesse-spedite.ts`, `spedizioniDelleCommesse` in `commesse-servizio.ts`,
+   test in `tests/commesse-spedite.test.ts`): l'elenco Commesse si apre su "Da fare" (`?vista=spedite|tutte`); spedita = schede uscite con DDT di vendita emessi (collegati alla commessa o alla
+   riga d'ordine, oppure stesso cliente + prodotto/codice dal giorno della commessa, divisi prima alle commesse finite poi alle più vecchie, mai oltre la quantità) ≥ quantità, o ≥ 90 % a rientro
+   confermato. Calcolato in lettura, lo stato salvato non cambia; colonna "Spedite" con i DDT; la ricerca trova anche le spedite.
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei
