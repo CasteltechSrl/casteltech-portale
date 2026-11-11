@@ -225,6 +225,7 @@ export function lamineDaVendite(righe: RigaLamina[], anni: number[]): LamineVend
     for (const r of righe.filter(r => r.anno === anno)) {
       const d = r.descrizione.trim(), d1 = d.split('\n')[0];
       if (!/^UT-LAMINA$/i.test(r.codice.trim()) && !LAMINA.test(d)) continue;
+      if (!r.importo) continue;   // lamina riconsegnata a 0 € (JOX FT 60/2026): già fatturata prima
       const segno = r.importo < 0 || r.quantita < 0 ? -1 : 1;
       const pezzi = segno * pezziLamina(d, r.quantita);
       const aParte = /^UT-LAMINA$/i.test(r.codice.trim()) || (LAMINA.test(d1) && !ALTRE_VOCI.test(d));
