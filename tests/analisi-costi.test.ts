@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  lamineDaVendite, pezziLamina,
+  lamineDaVendite, pezziLamina, materialeVenduto,
   chiaveFornitore, classificaCosti, classificaVendite, confrontoRivendita, costiPerAnno, fornitoriDaControllare, nomiPcbComprati, riassuntoCosti, type RigaCosto, type RigaVendita,
 } from '../src/engine/analisi-costi.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -117,6 +117,13 @@ test('comprato e rivenduto: comprato anche dall\'estero contro il fatturato vero
   assert.equal(r.margineLamine, 140);
 });
 
+test('componenti e PCB venduti: riga del materiale, quota del preventivo, media per le schede senza preventivo', () => {
+  const v = (codice: string, descrizione: string, importo: number, tipo: 'nostro' | 'servizio' = 'nostro') => ({ ...vendita({ cliente: 'X', codice, descrizione, importo }), tipo });
+  const m = materialeVenduto([v('A', 'scheda A', 1000), v('', 'Acquisto componenti', 300), v('', 'Acquisto PCB', 200), v('B', 'scheda B', 500), v('', 'Lamina', 110, 'servizio')],
+    [{ codice: 'A', clienteId: null, conMateriale: true, quotaComponenti: 0.6, quotaPcb: 0.1 }]);
+  assert.deepEqual(m.map(x => [Math.round(x.componenti), Math.round(x.pcb)]), [[600, 100], [300, 0], [0, 200], [300, 50], [0, 0]]);
+});
+
 test('riassunto: dove vanno i soldi, cosa sale, rivendita in perdita, proposte', () => {
   const r = (fornitore: string, descrizione: string, importo: number, anno: number, id: number) => riga({ rigaId: id, fornitore, descrizione, importo, data: `${anno}-02-01` });
   const righe = classificaCosti([
@@ -126,14 +133,16 @@ test('riassunto: dove vanno i soldi, cosa sale, rivendita in perdita, proposte',
   ], []);
   const costi = costiPerAnno(righe, [2026, 2025]);
   const rivendita = confrontoRivendita({ righe, anni: [2026, 2025], lamine: [],
-    vendite: [{ ...vendita({ cliente: 'X', descrizione: 'scheda', importo: 66000 }), tipo: 'nostro' as const }] });
+    vendite: [{ ...vendita({ cliente: 'X', codice: 'S1', descrizione: 'scheda', importo: 66000 }), tipo: 'nostro' as const }],
+    preventivi: [{ codice: 'S1', clienteId: null, conMateriale: true, quotaComponenti: 0.5, quotaPcb: 0.1 }] });
   const s = riassuntoCosti({ costi, rivendita, ricavi: { 2026: 150000, 2025: 140000 }, mesi: 12 });
   const testi = s.frasi.map(f => f.testo).join('\n');
   assert.match(testi, /valgono 92\.000 €, il 61,3% del fatturato/);
   assert.ok(s.frasi.some(f => f.livello === 'critico' && /costi salgono più del fatturato/.test(f.testo)));
   assert.ok(s.frasi.some(f => f.livello === 'attenzione' && /^Commercialista, paghe, notaio, consulenze amministrative: 12\.000 € nel 2026 contro 6\.000 €/.test(f.testo)));
-  assert.ok(s.frasi.some(f => f.livello === 'critico' && /comprati 60\.000 €.*con materiale nostro 66\.000 €: il materiale ne vale il 90,9%/.test(f.testo)), 'materiale 60.000 su 66.000 fatturati');
-  assert.ok(s.proposte.some(p => /si mangia quasi tutto/.test(p)));
+  // una riga coppia comprato / venduto: componenti 60.000 comprati, 66.000 × 50 % venduti
+  assert.ok(s.frasi.some(f => f.livello === 'critico' && f.testo === 'Componenti: comprati 60.000 €, venduti 33.000 €: perdita di 27.000 €.'), testi);
+  assert.ok(s.proposte.some(p => /venduti per meno di quanto si comprano/.test(p)));
   assert.ok(s.proposte.some(p => /consulenze amministrative 12\.000 €/.test(p)));
   assert.match(s.opinione, /resta troppo poco per il montaggio/);
   // senza fatture: nessun conto

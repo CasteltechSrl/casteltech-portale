@@ -104,7 +104,9 @@ export async function materialeDeiPreventivi(): Promise<MaterialePreventivo[]> {
   for (const r of righe) {
     try {
       const rp = riepilogo(r.risultato);
-      out.push({ codice: r.codice, clienteId: r.clienteId, conMateriale: rp.venditaComponentiScheda + rp.venditaPcbScheda > 0 });
+      const prezzo = rp.prezzoScheda > 0 ? rp.prezzoScheda : 0;
+      out.push({ codice: r.codice, clienteId: r.clienteId, conMateriale: rp.venditaComponentiScheda + rp.venditaPcbScheda > 0,
+        quotaComponenti: prezzo ? Math.min(1, rp.venditaComponentiScheda / prezzo) : undefined, quotaPcb: prezzo ? Math.min(1, rp.venditaPcbScheda / prezzo) : undefined });
     } catch { /* preventivo con un risultato non leggibile: non conta */ }
   }
   return out;
