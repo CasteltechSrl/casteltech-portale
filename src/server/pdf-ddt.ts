@@ -24,7 +24,7 @@ async function caricaLogo(): Promise<Buffer | null> {
 }
 
 /** d = riga di `documenti` (tipo ddt), righe = documenti_righe, azienda = impostazioni 'azienda', destinatario = fotografia o anagrafica. */
-export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: any): Promise<Buffer> {
+export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: any, revisione = 0): Promise<Buffer> {
   const t = d.dati_trasporto ?? {};
   const numero = d.numero == null ? 'BOZZA' : numeroCompleto(d.numero, d.sezionale);
   const doc = await PDFDocument.create();
@@ -87,7 +87,7 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
     M, y - 75, { dim: 7.8, colore: GRIGIO });
   scrivi(p, 'DOCUMENTO DI TRASPORTO', L - M, y - 12, { f: grassetto, dim: 13, destra: true });
   scrivi(p, 'D.P.R. 472/96', L - M, y - 24, { dim: 7.5, colore: GRIGIO, destra: true });
-  const titolo = `N. ${numero} del ${dataIt(d.data)}`;
+  const titolo = `N. ${numero} del ${dataIt(d.data)}${revisione > 0 ? ` · Rev. ${revisione}` : ''}`;
   scrivi(p, titolo, L - M, y - 40, { f: grassetto, dim: 11, destra: true });
   const timbro = d.numero == null ? 'BOZZA' : d.stato === 'annullato' ? 'ANNULLATO' : '';
   if (timbro) scrivi(p, timbro, L - M, y - 56, { f: grassetto, dim: 12, colore: ROSSO, destra: true });
@@ -156,7 +156,7 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
   casella(p, M + quarti * 2, y, quarti, 48, 'Firma conducente / vettore', []);
   casella(p, M + quarti * 3, y, quarti, 48, 'Firma del destinatario', []);
 
-  pagine.forEach((pg, i) => scrivi(pg, `DDT n. ${numero} del ${dataIt(d.data)}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
+  pagine.forEach((pg, i) => scrivi(pg, `DDT n. ${numero} del ${dataIt(d.data)}${revisione > 0 ? ` · Rev. ${revisione}` : ''}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
     L - M, M - 14, { dim: 7, colore: GRIGIO, destra: true }));
   return Buffer.from(await doc.save());
 }

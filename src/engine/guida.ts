@@ -574,6 +574,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/preventivi', 'Preventivi'], ['/ordini/conferme', 'Conferme d\'ordine'], ['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/amministrazione/documenti?tipo=fattura', 'Fatture'], ['/ordini/fornitori', 'Ordini a fornitore']],
   },
   {
+    id: 'revisioni-invio', area: 'amministrazione', titolo: 'Rimandare un documento corretto: le revisioni (Rev. 1, Rev. 2…)',
+    parole: 'revisione revisioni rev rimandare rimando reinviare nuovo invio modifica sconto correzione annulla sostituisce invio precedente ultima versione storico pdf inviato preventivo conferma ddt ordine fornitore',
+    testo: [
+      'Preventivi, conferme d\'ordine, DDT e ordini a fornitore si possono correggere e rimandare. Il primo invio per email è l\'originale; ogni invio dopo il primo è una revisione nuova: Rev. 1, Rev. 2 e così via.',
+      'Nella revisione il PDF porta "Rev. N" accanto al numero, il file si chiama "…_rev1.pdf", l\'oggetto dell\'email finisce con "- Rev. 1" e il testo comincia con "questo invio annulla e sostituisce l\'invio precedente del …": il cliente sa qual è il documento giusto. La frase è già scritta nel testo proposto; se la togli, il portale la rimette.',
+      'Il portale salva il PDF esatto di ogni invio: nel riquadro dell\'invio (nella stampa del preventivo e nella pagina del documento) c\'è l\'elenco "Invii al cliente" con data, destinatario e "PDF inviato"; quelli vecchi sono segnati "sostituito".',
+      'Si lavora sempre sull\'ultima versione: il preventivo, la conferma o il DDT nel portale sono uno solo (l\'ultima revisione), e commesse, ordini e fatture partono da lì. Le copie vecchie servono solo da storico.',
+      'Fatture e note di credito NON hanno revisioni: dopo lo SdI non si rimandano corrette, si fa la nota di credito.',
+    ],
+    passi: ['Correggi il documento e salva.', 'Mandalo di nuovo per email: controlla che l\'oggetto abbia "Rev. N" e il testo la frase "annulla e sostituisce".', 'Le copie inviate sono nel riquadro "Invii al cliente".'],
+    pagine: [['/preventivi', 'Preventivi'], ['/ordini/conferme', 'Conferme d\'ordine'], ['/amministrazione/documenti?tipo=ddt', 'DDT'], ['/ordini/fornitori', 'Ordini a fornitore']],
+  },
+  {
     id: 'data-consegna', area: 'preventivi', titolo: 'Data di consegna da dare al cliente',
     parole: 'data consegna quando consegniamo tempi produzione settimana capacità produttiva gantt arrivo componenti pcb materiale stima promettere',
     testo: [

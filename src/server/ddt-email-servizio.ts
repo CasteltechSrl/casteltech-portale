@@ -4,6 +4,8 @@
  * e non annullato; resta scritto a chi e quando (documenti.email_a / email_inviata_il), lo stato del DDT non cambia.
  */
 import { q, q1 } from './db.js';
+import { emailConRevisione, nomeFileRevisione } from '../engine/revisioni.js';
+import { prossimoInvio, salvaRevisione } from './revisioni-servizio.js';
 import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { pdfDdt } from './pdf-ddt.js';
@@ -24,12 +26,12 @@ export async function datiStampaDdt(id: number) {
   return { d, righe, azienda, destinatario };
 }
 
-export async function pdfDelDdt(id: number): Promise<{ nome: string; dati: Buffer } | null> {
+export async function pdfDelDdt(id: number, revisione = 0): Promise<{ nome: string; dati: Buffer } | null> {
   const x = await datiStampaDdt(id);
   if (!x) return null;
   const numero = x.d.numero == null ? null : numeroCompleto(x.d.numero, x.d.sezionale);
-  return { nome: nomeFilePdfDdt(numero, x.d.anno ?? Number(String(x.d.data).slice(0, 4)), x.destinatario.ragione_sociale ?? ''),
-    dati: await pdfDdt(x.d, x.righe, x.azienda, x.destinatario) };
+  return { nome: nomeFileRevisione(nomeFilePdfDdt(numero, x.d.anno ?? Number(String(x.d.data).slice(0, 4)), x.destinatario.ragione_sociale ?? ''), revisione),
+    dati: await pdfDdt(x.d, x.righe, x.azienda, x.destinatario, revisione) };
 }
 
 /** Indirizzo, oggetto e testo proposti nella pagina del DDT. */
@@ -45,9 +47,10 @@ export async function propostaEmailDdt(id: number) {
   const a = destinatarioDdt({ ultimoDdt: c?.ultimo, amministrazione: indirizzoEmail(c?.email_amministrazione), crm: indirizzoEmail(c?.crm), pec: indirizzoEmail(c?.pec) });
   const azienda = x.azienda.ragione_sociale || 'Casteltech S.r.l.';
   const t = x.d.dati_trasporto ?? {};
-  const testo = emailDdt({ numero: `${numeroCompleto(x.d.numero, x.d.sezionale)}`, data: x.d.data, azienda, riferimento: x.d.riferimento_esterno,
-    trasportatore: t.trasportatore, colli: t.colli });
-  return { a, ...testo, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ddt')) };
+  const prossimo = await prossimoInvio({ documento: id });
+  const testo = emailConRevisione(emailDdt({ numero: `${numeroCompleto(x.d.numero, x.d.sezionale)}`, data: x.d.data, azienda, riferimento: x.d.riferimento_esterno,
+    trasportatore: t.trasportatore, colli: t.colli }), prossimo.revisione, prossimo.precedente);
+  return { a, ...testo, revisione: prossimo.revisione, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ddt')) };
 }
 
 /** Manda il DDT con il PDF allegato; restituisce gli indirizzi a cui è partito. */
@@ -58,13 +61,15 @@ export async function inviaDdtEmail(id: number, b: { a?: string; cc?: string; og
   const a = elencoIndirizzi(b.a), cc = elencoIndirizzi(b.cc);
   if (!a.indirizzi.length) throw new Error('Scrivi a chi mandarlo.');
   if (a.errati.length || cc.errati.length) throw new Error(`Indirizzi non validi: ${[...a.errati, ...cc.errati].join(', ')}.`);
-  const oggetto = String(b.oggetto ?? '').trim(), testo = String(b.testo ?? '').trim();
-  if (!oggetto || !testo) throw new Error("Servono l'oggetto e il testo dell'email.");
-  const pdf = (await pdfDelDdt(id))!;
+  if (!String(b.oggetto ?? '').trim() || !String(b.testo ?? '').trim()) throw new Error("Servono l'oggetto e il testo dell'email.");
+  const prossimo = await prossimoInvio({ documento: id });
+  const { oggetto, testo } = emailConRevisione({ oggetto: String(b.oggetto).trim(), testo: String(b.testo).trim() }, prossimo.revisione, prossimo.precedente);
+  const pdf = (await pdfDelDdt(id, prossimo.revisione))!;
   const azienda = String(x.azienda.ragione_sociale || 'Casteltech S.r.l.').replace(/"/g, '');
   const inviato = await inviaGmail(messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ddt')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } }));
   await q(`UPDATE documenti SET email_a = $2, email_inviata_il = now(), email_id = $3, inviato_a_mano = false, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
+  await salvaRevisione({ documento: id }, { revisione: prossimo.revisione, a: [...a.indirizzi, ...cc.indirizzi].join(', '), oggetto, nome: pdf.nome, pdf: pdf.dati });
   return a.indirizzi.join(', ');
 }

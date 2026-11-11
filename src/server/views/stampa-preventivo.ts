@@ -7,6 +7,7 @@
 import { html, euro, euroUnitario, data, num, raw, type Raw } from './html.js';
 import { VERSIONE } from './layout.js';
 import { riquadroInvio } from './invio.js';
+import type { RevisioneInvio } from '../revisioni-servizio.js';
 import type { Risultato } from '../../engine/calcolo.js';
 import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
@@ -28,6 +29,8 @@ export interface EmailStampa {
   a: string; oggetto: string; testo: string; attivo: boolean; mittente: string; stato: string;
   richiesta: { mittente: string; oggetto: string } | null;
   email_a: string | null; email_inviata_il: Date | string | null; inviato_a_mano?: boolean;
+  /** invii già fatti con il PDF partito (Adriano 11/11/2026) */
+  revisioni?: RevisioneInvio[];
 }
 
 /** ut = dettaglio dei costi una tantum (Adriano 4/11/2026; `?ut=0` lo toglie) */
@@ -202,7 +205,8 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
   ${o.email ? html`<section class="invia-email" id="invia-email">
     <h2>Invia per email</h2>
     ${riquadroInvio({ tipo: 'preventivo', stato: o.email.stato, email_a: o.email.email_a, email_inviata_il: o.email.email_inviata_il, inviato_a_mano: o.email.inviato_a_mano },
-      { segna: `/preventivi/${p.id}/segna-inviato`, torna: `/preventivi/${p.id}/stampa${link({})}`, cosa: 'preventivo' })}
+      { segna: `/preventivi/${p.id}/segna-inviato`, torna: `/preventivi/${p.id}/stampa${link({})}`, cosa: 'preventivo',
+        revisioni: { elenco: o.email.revisioni ?? [], link: rid => `/preventivi/revisioni/${rid}/pdf` } })}
     ${o.email.stato === 'da_validare' ? html`<p class="aiuto"><b>Preventivo da validare</b>: controllalo e salvalo, poi si può mandare.</p>` : html`
     <form method="post" action="/preventivi/${p.id}/email" data-conferma="Mandare il preventivo per email con il PDF allegato (${VERSIONI_STAMPA.find(v => v.codice === opz.versione)?.nome ?? ''})?">
       <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}"><input type="hidden" name="allegato" value="${conAllegato ? '1' : '0'}">

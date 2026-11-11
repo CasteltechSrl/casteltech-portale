@@ -5,6 +5,22 @@
  */
 import { html, raw, type Raw } from './html.js';
 import { segniInvio, mancaSdi, type DatiInvio, type SegnoInvio } from '../../engine/invii.js';
+import { etichettaRevisione, prossimaRevisione } from '../../engine/revisioni.js';
+import type { RevisioneInvio } from '../revisioni-servizio.js';
+
+const giorno = (d: Date | string) => new Date(d).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/** Revisioni inviate (Adriano 11/11/2026): una riga per invio con il PDF partito; vale l'ultima. */
+function elencoRevisioni(d: DatiInvio, r: { elenco: RevisioneInvio[]; link: (id: number) => string }): Raw {
+  const ultima = r.elenco.length ? r.elenco[0].revisione : null;
+  const prossima = prossimaRevisione(ultima, !!d.email_inviata_il);
+  return html`<div class="revisioni-invio">
+    ${r.elenco.length ? html`<p class="invio-frase"><b>Invii al cliente</b> (fa fede l'ultimo):</p>
+      <ul>${r.elenco.map((x, i) => html`<li>${i === 0 ? html`<b>${etichettaRevisione(x.revisione) || 'Primo invio'}</b>` : etichettaRevisione(x.revisione) || 'Primo invio'}
+        del ${giorno(x.inviato_il)}${x.inviato_a ? ` a ${x.inviato_a}` : ''} · <a href="${r.link(x.id)}">PDF inviato</a>${i > 0 ? ' (sostituito)' : ''}</li>`)}</ul>` : ''}
+    ${prossima > 0 ? html`<p class="nota">Il prossimo invio sarà la <b>Rev. ${prossima}</b>: nel PDF e nell'oggetto c'è "Rev. ${prossima}" e nell'email la frase "annulla e sostituisce l'invio precedente".</p>` : ''}
+  </div>`;
+}
 
 const ICONA: Record<SegnoInvio['canale'], string> = { email: '✉', sdi: '⇪', fic: '✓', mano: '✓' };
 
@@ -19,7 +35,7 @@ export function segnoInvioElenco(d: DatiInvio): Raw {
  * Riquadro della scheda: frasi dei segni, oppure "Non ancora inviato"; con `segna` il modulo per segnarlo inviato a mano
  * (o togliere il segno messo a mano). `segna` = indirizzo del POST.
  */
-export function riquadroInvio(d: DatiInvio, o: { segna?: string; torna?: string; cosa?: string } = {}): Raw {
+export function riquadroInvio(d: DatiInvio, o: { segna?: string; torna?: string; cosa?: string; revisioni?: { elenco: RevisioneInvio[]; link: (id: number) => string } } = {}): Raw {
   const s = segniInvio(d);
   const cosa = o.cosa ?? 'documento';
   const manca = mancaSdi(d);
@@ -35,6 +51,7 @@ export function riquadroInvio(d: DatiInvio, o: { segna?: string; torna?: string;
     ${s.length ? s.map(x => html`<p class="invio-frase invio-${x.livello}">${raw(ICONA[x.canale])} ${x.frase}</p>`)
       : html`<p class="invio-frase"><b>Non ancora inviato</b>: nessun invio registrato.</p>`}
     ${manca ? html`<p class="invio-frase invio-attesa">⇪ Non ancora inviata allo SdI.</p>` : ''}
+    ${o.revisioni ? elencoRevisioni(d, o.revisioni) : ''}
     ${modulo}
   </div>`;
 }
