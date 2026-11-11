@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { FINESTRE, finestraValida, quandoFirma, type Finestra } from '../../engine/flusso.js';
 import { cambiaPriorita, chiudiRiga, dichiaraFineLavorazione, passaInProduzione, segnaSpedito, spunta, togliSpedito, type DatiFlusso, type RigaCruscottoFlusso } from '../flusso-servizio.js';
-import { html, data, num, type Raw } from '../views/html.js';
+import { html, data, num, raw, type Raw } from '../views/html.js';
 
 const gm = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
 const ritornoSicuro = (x: unknown, predefinito: string) => (typeof x === 'string' && x.startsWith('/cruscotto') ? x : predefinito);
@@ -21,7 +21,10 @@ export function rotteFlusso() {
 
   r.post('/riga/:id/spunta', async (req, res) => {
     const id = Number(req.params.id);
-    await spunta(id, String(req.body.gruppo ?? ''), String(req.body.chiave ?? ''), String(req.body.valore) === '1', utente(req));
+    const valore = String(req.body.valore) === '1';
+    await spunta(id, String(req.body.gruppo ?? ''), String(req.body.chiave ?? ''), valore, utente(req));
+    // dal browser con resta-qui.js: niente ricarica, la pagina resta dov'è (Adriano 11/11/2026)
+    if (req.get('X-Senza-Ricarica')) return res.json({ ok: true, fatta: valore });
     res.redirect(torna(req, id));
   });
   r.post('/riga/:id/priorita', async (req, res) => {
@@ -85,7 +88,7 @@ function spuntaForm(riga: number, gruppo: string, chiave: string, testo: string,
   const fatta = !!firma || !!opz.auto;
   const titolo = opz.auto ? 'Fatta: ci sono tempi del reparto per questa fase' : firma ? `Spuntata da ${quandoFirma(firma)} (premi per togliere)` : opz.titolo ?? 'Premi per spuntare';
   if (opz.solaLettura) return chip(`${fatta ? '✓ ' : ''}${testo}`, `${fatta ? (opz.auto ? 'auto' : 'si') : opz.manca ? 'manca' : ''} ${opz.cls ?? ''}`, titolo);
-  return html`<form method="post" action="/produzione/flusso/riga/${riga}/spunta" class="spunta-form">
+  return html`<form method="post" action="/produzione/flusso/riga/${riga}/spunta" class="spunta-form" data-senza-ricarica${opz.auto ? raw(' data-auto') : ''}>
     <input type="hidden" name="torna" value="${torna}"><input type="hidden" name="gruppo" value="${gruppo}"><input type="hidden" name="chiave" value="${chiave}">
     <input type="hidden" name="valore" value="${firma ? '0' : '1'}">
     <button class="spunta ${fatta ? (opz.auto && !firma ? 'auto' : 'si') : opz.manca ? 'manca' : ''} ${opz.cls ?? ''}" title="${titolo}">${fatta ? '✓' : '☐'} ${testo}</button></form>`;
