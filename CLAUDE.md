@@ -819,6 +819,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    PCB comprato con lo stesso nome, cliente chiavi in mano), conto lavoro, servizi, anticipi, non classificati; numero = peso del materiale su quel fatturato (≥70 % attenzione, ≥85 % critico).
    Scelta per cliente (Adriano 11/11/2026: JOX e Tree chiavi in mano, Control Systems conto lavoro; migrazione 088, impostazioni 'materiale_clienti' {c<id>: nostro|conto_lavoro},
    `sceltaMaterialeClienti`/`salvaSceltaMateriale`, POST `/costi/materiale-cliente`, riquadro "Clienti dell'anno" sotto la tabella): vince su preventivi e indizi, non su anticipi, materiale scritto, servizi.
+   Lamine (Adriano 11/11/2026, "per ogni lamina acquistata c'è una lamina venduta"): `righeLamine` + `lamineDaVendite`/`pezziLamina` in `engine/analisi-costi.ts` = pezzi fatturati a parte e DENTRO
+   i costi una tantum (lamina in qualunque riga della descrizione), confronto a pezzi con le comprate (`LAMINA_COMPRATA`, `RigaCosto.quantita`); LOPAR: circuiti stampati e campioni = PCB, codici LA26-… = lamine.
    I-TRONIK: assistenza e ricambi Essemtec in Manutenzione, non in Stagno (`FORNITORI_DOPPI`).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):

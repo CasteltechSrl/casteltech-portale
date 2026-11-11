@@ -145,6 +145,8 @@ const FORNITORI: [RegExp, string, boolean?][] = [
 const FORNITORI_DOPPI: [RegExp, RegExp, string][] = [
   // I-TRONIK (Adriano 11/11/2026, "stagno +146 %"): vende stagno e flussanti ma è anche l'assistenza delle macchine Essemtec: interventi e ricambi non sono stagno
   [/i-tronik/, /rimborso kilometric|ore di (viaggio|intervento|lavoro)|\bhotel\b|spese vive|pedaggi|\bfiltr|silenziator|tubicino|connection board|essemtec|vacuum|intervento|\bricamb/i, 'manutenzioni'],
+  // LOPAR (Adriano 11/11/2026): fa lamine (codici LA26-…) ma anche circuiti stampati e campioni di PCB
+  [/lopar/, /campioni|circuito stampato(?! cod\.? ?la\d{2}-)|circuiti stampati|\bpcb\b/i, 'pcb'],
   [/laura nardi|nardi laura/, /progettaz|consulen|svilupp|\blayout\b|sbrogli|disegn|\bschem|prototip|\bore\b|\bassistenza\b|\bmodific/i, 'progettazione'],
 ];
 
