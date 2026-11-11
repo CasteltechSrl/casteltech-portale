@@ -113,7 +113,7 @@ export async function pdfDdt(d: any, righe: any[], azienda: any, destinatario: a
     y -= alto;
   };
   fila([['Causale del trasporto', t.causale ?? ''], ['Riferimento', d.riferimento_esterno ?? ''], ['Porto', t.porto ?? ''], ['Trasporto a cura del', t.a_cura ?? '']]);
-  y -= 12;
+  y -= 22;   // stacco tra intestazione e righe (Adriano 11/11/2026)
 
   // ── righe dei beni ──
   const colonne = [{ t: 'CODICE', l: 110 }, { t: 'DESCRIZIONE DEI BENI', l: 0 }, { t: 'U.M.', l: 40 }, { t: 'QUANTITÀ', l: 60, n: true }];
