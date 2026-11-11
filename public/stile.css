@@ -1150,3 +1150,6 @@ table.elenco tr.anno-scelto td { background: #fff4c2; }
 /* revisioni dei documenti inviati (Adriano 11/11/2026) */
 .revisioni-invio ul { margin: .2rem 0 .3rem 1.2rem; padding: 0; }
 .revisioni-invio li { margin: .1rem 0; }
+
+/* riga da cui si torna con "← Torna alla BOM" (Adriano 11/11/2026) */
+table.bom tr.riga-tornata td { background: #fff3b0; transition: background .6s; }

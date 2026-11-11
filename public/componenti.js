@@ -42,6 +42,29 @@
     // il riquadro dei prezzi mancanti si vede solo con il filtro "Senza prezzo" (Adriano 5/11/2026)
     const riquadro = document.getElementById('da-prezzare');
     if (riquadro) riquadro.hidden = b.dataset.filtro !== 'da-prezzare';
+    // filtro ricordato per questa BOM: "← Torna alla BOM" dalla riga lo rimette (Adriano 11/11/2026)
+    try { sessionStorage.setItem('filtro-bom:' + location.pathname, b.dataset.filtro); } catch { /* niente memoria del browser */ }
+  };
+  // ritorno dalla pagina di una riga (#riga-N): stesso filtro di prima e stessa posizione;
+  // se la riga ora non rientra nel filtro (es. completata) si va alla riga visibile più vicina
+  const tornaAllaRiga = () => {
+    const m = /^#riga-(\d+)$/.exec(location.hash);
+    if (!filtri || !m) return;
+    let filtro = null;
+    try { filtro = sessionStorage.getItem('filtro-bom:' + location.pathname); } catch { /* niente */ }
+    const b = filtro != null ? [...filtri.querySelectorAll('button')].find(x => x.dataset.filtro === filtro) : null;
+    if (b) applicaFiltro(b);
+    const riga = document.getElementById('riga-' + m[1]);
+    if (!riga) return;
+    let vai = riga;
+    if (vai.hidden) {
+      let x = riga.nextElementSibling; while (x && x.hidden) x = x.nextElementSibling;
+      if (!x) { x = riga.previousElementSibling; while (x && x.hidden) x = x.previousElementSibling; }
+      vai = x || filtri;
+    }
+    vai.scrollIntoView({ block: 'center' });
+    vai.classList.add('riga-tornata');
+    setTimeout(() => vai.classList.remove('riga-tornata'), 2500);
   };
   if (filtri) {
     filtri.addEventListener('click', e => { const b = e.target.closest('button'); if (b) applicaFiltro(b); });
@@ -50,6 +73,7 @@
     const apriSeChiesto = () => { if (daPrezzare && location.hash === '#da-prezzare') { applicaFiltro(daPrezzare); document.getElementById('da-prezzare')?.scrollIntoView(); } };
     apriSeChiesto();
     window.addEventListener('hashchange', apriSeChiesto);
+    tornaAllaRiga();
   }
 
   document.querySelectorAll('form.conferma-elimina').forEach(f => f.addEventListener('submit', e => {
