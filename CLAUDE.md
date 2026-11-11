@@ -684,6 +684,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
 ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: solo FED ID) si riprende quella delle autofatture precedenti, con avviso.
    Provato il 28/10/2026 con le fatture vere 2026 (Mouser, DigiKey, Anthropic, FedEx, Cina): stessi tipo, righe, imponibile e IVA di FIC. Conferma → fattura tra le fatture fornitori (origine 'acquisito') + bozza
    dell'autofattura (sezionale AF, righe in euro con IVA 22 %) → Emetti: XML `generaAutofatturaXml` (cedente estero RF18, CAP 00000, DatiFattureCollegate).
+   Data della bozza (Adriano 11/11/2026, `dataAutofattura` in `engine/autofatture.ts`): giorno del caricamento della fattura nel portale (`acquisizioni.creato_il`), mai dopo oggi,
+   non prima dell'ultima autofattura emessa della serie; si può cambiare nella bozza.
    Doppioni (Adriano 4/11/2026; `stessaFatturaEstera` in `engine/autofatture.ts`, `fatturaEsteraGiaCaricata`, migrazione 070, test in `tests/autofatture.test.ts`): stessa fattura
    (fornitore dal nome, numero senza segni, data) anche da file diverso (PDF + .eml) = quella arrivata dopo si scarta in `elabora`; nell'elenco "doppione" rosso,
    "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (POST `/amministrazione/fatture-estere/azioni`: "Prepara l'autofattura" = `confermaFatturaEstera` per ognuna, con gli errori
