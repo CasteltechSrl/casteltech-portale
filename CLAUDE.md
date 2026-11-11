@@ -817,6 +817,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Pareggio) comprende le righe delle AUTOFATTURE (Mouser, DigiKey… ~40.000 € nel 2026 che mancavano), id negativi, fuori quelle con `ricevuto_id` o con la copia FIC "nAF" tra le ricevute.
    "Comprato e rivenduto" = materiale comprato contro fatturato VERO delle vendite con materiale nostro (riga "acquisto componenti/PCB", preventivo con componenti/PCB = solo sì/no,
    PCB comprato con lo stesso nome, cliente chiavi in mano), conto lavoro, servizi, anticipi, non classificati; numero = peso del materiale su quel fatturato (≥70 % attenzione, ≥85 % critico).
+   Scelta per cliente (Adriano 11/11/2026: JOX e Tree chiavi in mano, Control Systems conto lavoro; migrazione 088, impostazioni 'materiale_clienti' {c<id>: nostro|conto_lavoro},
+   `sceltaMaterialeClienti`/`salvaSceltaMateriale`, POST `/costi/materiale-cliente`, riquadro "Clienti dell'anno" sotto la tabella): vince su preventivi e indizi, non su anticipi, materiale scritto, servizi.
    I-TRONIK: assistenza e ricambi Essemtec in Manutenzione, non in Stagno (`FORNITORI_DOPPI`).
    ✅ Previsione di cassa 30/60/90 giorni (Adriano 3/11/2026, dal file Excel "cash-flow-snapshot" fatto con FIC; tasti Andamento / Previsione di cassa in Analisi;
    `/amministrazione/analisi/cassa`, conti in `engine/previsione-cassa.ts`, letture in `previsione-cassa-servizio.ts`, test in `tests/previsione-cassa.test.ts`):

@@ -14,7 +14,7 @@ import { CATEGORIE, NOMI_MACRO, SPIEGAZIONE_MACRO, categoria as categoriaDaCodic
 import {
   classificaCosti, classificaVendite, confrontoRivendita, nomiPcbComprati, costiPerAnno, fornitoriDaControllare, riassuntoCosti, type CostiPerAnno, type Livello, type RigaClassificata, type RivenditaAnno,
 } from '../../engine/analisi-costi.js';
-import { clientiContoLavoro, copertureRighe, lamineVendute, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
+import { clientiContoLavoro, salvaSceltaMateriale, sceltaMaterialeClienti, copertureRighe, lamineVendute, materialeDeiPreventivi, regoleCategorie, ricaviPerAnno, righeCosti, righeVenditeRivendita, salvaRegola } from '../analisi-costi-servizio.js';
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const euro = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 0)} €`);
@@ -36,17 +36,17 @@ async function calcola(anno: number) {
   const inCorso = anno === Number(oggi.slice(0, 4));
   const finoA = inCorso ? oggi.slice(5) : '';
   const anni = [anno, anno - 1, anno - 2].filter(a => a >= ANNO_MINIMO);
-  const [righeTutte, regole, righeVendute, preventivi, contoLavoro, lamine, ricavi, coperture] = await Promise.all([
-    righeCosti(anni), regoleCategorie(), righeVenditeRivendita(anni, finoA), materialeDeiPreventivi(), clientiContoLavoro(), lamineVendute(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni),
+  const [righeTutte, regole, righeVendute, preventivi, contoLavoro, lamine, ricavi, coperture, scelte] = await Promise.all([
+    righeCosti(anni), regoleCategorie(), righeVenditeRivendita(anni, finoA), materialeDeiPreventivi(), clientiContoLavoro(), lamineVendute(anni, finoA), ricaviPerAnno(anni, finoA), copertureRighe(anni), sceltaMaterialeClienti(),
   ]);
   // anno in corso: gli anni prima contano fino allo stesso giorno
   const righe = classificaCosti(righeTutte, regole).filter(r => !finoA || r.anno === anno || r.data.slice(5) <= finoA);
   const costi = costiPerAnno(righe, anni);
-  const tipi = classificaVendite(righeVendute, preventivi, nomiPcbComprati(righe), contoLavoro);
+  const tipi = classificaVendite(righeVendute, preventivi, nomiPcbComprati(righe), contoLavoro, scelte);
   const vendite = righeVendute.map((r, i) => ({ ...r, tipo: tipi[i] }));
   const rivendita = confrontoRivendita({ righe, vendite, lamine, anni });
   const riassunto = riassuntoCosti({ costi, rivendita, ricavi, mesi: inCorso ? Number(oggi.slice(5, 7)) : 12 });
-  return { anno, anni, inCorso, finoA, righe, costi, rivendita, riassunto, ricavi, coperture, daControllare: fornitoriDaControllare(righe.filter(r => r.anno === anno)), nPreventivi: preventivi.length };
+  return { anno, anni, inCorso, finoA, righe, costi, rivendita, riassunto, ricavi, coperture, scelte, daControllare: fornitoriDaControllare(righe.filter(r => r.anno === anno)), nPreventivi: preventivi.length };
 }
 
 const sceltaCategoria = (nome: string, scelta?: string) => html`<select name="${nome}">
@@ -98,6 +98,28 @@ function tabellaRivendita(riv: RivenditaAnno[], anno: number, inCorso: boolean):
     </tbody></table></div>`;
 }
 
+const NOMI_SCELTA = { nostro: 'materiale nostro', conto_lavoro: 'conto lavoro' } as const;
+/** I clienti più grandi per gruppo; l'ufficio li sposta a mano (vale per tutti gli anni). */
+function clientiMateriale(r: RivenditaAnno | undefined, anno: number, ufficio: boolean, scelte: Map<string, 'nostro' | 'conto_lavoro'>): Raw {
+  if (!r) return html``;
+  const gruppi = [
+    { nome: 'Con materiale nostro', elenco: r.clientiNostro },
+    { nome: 'Non classificati', elenco: r.clientiNonSo },
+    { nome: 'Conto lavoro', elenco: r.clientiContoLavoro },
+  ].filter(g => g.elenco.length);
+  if (!gruppi.length) return html``;
+  return html`<details class="riquadro" ${r.clientiNonSo.length ? 'open' : ''}><summary>Clienti del ${anno}: chi ha materiale nostro e chi no${r.clientiNonSo.length ? ` (${r.clientiNonSo.length} da classificare)` : ''}</summary>
+    <p class="nota">Il portale decide dalle righe e dai preventivi; dove sbaglia o non sa, scegli tu: vale per tutte le fatture del cliente, di ogni anno (servizi e anticipi restano a parte).</p>
+    <div class="tabella-scorre"><table class="elenco"><thead><tr><th>Gruppo</th><th>Cliente</th><th class="num">${anno}</th><th>Scelta</th>${ufficio ? html`<th>Cambia</th>` : ''}</tr></thead><tbody>
+    ${gruppi.flatMap(g => g.elenco.map(c => html`<tr><td>${g.nome}</td><td>${c.cliente}</td><td class="num">${euro(c.importo)}</td>
+      <td>${scelte.has(c.chiave) ? html`<b>${NOMI_SCELTA[scelte.get(c.chiave)!]}</b> <small class="tenue">(a mano)</small>` : html`<small class="tenue">dal portale</small>`}</td>
+      ${ufficio ? html`<td>${c.chiave.startsWith('c') ? html`<form method="post" action="/amministrazione/analisi/costi/materiale-cliente" class="in-riga">
+        <input type="hidden" name="chiave" value="${c.chiave}"><input type="hidden" name="anno" value="${anno}">
+        <select name="scelta"><option value="auto">decide il portale</option><option value="nostro" ${scelte.get(c.chiave) === 'nostro' ? 'selected' : ''}>materiale nostro</option>
+        <option value="conto_lavoro" ${scelte.get(c.chiave) === 'conto_lavoro' ? 'selected' : ''}>conto lavoro</option></select> <button type="submit">Salva</button></form>` : html`<small class="tenue">non in anagrafica</small>`}</td>` : ''}</tr>`))}
+    </tbody></table></div></details>`;
+}
+
 function pagina(req: Request, d: Awaited<ReturnType<typeof calcola>>): Raw {
   const { anno, costi, riassunto, rivendita, coperture } = d;
   const oggi = Number(oggiRoma().slice(0, 4));
@@ -141,8 +163,7 @@ function pagina(req: Request, d: Awaited<ReturnType<typeof calcola>>): Raw {
       servizi, anticipi (esclusi: si scalano dal saldo). Dei preventivi conta solo se il materiale è nostro, non i prezzi. Senza magazzino gli anni non chiudono pari:
       il materiale comprato a fine anno si fattura l'anno dopo.</p>
     ${tabellaRivendita(rivendita, anno, d.inCorso)}
-    ${rivendita[0]?.clientiNostro.length ? html`<p class="nota">Chiavi in mano nel ${anno} (i più grandi): ${rivendita[0].clientiNostro.map(c => `${c.cliente} ${euro(c.importo)}`).join(' · ')}.</p>` : ''}
-    ${rivendita[0]?.clientiNonSo.length ? html`<p class="nota">Non classificati nel ${anno}: ${rivendita[0].clientiNonSo.map(c => `${c.cliente} ${euro(c.importo)}`).join(' · ')}. Un preventivo nel portale per i loro prodotti li mette al posto giusto.</p>` : ''}
+    ${clientiMateriale(rivendita[0], anno, ufficio, d.scelte)}
 
     <h2>Da controllare</h2>
     ${d.daControllare.length ? html`<p class="nota">Fornitori con fatture del ${anno} che nessuna regola ha riconosciuto (stanno in "Altre spese"): scegli la categoria e vale per tutte le loro fatture, di ogni anno.</p>
@@ -202,6 +223,13 @@ export function rotteAnalisiCosti() {
     const msg = await salvaRegola(tipo, String(b.chiave ?? ''), String(b.categoria ?? ''));
     const torna = /^\/amministrazione\/analisi\/costi/.test(String(b.torna ?? '')) ? String(b.torna) : `/amministrazione/analisi/costi?anno=${Number(b.anno) || ''}`;
     res.redirect(`${torna}${torna.includes('?') ? '&' : '?'}msg=${encodeURIComponent(msg)}`);
+  });
+
+  r.post('/costi/materiale-cliente', async (req: Request, res) => {
+    if (!eUfficio(req.session.utente?.ruolo)) return res.status(403).send('Solo l\'ufficio può cambiare la scelta.');
+    const b = req.body ?? {};
+    const msg = await salvaSceltaMateriale(String(b.chiave ?? ''), String(b.scelta ?? ''));
+    res.redirect(`/amministrazione/analisi/costi?anno=${Number(b.anno) || ''}&msg=${encodeURIComponent(msg)}`);
   });
 
   r.get('/costi.xlsx', async (req: Request, res) => {

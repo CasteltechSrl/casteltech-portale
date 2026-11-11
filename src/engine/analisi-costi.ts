@@ -242,8 +242,14 @@ const pcbDelProdotto = (r: RigaVendita, nomi: string[]) => {
 const chiavePrev = (codice: string, clienteId: number | null) => `${codice.toUpperCase().trim()}|${clienteId ?? ''}`;
 const chiaveCliente = (r: Pick<RigaVendita, 'clienteId' | 'cliente'>) => r.clienteId != null ? `c${r.clienteId}` : `n:${r.cliente.toUpperCase().trim()}`;
 
-/** Il gruppo di ogni riga venduta (stesso ordine dell'elenco). `contoLavoro` = clienti con componenti in conto lavoro in anagrafica (chiave c<id>). */
-export function classificaVendite(righe: RigaVendita[], preventivi: MaterialePreventivo[], nomiPcb: string[], contoLavoro: Set<string> = new Set()): TipoVendita[] {
+/** Scelta dell'ufficio per un cliente (Adriano 11/11/2026: JOX e Tree chiavi in mano, Control Systems conto lavoro). */
+export type SceltaMateriale = 'nostro' | 'conto_lavoro';
+export const chiaveClienteVendita = (r: Pick<RigaVendita, 'clienteId' | 'cliente'>) => chiaveCliente(r);
+
+/** Il gruppo di ogni riga venduta (stesso ordine dell'elenco). `contoLavoro` = clienti con componenti in conto lavoro in anagrafica (chiave c<id>).
+ *  `scelte` = clienti segnati a mano dall'ufficio: decidono tutte le righe del cliente tranne anticipi, materiale scritto nella riga e servizi. */
+export function classificaVendite(righe: RigaVendita[], preventivi: MaterialePreventivo[], nomiPcb: string[], contoLavoro: Set<string> = new Set(),
+  scelte: Map<string, SceltaMateriale> = new Map()): TipoVendita[] {
   const prev = new Map(preventivi.map(p => [chiavePrev(p.codice, p.clienteId), p.conMateriale]));
   // 1. indizi della riga e del prodotto
   const primo: (TipoVendita | null)[] = righe.map(r => {
@@ -251,6 +257,8 @@ export function classificaVendite(righe: RigaVendita[], preventivi: MaterialePre
     if (r.acconto || ANTICIPO.test(d)) return 'acconto';
     if (MATERIALE_SCRITTO.test(d)) return 'nostro';
     if (/^UT-/i.test(r.codice)) return 'servizio';
+    const scelta = scelte.get(chiaveCliente(r));
+    if (scelta && !(SERVIZIO.test(d1) || PROGETTO.test(d))) return scelta;
     const p = r.codice ? prev.get(chiavePrev(r.codice, r.clienteId)) : undefined;
     if (p != null) return p ? 'nostro' : 'conto_lavoro';
     if (SERVIZIO.test(d1) || PROGETTO.test(d)) return 'servizio';
@@ -284,16 +292,19 @@ export interface RivenditaAnno {
   /** fatturato vero, diviso per gruppo (servizi e acconti esclusi dal confronto) */
   vendutoNostro: number; vendutoContoLavoro: number; vendutoNonSo: number; vendutoServizi: number;
   /** clienti con fatturato "non so" (i più grandi), per guardarli */
-  clientiNonSo: { cliente: string; importo: number }[];
+  clientiNonSo: { chiave: string; cliente: string; importo: number }[];
   /** clienti chiavi in mano (i più grandi) */
-  clientiNostro: { cliente: string; importo: number }[];
+  clientiNostro: { chiave: string; cliente: string; importo: number }[];
+  /** clienti in conto lavoro (i più grandi) */
+  clientiContoLavoro: { chiave: string; cliente: string; importo: number }[];
   /** peso del materiale comprato sul fatturato con materiale nostro (%), e su nostro + non so (il caso peggiore e il migliore) */
   pesoMateriale: number | null; pesoMaterialeMin: number | null;
   /** lamine fatturate ai clienti (UT-LAMINA e righe "lamina/stencil") */
   lamineVendutePezzi: number; lamineVendute: number; margineLamine: number;
 }
 
-const primi = (m: Map<string, number>, n = 6) => [...m.entries()].filter(e => Math.abs(e[1]) >= 1).sort((a, b) => b[1] - a[1]).slice(0, n).map(([cliente, importo]) => ({ cliente, importo: r2(importo) }));
+const primi = (m: Map<string, { cliente: string; importo: number }>, n = 6) => [...m.entries()].filter(e => Math.abs(e[1].importo) >= 1)
+  .sort((a, b) => b[1].importo - a[1].importo).slice(0, n).map(([chiave, x]) => ({ chiave, cliente: x.cliente, importo: r2(x.importo) }));
 
 /** Comprato contro fatturato vero, anno per anno. `vendite` = righe delle fatture già classificate (`classificaVendite`). */
 export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (RigaVendita & { tipo: TipoVendita })[]; lamine: LamineVendute[]; anni: number[] }): RivenditaAnno[] {
@@ -305,13 +316,15 @@ export function confrontoRivendita(x: { righe: RigaClassificata[]; vendite: (Rig
     const compratoEstero = r2(delAnno.filter(r => CATEGORIE_RIVENDITA_SCHEDE.includes(r.categoria) && r.rigaId != null && r.rigaId < 0).reduce((s, r) => s + r.importo, 0));
     const v = x.vendite.filter(r => r.anno === anno);
     const somma = (t: TipoVendita) => r2(v.filter(r => r.tipo === t).reduce((s, r) => s + r.importo, 0));
-    const perCliente = (t: TipoVendita) => { const m = new Map<string, number>(); for (const r of v.filter(r => r.tipo === t)) m.set(r.cliente, (m.get(r.cliente) ?? 0) + r.importo); return m; };
+    const perCliente = (t: TipoVendita) => { const m = new Map<string, { cliente: string; importo: number }>();
+      for (const r of v.filter(r => r.tipo === t)) { const k = chiaveCliente(r), y = m.get(k) ?? { cliente: r.cliente, importo: 0 }; y.importo += r.importo; m.set(k, y); }
+      return m; };
     const vendutoNostro = somma('nostro'), vendutoNonSo = somma('non_so');
     const l = x.lamine.find(l => l.anno === anno) ?? { anno, pezzi: 0, importo: 0 };
     return {
       anno, compratoComponenti, compratoPcb, compratoMeccanica, compratoLamine, comprato: r2(compratoSchede + compratoLamine), compratoSchede, compratoEstero,
       vendutoNostro, vendutoContoLavoro: somma('conto_lavoro'), vendutoNonSo, vendutoServizi: somma('servizio'),
-      clientiNonSo: primi(perCliente('non_so')), clientiNostro: primi(perCliente('nostro')),
+      clientiNonSo: primi(perCliente('non_so')), clientiNostro: primi(perCliente('nostro')), clientiContoLavoro: primi(perCliente('conto_lavoro')),
       pesoMateriale: vendutoNostro > 0 ? r2((compratoSchede / vendutoNostro) * 100) : null,
       pesoMaterialeMin: vendutoNostro + vendutoNonSo > 0 ? r2((compratoSchede / (vendutoNostro + vendutoNonSo)) * 100) : null,
       lamineVendutePezzi: l.pezzi, lamineVendute: r2(l.importo), margineLamine: r2(l.importo - compratoLamine),
