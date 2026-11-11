@@ -14,7 +14,7 @@ import { descrizioneConNota, righeDaModulo } from '../engine/documenti.js';
 import { risolviFontiDdt } from './componenti-clienti-servizio.js';
 import { completaDaListino, listinoProdotto } from './prezzi-servizio.js';
 import type { DdtAperto } from '../engine/fatture-differite.js';
-import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, SQL_DDT_DIFFERITA, bloccoModificaDdt, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
+import { INIZIO_DDT_DA_FATTURARE, SQL_DDT_DA_FATTURARE, SQL_DDT_DIFFERITA, bloccoModificaDdt, controlliDdt, rigaDdtDaCommessa, rigaOrdinePerCommessa, righeDdtDaOrdine, serviziDegliOrdini, trasportoDaModulo, type DatiTrasporto } from '../engine/ddt.js';
 import { TIPI_SCEGLIBILI, importoDaIncassare, righeStornoAcconto } from '../engine/tipi-fattura.js';
 import { righeOrdini } from './ordini-servizio.js';
 
@@ -331,6 +331,26 @@ export async function aggiungiRigheOrdine(id: number, rigaIds: number[]): Promis
 
 /** Aggiunge in fondo alla bozza le righe dei DDT scelti, ciascuno preceduto dalla riga "DDT n. X del gg/mm/aaaa". */
 export async function aggiungiDdt(id: number, ddtIds: number[]): Promise<number> {
+  const aggiunti = await aggiungiRigheDdt(id, ddtIds);
+  if (aggiunti) await aggiungiServiziDegliOrdini(id);
+  return aggiunti;
+}
+
+/**
+ * Servizi una tantum messi da soli in fattura (Adriano 11/11/2026): quando nella bozza entrano dei DDT, i servizi mai fatturati
+ * (lamina, programmazione, attrezzaggio…) degli STESSI ordini di quei DDT si aggiungono in fondo, senza aspettare la spunta nel
+ * riquadro giallo; chi non vuole fatturarli adesso toglie la riga. I servizi di altri ordini restano nel riquadro.
+ */
+export async function aggiungiServiziDegliOrdini(id: number): Promise<number> {
+  const d = await q1<{ cliente_id: number | null; tipo: string; tipo_sdi: string | null; stato: string }>(`SELECT cliente_id, tipo, tipo_sdi, stato FROM documenti WHERE id = $1`, [id]);
+  if (!d?.cliente_id || d.tipo !== 'fattura' || d.tipo_sdi === 'TD02' || d.stato !== 'bozza') return 0;
+  const ordini = await q<{ ordine_id: number }>(`SELECT DISTINCT r.ordine_id FROM documenti_righe x JOIN ordini_righe r ON r.id = x.riga_ordine_id
+    WHERE x.documento_id = $1 AND x.ddt_id IS NOT NULL`, [id]);
+  const scelte = serviziDegliOrdini(await righeOrdineDaFatturare(d.cliente_id, id), ordini.map(o => o.ordine_id));
+  return scelte.length ? aggiungiRigheOrdine(id, scelte) : 0;
+}
+
+async function aggiungiRigheDdt(id: number, ddtIds: number[]): Promise<number> {
   return transazione(async c => {
     const d = (await c.query(`SELECT stato, cliente_id FROM documenti WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (d?.stato !== 'bozza') throw new Error('Il documento è già emesso: non si modifica.');

@@ -205,3 +205,12 @@ export function notaNonFatturare(motivo: string | null | undefined, nota: string
   const extra = (nota ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
   return `${base}${extra ? ` (${extra})` : ''}, segnato da ${chi} il ${quando}`;
 }
+
+/**
+ * Servizi una tantum da mettere da soli nella fattura (Adriano 11/11/2026): tra i servizi mai fatturati del cliente,
+ * solo quelli degli ordini dei DDT che entrano nella fattura. Gli altri restano da spuntare nel riquadro giallo.
+ */
+export function serviziDegliOrdini<T extends { id: number; ordineId: number }>(daFatturare: T[], ordiniDeiDdt: number[]): number[] {
+  const ordini = new Set(ordiniDeiDdt);
+  return daFatturare.filter(r => ordini.has(r.ordineId)).map(r => r.id);
+}

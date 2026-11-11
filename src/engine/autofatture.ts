@@ -161,13 +161,23 @@ export function controllaFatturaEstera(f: FatturaEstera): { errori: string[]; av
 }
 
 /** "Relativo a fattura n. 93174181 del 21/10/2026": causale dell'autofattura, come in Fatture in Cloud. */
+/** Ultimo giorno del mese di una data AAAA-MM-GG. */
+export const fineMese = (data: string) => `${data.slice(0, 8)}${String(new Date(Date.UTC(Number(data.slice(0, 4)), Number(data.slice(5, 7)), 0)).getUTCDate()).padStart(2, '0')}`;
+
 /**
  * Data proposta per l'autofattura (Adriano 11/11/2026): il giorno in cui la fattura del fornitore è stata caricata nel portale,
  * non il giorno in cui si prepara l'autofattura. Mai dopo oggi; se nella serie c'è già un'autofattura con data successiva
  * (stesso anno) si prende quella, perché le date della numerazione devono restare in ordine.
+ * Mese di competenza: fattura del fornitore del mese PRIMA del caricamento (arrivata a fine mese, caricata il 2 o il 3) =
+ * ultimo giorno del mese della fattura, se nella serie non c'è già un'autofattura con una data del mese dopo e l'anno è lo stesso.
  */
-export function dataAutofattura(caricataIl: string, ultimaDataSerie: string | null | undefined, oggi: string): string {
+export function dataAutofattura(caricataIl: string, ultimaDataSerie: string | null | undefined, oggi: string, dataFattura?: string | null): string {
   let data = caricataIl && caricataIl < oggi ? caricataIl : oggi;
+  if (dataFattura && /^\d{4}-\d{2}-\d{2}$/.test(dataFattura) && dataFattura.slice(0, 4) === data.slice(0, 4)
+    && Number(data.slice(5, 7)) - Number(dataFattura.slice(5, 7)) === 1) {
+    const fine = fineMese(dataFattura);
+    if (!ultimaDataSerie || ultimaDataSerie <= fine) return fine;
+  }
   if (ultimaDataSerie && ultimaDataSerie.slice(0, 4) === data.slice(0, 4) && ultimaDataSerie > data) data = ultimaDataSerie <= oggi ? ultimaDataSerie : oggi;
   return data;
 }

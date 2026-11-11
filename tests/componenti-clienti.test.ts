@@ -47,3 +47,15 @@ test('DDT: fonte della riga scelta o dedotta per le righe vecchie', () => {
   assert.equal(fonteRiga({ codice: 'XYZ' }), 'libero');
   assert.equal(fonteRiga({}), 'prodotto');
 });
+
+test('ricerca dei componenti clienti su tutto l\'elenco (Adriano 11/11/2026, elenco a pagine)', async () => {
+  const { filtraComponentiClienti } = await import('../src/engine/componenti-clienti.js');
+  const righe = [
+    { codice: 'RES-0603-10K', cliente: 'IDEA AUTOMAZIONE', descrizione: 'RESISTENZA 10K', famiglia: 'RESISTENZE', gruppo: null },
+    { codice: 'CON-USB-B', cliente: 'SELEA', descrizione: 'CONNETTORE USB', famiglia: 'CONNETTORI', gruppo: null },
+  ];
+  assert.equal(filtraComponentiClienti(righe, '').length, 2);
+  assert.deepEqual(filtraComponentiClienti(righe, 'res 10k').map(r => r.codice), ['RES-0603-10K']);
+  assert.deepEqual(filtraComponentiClienti(righe, 'selea usb').map(r => r.codice), ['CON-USB-B']);
+  assert.equal(filtraComponentiClienti(righe, 'condensatore').length, 0);
+});
