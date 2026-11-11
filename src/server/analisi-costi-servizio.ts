@@ -131,11 +131,34 @@ export async function salvaSceltaMateriale(chiave: string, scelta: string): Prom
 /** Righe di fatture e note di credito che citano una lamina (UT-LAMINA, o "lamina/stencil" in qualunque riga della descrizione: anche dentro i costi una tantum). */
 export function righeLamine(anni: number[], finoA = ''): Promise<RigaLamina[]> {
   return q<RigaLamina>(`SELECT extract(year FROM d.data)::int AS anno, coalesce(r.codice, '') AS codice, coalesce(r.descrizione, '') AS descrizione,
-      (${SEGNO} * r.quantita)::float AS quantita, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo
+      (${SEGNO} * r.quantita)::float AS quantita, (${SEGNO} * round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2))::float AS importo, r.lamine
     FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id
     WHERE d.tipo IN ('fattura', 'nota_credito') AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.acconto_id IS NULL
-      AND (upper(trim(r.codice)) = 'UT-LAMINA' OR coalesce(r.descrizione, '') ~* '\\m(LAMIN[AE]|STENCIL)\\M')
+      AND (r.lamine IS NOT NULL OR upper(trim(r.codice)) = 'UT-LAMINA' OR coalesce(r.descrizione, '') ~* '\\m(LAMIN[AE]|STENCIL)\\M')
       AND extract(year FROM d.data)::int = ANY($1::int[]) ${STESSO_PERIODO}`, [anni, anni[0], finoA]);
+}
+
+export interface RigaPerLamine { id: number; data: string; numero: number; cliente: string; descrizione: string; importo: number; lamine: number | null; scritta: boolean }
+/** Righe di fattura dell'anno dove una lamina può stare senza essere scritta (costi una tantum, avvio produzione, campionature) + quelle già segnate
+ *  + tutte le righe della fattura cercata (`numero`, per un pacchetto tipo Botisum FT 93). */
+export function righePerLamine(anno: number, numero?: number): Promise<RigaPerLamine[]> {
+  return q<RigaPerLamine>(`SELECT r.id, to_char(d.data, 'YYYY-MM-DD') AS data, d.numero, ${NOME_CLIENTE} AS cliente, coalesce(r.descrizione, '') AS descrizione,
+      round(r.quantita * r.prezzo * (1 - coalesce(r.sconto, 0) / 100), 2)::float AS importo, r.lamine,
+      (upper(trim(coalesce(r.codice, ''))) = 'UT-LAMINA' OR coalesce(r.descrizione, '') ~* '\\m(LAMIN[AE]|STENCIL)\\M') AS scritta
+    FROM documenti_righe r JOIN documenti d ON d.id = r.documento_id LEFT JOIN clienti c ON c.id = d.cliente_id
+    WHERE d.tipo = 'fattura' AND ${STATI_OK} AND d.numero IS NOT NULL AND NOT r.solo_descrizione AND r.acconto_id IS NULL AND r.prezzo <> 0
+      AND extract(year FROM d.data)::int = $1
+      AND (r.lamine IS NOT NULL OR d.numero = $2
+        OR (split_part(coalesce(r.descrizione, ''), E'\\n', 1) ~* '(avvio|una tantum|attrezz|programmaz|campionatur|forfait|setup)'
+            AND coalesce(r.descrizione, '') !~* '\\m(LAMIN[AE]|STENCIL)\\M' AND upper(trim(coalesce(r.codice, ''))) <> 'UT-LAMINA'))
+    ORDER BY d.data, d.numero, r.id`, [anno, numero ?? -1]);
+}
+/** Lamine contenute in una riga di fattura, scritte a mano (vuoto = decide la descrizione). */
+export async function salvaLamineRiga(id: number, valore: string): Promise<string> {
+  const v = valore.trim() === '' ? null : Number(valore);
+  if (v != null && (!Number.isInteger(v) || v < 0 || v > 50)) return 'Scrivi un numero di lamine da 0 a 50 (vuoto = decide la descrizione).';
+  const r = await q(`UPDATE documenti_righe SET lamine = $2 WHERE id = $1 RETURNING id`, [id, v]);
+  return r.length ? (v == null ? 'Tolto: decide la descrizione.' : `Segnate ${v} lamine sulla riga.`) : 'Riga non trovata.';
 }
 
 /** Fatturato (imponibile di fatture meno note di credito) per anno. */
