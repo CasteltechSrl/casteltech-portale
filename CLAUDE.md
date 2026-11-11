@@ -147,6 +147,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Email del cliente per documento (migrazione 074, Dati fiscali del cliente): `email_amministrazione` = fatture E DDT (Adriano: "è lo stesso"),
   `email_preventivi` (più indirizzi con la virgola), proposte per prime (`destinatarioPreventivo` dopo il mittente della richiesta Gmail, `destinatarioDdt`);
   la colonna `email_ddt` della 074 non si usa.
+  Revisioni dei documenti inviati (Adriano 11/11/2026; regole in `engine/revisioni.ts`, letture in `revisioni-servizio.ts`, migrazione 091 `revisioni_invio`,
+  test in `tests/revisioni.test.ts`): preventivo, conferma d'ordine, DDT, ordine a fornitore. Primo invio = revisione 0, ogni invio dopo = Rev. N (`prossimoInvio`):
+  "Rev. N" nel PDF accanto al numero, file `_revN`, oggetto "- Rev. N", testo con "annulla e sostituisce l'invio precedente del …" (`emailConRevisione`, nella proposta
+  e di nuovo all'invio); ogni PDF partito salvato (`salvaRevisione`), elenco "Invii al cliente" nel riquadro dell'invio, GET `/preventivi/revisioni/:rid/pdf` e
+  `/amministrazione/documenti/revisioni/:rid/pdf`. Si lavora sempre sull'ultima versione. Fatture/NC/autofatture escluse (dopo lo SdI = nota di credito). Un invio nuovo usa le stesse tre funzioni.
   Tempi di consegna del preventivo (Adriano 4/11/2026; `Ritocchi.consegna`, `testoConsegna`/`consegnaCompleta` in `engine/stampa-preventivo.ts`, test in `tests/stampa-preventivo.test.ts`):
   obbligatori prima di stampare o mandare (fieldset "Tempi di consegna" nei ritocchi, settimane 1–26, sempre "circa"): conto lavoro = "circa N settimane dall'arrivo
   del materiale"; materiale comprato da noi (proposto dalla spunta Componenti) = "circa N settimane per l'arrivo del materiale e circa M per il montaggio".

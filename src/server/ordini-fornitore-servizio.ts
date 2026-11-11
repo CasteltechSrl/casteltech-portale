@@ -7,6 +7,8 @@
 import { q, q1, transazione } from './db.js';
 import { assegnaNumero, caricaAzienda } from './amministrazione-servizio.js';
 import { pdfConfermaOrdine, MODELLO_ORDINE_FORNITORE, type DatiPdfConferma } from './pdf-conferma-ordine.js';
+import { emailConRevisione, nomeFileRevisione } from '../engine/revisioni.js';
+import { prossimoInvio, salvaRevisione } from './revisioni-servizio.js';
 import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { AZIENDA_PREDEFINITA } from './views/stampa-preventivo.js';
@@ -137,7 +139,7 @@ export async function rifaiPdfOrdine(id: number) {
     await q(`UPDATE documenti SET pdf = $2 WHERE id = $1`, [id, (await creaPdf(id)).dati]);
 }
 
-async function datiPdf(id: number): Promise<{ dati: DatiPdfConferma; nome: string }> {
+async function datiPdf(id: number, revisione = 0): Promise<{ dati: DatiPdfConferma; nome: string }> {
   const x = await leggiOrdineFornitore(id);
   if (!x) throw new Error('Ordine non trovato.');
   const { d, righe } = x;
@@ -146,7 +148,7 @@ async function datiPdf(id: number): Promise<{ dati: DatiPdfConferma; nome: strin
     indirizzo: d.indirizzo, cap: d.cap, comune: d.comune, provincia: d.provincia, nazione: d.paese, pec: d.pec };
   const note = [d.commessa ? `Rif. nostra commessa ${d.commessa}` : '', d.note ?? ''].filter(Boolean).join('\n');
   const dati: DatiPdfConferma = {
-    numero: d.numero, anno: d.anno, data: d.data, modello: MODELLO_ORDINE_FORNITORE,
+    numero: d.numero, anno: d.anno, data: d.data, revisione, modello: MODELLO_ORDINE_FORNITORE,
     azienda: {
       nome: a.ragione_sociale || P.ragione_sociale,
       indirizzo: `${a.indirizzo || P.indirizzo} · ${a.cap || P.cap} ${a.comune || P.comune} (${a.provincia || P.provincia})`,
@@ -160,9 +162,9 @@ async function datiPdf(id: number): Promise<{ dati: DatiPdfConferma; nome: strin
   return { dati, nome: nomeFilePdfOrdine(d.numero, d.anno, fornitore.ragione_sociale ?? '') };
 }
 
-async function creaPdf(id: number) {
-  const { dati, nome } = await datiPdf(id);
-  return { nome, dati: await pdfConfermaOrdine(dati) };
+async function creaPdf(id: number, revisione = 0) {
+  const { dati, nome } = await datiPdf(id, revisione);
+  return { nome: nomeFileRevisione(nome, revisione), dati: await pdfConfermaOrdine(dati) };
 }
 
 /** PDF salvato all'emissione, o anteprima con la scritta BOZZA. */
@@ -305,8 +307,10 @@ export async function propostaEmailOrdine(id: number) {
   if (!x) return null;
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
   const consegne = x.righe.map(r => r.consegna).filter((k): k is string => !!k).sort();
-  const t = emailOrdineFornitore({ numero: x.d.numero ? `${x.d.numero}/${x.d.anno}` : 'bozza', data: x.d.data, rifFornitore: x.d.riferimento_esterno, azienda, consegna: consegne[0] });
-  return { a: indirizzoEmail(x.d.email) || indirizzoEmail(x.d.pec) || '', ...t, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ordine_fornitore')) };
+  const prossimo = await prossimoInvio({ documento: id });
+  const t = emailConRevisione(emailOrdineFornitore({ numero: x.d.numero ? `${x.d.numero}/${x.d.anno}` : 'bozza', data: x.d.data, rifFornitore: x.d.riferimento_esterno, azienda, consegna: consegne[0] }),
+    prossimo.revisione, prossimo.precedente);
+  return { a: indirizzoEmail(x.d.email) || indirizzoEmail(x.d.pec) || '', ...t, revisione: prossimo.revisione, attivo: gmailConfigurato(), mittente: descriviMittente(await mittentePer('ordine_fornitore')) };
 }
 
 export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: string; oggetto?: string; testo?: string }): Promise<string> {
@@ -316,15 +320,18 @@ export async function inviaOrdineFornitore(id: number, b: { a?: string; cc?: str
   const a = elencoIndirizzi(b.a), cc = elencoIndirizzi(b.cc);
   if (!a.indirizzi.length) throw new Error('Scrivi a chi mandarlo.');
   if (a.errati.length || cc.errati.length) throw new Error(`Indirizzi non validi: ${[...a.errati, ...cc.errati].join(', ')}.`);
-  const oggetto = String(b.oggetto ?? '').trim(), testo = String(b.testo ?? '').trim();
-  if (!oggetto || !testo) throw new Error("Servono l'oggetto e il testo dell'email.");
-  const pdf = await pdfOrdineFornitore(id);
+  if (!String(b.oggetto ?? '').trim() || !String(b.testo ?? '').trim()) throw new Error("Servono l'oggetto e il testo dell'email.");
+  // revisione (Adriano 11/11/2026): dal secondo invio PDF rifatto con "Rev. N", oggetto con "- Rev. N", testo con "annulla e sostituisce"
+  const prossimo = await prossimoInvio({ documento: id });
+  const { oggetto, testo } = emailConRevisione({ oggetto: String(b.oggetto).trim(), testo: String(b.testo).trim() }, prossimo.revisione, prossimo.precedente);
+  const pdf = prossimo.revisione > 0 ? await creaPdf(id, prossimo.revisione) : await pdfOrdineFornitore(id);
   const azienda = (await caricaAzienda()).ragione_sociale || AZIENDA_PREDEFINITA.ragione_sociale;
   const messaggio = messaggioEmail({ da: intestazioneDa(azienda, (await mittentePer('ordine_fornitore')).indirizzo), a: a.indirizzi, cc: cc.indirizzi, oggetto, testo,
     allegato: { nome: pdf.nome, mime: 'application/pdf', dati: pdf.dati } });
   const inviato = await inviaGmail(messaggio);
   await q(`UPDATE documenti SET stato = 'inviato', email_a = $2, email_inviata_il = now(), email_id = $3, inviato_a_mano = false, aggiornato_il = now() WHERE id = $1`,
     [id, [...a.indirizzi, ...cc.indirizzi].join(', '), inviato.id]);
+  await salvaRevisione({ documento: id }, { revisione: prossimo.revisione, a: [...a.indirizzi, ...cc.indirizzi].join(', '), oggetto, nome: pdf.nome, pdf: pdf.dati });
   return a.indirizzi.join(', ');
 }
 

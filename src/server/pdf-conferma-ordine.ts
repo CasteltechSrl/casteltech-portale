@@ -16,6 +16,8 @@ import { importoRigaConferma, totaleConferma, type RigaConferma } from '../engin
 
 export interface DatiPdfConferma {
   numero: number | null; anno: number; data: string;
+  /** revisione dell'invio (Adriano 11/11/2026): 0 o assente = primo invio, niente scritta */
+  revisione?: number;
   azienda: { nome: string; indirizzo: string; piva: string; rea: string; tel: string; email: string; pec: string; iban?: string; banca?: string };
   cliente: { ragione_sociale: string; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; nazione?: string | null;
     partita_iva?: string | null; codice_fiscale?: string | null; codice_sdi?: string | null; pec?: string | null };
@@ -119,7 +121,8 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
     .forEach((t, i) => scrivi(p, t, L - M, y - 23 - i * 10, { dim: 7.5, colore: GRIGIO, destra: true }));
   y -= 72;
   // titolo a destra: CONFERMA D'ORDINE nr. 12 del 28/10/2026
-  const pezzi: [string, boolean][] = [[m.titolo, true], [' nr. ', false], [numeroTesto, true], [' del ', false], [dataIt(d.data), true]];
+  const pezzi: [string, boolean][] = [[m.titolo, true], [' nr. ', false], [numeroTesto, true], [' del ', false], [dataIt(d.data), true],
+    ...(d.revisione ? [[' · ', false], [`Rev. ${d.revisione}`, true]] as [string, boolean][] : [])];
   let xt = L - M - pezzi.reduce((s, [t, g]) => s + larghezza(t, g ? grassetto : font, 12), 0);
   for (const [t, g] of pezzi) { scrivi(p, t, xt, y, { f: g ? grassetto : font, dim: 12, colore: g ? NERO : GRIGIO }); xt += larghezza(t, g ? grassetto : font, 12); }
   y -= 12;
@@ -247,7 +250,7 @@ export async function pdfConfermaOrdine(d: DatiPdfConferma): Promise<Buffer> {
 
   // ── piede su ogni pagina ──
   pagine.forEach((pg, i) => {
-    scrivi(pg, `${m.piede} nr. ${numeroTesto} del ${dataIt(d.data)}`, M, M - 8, { dim: 7, colore: GRIGIO });
+    scrivi(pg, `${m.piede} nr. ${numeroTesto} del ${dataIt(d.data)}${d.revisione ? ` · Rev. ${d.revisione}` : ''}`, M, M - 8, { dim: 7, colore: GRIGIO });
     scrivi(pg, `${d.azienda.nome} · ${d.azienda.email} · ${d.azienda.tel}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
       L - M, M - 8, { dim: 7, colore: GRIGIO, destra: true });
     if (!d.numero) scrivi(pg, m.bozza, L / 2 - larghezza(m.bozza, grassetto, 9) / 2, M + 6, { f: grassetto, dim: 9, colore: rgb(0.75, 0.2, 0.2) });

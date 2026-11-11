@@ -1,6 +1,7 @@
 /**
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
+import { elencoRevisioni, pdfRevisione } from '../revisioni-servizio.js';
 import { annoScelto, contaPerAnno, filtraPerAnno, indirizzoAnno } from '../../engine/anni-elenco.js';
 import { barraAnni } from '../views/barra-anni.js';
 import { paginata } from '../views/paginazione.js';
@@ -225,11 +226,21 @@ export function rottePreventivi() {
     // sempre la versione salvata in questo momento: niente copie del browser (Adriano 4/11/2026, P2026-2388)
     res.set('Cache-Control', 'no-store');
     const email = await propostaEmailPreventivo(id);
-    res.send(String(stampaPreventivo({ ...x, email: email ? { ...email, inviato_a_mano: !!x.p.inviato_a_mano } : null,
+    const revisioni = await elencoRevisioni({ preventivo: id });
+    res.send(String(stampaPreventivo({ ...x, email: email ? { ...email, inviato_a_mano: !!x.p.inviato_a_mano, revisioni } : null,
       messaggio: req.query.msg ? String(req.query.msg) : undefined })));
   });
 
   // ── PDF del preventivo (lo stesso che parte per email), con le scelte della stampa ──
+  // PDF di una revisione già inviata (Adriano 11/11/2026): la copia esatta di cosa ha ricevuto il cliente
+  r.get('/revisioni/:rid/pdf', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.rid)) return next();
+    const pdf = await pdfRevisione(Number(req.params.rid), 'preventivo');
+    if (!pdf) return res.status(404).send('Revisione non trovata');
+    res.type('application/pdf').setHeader('Content-Disposition', `inline; filename="${pdf.nome}"`);
+    res.send(pdf.dati);
+  });
+
   r.get('/:id/pdf', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
     const id = Number(req.params.id), opz = opzioniStampa(req.query as Record<string, unknown>);

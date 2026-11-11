@@ -3,6 +3,7 @@
  * di consegna dell'ordine in una bozza modificabile → Emetti (numero e PDF salvato) → Invia con Gmail in risposta
  * all'email dell'ordine. Senza la delega di Gmail il PDF si scarica e si manda a mano.
  */
+import { elencoRevisioni } from '../revisioni-servizio.js';
 import { riquadroInvio } from '../views/invio.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
 import { Router } from 'express';
@@ -63,7 +64,8 @@ export function rotteConferme() {
       <div class="intestazione-pagina"><h2>${titolo} ${statoConferma(d.stato)}</h2>
         <a href="/ordini/${o.id}">← Ordine ${o.numero}/${o.anno}</a></div>
       <p>Cliente <b>${d.intestatario?.ragione_sociale ?? d.ragione_sociale}</b></p>
-      ${emessa && !annullata ? riquadroInvio({ ...d, tipo: 'conferma_ordine' }, { segna: `/amministrazione/documenti/${d.id}/segna-inviato`, torna: base, cosa: "conferma d'ordine" }) : ''}
+      ${emessa && !annullata ? riquadroInvio({ ...d, tipo: 'conferma_ordine' }, { segna: `/amministrazione/documenti/${d.id}/segna-inviato`, torna: base, cosa: "conferma d'ordine" ,
+        revisioni: { elenco: await elencoRevisioni({ documento: d.id }), link: rid => `/amministrazione/documenti/revisioni/${rid}/pdf` } }) : ''}
       ${emessa && !annullata ? html`<p class="nota">La conferma è già emessa: se la correggi e salvi, il PDF si rifà con lo stesso numero${d.email_inviata_il ? ' (poi rimandala al cliente)' : ''}.</p>` : ''}
       <form method="post" action="${base}" class="blocco" id="modulo-documento" data-autosalva="${annullata ? '' : '1'}">
         <div class="riga-campi">

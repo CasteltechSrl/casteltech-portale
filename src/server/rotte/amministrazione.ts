@@ -59,6 +59,8 @@ import { elencoControlli, riepilogoControlli } from '../../engine/controlli.js';
 import { datiControlli, riferimentiPreventivi } from '../controlli-servizio.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
+import { elencoRevisioni, pdfRevisione } from '../revisioni-servizio.js';
+import { TIPI_CON_REVISIONI } from '../../engine/revisioni.js';
 import { anticipiFatture, incassiFatture } from '../banca-servizio.js';
 import { segnoAnticipo, statoIncasso, type AnticipoFattura } from '../../engine/anticipi.js';
 import { segnaDocumentoInviato } from '../invii-servizio.js';
@@ -784,6 +786,15 @@ export function rotteAmministrazione() {
     res.send(String(stampaDdt(d, righe, azienda, dest)));
   });
 
+  // PDF di una revisione già inviata (Adriano 11/11/2026): la copia esatta di cosa ha ricevuto il cliente
+  r.get('/documenti/revisioni/:rid/pdf', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.rid)) return next();
+    const pdf = await pdfRevisione(Number(req.params.rid), 'documento');
+    if (!pdf) return res.status(404).send('Revisione non trovata');
+    res.type('application/pdf').setHeader('Content-Disposition', `inline; filename="${pdf.nome}"`);
+    res.send(pdf.dati);
+  });
+
   // PDF del DDT o della fattura / nota di credito di cortesia (lo stesso che parte allegato all'email)
   r.get('/documenti/:id/pdf', async (req, res) => {
     const id = Number(req.params.id);
@@ -890,7 +901,8 @@ export function rotteAmministrazione() {
         ${d.tipo === 'ddt' && !['bozza', 'annullato'].includes(d.stato) ? (d.fattura_id ? html` · fatturato con la <a href="/amministrazione/documenti/${d.fattura_id}">fattura n. ${d.fattura_numero} del ${data(d.fattura_data)}</a>`
           : d.fatturato_altrove ? html` · ${d.fatturato_altrove}` : ' · da fatturare') : ''}</p>
       ${!['bozza', 'annullato'].includes(d.stato) ? riquadroInvio(d, { segna: d.tipo === 'autofattura' ? undefined : `/amministrazione/documenti/${id}/segna-inviato`,
-        cosa: NOMI[d.tipo]?.uno ?? 'documento' }) : ''}
+        cosa: NOMI[d.tipo]?.uno ?? 'documento',
+        revisioni: TIPI_CON_REVISIONI.includes(d.tipo) ? { elenco: await elencoRevisioni({ documento: id }), link: rid => `/amministrazione/documenti/revisioni/${rid}/pdf` } : undefined }) : ''}
       ${d.tipo === 'nota_credito' && d.stato !== 'bozza' && !d.documento_origine_id && d.cliente_id ? await riquadroStorno(d) : ''}`;
 
     // DDT emesso: "Modifica" finché non è in una fattura già allo SdI (Adriano 2/11/2026)

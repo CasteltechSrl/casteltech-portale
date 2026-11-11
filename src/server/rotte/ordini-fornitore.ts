@@ -5,6 +5,7 @@
  */
 import { annoScelto, contaPerAnno, filtraPerAnno } from '../../engine/anni-elenco.js';
 import { barraAnni } from '../views/barra-anni.js';
+import { elencoRevisioni } from '../revisioni-servizio.js';
 import { riquadroInvio, segnoInvioElenco } from '../views/invio.js';
 import { INVIATO_TITOLO } from '../../engine/invii.js';
 import { eAutosalvataggio, rispondiSalvataggio } from '../autosalva.js';
@@ -234,7 +235,8 @@ export function rotteOrdiniFornitore() {
       ${avviso ? html`<div class="avviso info">${avviso}</div>` : ''}
       <p>${nomeFornitoreOrdine ? html`Fornitore <b>${nomeFornitoreOrdine}</b>` : html`<b>Fornitore da scegliere</b>`}${d.bom_id
         ? html` · dalla BOM <a href="/quotazioni/bom/${d.bom_id}">${d.bom_nome ?? d.bom_id}</a>` : ''}</p>
-      ${emesso && !annullato ? riquadroInvio({ ...d, tipo: 'ordine_fornitore' }, { segna: `/amministrazione/documenti/${d.id}/segna-inviato`, torna: base, cosa: 'ordine' }) : ''}
+      ${emesso && !annullato ? riquadroInvio({ ...d, tipo: 'ordine_fornitore' }, { segna: `/amministrazione/documenti/${d.id}/segna-inviato`, torna: base, cosa: 'ordine' ,
+        revisioni: { elenco: await elencoRevisioni({ documento: d.id }), link: rid => `/amministrazione/documenti/revisioni/${rid}/pdf` } }) : ''}
       ${emesso && !annullato ? html`<p class="nota">L'ordine è già emesso: se lo correggi e salvi, il PDF si rifà con lo stesso numero${d.email_inviata_il ? ' (poi rimandalo al fornitore)' : ''}. Il fornitore non si cambia più.</p>` : ''}
       <form method="post" action="${base}" class="blocco" id="modulo-documento" data-autosalva="${annullato ? '' : '1'}">
         <div class="riga-campi">

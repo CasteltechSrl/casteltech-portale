@@ -14,6 +14,8 @@ import { FOGLIO_COMPONENTI, fraseAlternative, type AlternativaDaConfermare, type
 
 export interface DatiPdfPreventivo {
   numero: string; data: string;
+  /** revisione dell'invio (Adriano 11/11/2026): 0 o assente = primo invio, niente scritta */
+  revisioneInvio?: number;
   azienda: { nome: string; indirizzo: string; piva: string; rea: string; tel: string; email: string; pec: string; iban?: string; banca?: string };
   cliente: { ragione_sociale: string; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; nazione?: string | null;
     partita_iva?: string | null; codice_fiscale?: string | null; codice_sdi?: string | null; pec?: string | null };
@@ -103,7 +105,8 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
   let y = H - M;
   testata(p, y);
   y -= 72;
-  const pezzi: [string, boolean][] = [['PREVENTIVO', true], [' nr. ', false], [d.numero, true], [' del ', false], [dataIt(d.data), true]];
+  const pezzi: [string, boolean][] = [['PREVENTIVO', true], [' nr. ', false], [d.numero, true], [' del ', false], [dataIt(d.data), true],
+    ...(d.revisioneInvio ? [[' · ', false], [`Rev. ${d.revisioneInvio}`, true]] as [string, boolean][] : [])];
   let xt = L - M - pezzi.reduce((s, [t, g]) => s + larghezza(t, g ? grassetto : font, 12), 0);
   for (const [t, g] of pezzi) { scrivi(p, t, xt, y, { f: g ? grassetto : font, dim: 12, colore: g ? NERO : GRIGIO }); xt += larghezza(t, g ? grassetto : font, 12); }
   y -= 12;
@@ -344,7 +347,7 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
 
   // ── piede su ogni pagina ──
   pagine.forEach((pg, i) => {
-    scrivi(pg, `Preventivo nr. ${d.numero} del ${dataIt(d.data)}`, M, M - 8, { dim: 7, colore: GRIGIO });
+    scrivi(pg, `Preventivo nr. ${d.numero} del ${dataIt(d.data)}${d.revisioneInvio ? ` · Rev. ${d.revisioneInvio}` : ''}`, M, M - 8, { dim: 7, colore: GRIGIO });
     scrivi(pg, `${d.azienda.nome} · ${d.azienda.email} · ${d.azienda.tel}${pagine.length > 1 ? ` · pagina ${i + 1} di ${pagine.length}` : ''}`,
       L - M, M - 8, { dim: 7, colore: GRIGIO, destra: true });
   });
