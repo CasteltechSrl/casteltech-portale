@@ -42,6 +42,8 @@ export interface SezioneQualita {
   scadenza?: 'frequenza_mesi' | 'mesi_previsti' | 'campo';
   /** per scadenza 'campo': il campo con la data */
   campoScadenza?: string;
+  /** frequenza in mesi proposta quando non è scritta, secondo il valore di un campo (Sicurezza: corso → mesi dell'aggiornamento di legge) */
+  frequenzaPredefinita?: { campo: string; mesi: Record<string, number> };
 }
 
 const ESITI = { positivo: 'Positivo', negativo: 'Negativo', da_ripetere: 'Da ripetere' };
@@ -258,6 +260,8 @@ export function preparaVoce(sezione: SezioneQualita, campi: Record<string, unkno
     dati[c.chiave] = valore;
     if (c.obbligatorio && (valore === null || valore === '')) mancanti.push(c.nome);
   }
+  const fp = sezione.frequenzaPredefinita;
+  if (fp && dati.frequenza_mesi == null && typeof dati[fp.campo] === 'string' && fp.mesi[dati[fp.campo] as string]) dati.frequenza_mesi = fp.mesi[dati[fp.campo] as string];
   return { dati, errore: mancanti.length ? `Manca: ${mancanti.join(', ')}.` : null };
 }
 
@@ -360,12 +364,12 @@ export function titoloVoce(sezione: SezioneQualita, d: DatiVoce) {
  * Cruscotto della Qualità: quante righe per sezione, le non conformità aperte e tutte le scadenze passate o vicine
  * (tarature, manutenzioni, verifiche ESD, azioni correttive, audit, riesami), dalla più vecchia.
  */
-export function riepilogoQualita(voci: { id: number; sezione: string; dati: DatiVoce }[], oggi: string) {
-  const conteggi: Record<string, number> = Object.fromEntries(SEZIONI_QUALITA.map(s => [s.chiave, 0]));
+export function riepilogoQualita(voci: { id: number; sezione: string; dati: DatiVoce }[], oggi: string, sezioni: SezioneQualita[] = SEZIONI_QUALITA) {
+  const conteggi: Record<string, number> = Object.fromEntries(sezioni.map(s => [s.chiave, 0]));
   const scadenze: ScadenzaQualita[] = [];
   let ncAperte = 0;
   for (const v of voci) {
-    const s = sezioneQualita(v.sezione);
+    const s = sezioni.find(x => x.chiave === v.sezione);
     if (!s) continue;
     conteggi[s.chiave]++;
     if (s.chiave === 'non_conformita' && v.dati.stato !== 'chiusa') ncAperte++;
@@ -400,10 +404,10 @@ export function chiaveImport(sezione: SezioneQualita, d: DatiVoce) {
 export interface FileQualita { sezioni: Record<string, Record<string, unknown>[]> }
 
 /** Controlla il file da caricare: { sezioni: { documenti: [...], strumenti: [...] } }, solo sezioni conosciute. */
-export function controllaFileQualita(f: unknown): FileQualita {
+export function controllaFileQualita(f: unknown, ammesse: SezioneQualita[] = SEZIONI_QUALITA): FileQualita {
   const sezioni = (f as FileQualita)?.sezioni;
   if (!sezioni || typeof sezioni !== 'object') throw new Error('serve "sezioni" con le righe di ogni sezione');
-  const sconosciute = Object.keys(sezioni).filter(k => !sezioneQualita(k));
+  const sconosciute = Object.keys(sezioni).filter(k => !ammesse.some(s => s.chiave === k));
   if (sconosciute.length) throw new Error(`sezioni sconosciute: ${sconosciute.join(', ')}`);
   for (const [k, righe] of Object.entries(sezioni)) if (!Array.isArray(righe)) throw new Error(`"${k}" deve essere un elenco`);
   return { sezioni };

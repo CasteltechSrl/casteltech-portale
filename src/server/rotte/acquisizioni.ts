@@ -17,6 +17,8 @@ import { confermaDdt, righeAperteCliente, salvaDdt, type DdtDb, type SchedaLetta
 import { confermaDdtRicevuto, contestoDdtRicevuto, salvaDdtRicevuto, type DdtRicevutoDb } from '../ddt-ricevuti-servizio.js';
 import { riassuntoAnomalie } from '../../engine/ddt-ricevuti.js';
 import type { Request } from 'express';
+import { controllaRighe, cercaMancantiDopo } from '../sicurezza-servizio.js';
+import { riquadroSchede } from '../views/sicurezza.js';
 import { html, data, euro, num, numCampo, raw } from '../views/html.js';
 
 const STATI: Record<string, string> = { nuovo: 'in attesa', da_confermare: 'da confermare', confermato: 'ordine creato', scartato: 'scartato', errore: 'errore' };
@@ -140,6 +142,8 @@ async function paginaDdtRicevuto(req: Request, a: any): Promise<string> {
   const errori = anomalie.filter(x => x.livello === 'errore').length;
   const ddtId = a.stato === 'confermato' ? (await q1<{ id: number }>(`SELECT id FROM ddt_ricevuti WHERE acquisizione_id = $1`, [a.id]))?.id : null;
   const it = (n: number) => num(n, 3);
+  // schede di sicurezza delle sostanze arrivate dai fornitori (Adriano 12/11/2026)
+  const sds = d && tipo !== 'cliente' && a.stato !== 'scartato' ? await controllaRighe(d.righe.map(r => ({ codice: r.codice || null, descrizione: r.descrizione }))) : [];
   return pagina(req.session.utente, a.nome_file, 'acquisire', html`
     <h2>${a.nome_file} <span class="stato acq-${a.stato}">${a.stato === 'confermato' ? 'DDT registrato' : STATI[a.stato]}</span></h2>
     <dl class="dati-ordine">
@@ -193,6 +197,7 @@ async function paginaDdtRicevuto(req: Request, a: any): Promise<string> {
         <p class="pulsanti"><button class="primario" name="azione" value="conferma">Conferma il DDT</button>
           <button name="azione" value="salva">Salva le correzioni</button></p>` : ''}
     </form>` : ''}
+    ${riquadroSchede(sds, `/ordini/acquisire/${a.id}`)}
     ${a.stato !== 'confermato' ? html`<p class="pulsanti">
       ${a.contenuto ? html`<form method="post" action="/ordini/acquisire/${a.id}/rileggi" class="in-linea"><button>Rileggi con l'IA</button></form>` : ''}
       ${a.stato !== 'scartato' ? html`<form method="post" action="/ordini/acquisire/${a.id}/scarta" class="in-linea" data-conferma="Scartare questo DDT? Non viene registrato e il file non si conserva."><button class="pericolo">Scarta</button></form>` : ''}</p>` : ''}`,
@@ -480,6 +485,7 @@ export function rotteAcquisizioni() {
     if (b.azione === 'conferma') {
       try {
         await confermaDdtRicevuto(id, d, req.session.utente!.id, oggiRoma(), !!b.anomalieControllate);
+        if (d.mittenteTipo === 'fornitore') cercaMancantiDopo(d.righe.map(r => ({ codice: r.codice || null, descrizione: r.descrizione })), 'DDT ricevuto');
         return res.redirect(`/ordini/acquisire/${id}?salvato=1`);
       } catch (e: any) {
         await salvaDdtRicevuto(id, d);

@@ -30,11 +30,16 @@ export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string]
   { chiave: 'qualita', nome: 'Qualità', voci: [['Cruscotto della qualità', '/qualita'], ['Non conformità e reclami', '/qualita/non_conformita'], ['Strumenti e tarature', '/qualita/strumenti'], ['Piano delle manutenzioni', '/qualita/manutenzioni'], ['Verifiche ESD', '/qualita/esd'], ['Documenti del sistema', '/qualita/documenti'], ['Formazione', '/qualita/formazione'], ['Audit', '/qualita/audit'], ['Rischi e opportunità', '/qualita/rischi'], ['Codifica dei difetti', '/qualita/difetti']] },
   // Dipendenti (Adriano 1/11/2026): costo del personale, nota spese, persone; buste paga nell'area riservata con password
   { chiave: 'dipendenti', nome: 'Dipendenti', voci: [['Costo del personale', '/dipendenti'], ['Nota spese', '/dipendenti/note-spese'], ['Persone e auto', '/dipendenti/persone'], ['Buste paga (riservato)', '/dipendenti/riservata']] },
+  // Sicurezza (Adriano 12/11/2026): schede di sicurezza dei prodotti chimici, controllo su ordini e DDT, scadenzario del D.Lgs. 81/08
+  { chiave: 'sicurezza', nome: 'Sicurezza', voci: [['Cruscotto della sicurezza', '/sicurezza'], ['Schede di sicurezza (SDS)', '/sicurezza/schede'], ['Controllo SDS su ordini e DDT', '/sicurezza/controllo'],
+    ['Documenti e valutazioni (DVR)', '/sicurezza/sic_adempimenti'], ['Formazione sicurezza', '/sicurezza/sic_formazione'], ['Visite mediche', '/sicurezza/sic_visite'],
+    ['DPI consegnati', '/sicurezza/sic_dpi'], ['Antincendio ed emergenza', '/sicurezza/sic_emergenza'], ['Impianti, macchine e ambiente', '/sicurezza/sic_impianti'],
+    ['Organigramma della sicurezza', '/sicurezza/sic_figure'], ['Infortuni e quasi infortuni', '/sicurezza/sic_infortuni']] },
 ];
 /** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
 const GRUPPO_DI: Record<string, string> = {
   crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
-  acquisti: 'acquisti', documenti: 'documenti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
+  acquisti: 'acquisti', documenti: 'documenti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti', sicurezza: 'sicurezza',
 };
 /**
  * Menu del profilo Contabilità (Adriano 1/11/2026): niente tendine, le pagine dell'Amministrazione in fila nella barra in alto

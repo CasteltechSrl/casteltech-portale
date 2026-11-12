@@ -1173,3 +1173,15 @@ dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }
 
 /* Anteprima impaginata del documento dentro la sua pagina (autofatture, Adriano 12/11/2026) */
 .anteprima-documento { width: 100%; height: 80vh; min-height: 560px; border: 1px solid #ccc; border-radius: 4px; background: #d9d9d9; display: block; margin: 8px 0 12px; }
+
+/* Sicurezza (12/11/2026): pericoli delle schede di sicurezza (pittogrammi GHS) e filtri dell'elenco */
+.pericoli { display: inline-flex; flex-wrap: wrap; gap: .2rem; }
+.etichetta.pericolo-GHS02 { background: #fde2d4; color: #a33a00; }
+.etichetta.pericolo-GHS05, .etichetta.pericolo-GHS06 { background: #fbe2e0; color: var(--negativo); }
+.etichetta.pericolo-GHS08 { background: #f3dcf0; color: #7a2a6f; }
+.etichetta.pericolo-GHS07 { background: #fff2cc; color: #8a6100; }
+.etichetta.pericolo-GHS09 { background: #ddf3e5; color: var(--positivo); }
+.etichetta.pericolo-GHS04 { background: #e2ecfb; color: #2a4f8a; }
+nav.filtri-rapidi { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1rem; }
+nav.filtri-rapidi a.attivo { font-weight: 650; text-decoration: underline; }
+table.elenco tr.spento td { opacity: .55; }
