@@ -73,3 +73,20 @@ export function totaleDaOre(r: { inizio?: string; fine?: string }): string | und
   if (a == null || c == null) return undefined;
   return scriviTempo(((c - a + 1440) % 1440) * 60);
 }
+
+/**
+ * Ordine delle righe nel foglio tempi della pagina Rientro (Adriano 12/11/2026, "in ordine con il #, consecutive e allineate"):
+ * prima per fase nell'ordine della commessa (`codici`: fasi della commessa, poi le altre), poi data e apertura; righe senza fase in fondo.
+ * Restituisce le posizioni di partenza nel nuovo ordine (a parità resta l'ordine di prima).
+ */
+export function ordineRighe(righe: { fase?: string; data?: string; inizio?: string }[], codici: string[]): number[] {
+  const pos = new Map(codici.map((c, i) => [c, i]));
+  const chiave = (r: { fase?: string }) => (r.fase ? pos.get(r.fase) ?? codici.length : codici.length + 1);
+  return righe.map((_, i) => i).sort((a, b) => {
+    const x = righe[a], y = righe[b];
+    return chiave(x) - chiave(y)
+      || (x.data ?? '9999').localeCompare(y.data ?? '9999')
+      || (x.inizio ?? '99').localeCompare(y.inizio ?? '99')
+      || a - b;
+  });
+}

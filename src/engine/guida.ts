@@ -978,6 +978,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'I controlli segnano errori (bloccano la conferma) e avvisi (non la bloccano). Con errori il rientro si può salvare ma non confermare.',
       'Eccezione: una riga senza fase non si può salvare (ogni tempo deve avere la sua fase). Il portale non salva e lo dice: scegli la fase nel menu o togli la riga con ✕, poi Salva; le altre righe restano nella pagina.',
       'Nella colonna Totale il numero grigio è solo il suggerimento calcolato da apertura e chiusura: non serve scriverlo.',
+      'Le righe del foglio tempi si mostrano in ordine di fase (come il numero della fase), poi per data e ora: le righe della stessa fase stanno una sotto l\'altra. Le righe senza fase vanno in fondo.',
       'Dopo la conferma il pulsante "Crea DDT" (nel rientro e nella pagina della commessa) prepara la bolla già compilata: cliente, codice, le schede scritte nelle spedizioni (o tutta la commessa, meno quelle già partite), prezzo e riga dell\'ordine se la commessa spedisce un ordine. Si controlla e si emette; dal DDT emesso "Fattura questo DDT" prepara la fattura. Nella pagina della commessa restano i collegamenti a DDT e fatture.',
       'I tempi già segnati dal telefono sono già dentro. Dopo la conferma la scheda stampata si compila da sola con tempi effettivi e consumi a scheda. Una commessa già rientrata si può ancora correggere.',
     ],

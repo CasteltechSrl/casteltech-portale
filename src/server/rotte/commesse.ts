@@ -23,7 +23,7 @@ import {
 import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
-import { controllaRientro, SOGLIA_SCOSTAMENTO, avvisoSenzaFase, totaleDaOre } from '../../engine/rientro.js';
+import { controllaRientro, SOGLIA_SCOSTAMENTO, avvisoSenzaFase, totaleDaOre, ordineRighe } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { documentiDellaCommessa } from '../documenti-servizio.js';
@@ -576,7 +576,7 @@ function righeDaForm(b: any, personeFase: Record<string, number>): RigaForm[] {
   });
 }
 
-async function paginaRientro(req: Request, c: any, righe: RigaForm[],
+async function paginaRientro(req: Request, c: any, righeArrivate: RigaForm[],
   esito?: { messaggio?: string; errore?: string; lette?: { da: number; incerte: Set<number>; acquisizione: number } }): Promise<string> {
   const i = c.intestazione ?? {};
   const prev = await leggiPreventivo(c.preventivo_id);
@@ -584,6 +584,12 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
   const tutte = await fasiConNumeroAttuale(prev);
   const altre = tutte.filter(f => !fasi.some(x => x.codice === f.codice));
   const nomeFase = (cod: string) => { const f = tutte.find(x => x.codice === cod); return f ? `${f.numero} ${f.nome}` : cod; };
+  // righe in ordine di fase (come il #), poi data e ora: le righe lette dalla scansione restano evidenziate dove finiscono
+  const ordine = ordineRighe(righeArrivate, [...fasi, ...altre].map(f => f.codice));
+  const righe = ordine.map(i => righeArrivate[i]);
+  const letteDa = esito?.lette?.da ?? righeArrivate.length;
+  const evidenziate = new Set(ordine.flatMap((i, k) => (i >= letteDa ? [k] : [])));
+  const incerte = new Set(ordine.flatMap((i, k) => (esito?.lette?.incerte.has(i) ? [k] : [])));
   const controlli = controllaRientro(righe, fasi, nomeFase);
   const reali = tempiRealiPerFase(righe.filter(r => r.fase));
   const voci = vociConsumo(prev, c.quantita);
@@ -595,7 +601,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
     <optgroup label="Altre fasi">${altre.map(f => html`<option value="${f.codice}" ${f.codice === sel ? raw('selected') : ''}>${f.numero} ${f.nome}</option>`)}</optgroup>`;
   const totaleTesto = (r: RigaForm) => { const m = r.inizio && r.fine ? r.totaleScrittoMin : r.durataMin; return m == null ? '' : scriviTempo(m * 60); };
   const riga = (r: Partial<RigaForm>, k: number | string, errore = false) => html`
-    <tr class="${errore ? 'riga-errore' : ''} ${typeof k === 'number' && esito?.lette && k >= esito.lette.da && k < righe.length ? 'riga-letta' : ''} ${typeof k === 'number' && esito?.lette?.incerte.has(k) ? 'riga-incerta' : ''}">
+    <tr class="${errore ? 'riga-errore' : ''} ${typeof k === 'number' && evidenziate.has(k) ? 'riga-letta' : ''} ${typeof k === 'number' && incerte.has(k) ? 'riga-incerta' : ''}">
       <td class="n num-riga">${typeof k === 'number' ? k + 1 : ''}</td>
       <td><select name="righe[${k}][fase]">${opzioniFase(r.fase ?? '')}</select></td>
       <td><input name="righe[${k}][operatore]" value="${r.operatore ?? ''}" class="maiuscolo" list="operatori"></td>
