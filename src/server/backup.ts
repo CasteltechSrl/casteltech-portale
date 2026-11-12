@@ -209,8 +209,12 @@ export function avviaBackupNotturno() {
     // dalle 18 alle 21: se il portale riparte dopo le 18 (pubblicazione serale) la copia si fa lo stesso
     if (feriale && Number(p.hour) >= 18 && Number(p.hour) < 22 && giorno !== ultimoGiorno) {
       ultimoGiorno = giorno;
-      if (!backupSeraleDaFare(elencoBackup().map(b => b.nome), giorno)) return;
-      void backupNotturno();
+      // dopo la copia: tariffe dei preventivi dal costo orario, se è arrivato un mese di cedolini nuovo (Adriano 12/11/2026)
+      const tariffe = () => import('./costo-orario-servizio.js').then(m => m.aggiornaTariffeSeServe())
+        .then(f => { if (f) console.log('Tariffe dei preventivi aggiornate dal costo orario'); })
+        .catch(e => console.error('Aggiornamento automatico delle tariffe NON riuscito', e));
+      if (!backupSeraleDaFare(elencoBackup().map(b => b.nome), giorno)) { void tariffe(); return; }
+      void backupNotturno().then(tariffe);
     }
   }, 10 * 60_000).unref();
 }
