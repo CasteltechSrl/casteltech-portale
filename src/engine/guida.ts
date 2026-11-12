@@ -36,6 +36,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
   { id: 'qualita', nome: 'Qualità', descrizione: 'Non conformità e reclami, tarature, manutenzioni, verifiche ESD, documenti del sistema, formazione, audit, rischi.' },
   { id: 'dipendenti', nome: 'Dipendenti', descrizione: 'Costo del personale, buste paga riservate, nota spese con il rimborso chilometrico.' },
+  { id: 'sicurezza', nome: 'Sicurezza', descrizione: 'Schede di sicurezza dei prodotti chimici, controllo su ordini e DDT, scadenze del D.Lgs. 81/08 (DVR, corsi, visite, DPI, estintori, impianti).' },
 ];
 
 export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
@@ -187,7 +188,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
       'Anagrafiche: clienti, fornitori, prodotti, componenti. Documenti (dal 12/11/2026, prima erano in Commerciale): nella tendina in alto "Arrivati" (Documenti commesse: BOM, Gerber, pick and place del cliente per il preventivo; Documenti da e-mail e PDF: ordini, DDT, fatture estere da leggere con l\'IA), sotto "Emessi da noi" (preventivi, conferme d\'ordine, DDT, fatture, note di credito, autofatture, ordini a fornitore: le stesse pagine che trovi anche in Commerciale, Acquisti e Amministrazione). Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti e conferme d\'ordine. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: flusso, commesse, Gantt, codifica componenti e le pagine delle macchine (Stoccaggio componenti, Pick & Place, AOI, in attesa del collegamento). Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
       'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
-      'Più avanti arriveranno anche i gruppi Qualità e Sicurezza e ambiente.',
+      'Dopo Qualità e Dipendenti c\'è il gruppo Sicurezza (dal 12/11/2026): schede di sicurezza dei prodotti chimici e scadenze della sicurezza sul lavoro.',
     ],
     pagine: [['/preventivi/documenti', 'Documenti commesse'], ['/ordini/acquisire', 'Documenti da e-mail e PDF'], ['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
   },
@@ -1692,6 +1693,30 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Qualità → Strumenti e tarature (o Piano delle manutenzioni, Verifiche ESD).', 'Spunta le righe fatte → Fatto oggi.', 'Se l\'esito non è positivo, apri la riga e correggi esito e note.'],
     pagine: [['/qualita/strumenti', 'Strumenti e tarature'], ['/qualita/manutenzioni', 'Piano delle manutenzioni'], ['/qualita/esd', 'Verifiche ESD']],
+  },
+  // ── Sicurezza ──
+  {
+    id: 'sicurezza-schede', area: 'sicurezza', titolo: 'Schede di sicurezza (SDS): dove sono e come si controllano su ordini e DDT',
+    parole: 'scheda di sicurezza sds msds scheda tecnica tds prodotto chimico pasta saldante stagno filo barre flussante solvente alcool coating colla pericoli frasi h pittogrammi ordine fornitore ddt ricevuto internet cerca manca',
+    testo: [
+      'Sicurezza → Schede di sicurezza: l\'elenco delle schede (SDS) dei prodotti chimici che usiamo (paste, filo e barre di stagno, flussanti, solventi, coating, colle), con i pericoli della sezione 2 (pittogrammi, frasi H), la data di revisione e il PDF. Le schede con revisione vecchia (prima del 2021 o di oltre 5 anni) o solo con la scheda tecnica sono in evidenza: vanno chieste aggiornate al fornitore.',
+      'Nella pagina di ogni ordine a fornitore e di ogni DDT ricevuto c\'è il riquadro "Schede di sicurezza": per le righe con sostanze dice se la scheda c\'è. Quando l\'ordine si emette o il DDT si conferma, il portale cerca da solo su internet quelle che mancano (al massimo 3 per volta, circa 2 centesimi l\'una) e le mette nell\'elenco con fonte "internet": vanno controllate. Una ricerca senza esito non si ripete per 30 giorni, ma si può rifare con "Cerca su internet".',
+      'Per caricare una scheda: Schede di sicurezza → Carica PDF (anche più file insieme): il portale legge pericoli e data di revisione dal testo. PDF fino a 4 MB; quelli più grandi restano sul Drive e si scrive il percorso. Nel campo "parole" i codici MC-… e i nomi con cui il prodotto compare nelle righe degli ordini.',
+      'Sicurezza → Controllo SDS su ordini e DDT mostra in una pagina i materiali di consumo e le righe degli ultimi 12 mesi con la scheda o senza.',
+    ],
+    passi: ['Sicurezza → Schede di sicurezza.', 'Carica PDF oppure apri una scheda per correggere pericoli, revisione e parole.', 'Nell\'ordine a fornitore o nel DDT ricevuto: riquadro "Schede di sicurezza" → Cerca su internet per quelle che mancano.'],
+    pagine: [['/sicurezza/schede', 'Schede di sicurezza'], ['/sicurezza/controllo', 'Controllo SDS su ordini e DDT']],
+  },
+  {
+    id: 'sicurezza-scadenzario', area: 'sicurezza', titolo: 'Scadenze della sicurezza: DVR, corsi, visite mediche, DPI, estintori, impianti',
+    parole: 'scadenza scadenzario sicurezza lavoro 81 dvr valutazione rischi corso formazione antincendio primo soccorso preposto rls rspp medico competente visita idoneita dpi guanti occhiali estintori luci emergenza evacuazione messa a terra impianto caldaia infortunio quasi',
+    testo: [
+      'Il cruscotto della Sicurezza mostra cosa è scaduto o scade entro un mese, come la Qualità. I registri: Documenti e valutazioni (DVR, rischio chimico, rumore, incendio, MUD…), Formazione sicurezza (corso, persona, data; la scadenza si calcola dal tipo di corso: specifica e aggiornamento lavoratori 5 anni, antincendio 5, primo soccorso 3, preposto 2, RLS 1), Visite mediche, DPI consegnati, Antincendio ed emergenza (estintori, luci, prova di evacuazione), Impianti, macchine e ambiente (messa a terra, caldaia, aspirazione fumi…), Organigramma della sicurezza e Infortuni e quasi infortuni.',
+      'Alcune righe sono già scritte senza date: si apre la riga, si scrive l\'ultima volta (o la scadenza) e si salva. Quelle che non servono si eliminano. Le visite mediche contengono solo date e giudizio di idoneità: la cartella sanitaria resta al medico.',
+      'Il riquadro "Cosa tenere sotto controllo" nel cruscotto elenca gli obblighi principali del D.Lgs. 81/2008 con il riferimento di legge. È un promemoria, non consulenza: il riferimento resta l\'RSPP.',
+    ],
+    passi: ['Sicurezza → Cruscotto della sicurezza.', 'Clic su una scadenza o su un registro con i tasti in alto.', 'Per segnare che è stato fatto: spunta la riga → Fatto oggi, oppure apri la riga e scrivi la data.'],
+    pagine: [['/sicurezza', 'Cruscotto della sicurezza'], ['/sicurezza/sic_formazione', 'Formazione sicurezza']],
   },
 ];
 

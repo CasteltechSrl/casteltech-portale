@@ -26,8 +26,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   e Documenti da e-mail e PDF = Da acquisire `/ordini/acquisire`, pagine con `attiva: 'documenti'`, tolti da Commerciale; titoletto "Emessi da noi" = preventivi, conferme, DDT, fatture,
   NC, autofatture, ordini a fornitore, che restano anche nei loro gruppi; voce con indirizzo '' = titoletto `titolo-tendina`), Commerciale (in quest'ordine: CRM, Quotazioni componenti, Preventivi, Ordini clienti,
   Conferme d'ordine = elenco `/ordini/conferme`), Acquisti (ordini a fornitore, DDT ricevuti, Fatture fornitori = `/amministrazione/ricevuti` spostata qui da Amministrazione il 7/11/2026 con `tastiAcquisti` e gruppo acceso da `attiva`, acquisti per mese, miglior prezzo; poi magazzino), Produzione (commesse, Gantt, Codifica componenti; Adriano 12/11/2026: Stoccaggio componenti `/produzione/stoccaggio`, Pick & Place `/produzione/pick-place`, AOI `/produzione/aoi` = pagine di attesa per le API delle macchine, testi in `engine/macchine.ts`, rotta `rotte/macchine.ts`, test in `tests/macchine.test.ts`, nessun dato),
-  Amministrazione (Adriano 2/11/2026: DDT, Fatture, Autofatture, Note di credito direttamente nel menu e nei tasti della sezione, niente più "Documenti emessi"; indirizzo `/amministrazione/documenti?tipo=`), Qualità (dal 1/11/2026); ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Da aggiungere più avanti:
-  Sicurezza e ambiente. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
+  Amministrazione (Adriano 2/11/2026: DDT, Fatture, Autofatture, Note di credito direttamente nel menu e nei tasti della sezione, niente più "Documenti emessi"; indirizzo `/amministrazione/documenti?tipo=`), Qualità (dal 1/11/2026), Dipendenti, Sicurezza (dal 12/11/2026, punto 4m); ogni gruppo ha la tendina con le pagine. Impostazioni, Suggerimenti e Guida piccoli a destra. Gli indirizzi delle pagine non cambiano; la sezione della pagina (`attiva`) accende il gruppo con `gruppoAttivo`.
   Richieste del 7/11/2026 (test in `tests/menu-pagamenti-cruscotto.test.ts`): modi di pagamento (con RID) e banche/strumenti modificabili in Impostazioni → Amministrazione →
   Modi di pagamento e banche (impostazioni 'modi_pagamento', `engine/modi-pagamento.ts`, `modi-pagamento-servizio.ts`; una voce per riga; "Compensato con fattura" e "Stornato"
   restano sempre; banche non salvate = quelle già usate nelle rate; `modoPagamento(valore, elenco)`), RID = MP09 nelle condizioni di pagamento; controlli settimanali
@@ -638,7 +637,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (ultima + ogni quanti mesi), piano delle manutenzioni e verifiche ESD (mesi previsti, scadenza = mese previsto dopo l'ultima volta; spunte → "Fatto oggi"),
    formazione, audit, rischi e opportunità (valore × frequenza). Cruscotto `/qualita`: scadute, entro un mese, NC aperte, difetti più frequenti.
    Dati del Drive (vecchi, per la struttura): file `qualita_esempio.json.gz` in Project Files → qualita, "Carica i dati dal Drive" (ricaricabile, `chiaveImport`).
-   ⬜ Sicurezza e ambiente; schede del personale e mansionario restano alla sezione Dipendenti.
+   Sicurezza: punto 4m (registri condivisi in `rotte/registri.ts`); schede del personale e mansionario restano alla sezione Dipendenti.
 4k. ✅ Dipendenti (Adriano 1/11/2026; menu Dipendenti, `rotte/dipendenti.ts`, `dipendenti-servizio.ts`, `lettura-paghe-ia.ts`, `engine/dipendenti.ts`, migrazione 056,
    test in `tests/dipendenti.test.ts`): Costo del personale per tutto l'ufficio (solo il TOTALE del mese: lordo + INPS azienda + TFR + enti; anni × mesi, confronto con
    gli stessi mesi dell'anno prima, peso sul fatturato, F24 con scadenza). Area riservata "Buste paga": solo l'utente ADMIN_EMAIL e chi ha `utenti.paghe` (spunta data da lui),
@@ -654,6 +653,17 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    avvisi se voci ≠ totali. Cedolini nuovi dalla cartella "Da acquisire" letti da soli (`leggiDocumentoPaghe`); storico 2019-04 → 2026-09 (736 cedolini)
    nel file cedolini.json.gz (Project Files → dipendenti, preparato con `tools/cedolini-da-pdf.ts` + pdftotext), stesso pulsante "Storico dall'archivio".
    Area riservata: tabella persone × mesi (netto), pagina persona (`/riservata/persona?p=`), pagina cedolino con le voci.
+4m. ✅ Sicurezza (Adriano 12/11/2026; menu Sicurezza dopo Dipendenti, `/sicurezza` = `rotte/sicurezza.ts`, regole in `engine/sicurezza.ts`, letture e ricerca in `sicurezza-servizio.ts`,
+   riquadro in `views/sicurezza.ts`, migrazione 094, test in `tests/sicurezza.test.ts`). Schede di sicurezza (SDS) dei prodotti chimici in `sicurezza_schede` (PDF ≤ 4 MB nel database,
+   più grandi = solo `percorso_drive`; pericoli = frasi H della sezione 2 letti con `pericoliDaTesto`, pittogrammi GHS con `pittogrammi`; `statoScheda`: revisione prima del 2021 o oltre
+   5 anni = da aggiornare, solo TDS = manca). Righe con sostanze (`categoriaSostanza`: codici MC-PAS/FIL/BAR/FLU/PUL/COA o parole della descrizione) abbinate alle schede con `trovaScheda`
+   (campo `parole`: codici MC-… e nomi, chiave più lunga). Riquadro "Schede di sicurezza" (`riquadroSchede`) nell'ordine a fornitore e nel DDT ricevuto da fornitore; all'emissione
+   dell'ordine / conferma del DDT `cercaMancantiDopo` (setImmediate, max 3) → `cercaSchedaOnline` (IA con web_search, PDF scaricato e letto, fonte 'internet'); esito in
+   `sicurezza_ricerche`, non ripetuto per 30 giorni salvo "Cerca su internet". Schede del Drive (4_PRODUZIONE/02_SCHEDE TECNICHE E SICUREZZA/Schede) caricate da Claude con
+   POST `/api/claude/sicurezza/scheda` (PDF + intestazione x-dati JSON base64; stesso prodotto = aggiornata); GET `/api/claude/sicurezza`.
+   Scadenzario D.Lgs. 81/08 = registri come la Qualità (`qualita_voci`, sezioni `sic_…` in `SEZIONI_SICUREZZA`: adempimenti/DVR, formazione con `frequenzaPredefinita` dal corso
+   `CORSI_SICUREZZA`, visite mediche solo giudizio, DPI, emergenza, impianti, figure, infortuni); righe di partenza senza date dalla migrazione 094; POST `/api/claude/sicurezza/voci`.
+   Le rotte dei registri (elenco, nuovo, scheda, azioni) sono comuni a Qualità e Sicurezza in `rotte/registri.ts` (`rotteRegistri(config)`). Una sezione nuova = una voce in `SEZIONI_SICUREZZA` + menu.
 4l. ✅ Revisione e collaudo di tutto il portale (notte 31/10–1/11/2026; PR della revisione): portale provato in locale con i dati veri (storico FIC, ordini, CRM),
    3.000 pagine e tutti i flussi (preventivo → commessa → rientro → reparto, fattura → XML/PDF, DDT, conferma, acconto, ordine a fornitore). Regole nuove:
    DDT con causale reso non lavorato / garanzia / conto visione / conto lavorazione / campioni / prestito NON contano tra i "DDT da fatturare"

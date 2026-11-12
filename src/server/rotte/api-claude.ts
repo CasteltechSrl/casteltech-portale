@@ -25,10 +25,14 @@
  *   GET  /api/claude/backup                  → copie del database sul disco di Render (nome, byte) e l'ultima (Adriano 11/11/2026: il controllo
  *                                              settimanale prova il portale con la copia di venerdì, senza dipendere dal PC dell'ufficio e dal Drive)
  *   GET  /api/claude/backup/:nome            → il file .json.gz di quella copia (solo file già sul disco: il database non si tocca)
+ *   GET  /api/claude/sicurezza               → schede di sicurezza caricate (senza i PDF) (Adriano 12/11/2026)
+ *   POST /api/claude/sicurezza/scheda        → PDF come application/octet-stream (anche vuoto) + intestazione x-dati = JSON in base64 con i dati della scheda
+ *                                              (prodotto, produttore, categoria, tipo, data_revisione, pericoli, parole, percorso_drive…): stesso prodotto = si aggiorna
+ *   POST /api/claude/sicurezza/voci          → { sezioni: { sic_adempimenti: [...], sic_impianti: [...] } } = righe dello scadenzario dai documenti del Drive
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
-import { Router, type NextFunction, type Request, type Response } from 'express';
+import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { q, q1 } from '../db.js';
@@ -42,6 +46,10 @@ import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabell
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
 import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante, codiceSia, salvaCodiceSia } from '../banca-servizio.js';
 import { datiXmlFattura } from '../../engine/xml-fic.js';
+import { elencoSchede, nuovaScheda, ripulisciScheda, salvaScheda, sostituisciFile, MAX_PDF, type DatiScheda } from '../sicurezza-servizio.js';
+import { importaVoci } from './registri.js';
+import { controllaFileQualita } from '../../engine/qualita.js';
+import { SEZIONI_SICUREZZA } from '../../engine/sicurezza.js';
 import { CATEGORIE_MOVIMENTO, codiceSiaValido, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
@@ -85,6 +93,32 @@ export function rotteApiClaude() {
         return res.status(401).json({ errore: attesa ? 'Chiave non valida.' : 'Chiave non ancora creata: Suggerimenti → Collegamento con Claude.' });
       next();
     } catch (e) { next(e); }
+  });
+
+  // Sicurezza (Adriano 12/11/2026): schede di sicurezza dal Drive e scadenzario dai documenti del Drive
+  r.get('/sicurezza', async (_req, res) => {
+    res.json({ schede: (await elencoSchede()).map(({ ...x }) => x) });
+  });
+  r.post('/sicurezza/scheda', express.raw({ type: 'application/octet-stream', limit: '6mb' }), async (req, res) => {
+    let dati: Record<string, unknown>;
+    try { dati = JSON.parse(Buffer.from(String(req.get('x-dati') ?? ''), 'base64').toString('utf8')); } catch { return res.status(400).json({ errore: 'x-dati non valido' }); }
+    const d = ripulisciScheda(dati);
+    if (typeof d === 'string') return res.status(400).json({ errore: d });
+    const pdf = Buffer.isBuffer(req.body) && req.body.length ? req.body as Buffer : null;
+    if (pdf && pdf.subarray(0, 5).toString('latin1') !== '%PDF-') return res.status(400).json({ errore: 'Il file non è un PDF.' });
+    const nome = String(dati.nome_file ?? `${d.prodotto}.pdf`).slice(0, 150);
+    const esiste = (await elencoSchede()).find(x => x.prodotto === d.prodotto);
+    if (esiste) {
+      await salvaScheda(esiste.id, d as DatiScheda);
+      if (pdf && pdf.length <= MAX_PDF) await sostituisciFile(esiste.id, nome, pdf);
+      return res.json({ id: esiste.id, aggiornata: true, file: !!pdf && pdf.length <= MAX_PDF });
+    }
+    const id = await nuovaScheda(d as DatiScheda, pdf ? { nome, dati: pdf } : null, dati.fonte === 'internet' ? 'internet' : 'drive', 'Claude');
+    res.json({ id, aggiornata: false, file: !!pdf && pdf.length <= MAX_PDF });
+  });
+  r.post('/sicurezza/voci', async (req, res) => {
+    try { res.json(await importaVoci(controllaFileQualita(req.body, SEZIONI_SICUREZZA), SEZIONI_SICUREZZA)); }
+    catch (e: any) { res.status(400).json({ errore: e?.message ?? String(e) }); }
   });
 
   r.get('/suggerimenti', async (req, res) => {

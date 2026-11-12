@@ -29,6 +29,7 @@ import { rotteDdtRicevuti } from './rotte/ddt-ricevuti.js';
 import { rotteCrm } from './rotte/crm.js';
 import { rotteSuggerimenti } from './rotte/suggerimenti.js';
 import { rotteQualita } from './rotte/qualita.js';
+import { rotteSicurezza } from './rotte/sicurezza.js';
 import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteFlusso } from './rotte/flusso.js';
 import { rotteMacchine } from './rotte/macchine.js';
@@ -218,6 +219,7 @@ app.use('/componenti', (req, res) => res.redirect(307, '/quotazioni' + req.url))
 app.use('/crm', soloUfficio, rotteCrm());
 app.use('/suggerimenti', soloUfficio, rotteSuggerimenti());
 app.use('/qualita', soloUfficio, rotteQualita());
+app.use('/sicurezza', soloUfficio, rotteSicurezza());   // Adriano 12/11/2026: schede di sicurezza e scadenzario D.Lgs. 81/08
 app.use('/amministrazione', amministrazioneOContabilita, rotteAmministrazione());
 // Dipendenti (Adriano 1/11/2026): costo del personale per l'ufficio; buste paga solo con permesso e password (rotte/dipendenti.ts)
 app.use('/dipendenti', soloUfficio, rotteDipendenti());
