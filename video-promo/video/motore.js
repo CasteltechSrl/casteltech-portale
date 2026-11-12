@@ -223,11 +223,10 @@
     }
     if (s.extra === 'macchine') extra.innerHTML = macchine(tl);
     if (s.extra === 'finale') {
-      const a = lin((tl - 0.6) / 0.5), b = lin((tl - 2.4) / 0.5), c = lin((tl - 4.6) / 0.5);
+      const a = lin((tl - 0.6) / 0.5), b = lin((tl - 2.4) / 0.5), c = lin((tl - 4.0) / 0.5);  // pulsante "Richiedi una demo" tolto (Adriano 12/11/2026)
       extra.innerHTML = `<div class="grande" style="top:300px;font-size:96px;opacity:${a};transform:translateY(${(1 - ease(a)) * 20}px)">Dalla email alla fattura.</div>
         <div class="grande" style="top:440px;font-size:52px;font-weight:600;color:var(--tenue);opacity:${b}">Un solo portale. <span style="color:var(--accento)">Semplice. Completo.</span></div>
-        <div style="position:absolute;left:50%;top:600px;transform:translateX(-50%) scale(${mix(0.9, 1, ease(c))});opacity:${c};padding:20px 50px;border-radius:44px;background:var(--accento);color:#04201c;font-size:38px;font-weight:800;box-shadow:0 14px 50px rgba(25,194,166,.55)">Richiedi una demo</div>
-        <div class="grande" style="top:730px;font-size:26px;font-weight:500;color:var(--tenue);opacity:${c}">Il gestionale con intelligenza artificiale per chi produce elettronica</div>`;
+        <div class="grande" style="top:620px;font-size:30px;font-weight:500;color:var(--tenue);opacity:${c}">Il gestionale con intelligenza artificiale per chi produce elettronica</div>`;
     }
   };
 })();
