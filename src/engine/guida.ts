@@ -1448,6 +1448,18 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/analisi/pareggio', 'Punto di pareggio'], ['/amministrazione/analisi', 'Analisi'], ['/impostazioni/amministrazione#bilancino', 'Impostazioni → Amministrazione']],
   },
   {
+    id: 'costo-orario', area: 'amministrazione', titolo: 'Costo orario: ora azienda e ora operatore dai costi veri',
+    parole: 'costo orario ora azienda costo azienda ora operatore costo operatore costo del personale costo medio orario ore lavorate ore uomo tariffe preventivo aggiornare tariffe spese di gestione stipendio amministratore tfr media annua mese per mese quanto costa un ora',
+    testo: [
+      'In Amministrazione → Analisi → Costo orario (pagina riservata, come la Previsione di cassa) vedi le due tariffe del preventivo calcolate dai costi veri, come se ci fosse sempre una persona al lavoro: l\'ora operatore (produzione e ufficio) e l\'ora azienda. In alto la media degli ultimi 12 mesi e quella usata oggi nei preventivi; sotto anno per anno e, per l\'anno scelto, mese per mese.',
+      'Ora operatore = costo dei dipendenti (lordo, INPS e INAIL dell\'azienda, enti, TFR che matura) diviso le ore lavorate dei cedolini. Il TFR liquidato a chi esce non conta. Ora azienda = spese di gestione (servizi, affitto e leasing, il compenso dell\'amministratore con l\'INPS, ammortamenti, imposte e oneri, interessi) diviso le ore lavorate di tutti i dipendenti. Il materiale che si rivende o si consuma e le lavorazioni comprate e rivendute (montaggi fatti fuori, progettazione) restano fuori: nel preventivo sono voci a parte.',
+      'La media è la somma dei costi diviso la somma delle ore: la tredicesima o un mese con poche ore (agosto) non pesano più degli altri. Gli anni fino al 2024, quando alcuni soci lavoravano in produzione pagati come soci, sono segnati "non confrontabili".',
+      '"Usa nei preventivi nuovi" scrive la media dei 12 mesi (arrotondata al mezzo euro) in Impostazioni → Tariffe: vale per i preventivi nuovi; quelli già salvati tengono le loro tariffe. Conviene farlo una volta al mese, quando arrivano i cedolini e le fatture del mese.',
+    ],
+    passi: ['Amministrazione → Analisi → Costo orario.', 'Guarda l\'ora azienda e l\'ora operatore degli ultimi 12 mesi e il confronto con i preventivi.', 'Se vuoi, premi "Usa nei preventivi nuovi" e conferma.'],
+    pagine: [['/amministrazione/analisi/costo-orario', 'Costo orario'], ['/impostazioni/tariffe', 'Tariffe']],
+  },
+  {
     id: 'costi-categoria', area: 'amministrazione', titolo: 'Costi per categoria: dove vanno i soldi, comprato e rivenduto',
     parole: 'costi per categoria categorie costi fatture fornitori riga per riga spese di gestione per tipo materiale rivenduto rivendita comprato rivenduto componenti pcb lamine stagno flussante consumo lavorazioni esterne guadagno margine rivendita riassunto opinione proposte tagliare spese energia leasing affitto consulenze telefonia software da controllare categoria fornitore altre spese quanto spendo',
     testo: [

@@ -18,6 +18,7 @@ import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import { rotteAnalisiProdotti } from './analisi-prodotti.js';
 import { rotteAnalisiAcquisti } from './analisi-acquisti.js';
 import { rottePareggio } from './pareggio.js';
+import { rotteCostoOrario } from './costo-orario.js';
 import { rotteAnalisiCosti } from './analisi-costi.js';
 import { classificaCosti } from '../../engine/analisi-costi.js';
 import { categoria as categoriaCosto, NOMI_MACRO } from '../../engine/categorie-acquisti.js';
@@ -64,7 +65,7 @@ export async function caricaDatiAnalisi(anno: number, oggi: string) {
 }
 
 /** Le pagine dell'Analisi: andamento, prodotti e clienti (Adriano 5/11/2026), fornitori e punto di pareggio (6/11/2026) e previsione di cassa. */
-export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'costi' | 'cassa'): Raw {
+export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'fornitori' | 'acquisti' | 'pareggio' | 'costi' | 'costo-orario' | 'cassa'): Raw {
   return html`<nav class="tasti-sezione non-stampare">
     <a href="/amministrazione/analisi" class="${attiva === 'andamento' ? 'attivo' : ''}">Andamento</a>
     <a href="/amministrazione/analisi/prodotti" class="${attiva === 'prodotti' ? 'attivo' : ''}">Prodotti</a>
@@ -73,6 +74,7 @@ export function tastiAnalisi(attiva: 'andamento' | 'prodotti' | 'clienti' | 'for
     <a href="/amministrazione/analisi/acquisti" class="${attiva === 'acquisti' ? 'attivo' : ''}">Acquisti</a>
     <a href="/amministrazione/analisi/pareggio" class="${attiva === 'pareggio' ? 'attivo' : ''}">Punto di pareggio</a>
     <a href="/amministrazione/analisi/costi" class="${attiva === 'costi' ? 'attivo' : ''}">Costi per categoria</a>
+    <a href="/amministrazione/analisi/costo-orario" class="${attiva === 'costo-orario' ? 'attivo' : ''}">🔒 Costo orario</a>
     <a href="/amministrazione/analisi/cassa" class="${attiva === 'cassa' ? 'attivo' : ''}">🔒 Previsione di cassa</a></nav>`;
 }
 
@@ -218,6 +220,7 @@ export function rotteAnalisi() {
   r.use(rotteAnalisiAcquisti());   // Fornitori, componenti e materiali (Adriano 6/11/2026)
   r.use(rottePareggio());          // Punto di pareggio (Adriano 6/11/2026)
   r.use(rotteAnalisiCosti());      // Costi per categoria (Adriano 6/11/2026)
+  r.use(rotteCostoOrario());       // Costo orario azienda e operatore (Adriano 12/11/2026)
 
   // ── Previsione di cassa (Adriano 3/11/2026) ──
   r.get('/cassa', async (req: Request, res) => {
