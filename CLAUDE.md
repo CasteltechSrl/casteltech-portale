@@ -829,6 +829,13 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    `/amministrazione/analisi/clienti` = visione d'insieme (`visioneClienti`): classifica con peso, stesso periodo dell'anno prima, segnali (calo forte ≤ −30 % su almeno 2.000 €, in calo,
    in crescita, nuovo = prima vendita nell'anno, perso = anno prima sì e anno scelto no, fermo = nessuna vendita da 6+ mesi, solo anno in corso), primi 3/5, margine medio dai preventivi,
    giorni di incasso e ritardo (da `analisiClienti`), scaduto (→ Crediti). GET `/api/claude/storico` = conteggi dei documenti per tipo/anno/origine (controllo dello storico caricato).
+   ✅ Costo orario (Adriano 12/11/2026, "ore uomo + ore azienda come nel preventivo, aggiornate ogni mese"; tasto 🔒 Costo orario in Analisi = `/amministrazione/analisi/costo-orario`,
+   regole in `engine/costo-orario.ts`, letture in `costo-orario-servizio.ts`, pagina in `rotte/costo-orario.ts`, test in `tests/costo-orario.test.ts`): solo chi `vedePaghe`. Ora operatore
+   (produzione / ufficio per qualifica) = lordo + contributi + altri + TFR che matura (lordo ÷ 13,5) ÷ ore dei cedolini (ore lavorate, altrimenti giorni × 8; il TFR LIQUIDATO non conta;
+   cedolini senza ore stimati sui colleghi del mese, togliendo il TFR liquidato); ora azienda = spese di gestione del Punto di pareggio (servizi, godimento, compensi dei soci, ammortamenti,
+   oneri, finanziari) ÷ tutte le ore; materie e lavorazioni rivendute (`CATEGORIE_ESCLUSE`: montaggi esterni, progettazione, R&S) fuori. Mese per mese, anno per anno e ultimi 12 mesi
+   (somma costi ÷ somma ore, solo mesi con cedolini); anni con soci al lavoro / troppe ore stimate = "non confrontabile"/"cautela". "Usa nei preventivi nuovi" = scrive le tariffe
+   (impostazioni 'tariffe', ricarico invariato), i preventivi salvati non cambiano.
    ✅ Punto di pareggio (Adriano 6/11/2026, dal file "Analisi CASTELTECH SRL" del commercialista; tasto in Analisi, `/amministrazione/analisi/pareggio` + `.xlsx`,
    conti in `engine/pareggio.ts`, letture in `pareggio-servizio.ts`, pagina in `rotte/pareggio.ts`, migrazione 078 `conto_economico_mensile`, test in `tests/pareggio.test.ts`):
    MEDIA mensile di ogni voce (famiglie `FAMIGLIE`: ricavi, materie prime = variabili, servizi, affitti/leasing, personale, compensi, ammortamenti, oneri, finanziari) nel periodo
