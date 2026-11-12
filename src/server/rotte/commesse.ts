@@ -23,7 +23,7 @@ import {
 import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
 import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
-import { controllaRientro, SOGLIA_SCOSTAMENTO } from '../../engine/rientro.js';
+import { controllaRientro, SOGLIA_SCOSTAMENTO, avvisoSenzaFase, totaleDaOre } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
 import { segnaRientroFatto } from '../acquisizioni-servizio.js';
 import { documentiDellaCommessa } from '../documenti-servizio.js';
@@ -289,6 +289,16 @@ export function rotteCommesse() {
       const t = (y: unknown) => String(y ?? '').trim().slice(0, 60);
       return { qta: t(x.qta), colli: t(x.colli), bancali: t(x.bancali), peso: t(x.peso), dimensione: t(x.dimensione) };
     });
+    // Righe senza fase: nel database ogni tempo deve avere la sua fase (prima il salvataggio falliva tutto con un errore,
+    // C2026-0075 del 12/11/2026). Niente si perde: la pagina torna con le righe come scritte e l'avviso su cosa sistemare.
+    const senzaFase = righe.flatMap((r, i) => (r.fase ? [] : [i + 1]));
+    if (senzaFase.length) {
+      const acqId = Number(b.acquisizione) || 0;
+      return res.status(400).send(await paginaRientro(req, c, righe, {
+        errore: avvisoSenzaFase(senzaFase),
+        lette: acqId ? { da: righe.length, incerte: new Set(), acquisizione: acqId } : undefined,
+      }));
+    }
     const vuoleConferma = b.azione === 'conferma';
     const errori = controllaRientro(righe, fasi).filter(x => x.livello === 'errore');
     const conferma = vuoleConferma && !errori.length;
@@ -592,7 +602,7 @@ async function paginaRientro(req: Request, c: any, righe: RigaForm[],
       <td><input type="date" name="righe[${k}][data]" value="${r.data ?? ''}"></td>
       <td><input type="time" name="righe[${k}][apertura]" value="${r.inizio ?? ''}"></td>
       <td><input type="time" name="righe[${k}][chiusura]" value="${r.fine ?? ''}"></td>
-      <td><input name="righe[${k}][totale]" value="${r.fase ? totaleTesto(r as RigaForm) : ''}" placeholder="1.30" class="corto" inputmode="decimal" data-tempo="minuti" data-totale></td>
+      <td><input name="righe[${k}][totale]" value="${r.fase ? totaleTesto(r as RigaForm) : ''}" placeholder="${totaleDaOre(r) ?? '1.30'}" class="corto" inputmode="decimal" data-tempo="minuti" data-totale></td>
       <td><input name="righe[${k}][persone]" value="${r.persone ?? ''}" inputmode="decimal" class="cortissimo"></td>
       <td><input name="righe[${k}][pezzi]" value="${r.pezzi ?? ''}" inputmode="numeric" class="cortissimo"></td>
       <td><select name="righe[${k}][tipo]"><option ${r.tipo !== 'P' ? raw('selected') : ''}>S</option><option ${r.tipo === 'P' ? raw('selected') : ''}>P</option></select></td>
