@@ -1,0 +1,74 @@
+{
+  "_nota": "Dati INVENTATI per il video promozionale: nessuna azienda, codice o importo reale. Si possono cambiare liberamente e rilanciare semina.ts.",
+  "oggi": "2026-11-12",
+  "fatturatoMese2025": 78000,
+  "azienda": { "ragione_sociale": "ELETTRONICA DEMO S.R.L.", "partita_iva": "01234567897", "indirizzo": "VIA DELL'INNOVAZIONE 1", "cap": "20100", "comune": "MILANO",
+    "provincia": "MI", "nazione": "IT", "email": "info@esempio.example", "telefono": "02 0000000", "regime_fiscale": "RF01" },
+  "cassa": { "saldo": 168000, "stipendi": 26000, "f24": 9500, "iva": 12000 },
+  "clienti": [
+    { "nome": "NORDELETTRA S.R.L.", "indirizzo": "VIA DELLE INDUSTRIE 14", "cap": "24040", "comune": "BERGAMO", "provincia": "BG", "email": "amministrazione@nordelettra.example", "peso": 26,
+      "prodotti": [
+        { "codice": "NE-MC410", "descrizione": "SCHEDA CONTROLLO MOTORE MC410", "prezzo": 38.5, "smd": 312, "tht": 14, "bot": 48 },
+        { "codice": "NE-PSU220", "descrizione": "ALIMENTATORE PSU220 24V", "prezzo": 21.9, "smd": 96, "tht": 22, "bot": 0 },
+        { "codice": "NE-IO16", "descrizione": "ESPANSIONE I/O 16 CANALI", "prezzo": 17.4, "smd": 140, "tht": 18, "bot": 0 } ] },
+    { "nome": "AUTOMAZIONI VALTREBBIA S.P.A.", "indirizzo": "STRADA PROVINCIALE 45", "cap": "29010", "comune": "RIVERGARO", "provincia": "PC", "email": "acquisti@valtrebbia.example", "peso": 20,
+      "prodotti": [
+        { "codice": "AVT-PLC08", "descrizione": "CPU PLC COMPATTO 8 I/O", "prezzo": 54.2, "smd": 420, "tht": 10, "bot": 64 },
+        { "codice": "AVT-HMI7", "descrizione": "SCHEDA DISPLAY HMI 7 POLLICI", "prezzo": 46.0, "smd": 260, "tht": 6, "bot": 0 } ] },
+    { "nome": "MEDITRONIC LAB S.R.L.", "indirizzo": "VIA GALVANI 3", "cap": "40128", "comune": "BOLOGNA", "provincia": "BO", "email": "ordini@meditroniclab.example", "peso": 14,
+      "prodotti": [
+        { "codice": "MDL-SENS2", "descrizione": "MODULO SENSORE PARAMETRI VITALI", "prezzo": 29.8, "smd": 188, "tht": 4, "bot": 22 },
+        { "codice": "MDL-BLE5", "descrizione": "SCHEDA COMUNICAZIONE BLE", "prezzo": 12.6, "smd": 74, "tht": 2, "bot": 0 } ] },
+    { "nome": "SOLARIS CONTROL S.R.L.", "indirizzo": "VIA DEL SOLE 88", "cap": "37135", "comune": "VERONA", "provincia": "VR", "email": "info@solariscontrol.example", "peso": 13,
+      "prodotti": [
+        { "codice": "SC-INV3K", "descrizione": "CONTROLLO INVERTER 3KW", "prezzo": 61.3, "smd": 356, "tht": 28, "bot": 0 },
+        { "codice": "SC-MPPT", "descrizione": "REGOLATORE MPPT 40A", "prezzo": 33.1, "smd": 150, "tht": 20, "bot": 0 } ] },
+    { "nome": "AGRISENSE TECH S.R.L.", "indirizzo": "VIA EMILIA 210", "cap": "43126", "comune": "PARMA", "provincia": "PR", "email": "amministrazione@agrisense.example", "peso": 9,
+      "prodotti": [
+        { "codice": "AGS-NODE4", "descrizione": "NODO LORA IRRIGAZIONE", "prezzo": 15.7, "smd": 92, "tht": 6, "bot": 0 },
+        { "codice": "AGS-GW1", "descrizione": "GATEWAY CAMPO 4G", "prezzo": 42.4, "smd": 210, "tht": 12, "bot": 36 } ] },
+    { "nome": "DOMOLUX SISTEMI S.R.L.", "indirizzo": "VIA ROMA 5", "cap": "20900", "comune": "MONZA", "provincia": "MB", "email": "acquisti@domolux.example", "peso": 8,
+      "prodotti": [
+        { "codice": "DLX-DIM2", "descrizione": "DIMMER LED DUE CANALI", "prezzo": 9.9, "smd": 64, "tht": 8, "bot": 0 },
+        { "codice": "DLX-HUB", "descrizione": "CENTRALE DOMOTICA HUB", "prezzo": 37.2, "smd": 240, "tht": 10, "bot": 30 } ] },
+    { "nome": "RAILTEK ITALIA S.P.A.", "indirizzo": "VIA DEI BINARI 21", "cap": "10156", "comune": "TORINO", "provincia": "TO", "email": "supply@railtek.example", "peso": 7,
+      "prodotti": [
+        { "codice": "RTK-CAN12", "descrizione": "INTERFACCIA CAN BORDO TRENO", "prezzo": 88.6, "smd": 380, "tht": 24, "bot": 52 } ] },
+    { "nome": "BIOMED DEVICES S.R.L.", "indirizzo": "VIA PASTEUR 9", "cap": "41036", "comune": "MIRANDOLA", "provincia": "MO", "email": "ordini@biomeddevices.example", "peso": 6,
+      "prodotti": [
+        { "codice": "BMD-PUMP3", "descrizione": "CONTROLLO POMPA INFUSIONE", "prezzo": 71.5, "smd": 296, "tht": 8, "bot": 40 } ] }
+  ],
+  "fornitori": [
+    { "nome": "ELCOM DISTRIBUZIONE S.R.L.", "comune": "MILANO", "provincia": "MI", "email": "ordini@elcom.example", "categoria": "Componenti elettronici", "quota": 0.30 },
+    { "nome": "CIRCUITI VELOCI S.P.A.", "comune": "VICENZA", "provincia": "VI", "email": "vendite@circuitiveloci.example", "categoria": "Circuiti stampati PCB", "quota": 0.11 },
+    { "nome": "STENCIL ITALIA S.R.L.", "comune": "BRESCIA", "provincia": "BS", "email": "info@stencilitalia.example", "categoria": "Lamine serigrafiche", "quota": 0.012 },
+    { "nome": "SALDATECH S.R.L.", "comune": "MODENA", "provincia": "MO", "email": "info@saldatech.example", "categoria": "Stagno e pasta saldante", "quota": 0.018 },
+    { "nome": "TRASPORTI RAPIDI S.R.L.", "comune": "PIACENZA", "provincia": "PC", "email": "clienti@trasportirapidi.example", "categoria": "Trasporti e spedizioni", "quota": 0.01 },
+    { "nome": "ENERGIA PADANA S.P.A.", "comune": "CREMONA", "provincia": "CR", "email": "clienti@energiapadana.example", "categoria": "Energia elettrica", "quota": 0.022 },
+    { "nome": "LOGIMAT IMBALLAGGI S.R.L.", "comune": "LODI", "provincia": "LO", "email": "info@logimat.example", "categoria": "Imballaggi", "quota": 0.008 }
+  ],
+  "preventiviRecenti": [
+    { "cliente": 0, "prodotto": 0, "schede": 500, "giorniFa": 1, "stato": "bozza" },
+    { "cliente": 2, "prodotto": 0, "schede": 300, "giorniFa": 2, "stato": "inviato" },
+    { "cliente": 3, "prodotto": 1, "schede": 250, "giorniFa": 3, "stato": "inviato" },
+    { "cliente": 6, "prodotto": 0, "schede": 120, "giorniFa": 4, "stato": "accettato" }
+  ],
+  "ordiniAperti": [
+    { "cliente": 0, "giorniFa": 18, "rif": "OA-2026-0871", "righe": [ { "prodotto": 0, "quantita": 300, "consegnaTra": 14, "commessa": "in_produzione", "fasiFatte": 7 }, { "prodotto": 2, "quantita": 200, "consegnaTra": 40 } ] },
+    { "cliente": 1, "giorniFa": 15, "rif": "PO 45021", "righe": [ { "prodotto": 0, "quantita": 250, "consegnaTra": 20, "commessa": "in_produzione", "fasiFatte": 4 } ] },
+    { "cliente": 2, "giorniFa": 12, "rif": "ORD 2026/155", "righe": [ { "prodotto": 0, "quantita": 400, "consegnaTra": 27, "commessa": "aperta" } ] },
+    { "cliente": 3, "giorniFa": 10, "rif": "SC-0912", "righe": [ { "prodotto": 0, "quantita": 150, "consegnaTra": 32, "commessa": "aperta" }, { "prodotto": 1, "quantita": 300, "consegnaTra": 58 } ] },
+    { "cliente": 4, "giorniFa": 8, "rif": "AG-77", "righe": [ { "prodotto": 0, "quantita": 1000, "consegnaTra": 47 } ] },
+    { "cliente": 5, "giorniFa": 6, "rif": "DLX-26-301", "righe": [ { "prodotto": 1, "quantita": 200, "consegnaTra": 52 } ] },
+    { "cliente": 6, "giorniFa": 5, "rif": "RT-4410", "righe": [ { "prodotto": 0, "quantita": 120, "consegnaTra": 65 } ] },
+    { "cliente": 7, "giorniFa": 3, "rif": "BMD-1188", "righe": [ { "prodotto": 0, "quantita": 180, "consegnaTra": 77 } ] }
+  ],
+  "crm": [
+    { "nome": "NORDELETTRA S.R.L.", "cliente": 0, "stato": "cliente", "priorita": "alta", "settore": "Automazione industriale", "citta": "Bergamo", "provincia": "BG", "telefono": "035 000 1111", "email": "info@nordelettra.example", "prossima": "Offerta nuovo lotto MC410", "tra": 2, "ultimo": 3, "tipo": "telefonata", "attivita": "Richiesto lotto da 500 pezzi per gennaio" },
+    { "nome": "VERDELAB ROBOTICS S.R.L.", "cliente": null, "stato": "in_trattativa", "priorita": "alta", "settore": "Robotica", "citta": "Reggio Emilia", "provincia": "RE", "telefono": "0522 000 222", "email": "info@verdelab.example", "prossima": "Visita in azienda", "tra": 1, "ultimo": 6, "tipo": "visita", "attivita": "Presentata la linea SMD, interessati a 3 schede" },
+    { "nome": "OTTICA PRECISA S.P.A.", "cliente": null, "stato": "offerta_inviata", "priorita": "media", "settore": "Strumentazione", "citta": "Padova", "provincia": "PD", "telefono": "049 000 333", "email": "acquisti@otticaprecisa.example", "prossima": "Richiamare per l'offerta", "tra": 3, "ultimo": 8, "tipo": "offerta", "attivita": "Inviato preventivo per 400 schede" },
+    { "nome": "SMARTGRID ENERGIE S.R.L.", "cliente": null, "stato": "contattato", "priorita": "media", "settore": "Energia", "citta": "Ferrara", "provincia": "FE", "telefono": "0532 000 444", "email": "info@smartgrid.example", "prossima": "Mandare presentazione", "tra": 5, "ultimo": 4, "tipo": "email", "attivita": "Primo contatto dalla fiera" },
+    { "nome": "AUTOMAZIONI VALTREBBIA S.P.A.", "cliente": 1, "stato": "cliente", "priorita": "alta", "settore": "Automazione industriale", "citta": "Rivergaro", "provincia": "PC", "telefono": "0523 000 555", "email": "acquisti@valtrebbia.example", "prossima": "Previsione ordini 2027", "tra": 7, "ultimo": 10, "tipo": "visita", "attivita": "Riunione su forecast annuale" },
+    { "nome": "AQUATEC SENSORI S.R.L.", "cliente": null, "stato": "da_contattare", "priorita": "bassa", "settore": "Sensoristica", "citta": "Mantova", "provincia": "MN", "telefono": "0376 000 666", "email": "info@aquatec.example", "prossima": "Prima telefonata", "tra": 4, "ultimo": 20, "tipo": "fiera", "attivita": "Biglietto da visita preso in fiera" }
+  ]
+}
