@@ -47,7 +47,7 @@ function schede(attiva: string) {
 }
 export const pagina = (utente: Utente | undefined, titolo: string, attiva: string, contenuto: Raw, opz: { avviso?: string; script?: string | string[] } = {}) =>
   // menu a gruppi (31/10/2026): gli ordini a fornitore stanno negli Acquisti (senza le schede degli ordini clienti), il Gantt nella Produzione
-  String(layout({ titolo, utente, attiva: attiva === 'fornitori' ? 'acquisti' : attiva === 'gantt' ? 'produzione' : 'ordini', largo: true,
+  String(layout({ titolo, utente, attiva: attiva === 'fornitori' ? 'acquisti' : attiva === 'gantt' ? 'produzione' : attiva === 'acquisire' ? 'documenti' : 'ordini', largo: true,
     script: opz.script ?? 'elenco.js', avviso: opz.avviso,
     contenuto: attiva === 'fornitori' ? html`<div class="intestazione-pagina"><h1>Acquisti · Ordini a fornitore</h1></div>${contenuto}`
       : html`<div class="intestazione-pagina"><h1>Ordini clienti</h1></div>${schede(attiva)}${contenuto}` }));

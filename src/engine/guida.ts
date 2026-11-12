@@ -182,14 +182,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'menu-gruppi', area: 'inizio', titolo: 'Il menu in alto: gruppi e tendine',
-    parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
+    parole: 'menu barra tendina gruppi documenti arrivati ricevuti commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
     testo: [
       'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
-      'Anagrafiche: clienti, fornitori, prodotti, componenti. Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
+      'Anagrafiche: clienti, fornitori, prodotti, componenti. Documenti (dal 12/11/2026, prima erano in Commerciale): i documenti che arrivano, cioè Documenti dei clienti (BOM, Gerber, pick and place per il preventivo) e Documenti da e-mail e PDF (ordini, DDT, fatture estere da leggere con l\'IA). Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti e conferme d\'ordine. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
       'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
       'Più avanti arriveranno anche i gruppi Qualità e Sicurezza e ambiente.',
     ],
-    pagine: [['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
+    pagine: [['/preventivi/documenti', 'Documenti dei clienti'], ['/ordini/acquisire', 'Documenti da e-mail e PDF'], ['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
   },
   {
     id: 'dove-file', area: 'inizio', titolo: 'Dove metto i file? (ordini, schede, documenti, BOM)',
@@ -676,7 +676,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'carica-ordine', area: 'ordini', titolo: 'Caricare un ordine del cliente (PDF, foto, email)',
     parole: 'ordine ordini carico caricare caricamento inserire nuovo file documenti pdf foto email eml acquisire da acquisire drive cartella ia leggere salvo dove telefono',
     testo: [
-      'Di solito si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da e-mail e PDF".',
+      'Di solito si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Documenti la pagina si chiama "Documenti da e-mail e PDF" (nelle schede di Ordini clienti "Ordini da e-mail e PDF").',
       'Ordine per telefono o a voce (nessun documento): in "Ordini da e-mail e PDF" il riquadro "Ordine a voce o per telefono" (ci si arriva anche dal pulsante "+ Nuovo ordine (telefono / a voce)" di Ordini clienti). Scegli il cliente e premi "Scrivi l\'ordine": si apre la stessa pagina di conferma con cinque righe vuote. Per ogni riga scegli il prodotto dal menu (codice, descrizione e prezzo arrivano dall\'anagrafica), scrivi quantità e consegna, poi "Conferma e crea l\'ordine". Nelle note resta "ordine ricevuto per telefono"; il numero è dal 9001 come gli ordini da email.',
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',

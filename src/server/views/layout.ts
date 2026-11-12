@@ -17,7 +17,9 @@ export interface Utente { id: number; nome: string; ruolo: Ruolo }
  */
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti'], ['Componenti clienti', '/anagrafiche/componenti-clienti'], ['Materiali di consumo', '/anagrafiche/materiali']] },
-  { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Documenti dei clienti', '/preventivi/documenti'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme'], ['Ordini da e-mail e PDF', '/ordini/acquisire']] },
+  // Documenti (Adriano 12/11/2026): i documenti che ARRIVANO (dai clienti, da e-mail e PDF), prima sotto Commerciale; indirizzi invariati
+  { chiave: 'documenti', nome: 'Documenti', voci: [['Documenti dei clienti', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']] },
+  { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme']] },
   { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti']] },
   { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['DDT', '/amministrazione/documenti?tipo=ddt'], ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'], ['Fatture differite (DDT da fatturare)', '/amministrazione/differite'], ['Crediti verso clienti', '/amministrazione/crediti'], ['Solleciti incassi', '/amministrazione/solleciti'], ['Banca: movimenti e abbinamenti', '/amministrazione/banca'], ['RiBa e anticipo fatture', '/amministrazione/banca/anticipi'], ['Controlli settimanali', '/amministrazione/controlli'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Spese senza fattura elettronica', '/amministrazione/spese'], ['Bollo virtuale', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'], ['Analisi', '/amministrazione/analisi']] },
@@ -28,7 +30,7 @@ export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string]
 /** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
 const GRUPPO_DI: Record<string, string> = {
   crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
-  acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
+  acquisti: 'acquisti', documenti: 'documenti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
 };
 /**
  * Menu del profilo Contabilità (Adriano 1/11/2026): niente tendine, le pagine dell'Amministrazione in fila nella barra in alto

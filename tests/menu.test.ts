@@ -13,7 +13,7 @@ const destra = (ruolo: 'ufficio' | 'produzione') => link(pagina(ruolo).split('<n
 const gruppi = (ruolo: 'ufficio' | 'produzione') => [...menu(ruolo).matchAll(/class="titolo-gruppo[^"]*"[^>]*>([^<]+)</g)].map(m => m[1]);
 
 test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acquisti, Produzione, Amministrazione, Qualità; a destra Impostazioni, Suggerimenti, Guida', () => {
-  assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione', 'Qualità', 'Dipendenti']);
+  assert.deepEqual(gruppi('ufficio'), ['Anagrafiche', 'Documenti', 'Commerciale', 'Acquisti', 'Produzione', 'Amministrazione', 'Qualità', 'Dipendenti']);
   assert.deepEqual(destra('ufficio'), ['Impostazioni', 'Suggerimenti', 'Guida']);
   const voci = link(menu('ufficio'));
   assert.ok(voci.some(v => v[0] === 'Quotazioni componenti' && v[1] === '/quotazioni'));
@@ -24,10 +24,21 @@ test('menu in alto a gruppi (Adriano 31/10/2026): Anagrafiche, Commerciale, Acqu
   assert.deepEqual(destra('produzione'), ['Guida']);
 });
 
-test('Commerciale nell\'ordine di Adriano (1/11/2026): CRM, Quotazioni componenti, Documenti dei clienti, Preventivi, Ordini clienti, Conferme d\'ordine', () => {
+test('Commerciale nell\'ordine di Adriano: CRM, Quotazioni componenti, Preventivi, Ordini clienti, Conferme d\'ordine', () => {
   const g = MENU_GRUPPI.find(x => x.chiave === 'commerciale')!;
-  assert.deepEqual(g.voci.map(v => v[0]).slice(0, 6), ['CRM', 'Quotazioni componenti', 'Documenti dei clienti', 'Preventivi', 'Ordini clienti', "Conferme d'ordine"]);
+  assert.deepEqual(g.voci.map(v => v[0]), ['CRM', 'Quotazioni componenti', 'Preventivi', 'Ordini clienti', "Conferme d'ordine"]);
   assert.ok(g.voci.some(v => v[1] === '/ordini/conferme'));
+});
+
+test('Documenti (Adriano 12/11/2026): i documenti che arrivano, tolti da Commerciale, stessi indirizzi', () => {
+  const g = MENU_GRUPPI.find(x => x.chiave === 'documenti')!;
+  assert.deepEqual(g.voci, [['Documenti dei clienti', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']]);
+  assert.equal(gruppoAttivo('documenti'), 'documenti');
+  assert.match(pagina('ufficio', 'documenti'), /class="titolo-gruppo attiva"[^>]*>Documenti</);
+  const schede = readFileSync(new URL('../src/server/rotte/schede-cliente.ts', import.meta.url), 'utf8');
+  assert.match(schede, /attiva: 'documenti'/);
+  const ordini = readFileSync(new URL('../src/server/rotte/ordini.ts', import.meta.url), 'utf8');
+  assert.match(ordini, /attiva === 'acquisire' \? 'documenti'/);
 });
 
 test('menu a gruppi: la sezione della pagina accende il suo gruppo', () => {

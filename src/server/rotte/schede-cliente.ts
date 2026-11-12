@@ -29,7 +29,7 @@ const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `
 export function rotteSchedeCliente() {
   const r = Router();
   const pag = (req: Request, titolo: string, contenuto: Raw, avviso?: string) =>
-    String(layout({ titolo, utente: req.session.utente, attiva: 'preventivi', largo: true, avviso, script: ['schede-cliente.js', 'elenco.js'], contenuto }));
+    String(layout({ titolo, utente: req.session.utente, attiva: 'documenti', largo: true, avviso, script: ['schede-cliente.js', 'elenco.js'], contenuto }));
 
   // ── elenco e caricamento ──
   r.get('/', async (req, res) => {
