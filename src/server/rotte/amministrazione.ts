@@ -43,11 +43,12 @@ import {
 import { TIPI_SCEGLIBILI, TIPI_SDI_FATTURA, nomeTipoSdi, scadenzaF24, termineDifferita } from '../../engine/tipi-fattura.js';
 import { controlloStorno } from '../../engine/analisi.js';
 import { CAUSALI_DDT, MOTIVI_NON_FATTURARE, PORTI, SQL_DDT_DA_FATTURARE, TRASPORTO_A_CURA, avvisoPrezziDdt, indirizzoSu } from '../../engine/ddt.js';
-import { MODALITA, stampaDdt, stampaFattura } from '../views/stampa-documento.js';
+import { avvisoMeseAutofattura } from '../../engine/autofatture.js';
+import { MODALITA, stampaAutofattura, stampaDdt, stampaFattura } from '../views/stampa-documento.js';
 import { allegatoFattura, fatturaLeggibile } from '../../engine/fattura-leggibile.js';
 import { attributiEmesso, campoEsigibilita, riquadroAttributi } from '../views/attributi-fattura.js';
 import { inviaDdtEmail, pdfDelDdt, propostaEmailDdt } from '../ddt-email-servizio.js';
-import { datiStampaFattura, inviaFatturaEmail, pdfDellaFattura, propostaEmailFattura } from '../fattura-email-servizio.js';
+import { datiStampaAutofattura, datiStampaFattura, inviaFatturaEmail, pdfDellaFattura, propostaEmailFattura } from '../fattura-email-servizio.js';
 import { TIPI_CORTESIA, nomeDocumento } from '../../engine/fattura-email.js';
 import { calcolaTotali } from '../../engine/amministrazione.js';
 import { avvisiRighe, riepilogoAvvisi, type RiferimentoPreventivo } from '../../engine/avviso-margine.js';
@@ -780,10 +781,13 @@ export function rotteAmministrazione() {
 
   r.get('/documenti/:id/stampa', async (req, res) => {
     const id = Number(req.params.id);
+    // autofattura impaginata (Adriano 12/11/2026); ?incorporata=1 = solo il foglio, dentro la pagina dell'autofattura
+    const af = await datiStampaAutofattura(id);
+    if (af) return res.send(String(stampaAutofattura(af.d, af.righe, af.azienda, af.fornitore, af.totali, af.fattura, { incorporata: req.query.incorporata === '1' })));
     const d = await q1(`SELECT d.*, c.ragione_sociale AS c_ragione_sociale, c.partita_iva AS c_partita_iva, c.indirizzo AS c_indirizzo, c.cap AS c_cap,
         c.comune AS c_comune, c.provincia AS c_provincia, c.nazione AS c_nazione
       FROM documenti d LEFT JOIN clienti c ON c.id = d.cliente_id WHERE d.id = $1 AND d.tipo IN ('ddt', 'fattura', 'nota_credito')`, [id]);
-    if (!d) return res.status(404).send('Stampa disponibile per DDT, fatture e note di credito');
+    if (!d) return res.status(404).send('Stampa disponibile per DDT, fatture, note di credito e autofatture');
     const righe = await q(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
     const azienda = (await q1(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
     if (d.tipo !== 'ddt') {
@@ -932,13 +936,13 @@ export function rotteAmministrazione() {
         ${d.tipo === 'ddt' && Object.keys(trasporto).length ? html`<p class="nota">${Object.entries(ETICHETTE_TRASPORTO).filter(([k]) => trasporto[k])
           .map(([k, v]) => `${v}: ${k === 'inizio' ? `${data(trasporto[k].slice(0, 10))} ore ${trasporto[k].slice(11, 16)}` : trasporto[k]}`).join(' · ')}</p>` : ''}
         ${d.tipo === 'ddt' && d.riferimento_esterno ? html`<p class="nota">${d.riferimento_esterno}</p>` : ''}
-        <div class="tabella-scorre"><table class="elenco">
+        ${d.tipo === 'autofattura' ? html`<iframe class="anteprima-documento" src="/amministrazione/documenti/${id}/stampa?incorporata=1" title="Autofattura impaginata"></iframe>` : html`<div class="tabella-scorre"><table class="elenco">
           <thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Q.tà</th><th>U.m.</th><th class="num">Prezzo</th><th class="num">Sconto</th><th class="num">Importo</th><th>IVA</th></tr></thead>
           <tbody>${righe.map(x => x.solo_descrizione ? html`<tr><td></td><td colspan="7"><em>${x.descrizione}</em></td></tr>` : html`<tr>
             <td>${x.codice ?? ''}</td><td>${x.descrizione}</td><td class="num">${num(x.quantita, 0)}</td><td>${x.um ?? ''}</td>
             <td class="num">${euroUnitario(x.prezzo)}</td><td class="num">${x.sconto ? `${num(x.sconto)} %` : ''}</td>
             <td class="num">${euro(Math.round(x.quantita * x.prezzo * (1 - x.sconto / 100) * 100) / 100)}</td><td>${x.aliquota_iva ?? ''}</td></tr>`)}</tbody>
-        </table></div>
+        </table></div>`}
         ${d.tipo !== 'ddt' ? html`<p class="totali-documento">Imponibile ${euro(d.imponibile)} · IVA ${euro(d.imposta)}${d.bollo ? html` · bollo ${euro(d.bollo)}${d.tipo === 'nota_credito' ? ' (a carico di Casteltech)' : ' (addebitato al cliente, compreso nell\'imponibile N1)'}` : ''} · <strong>Totale ${euro(d.totale)}</strong></p>` : ''}
         ${d.sdi_messaggio && ['scartato', 'non_consegnato'].includes(d.stato) ? html`<p class="avviso">${d.sdi_messaggio}</p>` : ''}
         ${['fattura', 'nota_credito', 'autofattura'].includes(d.tipo) && d.origine === 'portale' ? attributiEmesso(d.xml, d.attributi_xml) : ''}
@@ -947,6 +951,7 @@ export function rotteAmministrazione() {
         ${elencoScadenze(scadenze, 'documenti', await caricaModiPagamento())}
         <div class="azioni-secondarie">
           ${d.xml ? html`<a class="bottone" href="/amministrazione/documenti/${id}/xml">Scarica XML</a>` : ''}
+          ${d.tipo === 'autofattura' ? html`<a class="bottone" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener">Stampa / PDF</a>` : ''}
           ${email ? html`<a class="bottone primario" href="#invia-email">✉ Invia per email</a>` : ''}
           ${['fattura', 'nota_credito'].includes(d.tipo) && d.origine === 'fic' ? html`<a class="bottone primario" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener"
             title="Il documento ricostruito con i dati del portale (cliente, righe, IVA, pagamento e scadenze), da leggere o stampare; l'originale è il PDF di Fatture in Cloud">Vedi la fattura</a>` : ''}
@@ -1039,7 +1044,8 @@ export function rotteAmministrazione() {
       <form method="post" action="/amministrazione/documenti/${id}" class="blocco" id="modulo-documento" data-autosalva="${d.stato === 'bozza' ? '1' : ''}">
         <div class="riga-campi">
           <label class="stretto">Data <input type="date" name="data" value="${d.data}" required ${d.numero != null ? raw('readonly title="Scartato dallo SdI: si rimanda con la stessa data"') : ''}></label>
-          ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>`
+          ${d.tipo === 'autofattura' ? html`<label>Fattura del fornitore <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}"></label>
+          ${(() => { const a = avvisoMeseAutofattura(String(d.data).slice(0, 10), d.ricevuto_data ? String(d.ricevuto_data).slice(0, 10) : null); return a ? html`<span class="nota avviso-mese">${a}</span>` : ''; })()}`
           : html`<label>Pagamento <select name="condizione_pagamento"><option value="">Scegli…</option>${condizioni.map(c =>
             html`<option value="${c.codice}" ${d.condizione_pagamento === c.codice ? raw('selected') : ''}>${c.descrizione}</option>`)}</select></label>
           <label>Rif. ordine del cliente <input name="riferimento_esterno" value="${d.riferimento_esterno ?? ''}" maxlength="20" title="Numero dell'ordine (al massimo 20 caratteri)"></label>
@@ -1111,7 +1117,7 @@ export function rotteAmministrazione() {
           <form method="post" action="/amministrazione/documenti/${id}/emetti" class="inline"
             data-conferma="Emettere il documento? Prende il numero successivo e non si potrà più modificare (si corregge con una nota di credito).">
             <button class="primario" ${errori.length ? raw('disabled') : ''}>Emetti</button></form>
-          ${d.tipo !== 'autofattura' ? html`<a class="bottone" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>` : ''}
+          <a class="bottone" href="/amministrazione/documenti/${id}/stampa" target="_blank" rel="noopener" title="Anteprima con la scritta BOZZA (salva prima le modifiche)">Anteprima di stampa</a>
           ${errori.length ? '' : html`<a class="bottone" href="/amministrazione/documenti/${id}/xml-prova" title="Stesso file che si emetterebbe, con numero 0: non consuma la numerazione">Scarica XML di prova</a>`}
           ${d.numero == null ? html`<form method="post" action="/amministrazione/documenti/${id}/elimina" class="inline" data-conferma="Eliminare questa bozza?">
             <button class="pericolo">Elimina bozza</button></form>` : ''}

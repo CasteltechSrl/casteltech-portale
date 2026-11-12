@@ -739,6 +739,11 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Data della bozza (Adriano 11/11/2026, `dataAutofattura` in `engine/autofatture.ts`): giorno del caricamento della fattura nel portale (`acquisizioni.creato_il`), mai dopo oggi,
    non prima dell'ultima autofattura emessa della serie; si può cambiare nella bozza.
    Mese di competenza: fattura del fornitore del mese prima del caricamento (stesso anno) = ultimo giorno del mese della fattura (`fineMese`), se la serie non ha già una data del mese dopo.
+   Autofattura impaginata (Adriano 12/11/2026, "più facile vedere documenti impaginati che dati in tabella"; `stampaAutofattura` in `views/stampa-documento.ts`, dati in
+   `datiStampaAutofattura` in `fattura-email-servizio.ts`): GET `/amministrazione/documenti/:id/stampa` anche per le autofatture (cedente = fornitore estero, Casteltech cessionario,
+   fattura del fornitore con valuta/cambio), `?incorporata=1` = solo il foglio, in `<iframe class="anteprima-documento">` nella pagina dell'autofattura emessa al posto della tabella;
+   "Anteprima di stampa" nella bozza, azione "Stampa / PDF" nell'elenco. Bozza: `avvisoMeseAutofattura` accanto alla data se la fattura del fornitore è del mese prima.
+   AF 93–99/2026 (fatture di ottobre) preparate il 4/11 prima della regola del mese: date di novembre, già consegnate dallo SdI (non si cambiano).
    Doppioni (Adriano 4/11/2026; `stessaFatturaEstera` in `engine/autofatture.ts`, `fatturaEsteraGiaCaricata`, migrazione 070, test in `tests/autofatture.test.ts`): stessa fattura
    (fornitore dal nome, numero senza segni, data) anche da file diverso (PDF + .eml) = quella arrivata dopo si scarta in `elabora`; nell'elenco "doppione" rosso,
    "Prepara l'autofattura" bloccato. Spunte nel riquadro fatture estere (POST `/amministrazione/fatture-estere/azioni`: "Prepara l'autofattura" = `confermaFatturaEstera` per ognuna, con gli errori

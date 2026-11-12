@@ -151,3 +151,29 @@ test("data dell'autofattura: ultima data utile del mese di arrivo della fattura 
   assert.equal(dataAutofattura('2026-11-03', null, '2026-11-05', '2026-09-28'), '2026-11-03');
   assert.equal(dataAutofattura('2027-01-03', null, '2027-01-05', '2026-12-28'), '2027-01-03');
 });
+
+test("bozza dell'autofattura: avviso se la fattura del fornitore è del mese prima (Adriano 12/11/2026)", async () => {
+  const { avvisoMeseAutofattura } = await import('../src/engine/autofatture.js');
+  assert.match(avvisoMeseAutofattura('2026-11-04', '2026-10-28')!, /ottobre 2026.*31\/10\/2026/);
+  assert.equal(avvisoMeseAutofattura('2026-10-31', '2026-10-28'), null);
+  assert.equal(avvisoMeseAutofattura('2026-11-04', '2026-11-02'), null);
+  assert.match(avvisoMeseAutofattura('2027-01-04', '2026-12-28')!, /anno prima/);
+  assert.equal(avvisoMeseAutofattura('2026-11-04', null), null);
+});
+
+test('autofattura impaginata: fornitore estero come cedente, Casteltech cessionario, fattura del fornitore (Adriano 12/11/2026)', async () => {
+  const { stampaAutofattura } = await import('../src/server/views/stampa-documento.js');
+  const totali = { imponibile: 100, imposta: 22, totale: 122, bollo: 0, riepilogo: [{ aliquota: 'IVA22', percentuale: 22, imponibile: 100, imposta: 22 }], errori: [] } as any;
+  const pagina = String(stampaAutofattura({ id: 7, numero: 99, sezionale: 'AF', data: '2026-10-31', tipo_sdi: 'TD17', stato: 'consegnato', causale: 'Relativo a fattura n. 93174181 del 21/10/2026' },
+    [{ codice: 'X1', descrizione: 'Servizio', quantita: 1, prezzo: 100, sconto: 0, aliquota_iva: 'IVA22' }],
+    { ragione_sociale: 'CASTELTECH S.R.L.', partita_iva: '01777320332' }, { ragione_sociale: 'ANTHROPIC PBC', partita_iva: 'US123', nazione: 'US' },
+    totali, { numero: '93174181', data: '2026-10-21', valuta: 'USD', cambio: 1.0821 }, { incorporata: true }));
+  assert.match(pagina, /AUTOFATTURA/);
+  assert.match(pagina, /99\/AF/);
+  assert.match(pagina, /Cedente \/ prestatore/);
+  assert.match(pagina, /ANTHROPIC PBC/);
+  assert.match(pagina, /N\. 93174181 del 21\/10\/2026/);
+  assert.match(pagina, /USD/);
+  assert.match(pagina, /class="incorporata"/);
+  assert.doesNotMatch(pagina, /barra-stampa/);
+});

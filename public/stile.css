@@ -1168,3 +1168,6 @@ dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }
 /* resta-qui.js: spunte salvate senza ricaricare, invito ad aggiornare la pagina (Adriano 11/11/2026) */
 .barra-aggiorna { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; display: flex; align-items: center; gap: .6rem;
   background: var(--carta); border: 1px solid #c9d6e8; border-radius: 8px; padding: .5rem .8rem; box-shadow: 0 4px 14px rgba(0,0,0,.15); font-size: .9rem; }
+
+/* Anteprima impaginata del documento dentro la sua pagina (autofatture, Adriano 12/11/2026) */
+.anteprima-documento { width: 100%; height: 80vh; min-height: 560px; border: 1px solid #ccc; border-radius: 4px; background: #d9d9d9; display: block; margin: 8px 0 12px; }

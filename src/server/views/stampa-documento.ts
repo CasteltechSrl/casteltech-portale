@@ -10,6 +10,7 @@ import { indirizzoSu } from '../../engine/ddt.js';
 import { importoRiga, numeroCompleto, type Totali } from '../../engine/amministrazione.js';
 import { importoDaIncassare, nomeTipoSdi } from '../../engine/tipi-fattura.js';
 import { noteDdt, notaFattura } from '../../engine/condizioni.js';
+import { TIPI_AUTOFATTURA } from '../../engine/autofatture.js';
 
 /** Note del lotto sotto la descrizione della riga (Adriano 9/11/2026): DDT e fattura. */
 const notaStampa = (r: any) => r.note ? html`<div class="nota-riga">${r.note}</div>` : '';
@@ -152,5 +153,72 @@ export function stampaFattura(d: any, righe: any[], azienda: any, cliente: any, 
   <p class="piede">Copia di cortesia: il documento fiscale è il file XML trasmesso al Sistema di Interscambio ed è disponibile nell'area riservata del sito dell'Agenzia delle Entrate.</p>
 </section>
 <script src="/static/stampa.js?v=${VERSIONE}" defer></script>
+</body></html>`;
+}
+
+/** Pagina incorporata nella scheda del documento (Adriano 12/11/2026): solo il foglio, senza la barra dei pulsanti. */
+const barra = (incorporata: boolean, contenuto: Raw) => incorporata ? '' : contenuto;
+
+/**
+ * Autofattura impaginata come un documento (Adriano 12/11/2026: "è più facile per noi visualizzare documenti impaginati che vedere dei dati
+ * in una tabella"). Come la copia di cortesia della fattura, ma il cedente/prestatore è il fornitore estero e il cessionario/committente
+ * è Casteltech (testata); sotto i dati della fattura del fornitore a cui si riferisce. Il documento fiscale resta l'XML allo SdI.
+ */
+export function stampaAutofattura(d: any, righe: any[], azienda: any, fornitore: any, totali: Totali,
+  fattura: { numero?: string | null; data?: string | null; valuta?: string | null; cambio?: number | null } | null, opz: { incorporata?: boolean } = {}): Raw {
+  const tipo = TIPI_AUTOFATTURA[d.tipo_sdi] ?? d.tipo_sdi ?? '';
+  const numero = d.numero == null ? 'BOZZA' : numeroCompleto(d.numero, d.sezionale);
+  const sede = [azienda.indirizzo, [azienda.cap, azienda.comune, azienda.provincia ? `(${azienda.provincia})` : ''].filter(Boolean).join(' ')].filter(Boolean).join(' - ');
+  const timbro = d.numero == null ? 'BOZZA' : d.stato === 'scartato' ? 'SCARTATA' : d.stato === 'annullato' ? 'ANNULLATA' : '';
+  const percentuale = (codice: string | null) => totali.riepilogo.find(g => g.aliquota === codice);
+  return html`<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><title>Autofattura ${numero} · ${fornitore.ragione_sociale ?? ''}</title>
+<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/stampa.css?v=${VERSIONE}"></head>
+<body${opz.incorporata ? html` class="incorporata"` : ''}>
+${barra(!!opz.incorporata, html`<div class="barra-stampa"><button id="stampa">Stampa / salva PDF</button>
+  <a href="/amministrazione/documenti/${d.id}">← torna all'autofattura</a></div>`)}
+<section class="pagina ddt-stampa fattura-stampa">
+  ${timbro ? html`<div class="timbro-stampa">${timbro}</div>` : ''}
+  <div class="testata-stampa">
+    <div class="mittente-stampa"><img src="/static/logo-casteltech.png" alt="Casteltech" class="logo">
+      <div><span class="etic">Cessionario / committente (emette l'autofattura)</span><br><strong>${azienda.ragione_sociale ?? ''}</strong><br>${sede}<br>
+        P.IVA ${azienda.partita_iva ?? ''}${azienda.codice_fiscale && azienda.codice_fiscale !== azienda.partita_iva ? ` · C.F. ${azienda.codice_fiscale}` : ''}</div></div>
+    <div class="titolo-stampa">AUTOFATTURA<br><span>${tipo}</span><br><span>N. <strong>${numero}</strong> del ${data(d.data)}</span></div>
+  </div>
+  <table class="griglia"><colgroup><col class="meta"><col class="meta"></colgroup>
+    <tr><td><div class="etic">Cedente / prestatore (fornitore estero)</div><div class="val">${fornitore.ragione_sociale ?? ''}</div>
+        <div class="indirizzo-stampa">${righeTesto(indirizzoSu(fornitore))}${fornitore.partita_iva ? html`Id. fiscale ${fornitore.partita_iva}` : ''}</div></td>
+      <td><div class="etic">Fattura del fornitore</div>
+        <div class="val">${fattura?.numero ? `N. ${fattura.numero}` : d.riferimento_esterno ? `N. ${d.riferimento_esterno}` : '—'}${fattura?.data ? ` del ${data(String(fattura.data).slice(0, 10))}` : ''}</div>
+        <div class="indirizzo-stampa">${fattura?.valuta && fattura.valuta !== 'EUR' ? html`Valuta ${fattura.valuta}${fattura.cambio ? html`, cambio BCE ${num(Number(fattura.cambio), 4)} per 1 €` : ''}: importi convertiti in euro<br>` : ''}
+          Codice destinatario 0000000 · inversione contabile</div></td></tr>
+  </table>
+  ${d.causale ? html`<p class="causale-stampa">${d.causale}</p>` : ''}
+  <table class="righe-ddt righe-fattura">
+    <thead><tr><th class="cod">Codice</th><th>Descrizione</th><th class="um">U.m.</th><th class="q">Q.tà</th><th class="q">Prezzo</th><th class="um">Sc. %</th><th class="q">Importo</th><th class="um">IVA</th></tr></thead>
+    <tbody>${righe.map(r => r.solo_descrizione
+      ? html`<tr><td></td><td colspan="7"><em>${r.descrizione}</em></td></tr>`
+      : html`<tr><td class="cod">${r.codice ?? ''}</td><td>${r.descrizione}</td><td class="um">${r.um ?? ''}</td>
+        <td class="q">${num(Number(r.quantita), Number(r.quantita) % 1 ? 2 : 0)}</td><td class="q">${euroUnitario(Number(r.prezzo))}</td>
+        <td class="um">${Number(r.sconto) ? num(Number(r.sconto)) : ''}</td><td class="q">${euro(importoRiga(r))}</td>
+        <td class="um">${(() => { const g = percentuale(r.aliquota_iva); return g ? (g.percentuale ? `${num(g.percentuale, 0)}%` : g.natura) : ''; })()}</td></tr>`)}</tbody>
+  </table>
+  <div class="totali-fattura">
+    <table class="riepilogo-iva">
+      <thead><tr><th>Aliquota / natura</th><th class="q">Imponibile</th><th class="q">Imposta</th></tr></thead>
+      <tbody>${totali.riepilogo.map(g => html`<tr><td>${g.percentuale ? `IVA ${num(g.percentuale, 0)}%` : `${g.natura} - ${g.riferimento_normativo ?? ''}`}</td>
+        <td class="q">${euro(g.imponibile)}</td><td class="q">${euro(g.imposta)}</td></tr>`)}</tbody>
+    </table>
+    <table class="somme">
+      <tr><td>Imponibile</td><td class="q">${euro(totali.imponibile)}</td></tr>
+      <tr><td>IVA (a debito e a credito)</td><td class="q">${euro(totali.imposta)}</td></tr>
+      <tr class="totale"><td>Totale documento</td><td class="q">${euro(totali.imponibile + totali.imposta)}</td></tr>
+    </table>
+  </div>
+  <p class="nota-stampa">Integrazione dell'IVA per acquisto da fornitore estero (${d.tipo_sdi === 'TD18' ? 'artt. 46-47 D.L. 331/93' : 'art. 17 c. 2 D.P.R. 633/72'}):
+    l'IVA si registra sia nel registro delle vendite sia in quello degli acquisti. Nessun pagamento al fornitore oltre alla sua fattura.</p>
+  <p class="piede">Documento interno: il documento fiscale è il file XML trasmesso al Sistema di Interscambio ed è disponibile nell'area riservata del sito dell'Agenzia delle Entrate.</p>
+</section>
+${opz.incorporata ? '' : html`<script src="/static/stampa.js?v=${VERSIONE}" defer></script>`}
 </body></html>`;
 }
