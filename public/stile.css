@@ -49,6 +49,8 @@ h2 { font-size: 1.1rem; margin: 1.6rem 0 .5rem; font-weight: 650; display: flex;
 .testata:not(.menu-js) .gruppo:hover .tendina, .testata .gruppo.aperto .tendina,
 .testata:not(.menu-js) .gruppo:focus-within .tendina { display: block; }
 .testata .gruppo .tendina a { display: block; padding: .5rem .7rem; color: var(--testo); font-weight: 500; white-space: nowrap; }
+.testata .gruppo .tendina .titolo-tendina { display: block; padding: .45rem .7rem .2rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--tenue); }
+.testata .gruppo .tendina .titolo-tendina ~ .titolo-tendina { margin-top: .3rem; border-top: 1px solid var(--bordo); padding-top: .55rem; }
 .testata .gruppo .tendina a:hover { background: var(--accento-chiaro); color: var(--accento); }
 .testata .gruppo .titolo-gruppo, .testata nav a.voce-cruscotto { display: inline-block; white-space: nowrap; }
 .testata .gruppo .titolo-gruppo::after { content: ' ▾'; font-size: .75em; opacity: .6; }

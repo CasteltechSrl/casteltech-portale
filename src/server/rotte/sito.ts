@@ -3,7 +3,7 @@
  * Senza sessione e senza chiave: li usano i visitatori del sito. Regole in engine/sito.ts.
  *
  *  - POST /api/sito/contatto   → email a info@ con "Rispondi" verso chi ha scritto.
- *  - POST /api/sito/preventivo → pacchetto nei Documenti dei clienti ("SITO – AZIENDA", o "SITO – PRIVATO – NOME") con il testo
+ *  - POST /api/sito/preventivo → pacchetto nei Documenti commesse ("SITO – AZIENDA", o "SITO – PRIVATO – NOME") con il testo
  *                                della richiesta e i file utili (stessa scelta del pulsante di Gmail), analisi dopo la risposta,
  *                                email a info@ con il link. Accetta il modulo del vecchio WordPress e il preventivo guidato del sito nuovo.
  *  - POST /api/sito/candidatura → email a info@ con il curriculum allegato (modulo "Lavora con noi" del sito nuovo, 8/11/2026).

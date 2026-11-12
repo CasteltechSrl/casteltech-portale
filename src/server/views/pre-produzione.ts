@@ -92,7 +92,7 @@ export function paginaPreProduzione(utente: Utente | undefined, d: DatiPreProduz
             ${d.pacchetto.file.map(f => html`<tr class="${f.usato ? '' : 'non-usato'}"><td class="taglia">${f.byte > 0 && ['bom', 'pick-place', 'gerber', 'foratura', 'gencad'].includes(f.tipo) ? html`<a href="/preventivi/documenti/${d.pacchetto!.id}/file?nome=${encodeURIComponent(f.nome)}" title="Scarica il file conservato nel portale">${f.nome}</a>` : f.nome}</td>
               <td>${ETICHETTE_TIPO[f.tipo] ?? f.tipo}</td><td class="n">${kb(f.byte)}</td><td>${f.usato ? '✓' : ''}</td><td class="nota-file">${f.nota ?? (['pdf', 'disegno-3d', 'immagine', 'odb', 'archivio', 'altro'].includes(f.tipo) ? 'solo in elenco: il file resta sul Drive del cliente' : '')}</td></tr>`)}
           </tbody></table></div>`
-        : html`<p class="vuoto">Nessun pacchetto di documenti del cliente collegato al preventivo${prev ? html`. Se i file ci sono, caricali in <a href="/preventivi/documenti">Documenti dei clienti</a> e crea da lì il preventivo, oppure tienili sul Drive e controllali a mano.` : '.'}</p>`}
+        : html`<p class="vuoto">Nessun pacchetto di documenti del cliente collegato al preventivo${prev ? html`. Se i file ci sono, caricali in <a href="/preventivi/documenti">Documenti commesse</a> e crea da lì il preventivo, oppure tienili sul Drive e controllali a mano.` : '.'}</p>`}
       </section>
     </div>
 
