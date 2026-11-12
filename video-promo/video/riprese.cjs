@@ -16,7 +16,7 @@ const CSS = `
   await p.fill('input[name=email]', 'demo@esempio.it');
   await p.fill('input[name=password]', 'DemoPortale2026!');
   await Promise.all([p.waitForNavigation(), p.click('button.primario')]);
-  for (const [nome, url, full] of PAGINE) {
+  for (const [nome, url, full, apri] of PAGINE) {  // apri = nome del gruppo del menu da mostrare aperto
     await p.goto('http://localhost:3999' + url); await p.waitForTimeout(700);
     await p.evaluate(() => {
       // niente marchio: il nome del portale sparisce (si vende con un altro nome)
@@ -44,7 +44,9 @@ const CSS = `
       }
       return r;
     }, cerca);
+    if (apri) { await p.hover(`nav.menu a.titolo-gruppo:text-is("${apri}")`); await p.waitForTimeout(600); }
     await p.screenshot({ path: `${OUT}/${nome}.png`, fullPage: !!full });
+    if (apri) await p.mouse.move(800, 880);
     console.log(nome);
   }
   require('fs').writeFileSync(OUT + '/zone.json', JSON.stringify(zone, null, 1));

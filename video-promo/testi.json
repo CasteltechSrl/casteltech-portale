@@ -3,15 +3,15 @@
   "battute": [
     {
       "id": "v1",
-      "scritta": "Email, ordini, disegni, preventivi, fatture. Ogni giorno, sparsi in dieci programmi diversi.",
-      "voce": "Email, ordini, disegni, preventivi, fatture. Ogni giorno, sparsi in dieci programmi diversi.",
+      "scritta": "Ogni giorno arrivano email, ordini, disegni, preventivi, fatture. Sparsi in dieci programmi diversi.",
+      "voce": "Ogni giorno arrivano imèil, ordini, disegni, preventivi, fatture. Sparsi in dieci programmi diversi.",
       "velocita": "+12%",
       "stringi": true
     },
     {
       "id": "v2",
-      "scritta": "E se bastasse un solo portale, per gestire tutta l'azienda?",
-      "voce": "E se bastasse un solo portale, per gestire tutta l'azienda?"
+      "scritta": "E se bastasse un solo portale per gestire tutta l'azienda? Dai documenti alla produzione, dalla qualità alla sicurezza.",
+      "voce": "E se bastasse un solo portale per gestire tutta l'azienda? Dai documenti alla produzione, dalla qualità alla sicurezza."
     },
     {
       "id": "v3",
@@ -32,6 +32,11 @@
       "id": "v6",
       "scritta": "In reparto si lavora con il QR: i tempi arrivano dal telefono e il Gantt si aggiorna da solo.",
       "voce": "In reparto si lavora con il cu-erre: i tempi arrivano dal telefono, e il gant si aggiorna da solo."
+    },
+    {
+      "id": "v6b",
+      "scritta": "E può collegarsi direttamente alle macchine: armadi di stoccaggio, pick and place, SPI e AOI. Componenti, tempi e difetti arrivano da soli nel portale.",
+      "voce": "E può collegarsi direttamente alle macchine: armadi di stoccaggio, pick-end-pleis, esse-pi-i e a-o-i. Componenti, tempi e difetti arrivano da soli nel portale."
     },
     {
       "id": "v7",

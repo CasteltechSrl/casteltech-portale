@@ -37,3 +37,12 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 /* sfondo caldo della scena iniziale (Adriano 12/11/2026: niente griglia blu all'inizio) */
 #sfondo-intro { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(1400px 900px at 50% 45%, #2a1430 0%, #120a18 70%); }
 #sfondo-intro i { position: absolute; left: 0; top: 0; width: 900px; height: 900px; border-radius: 50%; filter: blur(60px); opacity: .55; mix-blend-mode: screen; }
+
+/* scena delle macchine collegate (Adriano 12/11/2026) */
+.macchina { position: absolute; width: 330px; height: 150px; border-radius: 16px; background: rgba(14,26,51,.92); border: 1px solid rgba(25,194,166,.5);
+  box-shadow: 0 20px 50px rgba(0,0,0,.5); display: flex; gap: 16px; align-items: center; padding: 0 20px; }
+.macchina .ico { width: 64px; height: 64px; border-radius: 14px; background: var(--accento); color: #04201c; display: grid; place-items: center; font-size: 34px; flex: none; }
+.macchina .nome { font-size: 22px; font-weight: 700; }
+.macchina .cosa { font-size: 15px; color: var(--tenue); margin-top: 2px; }
+.macchina .valore { font-size: 30px; font-weight: 800; color: #7ff5e0; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.macchina .luce { position: absolute; right: 14px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: #40e07a; box-shadow: 0 0 10px #40e07a; }

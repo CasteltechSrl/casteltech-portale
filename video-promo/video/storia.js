@@ -8,7 +8,14 @@
 window.STORIA = [
   { id: 'v1', capitolo: null, extra: 'caos' },
   { id: 'v2', capitolo: null, extra: 'reveal',
-    riprese: [{ img: 'cruscotto', cam: [[0, 0, 0, 0.9], [5, 0, 0, 0.9]] }] },
+    // il menu a gruppi si apre come col mouse quando la voce dice "dai documenti alla produzione, dalla qualità alla sicurezza"
+    riprese: [
+      { img: 'cruscotto', da: 0, a: 4.4, cam: [[0, 0, 0, 1.0]] },
+      { img: 'menu-documenti', da: 4.4, a: 5.4, cam: [[0, 0, 0, 1.0]] },
+      { img: 'menu-produzione', da: 5.4, a: 6.5, cam: [[0, 0, 0, 1.0]] },
+      { img: 'menu-qualita', da: 6.5, a: 7.5, cam: [[0, 0, 0, 1.0]] },
+      { img: 'menu-sicurezza', da: 7.5, a: 99, cam: [[0, 0, 0, 1.0]] },
+    ] },
   { id: 'v3', capitolo: [1, "Dalla richiesta d'offerta al preventivo"], extra: 'ia',
     riprese: [
       { img: 'documenti', da: 0, a: 3.6, cam: [[0, 0, 60, 1.15], [3.6, 0, 90, 1.15]], evid: [[0.8, 3.4, 22, 126, 1556, 215]] },
@@ -32,13 +39,16 @@ window.STORIA = [
       { img: 'schedastampa', da: 0, a: 3.6, cam: [[0, 300, 40, 1.0], [3.6, 700, 50, 1.9]] },
       { img: 'gantt', da: 3.6, a: 99, cam: [[0, 0, 160, 1.0], [3.6, 120, 250, 1.25]] },
     ] },
-  { id: 'v7', capitolo: [5, 'Amministrazione in automatico'],
+  // macchine collegate (Adriano 12/11/2026): le voci nuove del menu Produzione, poi armadi, Pick & Place, SPI e AOI collegati al portale
+  { id: 'v6b', capitolo: [5, 'Macchine collegate'], extra: 'macchine',
+    riprese: [{ img: 'menu-produzione', cam: [[0, 0, 0, 1.0], [2, 330, 60, 1.6]], evid: [[0.9, 2.6, 684, 200, 216, 112]] }] },
+  { id: 'v7', capitolo: [6, 'Amministrazione in automatico'],
     riprese: [
       { img: 'fatture', da: 0, a: 3.4, cam: [[0, 0, 40, 1.0], [3.4, 500, 120, 1.4]], evid: [[0.8, 3.3, 1395, 345, 130, 330]] },
       { img: 'ricevuti', da: 3.4, a: 5.8, cam: [[0, 0, 40, 1.0], [2.4, 0, 90, 1.1]] },
       { img: 'banca', da: 5.8, a: 99, cam: [[0, 0, 640, 1.0], [3.6, 380, 690, 1.35]], evid: [[1, 99, 1060, 720, 520, 380]] },
     ] },
-  { id: 'v8', capitolo: [6, 'I numeri che contano'],
+  { id: 'v8', capitolo: [7, 'I numeri che contano'],
     riprese: [
       { img: 'analisi', da: 0, a: 3.2, cam: [[0, 0, 300, 1.0], [3.2, 0, 640, 1.1]] },
       { img: 'cassa', da: 3.2, a: 99, cam: [[0, 0, 60, 1.0], [3, 0, 100, 1.15]] },

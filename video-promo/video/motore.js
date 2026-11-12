@@ -148,6 +148,35 @@
     });
   }
 
+  // ── scena delle macchine collegate: quattro macchine intorno alla finestra del portale, linee con i dati che scorrono ──
+  const MACCHINE = [
+    ['Armadi di stoccaggio', '▤', 'Bobine in armadio', 1248, '', 70, 230],
+    ['Pick & Place', '⊕', 'Componenti montati', 18420, '', 70, 650],
+    ['SPI', '◎', 'Pasta controllata', 99.6, ' % ok', 1520, 230],
+    ['AOI', '◉', 'Schede controllate', 312, '', 1520, 650],
+  ];
+  function macchine(tl) {
+    const finX = 960, finY = 540 + 25, mezzaL = 1440 * 0.52 / 2;
+    let svg = '', carte = '';
+    MACCHINE.forEach(([nome, ico, cosa, valore, unita, x, y], i) => {
+      const k = ease((tl - 3.0 - i * 0.3) / 0.6); if (k <= 0) return;
+      const sinistra = x < 960, cx = sinistra ? x + 330 : x, cy = y + 75;
+      const ax = sinistra ? finX - mezzaL : finX + mezzaL, ay = finY + (cy < finY ? -120 : 120);
+      const lk = lin((tl - 3.3 - i * 0.3) / 0.5);
+      svg += `<line x1="${cx}" y1="${cy}" x2="${mix(cx, ax, lk)}" y2="${mix(cy, ay, lk)}" stroke="#19c2a6" stroke-width="3" stroke-dasharray="8 8" opacity="${0.8 * k}"/>`;
+      if (lk >= 1) for (let j = 0; j < 3; j++) { const f = (tl * 0.7 + j / 3 + i * 0.13) % 1; svg += `<circle cx="${mix(cx, ax, f)}" cy="${mix(cy, ay, f)}" r="7" fill="#7ff5e0" opacity="${Math.sin(f * Math.PI)}"/>`; }
+      const conta = valore * (1 + 0.002 * Math.max(0, tl - 4) * (valore > 100 ? 4 : 0));
+      const testo = valore % 1 ? conta.toFixed(1).replace('.', ',') : Math.round(conta).toLocaleString('it-IT');
+      carte += `<div class="macchina" style="left:${x + (sinistra ? -40 : 40) * (1 - k)}px;top:${y}px;opacity:${k}">
+        <div class="ico">${ico}</div><div><div class="nome">${nome}</div><div class="cosa">${cosa}</div><div class="valore">${testo}${unita}</div></div>
+        <i class="luce"></i></div>`;
+    });
+    const badge = lin((tl - 4.2) / 0.4);
+    return `<svg style="position:absolute;inset:0;width:1920px;height:1080px">${svg}</svg>${carte}`
+      + `<div class="badge" style="left:50%;top:${mix(150, 130, ease(badge))}px;transform:translateX(-50%);opacity:${badge * lin((s_dur_macchine - tl) / 0.3)}">Dati dalle macchine, senza scrivere niente</div>`;
+  }
+  const s_dur_macchine = (scene.find(x => x.extra === 'macchine') || { dur: 99 }).dur;
+
   // ── fotogramma ──
   window.mostra = function (t) {
     const s = scene.find(x => t >= x.inizio && t < x.inizio + x.dur) || scene[scene.length - 1];
@@ -159,6 +188,7 @@
     let fs = 1, fo = 1, fy = 0;
     if (s.extra === 'caos') { fo = 0; mostraCaos(tl, 'caos'); }
     else if (s.extra === 'reveal') { mostraCaos(tl, 'reveal'); const k = ease((tl - 0.35) / 1.2); fs = mix(0.2, 1, k); fo = lin((tl - 0.35) / 0.4); }
+    else if (s.extra === 'macchine') { const k = ease((tl - 2.4) / 0.9); fs = mix(1, 0.52, k); fy = mix(0, 25, k); }
     else if (s.extra === 'finale') { const k = ease(tl / 1.2); fs = mix(1, 0.6, k); fy = mix(0, 60, k); fo = 1 - k; }
     fin.style.opacity = fo; fin.style.transform = `translateY(${fy}px) scale(${fs})`;
     mostraRiprese(s.extra === 'finale' ? { riprese: [{ img: 'cruscotto', cam: [[0, 0, 0, 1]] }], dur: 99 } : s, tl);
@@ -175,8 +205,9 @@
     }
     if (s.extra === 'reveal') {
       const k = lin((tl - 1.6) / 0.5);
-      extra.innerHTML = `<div class="grande" style="top:${mix(990, 960, ease(k))}px;font-size:46px;opacity:${k * (1 - lin((tl - s.dur + 0.4) / 0.3))}">Un solo portale. <span style="color:var(--accento)">Tutta l'azienda.</span></div>`;
-      sott.style.opacity = 0;
+      // scritta grande finché la voce fa la domanda, poi i sottotitoli (documenti, produzione, qualità, sicurezza)
+      extra.innerHTML = `<div class="grande" style="top:${mix(990, 960, ease(k))}px;font-size:46px;opacity:${k * (1 - lin((tl - 4.1) / 0.3))}">Un solo portale. <span style="color:var(--accento)">Tutta l'azienda.</span></div>`;
+      if (tl < 4.3) sott.style.opacity = 0;
     }
     if (s.extra === 'ia') {
       const k = lin((tl - 0.5) / 0.4), out = lin((s.dur - tl) / 0.3);
@@ -190,6 +221,7 @@
         <div style="background:#fff;border-radius:16px;padding:16px;margin-bottom:12px"><div style="font-size:13px;color:#667">Fase in corso</div><div style="font-weight:700">6 · Pick&amp;Place TOP</div><div style="margin-top:8px;font-size:30px;font-weight:800;color:#0b7a68">01:42:10</div></div>
         <div style="background:#19c2a6;color:#04201c;border-radius:14px;padding:14px;text-align:center;font-weight:800">Chiudi fase ✓</div></div>`;
     }
+    if (s.extra === 'macchine') extra.innerHTML = macchine(tl);
     if (s.extra === 'finale') {
       const a = lin((tl - 0.6) / 0.5), b = lin((tl - 2.4) / 0.5), c = lin((tl - 4.6) / 0.5);
       extra.innerHTML = `<div class="grande" style="top:300px;font-size:96px;opacity:${a};transform:translateY(${(1 - ease(a)) * 20}px)">Dalla email alla fattura.</div>
