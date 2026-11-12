@@ -182,6 +182,21 @@ export function dataAutofattura(caricataIl: string, ultimaDataSerie: string | nu
   return data;
 }
 
+const MESI_AF = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+
+/**
+ * Nella bozza (Adriano 12/11/2026, "le autofatture devono avere la data nello stesso mese della fattura"): se la fattura del fornitore è di un mese
+ * prima della data dell'autofattura (stesso anno), ricorda che si può mettere l'ultimo giorno di quel mese; null se il mese è già lo stesso.
+ */
+export function avvisoMeseAutofattura(dataAf: string, dataFattura: string | null | undefined): string | null {
+  if (!dataFattura || !/^\d{4}-\d{2}-\d{2}$/.test(dataFattura) || !/^\d{4}-\d{2}/.test(dataAf) || dataFattura.slice(0, 7) >= dataAf.slice(0, 7)) return null;
+  const mese = `${MESI_AF[Number(dataFattura.slice(5, 7)) - 1]} ${dataFattura.slice(0, 4)}`;
+  const fine = fineMese(dataFattura).split('-').reverse().join('/');
+  return dataFattura.slice(0, 4) === dataAf.slice(0, 4)
+    ? `La fattura del fornitore è di ${mese}: per tenerla nel suo mese metti la data ${fine}. Il portale la rifiuta solo se c'è già un'autofattura emessa con una data successiva (le date devono restare in ordine).`
+    : `La fattura del fornitore è di ${mese}, dell'anno prima: l'autofattura resta nell'anno nuovo.`;
+}
+
 export const causaleAutofattura = (numero: string, data: string) => `Relativo a fattura n. ${numero} del ${data.split('-').reverse().join('/')}`;
 
 /**

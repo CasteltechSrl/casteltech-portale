@@ -154,7 +154,7 @@ function leggiPreventivoGuidato(c: Record<string, unknown>): { richiesta: Richie
   return { richiesta, errori };
 }
 
-/** Testo della richiesta: va nell'email a info@ e nel pacchetto dei Documenti dei clienti (come il testo di un'email). */
+/** Testo della richiesta: va nell'email a info@ e nel pacchetto dei Documenti commesse (come il testo di un'email). */
 export function testoPreventivo(r: RichiestaPreventivo, file: string[]): { oggetto: string; testo: string } {
   return {
     oggetto: `Sito casteltech.net – Richiesta preventivo: ${r.azienda}${r.privato ? ' (privato)' : ''}`,
@@ -166,7 +166,7 @@ export function testoPreventivo(r: RichiestaPreventivo, file: string[]): { ogget
   };
 }
 
-/** Nome del pacchetto nei Documenti dei clienti: "SITO – AZIENDA" (o "SITO – PRIVATO – NOME COGNOME") in maiuscolo come le anagrafiche. */
+/** Nome del pacchetto nei Documenti commesse: "SITO – AZIENDA" (o "SITO – PRIVATO – NOME COGNOME") in maiuscolo come le anagrafiche. */
 export const nomePacchettoSito = (azienda: string, privato = false) => `SITO – ${privato ? 'PRIVATO – ' : ''}${azienda.toUpperCase()}`.slice(0, 120);
 
 export interface Candidatura { nome: string; email: string; telefono: string; area: string; messaggio: string; privacy: boolean }

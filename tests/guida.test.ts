@@ -11,7 +11,7 @@ test('guida: argomenti con id unici, ogni area ha i suoi argomenti, pagine del p
   assert.equal(new Set(ids).size, ids.length);
   for (const a of ARGOMENTI_GUIDA) assert.ok(AREE_GUIDA.some(x => x.id === a.area), `area sconosciuta: ${a.id}`);
   for (const area of AREE_GUIDA) assert.ok(ARGOMENTI_GUIDA.some(a => a.area === area.id), `area vuota: ${area.id}`);
-  const sezioni = ['anagrafiche', 'preventivi', 'ordini', 'commesse', 'quotazioni', 'crm', 'amministrazione', 'impostazioni', 'suggerimenti', 'r', 'cruscotto', 'qualita', 'dipendenti', 'cerca', 'produzione', 'acquisti'];
+  const sezioni = ['anagrafiche', 'preventivi', 'ordini', 'commesse', 'quotazioni', 'crm', 'amministrazione', 'impostazioni', 'suggerimenti', 'r', 'cruscotto', 'qualita', 'dipendenti', 'cerca', 'produzione', 'acquisti', 'sicurezza'];
   for (const a of ARGOMENTI_GUIDA) for (const [href] of a.pagine) assert.ok(sezioni.includes(href.split(/[/?]/)[1]), `pagina sconosciuta: ${href}`);
 });
 
@@ -200,6 +200,7 @@ test('guida: lamine comprate da fatturare (Adriano 11/11/2026)', () => {
 test('guida: fattura estera caricata due volte e spunte delle autofatture', () => {
   assert.equal(primi('fattura estera caricata due volte')[0], 'autofatture-estere');
   assert.equal(primi('eliminare autofattura doppione')[0], 'autofatture-estere');
+  assert.equal(primi('vedere autofattura pdf')[0], 'autofatture-estere');
 });
 
 test('guida: "componente da verificare nella BOM" porta alla codifica della BOM', () => {

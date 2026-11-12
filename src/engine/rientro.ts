@@ -2,6 +2,7 @@
  * Controlli sul rientro della scheda: l'ufficio vede subito righe non chiuse, tempi dimenticati,
  * tempi fuori misura, sovrapposizioni. Gli "errori" impediscono la conferma, gli "avvisi" no.
  */
+import { scriviTempo } from './tempi-scritti.js';
 import { minutiRiga, tempiRealiPerFase, type Rilevazione } from './consuntivo.js';
 
 export interface Controllo { livello: 'errore' | 'avviso'; testo: string; riga?: number }
@@ -54,4 +55,38 @@ export function controllaRientro(righe: (Rilevazione & { totaleScrittoMin?: numb
   for (const codice of Object.keys(reali)) if (!codiciPrevisti.has(codice))
     out.push({ livello: 'avviso', testo: `${nomeFase(codice)}: fase non prevista dal preventivo` });
   return out;
+}
+
+/**
+ * Righe senza fase al salvataggio (C2026-0075, 12/11/2026): nel database ogni tempo ha la sua fase, quindi il rientro
+ * non si salva finché non si sceglie la fase o si toglie la riga. `righe` = numeri delle righe come sulla pagina (da 1).
+ */
+export function avvisoSenzaFase(righe: number[]): string {
+  const elenco = righe.length === 1 ? `la riga ${righe[0]}` : `le righe ${righe.slice(0, -1).join(', ')} e ${righe[righe.length - 1]}`;
+  return `Non salvato: ${elenco} ${righe.length === 1 ? 'non ha' : 'non hanno'} la fase. Scegli la fase nel menu (se non la sai, togli la riga con ✕) e premi di nuovo Salva. Le altre righe sono ancora qui, non si è perso niente.`;
+}
+
+/** Totale suggerito (grigio) da apertura e chiusura, come lo scrive il browser: "1h 30'", "20'". Senza ore = undefined. */
+export function totaleDaOre(r: { inizio?: string; fine?: string }): string | undefined {
+  const m = (t?: string) => { const x = /^(\d{1,2}):(\d{2})$/.exec(t ?? ''); return x ? +x[1] * 60 + +x[2] : null; };
+  const a = m(r.inizio), c = m(r.fine);
+  if (a == null || c == null) return undefined;
+  return scriviTempo(((c - a + 1440) % 1440) * 60);
+}
+
+/**
+ * Ordine delle righe nel foglio tempi della pagina Rientro (Adriano 12/11/2026, "in ordine con il #, consecutive e allineate"):
+ * prima per fase nell'ordine della commessa (`codici`: fasi della commessa, poi le altre), poi data e apertura; righe senza fase in fondo.
+ * Restituisce le posizioni di partenza nel nuovo ordine (a parità resta l'ordine di prima).
+ */
+export function ordineRighe(righe: { fase?: string; data?: string; inizio?: string }[], codici: string[]): number[] {
+  const pos = new Map(codici.map((c, i) => [c, i]));
+  const chiave = (r: { fase?: string }) => (r.fase ? pos.get(r.fase) ?? codici.length : codici.length + 1);
+  return righe.map((_, i) => i).sort((a, b) => {
+    const x = righe[a], y = righe[b];
+    return chiave(x) - chiave(y)
+      || (x.data ?? '9999').localeCompare(y.data ?? '9999')
+      || (x.inizio ?? '99').localeCompare(y.inizio ?? '99')
+      || a - b;
+  });
 }

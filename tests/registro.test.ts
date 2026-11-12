@@ -20,7 +20,7 @@ test('registro: salvataggio con link alla riga, sezione dal percorso', () => {
   assert.equal(v.link, '/amministrazione/documenti/45');
   assert.equal(voceRegistro({ metodo: 'POST', percorso: '/preventivi/7', stato: 302 })!.azione, 'salva');
   assert.equal(sezioneDi('/ordini/fornitori/3'), 'Ordini a fornitore');
-  assert.equal(sezioneDi('/preventivi/documenti/3'), 'Documenti dei clienti');
+  assert.equal(sezioneDi('/preventivi/documenti/3'), 'Documenti commesse');
 });
 
 test('registro: eliminazioni dall\'indirizzo e dai pulsanti degli elenchi, con le righe spuntate', () => {

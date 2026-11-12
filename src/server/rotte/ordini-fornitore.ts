@@ -26,6 +26,8 @@ import { NOMI_STATO_MANCA } from '../../engine/cosa-manca.js';
 import { pagina } from './ordini.js';
 import { casella, casellaTutti, conMessaggio, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { ddtRicevutiPerOrdineFornitore } from '../ddt-ricevuti-servizio.js';
+import { controllaRighe, cercaMancantiDopo } from '../sicurezza-servizio.js';
+import { riquadroSchede } from '../views/sicurezza.js';
 import { html, data, euro, num, raw, numCampo } from '../views/html.js';
 
 const STATI: Record<string, [string, string]> = {
@@ -212,6 +214,8 @@ export function rotteOrdiniFornitore() {
     ]);
     const errori = emesso ? [] : controlliEmissioneOrdine({ fornitoreId: d.fornitore_id }, righe);
     const fuori = annullato ? [] : await righeOrdineFuoriAnagrafica(righe);
+    // schede di sicurezza delle sostanze nelle righe (Adriano 12/11/2026)
+    const sds = annullato ? [] : await controllaRighe(righe.map((k: any) => ({ codice: k.codice ?? null, descrizione: k.descrizione ?? '' })));
     const avviso = emesso ? null : avvisoNumerazione(d.anno, ultimo);
     const base = `/ordini/fornitori/${d.id}`;
     const rigaModulo = (x: any, i: number) => html`<tr>
@@ -290,6 +294,7 @@ export function rotteOrdiniFornitore() {
             <button class="pericolo">${emesso ? 'Annulla ordine' : 'Elimina bozza'}</button></form>`}
         </div>
       </div>
+      ${riquadroSchede(sds, base)}
       ${fuori.length && !annullato ? html`<div class="blocco" id="righe-fuori-anagrafica">
         <h2>Righe non in anagrafica</h2>
         <p class="nota">Questi codici non sono né materiali di consumo né componenti delle Anagrafiche. Se l'articolo si ricompra, aggiungilo ai materiali:
@@ -373,6 +378,10 @@ export function rotteOrdiniFornitore() {
 
   r.post('/:id/emetti', async (req, res) => {
     const e = await emettiOrdineFornitore(Number(req.params.id));
+    if (!('errori' in e)) {
+      const x = await leggiOrdineFornitore(Number(req.params.id));
+      if (x) cercaMancantiDopo(x.righe.map((k: any) => ({ codice: k.codice ?? null, descrizione: k.descrizione ?? '' })), 'ordine a fornitore');
+    }
     res.redirect(msg(`/ordini/fornitori/${req.params.id}`, 'errori' in e ? `Non emesso: ${e.errori.join(' ')}` : `Emesso con il n. ${e.numero}: il PDF è salvato. Ora puoi mandarlo al fornitore.`));
   });
 

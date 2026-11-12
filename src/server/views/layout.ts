@@ -17,18 +17,31 @@ export interface Utente { id: number; nome: string; ruolo: Ruolo }
  */
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti'], ['Componenti clienti', '/anagrafiche/componenti-clienti'], ['Materiali di consumo', '/anagrafiche/materiali']] },
-  { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Documenti dei clienti', '/preventivi/documenti'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme'], ['Ordini da e-mail e PDF', '/ordini/acquisire']] },
+  // Documenti (Adriano 12/11/2026): i documenti che ARRIVANO (dai clienti, da e-mail e PDF), prima sotto Commerciale; indirizzi invariati
+  { chiave: 'documenti', nome: 'Documenti', voci: [['Arrivati', ''], ['Documenti commesse', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire'],
+    // Adriano 12/11/2026: nella stessa tendina anche i documenti che produciamo noi (restano anche nei loro gruppi)
+    ['Emessi da noi', ''], ['Preventivi', '/preventivi'], ['Conferme d\'ordine', '/ordini/conferme'], ['DDT', '/amministrazione/documenti?tipo=ddt'],
+    ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'],
+    ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Ordini a fornitore', '/ordini/fornitori']] },
+  { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme']] },
   { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
-  { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti']] },
+  { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti'],
+    // Adriano 12/11/2026: pagine delle macchine, pronte per il collegamento con le API (engine/macchine.ts)
+    ['Stoccaggio componenti', '/produzione/stoccaggio'], ['Pick & Place', '/produzione/pick-place'], ['AOI', '/produzione/aoi']] },
   { chiave: 'amministrazione', nome: 'Amministrazione', voci: [['Cruscotto', '/amministrazione'], ['DDT', '/amministrazione/documenti?tipo=ddt'], ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'], ['Fatture differite (DDT da fatturare)', '/amministrazione/differite'], ['Crediti verso clienti', '/amministrazione/crediti'], ['Solleciti incassi', '/amministrazione/solleciti'], ['Banca: movimenti e abbinamenti', '/amministrazione/banca'], ['RiBa e anticipo fatture', '/amministrazione/banca/anticipi'], ['Controlli settimanali', '/amministrazione/controlli'], ['Registri IVA', '/amministrazione/registri'], ['Controllo VIES', '/amministrazione/vies'], ['Spese senza fattura elettronica', '/amministrazione/spese'], ['Bollo virtuale', '/amministrazione/bollo'], ['Lettere d\'intento', '/amministrazione/lettere-intento'], ['Analisi', '/amministrazione/analisi']] },
   { chiave: 'qualita', nome: 'Qualità', voci: [['Cruscotto della qualità', '/qualita'], ['Non conformità e reclami', '/qualita/non_conformita'], ['Strumenti e tarature', '/qualita/strumenti'], ['Piano delle manutenzioni', '/qualita/manutenzioni'], ['Verifiche ESD', '/qualita/esd'], ['Documenti del sistema', '/qualita/documenti'], ['Formazione', '/qualita/formazione'], ['Audit', '/qualita/audit'], ['Rischi e opportunità', '/qualita/rischi'], ['Codifica dei difetti', '/qualita/difetti']] },
   // Dipendenti (Adriano 1/11/2026): costo del personale, nota spese, persone; buste paga nell'area riservata con password
   { chiave: 'dipendenti', nome: 'Dipendenti', voci: [['Costo del personale', '/dipendenti'], ['Nota spese', '/dipendenti/note-spese'], ['Persone e auto', '/dipendenti/persone'], ['Buste paga (riservato)', '/dipendenti/riservata']] },
+  // Sicurezza (Adriano 12/11/2026): schede di sicurezza dei prodotti chimici, controllo su ordini e DDT, scadenzario del D.Lgs. 81/08
+  { chiave: 'sicurezza', nome: 'Sicurezza', voci: [['Cruscotto della sicurezza', '/sicurezza'], ['Schede di sicurezza (SDS)', '/sicurezza/schede'], ['Controllo SDS su ordini e DDT', '/sicurezza/controllo'],
+    ['Documenti e valutazioni (DVR)', '/sicurezza/sic_adempimenti'], ['Formazione sicurezza', '/sicurezza/sic_formazione'], ['Visite mediche', '/sicurezza/sic_visite'],
+    ['DPI consegnati', '/sicurezza/sic_dpi'], ['Antincendio ed emergenza', '/sicurezza/sic_emergenza'], ['Impianti, macchine e ambiente', '/sicurezza/sic_impianti'],
+    ['Organigramma della sicurezza', '/sicurezza/sic_figure'], ['Infortuni e quasi infortuni', '/sicurezza/sic_infortuni']] },
 ];
 /** Gruppo da evidenziare per la sezione della pagina (chiave `attiva` passata al layout). */
 const GRUPPO_DI: Record<string, string> = {
   crm: 'commerciale', quotazioni: 'commerciale', preventivi: 'commerciale', ordini: 'commerciale',
-  acquisti: 'acquisti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti',
+  acquisti: 'acquisti', documenti: 'documenti', commesse: 'produzione', produzione: 'produzione', anagrafiche: 'anagrafiche', amministrazione: 'amministrazione', qualita: 'qualita', dipendenti: 'dipendenti', sicurezza: 'sicurezza',
 };
 /**
  * Menu del profilo Contabilità (Adriano 1/11/2026): niente tendine, le pagine dell'Amministrazione in fila nella barra in alto
@@ -59,7 +72,8 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
   // nel menu solo le pagine che il profilo può aprire (es. Analisi: solo amministratore ed esterno, Adriano 6/11/2026)
-  const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
+  // voce senza indirizzo = titoletto dentro la tendina (es. Documenti: Arrivati / Emessi da noi)
+  const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => !h || linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
   return html`<!doctype html>
 <html lang="it">
 <head>
@@ -76,8 +90,8 @@ ${opz.utente ? html`
   ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026); "⌂ Cruscotto" prima voce, senza tendina (Adriano 9/11/2026) -->
     ${eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? html`<a href="/cruscotto" class="voce-cruscotto ${opz.attiva === 'cruscotto' ? 'attiva' : ''}">⌂ Cruscotto</a>` : ''}
     ${(eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
-      <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
-      <div class="tendina">${permesse(g.voci).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
+      <a href="${g.voci.find(v => v[1])![1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
+      <div class="tendina">${permesse(g.voci).map(([t, h]) => h ? html`<a href="${h}">${t}</a>` : html`<span class="titolo-tendina">${t}</span>`)}</div>
     </div>`)}
   </nav>`}
   ${opz.utente.ruolo === 'produzione' ? '' : html`<form class="cerca-globale" method="get" action="/cerca" role="search" autocomplete="off">

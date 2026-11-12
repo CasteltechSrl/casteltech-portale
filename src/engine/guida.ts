@@ -36,6 +36,7 @@ export const AREE_GUIDA: AreaGuida[] = [
   { id: 'suggerimenti', nome: 'Suggerimenti', descrizione: 'Le idee del team per migliorare il portale.' },
   { id: 'qualita', nome: 'Qualità', descrizione: 'Non conformità e reclami, tarature, manutenzioni, verifiche ESD, documenti del sistema, formazione, audit, rischi.' },
   { id: 'dipendenti', nome: 'Dipendenti', descrizione: 'Costo del personale, buste paga riservate, nota spese con il rimborso chilometrico.' },
+  { id: 'sicurezza', nome: 'Sicurezza', descrizione: 'Schede di sicurezza dei prodotti chimici, controllo su ordini e DDT, scadenze del D.Lgs. 81/08 (DVR, corsi, visite, DPI, estintori, impianti).' },
 ];
 
 export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
@@ -182,14 +183,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'menu-gruppi', area: 'inizio', titolo: 'Il menu in alto: gruppi e tendine',
-    parole: 'menu barra tendina gruppi commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
+    parole: 'menu barra tendina gruppi documenti arrivati ricevuti emessi commesse commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
     testo: [
       'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
-      'Anagrafiche: clienti, fornitori, prodotti, componenti. Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
+      'Anagrafiche: clienti, fornitori, prodotti, componenti. Documenti (dal 12/11/2026, prima erano in Commerciale): nella tendina in alto "Arrivati" (Documenti commesse: BOM, Gerber, pick and place del cliente per il preventivo; Documenti da e-mail e PDF: ordini, DDT, fatture estere da leggere con l\'IA), sotto "Emessi da noi" (preventivi, conferme d\'ordine, DDT, fatture, note di credito, autofatture, ordini a fornitore: le stesse pagine che trovi anche in Commerciale, Acquisti e Amministrazione). Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti e conferme d\'ordine. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: flusso, commesse, Gantt, codifica componenti e le pagine delle macchine (Stoccaggio componenti, Pick & Place, AOI, in attesa del collegamento). Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
       'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
-      'Più avanti arriveranno anche i gruppi Qualità e Sicurezza e ambiente.',
+      'Dopo Qualità e Dipendenti c\'è il gruppo Sicurezza (dal 12/11/2026): schede di sicurezza dei prodotti chimici e scadenze della sicurezza sul lavoro.',
     ],
-    pagine: [['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
+    pagine: [['/preventivi/documenti', 'Documenti commesse'], ['/ordini/acquisire', 'Documenti da e-mail e PDF'], ['/ordini/cruscotto', 'Ordini clienti'], ['/ordini/fornitori', 'Ordini a fornitore'], ['/commesse', 'Commesse']],
   },
   {
     id: 'dove-file', area: 'inizio', titolo: 'Dove metto i file? (ordini, schede, documenti, BOM)',
@@ -338,9 +339,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Su ogni riga di Anagrafiche → Prodotti il tasto Doc apre la documentazione di quel codice: per ogni revisione dei documenti del cliente c\'è il riassunto (componenti con riferimento, P/N, valore, case, lato; SMD per lato, THT, codici diversi, misure, strati Gerber, file usati).',
       'I file del cliente restano su Google Drive: nel portale c\'è solo il riassunto, che pesa pochi KB e non consuma lo spazio del database (Neon). Nella riga c\'è scritta la cartella del Drive da cui vengono i file.',
       'La revisione si legge dai file (intestazione della BOM, Gerber, GenCAD, nomi di cartelle e file come "Rev.C", "V1.0.7"); se non c\'è scritta da nessuna parte è la revisione 0. Se il cliente manda di nuovo la stessa revisione, la nuova riga si chiama "C-2".',
-      'Quando il cliente manda i file aggiornati: nella pagina del prodotto scegli i file o la cartella (BOM, pick and place, Gerber, anche zip) e premi "Carica e confronta". Il portale li legge come nei Documenti dei clienti, scrive la revisione nuova e dice le differenze con quella prima: componenti aggiunti, tolti, cambiati (P/N, valore, case, lato, montaggio, non montato), conteggi, misure e strati Gerber.',
+      'Quando il cliente manda i file aggiornati: nella pagina del prodotto scegli i file o la cartella (BOM, pick and place, Gerber, anche zip) e premi "Carica e confronta". Il portale li legge come nei Documenti commesse, scrive la revisione nuova e dice le differenze con quella prima: componenti aggiunti, tolti, cambiati (P/N, valore, case, lato, montaggio, non montato), conteggi, misure e strati Gerber.',
       'Se il progetto è stravolto (meno della metà dei riferimenti in comune, o misure molto diverse) il confronto riga per riga non ha senso: il portale lo dice e mostra solo i numeri.',
-      'I file appena caricati vengono tolti dal database subito dopo il riassunto, salvo la spunta "Tieni anche i file nel portale" (serve solo per "Codifica la BOM" dai Documenti dei clienti). "Confronta con …" su una revisione la confronta con quella prima. Elimina toglie solo la riga del portale, mai i file sul Drive.',
+      'I file appena caricati vengono tolti dal database subito dopo il riassunto, salvo la spunta "Tieni anche i file nel portale" (serve solo per "Codifica la BOM" dai Documenti commesse). "Confronta con …" su una revisione la confronta con quella prima. Elimina toglie solo la riga del portale, mai i file sul Drive.',
       'Le prime revisioni dei prodotti fatti nel 2026 le ha caricate Claude leggendo le cartelle del Drive (1_DOCUMENTAZIONE DI PRODOTTO), origine "cartelle del Drive".',
     ],
     passi: ['Anagrafiche → Prodotti → tasto Doc sulla riga del prodotto.', 'Per una revisione nuova: scegli i file o la cartella, eventualmente scrivi la revisione, premi "Carica e confronta".', 'Leggi le differenze con la revisione precedente in cima alla pagina.'],
@@ -676,7 +677,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'carica-ordine', area: 'ordini', titolo: 'Caricare un ordine del cliente (PDF, foto, email)',
     parole: 'ordine ordini carico caricare caricamento inserire nuovo file documenti pdf foto email eml acquisire da acquisire drive cartella ia leggere salvo dove telefono',
     testo: [
-      'Di solito si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Commerciale la pagina si chiama "Ordini da e-mail e PDF".',
+      'Di solito si carica il file e l\'IA prepara una proposta. L\'ordine nasce solo quando la confermi. Nel menu Documenti la pagina si chiama "Documenti da e-mail e PDF" (nelle schede di Ordini clienti "Ordini da e-mail e PDF").',
       'Ordine per telefono o a voce (nessun documento): in "Ordini da e-mail e PDF" il riquadro "Ordine a voce o per telefono" (ci si arriva anche dal pulsante "+ Nuovo ordine (telefono / a voce)" di Ordini clienti). Scegli il cliente e premi "Scrivi l\'ordine": si apre la stessa pagina di conferma con cinque righe vuote. Per ogni riga scegli il prodotto dal menu (codice, descrizione e prezzo arrivano dall\'anagrafica), scrivi quantità e consegna, poi "Conferma e crea l\'ordine". Nelle note resta "ordine ricevuto per telefono"; il numero è dal 9001 come gli ordini da email.',
       'Due modi: caricare il file in Ordini → Da acquisire, oppure metterlo nella cartella Google Drive condivisa con il portale (si legge da sola ogni 15 minuti, lun–ven 8–20; il pulsante "Controlla adesso la cartella" non fa aspettare).',
       'Il cliente si sceglie SOLO dall\'anagrafica: se l\'IA legge un nome che non c\'è, scegli tu il cliente giusto e premi "Salva le correzioni", così i prodotti si ricollegano. Gli ordini arrivati per email prendono il numero dal 9001 in su.',
@@ -688,6 +689,15 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi (per un ordine al telefono: riquadro "Ordine a voce o per telefono", scegli il cliente, Scrivi l\'ordine).', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
     pagine: [['/ordini/acquisire', 'Ordini da e-mail e PDF']],
+  },
+  {
+    id: 'macchine-produzione', area: 'commesse', titolo: 'Stoccaggio componenti, Pick & Place e AOI: le pagine delle macchine',
+    parole: 'armadi armadio stoccaggio materiale magazzino bobine vassoi pick and place p&p pnp montaggio smd essemtec fox ipulse aoi controllo ottico difetti macchine api collegamento',
+    testo: [
+      'Dal 12/11/2026 nel menu Produzione ci sono tre pagine nuove: Stoccaggio componenti (gli armadi del materiale), Pick & Place (le macchine di montaggio SMD) e AOI (il controllo ottico).',
+      'Per ora sono vuote: si riempiranno quando le macchine saranno collegate al portale con le loro API. Ogni pagina spiega cosa mostrerà (posizione e quantità dei componenti negli armadi; stato, tempi e scarti delle pick and place; schede controllate e difetti dell\'AOI).',
+    ],
+    pagine: [['/produzione/stoccaggio', 'Produzione → Stoccaggio componenti'], ['/produzione/pick-place', 'Produzione → Pick & Place'], ['/produzione/aoi', 'Produzione → AOI']],
   },
   {
     id: 'flusso-produzione', area: 'commesse', titolo: 'Il flusso di produzione nel cruscotto: da acquistare, da preparare, in produzione, da spedire, spedite nel mese',
@@ -718,12 +728,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'pre-produzione', area: 'commesse', titolo: 'Pre-produzione della commessa: controllo completo, cosa fare e cosa non fare, checklist e via libera',
     parole: 'pre-produzione preproduzione scheda pre produzione via libera checklist verifica finale chi conferma data cosa fare cosa non fare materiale in casa magazzino bom offerte gerber documentazione tecnica segnalazioni preanalisi commessa prima di produrre',
     testo: [
-      'Nella pagina della commessa il pulsante "Pre-produzione" apre una pagina sola con tutto quello che serve prima di produrre: 1) cliente, ordine nel portale e conferma d\'ordine, preventivo con prezzo a scheda e lavorazioni, ore previste, programmi e lamine della scheda tecnica; 2) i file del cliente (pacchetto dei Documenti dei clienti collegato al preventivo: Gerber, BOM, pick and place da scaricare, disegno della scheda, fogli SMD TOP/BOT, THT e protezioni per l\'onda); 3) tutte le segnalazioni: preanalisi dei documenti (con "Va bene" già dato), note del cliente, note del preventivo, storico del prodotto dalle commesse precedenti, note di montaggio.',
+      'Nella pagina della commessa il pulsante "Pre-produzione" apre una pagina sola con tutto quello che serve prima di produrre: 1) cliente, ordine nel portale e conferma d\'ordine, preventivo con prezzo a scheda e lavorazioni, ore previste, programmi e lamine della scheda tecnica; 2) i file del cliente (pacchetto dei Documenti commesse collegato al preventivo: Gerber, BOM, pick and place da scaricare, disegno della scheda, fogli SMD TOP/BOT, THT e protezioni per l\'onda); 3) tutte le segnalazioni: preanalisi dei documenti (con "Va bene" già dato), note del cliente, note del preventivo, storico del prodotto dalle commesse precedenti, note di montaggio.',
       '4) La BOM quotata collegata al preventivo con le offerte usate (distributore, codice, prezzo, totale per la quantità quotata più vicina alla commessa) e lo stato del materiale riga per riga: "dal cliente" (conto lavoro: riga segnata nella BOM o codice in Anagrafiche → Componenti clienti), "arrivato / in parte / ordinato / da ordinare" dagli ordini a fornitore collegati alla BOM o alla commessa (come in "Cosa manca"), "senza prezzo". Il portale non ha un magazzino: il materiale che c\'è già (scorte, avanzi) lo spunti tu nella colonna "In casa", e resta scritto chi l\'ha spuntato.',
       '5) "Cosa fare" e "cosa non fare": il portale propone un elenco dalle lavorazioni del preventivo, dalle note del cliente, dallo storico e dalle segnalazioni aperte; l\'ufficio scrive il suo nelle due caselle. 6) Checklist finale: le voci dipendono dalle lavorazioni (onda, saldatura a mano, AOI, lavaggio, componenti o PCB comprati da noi o del cliente…); ogni spunta prende il nome di chi la conferma e la data. "Via libera alla produzione" si dà solo con tutte le voci confermate: resta scritto chi e quando, e la commessa aperta passa "in produzione". Se dopo si toglie una voce, il via libera decade.',
     ],
     passi: ['Crea la commessa dal preventivo e premi "Pre-produzione".', 'Leggi le sei sezioni; chiudi le segnalazioni con "Va bene" nei documenti, ordina quello che manca con "Cosa manca".', 'Scrivi cosa fare e cosa non fare, spunta la checklist e premi "Salva".', 'Con tutto confermato premi "Via libera alla produzione", poi stampa la scheda di produzione.'],
-    pagine: [['/commesse', 'Commesse'], ['/preventivi/documenti', 'Documenti dei clienti'], ['/ordini/fornitori', 'Ordini a fornitore']],
+    pagine: [['/commesse', 'Commesse'], ['/preventivi/documenti', 'Documenti commesse'], ['/ordini/fornitori', 'Ordini a fornitore']],
   },
   {
     id: 'cosa-manca', area: 'commesse', titolo: 'Cosa manca per la commessa: componenti da ordinare',
@@ -976,6 +986,9 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Quando la scheda torna in ufficio si apre la commessa → Rientro scheda: tempi per fase, materiale impiegato, spedizioni e segnalazioni.',
       'I controlli segnano errori (bloccano la conferma) e avvisi (non la bloccano). Con errori il rientro si può salvare ma non confermare.',
+      'Eccezione: una riga senza fase non si può salvare (ogni tempo deve avere la sua fase). Il portale non salva e lo dice: scegli la fase nel menu o togli la riga con ✕, poi Salva; le altre righe restano nella pagina.',
+      'Nella colonna Totale il numero grigio è solo il suggerimento calcolato da apertura e chiusura: non serve scriverlo.',
+      'Le righe del foglio tempi si mostrano in ordine di fase (come il numero della fase), poi per data e ora: le righe della stessa fase stanno una sotto l\'altra. Le righe senza fase vanno in fondo.',
       'Dopo la conferma il pulsante "Crea DDT" (nel rientro e nella pagina della commessa) prepara la bolla già compilata: cliente, codice, le schede scritte nelle spedizioni (o tutta la commessa, meno quelle già partite), prezzo e riga dell\'ordine se la commessa spedisce un ordine. Si controlla e si emette; dal DDT emesso "Fattura questo DDT" prepara la fattura. Nella pagina della commessa restano i collegamenti a DDT e fatture.',
       'I tempi già segnati dal telefono sono già dentro. Dopo la conferma la scheda stampata si compila da sola con tempi effettivi e consumi a scheda. Una commessa già rientrata si può ancora correggere.',
     ],
@@ -1195,10 +1208,11 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'autofatture-estere', area: 'amministrazione', titolo: 'Autofatture dalle fatture dei fornitori esteri',
-    parole: 'autofattura autofatture fattura estera estero fornitore mouser digikey anthropic reverse charge td17 td18 td19 doppione doppia due volte caricata errore eliminare elimina scartare spunta inviare sdi',
+    parole: 'autofattura autofatture fattura estera estero fornitore mouser digikey anthropic reverse charge td17 td18 td19 pdf stampa impaginata vedere anteprima data mese ottobre competenza doppione doppia due volte caricata errore eliminare elimina scartare spunta inviare sdi',
     testo: [
       'La fattura del fornitore estero (PDF o mail .eml) si carica in Amministrazione → Autofatture, riquadro "Fatture dei fornitori esteri", o arriva dalla cartella Drive: l\'IA legge fornitore, numero, data e righe. Si controlla, si preme "Prepara l\'autofattura" e nasce la bozza da emettere e mandare allo SdI.',
-      'La bozza dell\'autofattura prende come data il giorno in cui la fattura del fornitore è stata caricata nel portale (non il giorno in cui la prepari). Se c\'è già un\'autofattura emessa con una data successiva prende quella, perché le date devono restare in ordine. Mese di competenza: se la fattura del fornitore è del mese prima del caricamento (per esempio fattura del 28 ottobre caricata il 3 novembre) la bozza prende l\'ultimo giorno del mese della fattura (31 ottobre), purché non ci sia già un\'autofattura emessa con una data del mese nuovo; a cavallo dell\'anno resta il giorno del caricamento. La data si può comunque cambiare nella bozza prima di emettere.',
+      'La bozza dell\'autofattura prende come data il giorno in cui la fattura del fornitore è stata caricata nel portale (non il giorno in cui la prepari). Se c\'è già un\'autofattura emessa con una data successiva prende quella, perché le date devono restare in ordine. Mese di competenza: se la fattura del fornitore è del mese prima del caricamento (per esempio fattura del 28 ottobre caricata il 3 novembre) la bozza prende l\'ultimo giorno del mese della fattura (31 ottobre), purché non ci sia già un\'autofattura emessa con una data del mese nuovo; a cavallo dell\'anno resta il giorno del caricamento. La data si può comunque cambiare nella bozza prima di emettere: se la fattura del fornitore è del mese prima, la bozza lo ricorda accanto alla data con l\'ultimo giorno di quel mese da mettere.',
+      'L\'autofattura si vede impaginata come un documento (tipo PDF): nella pagina dell\'autofattura emessa il foglio è già aperto (fornitore estero, fattura del fornitore, righe, IVA, totale); "Stampa / PDF" lo apre a parte per stamparlo o salvarlo in PDF. Nella bozza c\'è "Anteprima di stampa" (con la scritta BOZZA); nell\'elenco si spunta e si preme "Stampa / PDF".',
       'La stessa fattura non entra due volte: se arriva di nuovo (stesso fornitore, numero e data, anche come file diverso, es. prima il PDF e poi la mail) il portale non la carica e lo scrive nel messaggio. Se due copie sono già nell\'elenco, la seconda ha la scritta rossa "doppione" e non si può preparare l\'autofattura finché non se ne elimina una.',
       'Più fatture insieme: spunta le righe nel riquadro e premi "Prepara l\'autofattura" (nasce una bozza per ognuna; quelle con errori o dubbi restano e il messaggio dice cosa sistemare aprendole) oppure "Elimina" per quelle caricate per errore. Una fattura che ha già preparato l\'autofattura non si elimina da lì.',
       'Nell\'elenco delle autofatture le spunte servono per scaricare XML ed Excel, "Emetti e invia allo SdI" ed "Elimina" (solo le bozze senza numero: un\'autofattura emessa o inviata allo SdI non si elimina mai). "Emetti e invia allo SdI" compare quando nell\'elenco c\'è un\'autofattura del portale non ancora inviata: le bozze spuntate prendono il numero e partono, quelle già emesse partono e basta; una bozza con errori resta bozza e il messaggio dice cosa manca. Quelle di Fatture in Cloud sono già state mandate da lì.',
@@ -1679,6 +1693,30 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Qualità → Strumenti e tarature (o Piano delle manutenzioni, Verifiche ESD).', 'Spunta le righe fatte → Fatto oggi.', 'Se l\'esito non è positivo, apri la riga e correggi esito e note.'],
     pagine: [['/qualita/strumenti', 'Strumenti e tarature'], ['/qualita/manutenzioni', 'Piano delle manutenzioni'], ['/qualita/esd', 'Verifiche ESD']],
+  },
+  // ── Sicurezza ──
+  {
+    id: 'sicurezza-schede', area: 'sicurezza', titolo: 'Schede di sicurezza (SDS): dove sono e come si controllano su ordini e DDT',
+    parole: 'scheda di sicurezza sds msds scheda tecnica tds prodotto chimico pasta saldante stagno filo barre flussante solvente alcool coating colla pericoli frasi h pittogrammi ordine fornitore ddt ricevuto internet cerca manca',
+    testo: [
+      'Sicurezza → Schede di sicurezza: l\'elenco delle schede (SDS) dei prodotti chimici che usiamo (paste, filo e barre di stagno, flussanti, solventi, coating, colle), con i pericoli della sezione 2 (pittogrammi, frasi H), la data di revisione e il PDF. Le schede con revisione vecchia (prima del 2021 o di oltre 5 anni) o solo con la scheda tecnica sono in evidenza: vanno chieste aggiornate al fornitore.',
+      'Nella pagina di ogni ordine a fornitore e di ogni DDT ricevuto c\'è il riquadro "Schede di sicurezza": per le righe con sostanze dice se la scheda c\'è. Quando l\'ordine si emette o il DDT si conferma, il portale cerca da solo su internet quelle che mancano (al massimo 3 per volta, circa 2 centesimi l\'una) e le mette nell\'elenco con fonte "internet": vanno controllate. Una ricerca senza esito non si ripete per 30 giorni, ma si può rifare con "Cerca su internet".',
+      'Per caricare una scheda: Schede di sicurezza → Carica PDF (anche più file insieme): il portale legge pericoli e data di revisione dal testo. PDF fino a 4 MB; quelli più grandi restano sul Drive e si scrive il percorso. Nel campo "parole" i codici MC-… e i nomi con cui il prodotto compare nelle righe degli ordini.',
+      'Sicurezza → Controllo SDS su ordini e DDT mostra in una pagina i materiali di consumo e le righe degli ultimi 12 mesi con la scheda o senza.',
+    ],
+    passi: ['Sicurezza → Schede di sicurezza.', 'Carica PDF oppure apri una scheda per correggere pericoli, revisione e parole.', 'Nell\'ordine a fornitore o nel DDT ricevuto: riquadro "Schede di sicurezza" → Cerca su internet per quelle che mancano.'],
+    pagine: [['/sicurezza/schede', 'Schede di sicurezza'], ['/sicurezza/controllo', 'Controllo SDS su ordini e DDT']],
+  },
+  {
+    id: 'sicurezza-scadenzario', area: 'sicurezza', titolo: 'Scadenze della sicurezza: DVR, corsi, visite mediche, DPI, estintori, impianti',
+    parole: 'scadenza scadenzario sicurezza lavoro 81 dvr valutazione rischi corso formazione antincendio primo soccorso preposto rls rspp medico competente visita idoneita dpi guanti occhiali estintori luci emergenza evacuazione messa a terra impianto caldaia infortunio quasi',
+    testo: [
+      'Il cruscotto della Sicurezza mostra cosa è scaduto o scade entro un mese, come la Qualità. I registri: Documenti e valutazioni (DVR, rischio chimico, rumore, incendio, MUD…), Formazione sicurezza (corso, persona, data; la scadenza si calcola dal tipo di corso: specifica e aggiornamento lavoratori 5 anni, antincendio 5, primo soccorso 3, preposto 2, RLS 1), Visite mediche, DPI consegnati, Antincendio ed emergenza (estintori, luci, prova di evacuazione), Impianti, macchine e ambiente (messa a terra, caldaia, aspirazione fumi…), Organigramma della sicurezza e Infortuni e quasi infortuni.',
+      'Alcune righe sono già scritte senza date: si apre la riga, si scrive l\'ultima volta (o la scadenza) e si salva. Quelle che non servono si eliminano. Le visite mediche contengono solo date e giudizio di idoneità: la cartella sanitaria resta al medico.',
+      'Il riquadro "Cosa tenere sotto controllo" nel cruscotto elenca gli obblighi principali del D.Lgs. 81/2008 con il riferimento di legge. È un promemoria, non consulenza: il riferimento resta l\'RSPP.',
+    ],
+    passi: ['Sicurezza → Cruscotto della sicurezza.', 'Clic su una scadenza o su un registro con i tasti in alto.', 'Per segnare che è stato fatto: spunta la riga → Fatto oggi, oppure apri la riga e scrivi la data.'],
+    pagine: [['/sicurezza', 'Cruscotto della sicurezza'], ['/sicurezza/sic_formazione', 'Formazione sicurezza']],
   },
 ];
 

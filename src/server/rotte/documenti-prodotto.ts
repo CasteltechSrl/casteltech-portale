@@ -1,7 +1,7 @@
 /**
  * Anagrafiche → Prodotti → "Documentazione" (Adriano 6/11/2026): le revisioni dei documenti del cliente (BOM, pick and place, Gerber)
  * di un prodotto, come riassunto. I file restano sul Drive. Una revisione nuova si carica dalla pagina (stesso caricamento dei
- * Documenti dei clienti: il pacchetto viene analizzato, il riassunto finisce qui e i file si tolgono dal database) e viene confrontata
+ * Documenti commesse: il pacchetto viene analizzato, il riassunto finisce qui e i file si tolgono dal database) e viene confrontata
  * con quella prima: componenti aggiunti, tolti, cambiati; se il progetto è stravolto lo dice e basta.
  *
  *   GET  /anagrafiche/prodotti/:id/documentazione                        pagina (?confronta=<id revisione> per confrontarla con la precedente)
@@ -141,7 +141,7 @@ function moduloCaricamento(p: { id: number; codice: string; cliente_id: number |
     <label>Revisione <input id="revisione-doc" placeholder="vuota = letta dai file, altrimenti 0" maxlength="20" class="maiuscolo"></label>
     <label>File <input type="file" id="file-pacchetto" multiple></label>
     <label>oppure una cartella intera <input type="file" id="cartella-pacchetto" webkitdirectory></label>
-    <label class="spunta"><input type="checkbox" id="conserva-file"> Tieni anche i file nel portale (servono solo per "Codifica la BOM" dai Documenti dei clienti; pesano su Neon)</label>
+    <label class="spunta"><input type="checkbox" id="conserva-file"> Tieni anche i file nel portale (servono solo per "Codifica la BOM" dai Documenti commesse; pesano su Neon)</label>
     <button class="primario" id="invia-pacchetto" data-prodotto="${p.id}">Carica e confronta</button>
     <output id="esito-pacchetto" class="nota"></output>
   </section>`;
