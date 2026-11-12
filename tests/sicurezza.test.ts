@@ -13,6 +13,14 @@ test('sicurezza: le sostanze si riconoscono dal codice MC- o dalle parole, gli a
   assert.equal(categoriaSostanza('MC-PAS-005', 'PASTA SALDANTE SAC305 ALPHA OM-338-PT'), 'pasta');
   assert.equal(categoriaSostanza('MC-FLU-001', 'FLUSSANTE LOCTITE MF 210'), 'flussante');
   assert.equal(categoriaSostanza('MC-PUL-002', 'SPRUZZATORE A GRILLETTO PER FLACONI DA 1 L'), null, 'spruzzatore: accessorio');
+  // connettori e ricambi con "solder"/"silicone" nel nome non sono sostanze (acquisti reali dell'ultimo anno, 12/11/2026)
+  assert.equal(categoriaSostanza('T4141512041-000^TE', 'Conn M12 Circular SKT 4 POS Solder ST Thru-Hole 4 Terminal 1 Port'), null);
+  assert.equal(categoriaSostanza('SP26HM04', 'TUBICINO SILICONE PER TESTA PARAQUDA/COBRA'), null);
+  assert.equal(categoriaSostanza('', 'YIXISI 385 Pezzi Rosso O-ring Assortimento Kit, O-ring Silicone'), null);
+  assert.equal(categoriaSostanza('', 'kwb set di 3 miscelatori per pitture e vernici'), null);
+  assert.equal(categoriaSostanza('', 'Gee-Wizz Isopropanolo - Alcool Isopropilico 2x5L'), 'pulizia');
+  assert.equal(categoriaSostanza('E12274', 'Cleaner KYZEN E5615 (5 LT)'), 'pulizia');
+  assert.equal(categoriaSostanza('', 'STAGNO IN VERGHE LEGA SN100Ce'), 'barre');
   assert.equal(categoriaSostanza('MC-PUL-007', 'TRECCIA DISSALDANTE NO-CLEAN STANNOL'), null);
   assert.equal(categoriaSostanza('MC-LAM-001', 'LAMINA SERIGRAFICA'), null, 'lamine: niente scheda');
   assert.equal(categoriaSostanza('MC-KAP-001', 'KAPTON 12 MM'), null);
