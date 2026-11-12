@@ -54,7 +54,7 @@ export async function salvaRevisione(n: NuovaRevisione): Promise<{ id: number; r
 }
 
 /**
- * Dal pacchetto dei Documenti dei clienti già analizzato al riassunto per il prodotto. Con `liberaFile` i file del pacchetto
+ * Dal pacchetto dei Documenti commesse già analizzato al riassunto per il prodotto. Con `liberaFile` i file del pacchetto
  * si tolgono dal database (resta analisi e disegno): i file stanno sul Drive, non pesano su Neon.
  */
 export async function revisioneDaPacchetto(opz: { prodottoId: number; pacchettoId: number; caricatoDa: string | null; revisione?: string | null; liberaFile: boolean; note?: string | null }) {

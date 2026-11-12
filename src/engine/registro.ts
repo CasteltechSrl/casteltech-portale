@@ -18,7 +18,7 @@ export interface VoceRegistro {
 
 /** Nome della sezione dal primo pezzo dell'indirizzo. */
 const SEZIONI: [string, string][] = [
-  ['/preventivi/documenti', 'Documenti dei clienti'],
+  ['/preventivi/documenti', 'Documenti commesse'],
   ['/preventivi', 'Preventivi'],
   ['/ordini/acquisire', 'Ordini da e-mail e PDF'],
   ['/ordini/fornitori', 'Ordini a fornitore'],

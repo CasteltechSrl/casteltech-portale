@@ -32,7 +32,12 @@ test('Commerciale nell\'ordine di Adriano: CRM, Quotazioni componenti, Preventiv
 
 test('Documenti (Adriano 12/11/2026): i documenti che arrivano, tolti da Commerciale, stessi indirizzi', () => {
   const g = MENU_GRUPPI.find(x => x.chiave === 'documenti')!;
-  assert.deepEqual(g.voci, [['Documenti dei clienti', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']]);
+  assert.deepEqual(g.voci.slice(0, 3), [['Arrivati', ''], ['Documenti commesse', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']]);
+  // seconda parte: i documenti che produciamo noi (Adriano 12/11/2026), con il titoletto
+  const emessi = g.voci.slice(g.voci.findIndex(v => v[0] === 'Emessi da noi') + 1).map(v => v[0]);
+  assert.deepEqual(emessi, ['Preventivi', "Conferme d'ordine", 'DDT', 'Fatture', 'Note di credito', 'Autofatture', 'Ordini a fornitore']);
+  assert.match(menu('ufficio'), /<span class="titolo-tendina">Emessi da noi<\/span>/);
+  assert.match(menu('ufficio'), /<a href="\/preventivi\/documenti" class="titolo-gruppo[^"]*"[^>]*>Documenti</);
   assert.equal(gruppoAttivo('documenti'), 'documenti');
   assert.match(pagina('ufficio', 'documenti'), /class="titolo-gruppo attiva"[^>]*>Documenti</);
   const schede = readFileSync(new URL('../src/server/rotte/schede-cliente.ts', import.meta.url), 'utf8');

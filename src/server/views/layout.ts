@@ -18,7 +18,11 @@ export interface Utente { id: number; nome: string; ruolo: Ruolo }
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti'], ['Componenti clienti', '/anagrafiche/componenti-clienti'], ['Materiali di consumo', '/anagrafiche/materiali']] },
   // Documenti (Adriano 12/11/2026): i documenti che ARRIVANO (dai clienti, da e-mail e PDF), prima sotto Commerciale; indirizzi invariati
-  { chiave: 'documenti', nome: 'Documenti', voci: [['Documenti dei clienti', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']] },
+  { chiave: 'documenti', nome: 'Documenti', voci: [['Arrivati', ''], ['Documenti commesse', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire'],
+    // Adriano 12/11/2026: nella stessa tendina anche i documenti che produciamo noi (restano anche nei loro gruppi)
+    ['Emessi da noi', ''], ['Preventivi', '/preventivi'], ['Conferme d\'ordine', '/ordini/conferme'], ['DDT', '/amministrazione/documenti?tipo=ddt'],
+    ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'],
+    ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Ordini a fornitore', '/ordini/fornitori']] },
   { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme']] },
   { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti']] },
@@ -61,7 +65,8 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
   const voce = (href: string, testo: string, chiave: string) =>
     html`<a href="${href}" class="${opz.attiva === chiave ? 'attiva' : ''}">${testo}</a>`;
   // nel menu solo le pagine che il profilo può aprire (es. Analisi: solo amministratore ed esterno, Adriano 6/11/2026)
-  const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
+  // voce senza indirizzo = titoletto dentro la tendina (es. Documenti: Arrivati / Emessi da noi)
+  const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => !h || linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
   return html`<!doctype html>
 <html lang="it">
 <head>
@@ -78,8 +83,8 @@ ${opz.utente ? html`
   ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026); "⌂ Cruscotto" prima voce, senza tendina (Adriano 9/11/2026) -->
     ${eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? html`<a href="/cruscotto" class="voce-cruscotto ${opz.attiva === 'cruscotto' ? 'attiva' : ''}">⌂ Cruscotto</a>` : ''}
     ${(eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? MENU_GRUPPI : []).map(g => html`<div class="gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attivo' : ''}">
-      <a href="${g.voci[0][1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
-      <div class="tendina">${permesse(g.voci).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</div>
+      <a href="${g.voci.find(v => v[1])![1]}" class="titolo-gruppo ${gruppoAttivo(opz.attiva) === g.chiave ? 'attiva' : ''}" aria-haspopup="true">${g.nome}</a>
+      <div class="tendina">${permesse(g.voci).map(([t, h]) => h ? html`<a href="${h}">${t}</a>` : html`<span class="titolo-tendina">${t}</span>`)}</div>
     </div>`)}
   </nav>`}
   ${opz.utente.ruolo === 'produzione' ? '' : html`<form class="cerca-globale" method="get" action="/cerca" role="search" autocomplete="off">
