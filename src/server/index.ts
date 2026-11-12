@@ -32,6 +32,7 @@ import { rotteQualita } from './rotte/qualita.js';
 import { rotteSicurezza } from './rotte/sicurezza.js';
 import { rotteCruscottoGenerale } from './rotte/cruscotto-generale.js';
 import { rotteFlusso } from './rotte/flusso.js';
+import { rotteMacchine } from './rotte/macchine.js';
 import { rotteAmministrazione } from './rotte/amministrazione.js';
 import { rotteGuida } from './rotte/guida.js';
 import { rotteDipendenti } from './rotte/dipendenti.js';
@@ -212,6 +213,7 @@ app.use('/acquisti/ddt', soloUfficio, rotteDdtRicevuti());
 app.use('/ordini', soloUfficio, rotteOrdini());
 // Quotazioni (fino al 28/10/2026 "Componenti"): i vecchi indirizzi /componenti/... portano qui (307 = anche i moduli inviati)
 app.use('/produzione/codifica-componenti', soloUfficio, rotteCodificaComponenti()); // Adriano 4/11/2026: codifica BOM senza prezzi
+app.use('/produzione', soloUfficio, rotteMacchine()); // Adriano 12/11/2026: Stoccaggio componenti, Pick & Place, AOI (in attesa delle API)
 app.use('/quotazioni', soloUfficio, rotteComponenti());
 app.use('/componenti', (req, res) => res.redirect(307, '/quotazioni' + req.url));
 app.use('/crm', soloUfficio, rotteCrm());

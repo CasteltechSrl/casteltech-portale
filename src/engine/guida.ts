@@ -186,7 +186,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'menu barra tendina gruppi documenti arrivati ricevuti emessi commesse commerciale acquisti produzione dove trovo sezione voce spostata fatture fornitori',
     testo: [
       'Dal 31/10/2026 il menu in alto è diviso in gruppi. Passando con il mouse sul nome del gruppo si apre la tendina con le sue pagine; cliccando il nome si va alla prima.',
-      'Anagrafiche: clienti, fornitori, prodotti, componenti. Documenti (dal 12/11/2026, prima erano in Commerciale): nella tendina in alto "Arrivati" (Documenti commesse: BOM, Gerber, pick and place del cliente per il preventivo; Documenti da e-mail e PDF: ordini, DDT, fatture estere da leggere con l\'IA), sotto "Emessi da noi" (preventivi, conferme d\'ordine, DDT, fatture, note di credito, autofatture, ordini a fornitore: le stesse pagine che trovi anche in Commerciale, Acquisti e Amministrazione). Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti e conferme d\'ordine. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: commesse e Gantt. Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
+      'Anagrafiche: clienti, fornitori, prodotti, componenti. Documenti (dal 12/11/2026, prima erano in Commerciale): nella tendina in alto "Arrivati" (Documenti commesse: BOM, Gerber, pick and place del cliente per il preventivo; Documenti da e-mail e PDF: ordini, DDT, fatture estere da leggere con l\'IA), sotto "Emessi da noi" (preventivi, conferme d\'ordine, DDT, fatture, note di credito, autofatture, ordini a fornitore: le stesse pagine che trovi anche in Commerciale, Acquisti e Amministrazione). Commerciale: CRM, Quotazioni, Preventivi, ordini dei clienti e conferme d\'ordine. Acquisti: ordini a fornitore, DDT ricevuti, fatture dei fornitori (dal 7/11/2026, prima erano in Amministrazione), acquisti per mese e miglior prezzo di un P/N. Produzione: flusso, commesse, Gantt, codifica componenti e le pagine delle macchine (Stoccaggio componenti, Pick & Place, AOI, in attesa del collegamento). Amministrazione: cruscotto, documenti emessi, incassi, registri IVA.',
       'Impostazioni, Suggerimenti e Guida sono a destra. Gli indirizzi delle pagine non sono cambiati: i link salvati funzionano ancora.',
       'Dopo Qualità e Dipendenti c\'è il gruppo Sicurezza (dal 12/11/2026): schede di sicurezza dei prodotti chimici e scadenze della sicurezza sul lavoro.',
     ],
@@ -689,6 +689,15 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     ],
     passi: ['Ordini → Da acquisire.', 'Scegli il file (PDF, foto, email .eml, testo) e premi Carica e leggi (per un ordine al telefono: riquadro "Ordine a voce o per telefono", scegli il cliente, Scrivi l\'ordine).', 'Apri la proposta, controlla cliente, righe, prezzi e consegne.', 'Conferma e crea l\'ordine.'],
     pagine: [['/ordini/acquisire', 'Ordini da e-mail e PDF']],
+  },
+  {
+    id: 'macchine-produzione', area: 'commesse', titolo: 'Stoccaggio componenti, Pick & Place e AOI: le pagine delle macchine',
+    parole: 'armadi armadio stoccaggio materiale magazzino bobine vassoi pick and place p&p pnp montaggio smd essemtec fox ipulse aoi controllo ottico difetti macchine api collegamento',
+    testo: [
+      'Dal 12/11/2026 nel menu Produzione ci sono tre pagine nuove: Stoccaggio componenti (gli armadi del materiale), Pick & Place (le macchine di montaggio SMD) e AOI (il controllo ottico).',
+      'Per ora sono vuote: si riempiranno quando le macchine saranno collegate al portale con le loro API. Ogni pagina spiega cosa mostrerà (posizione e quantità dei componenti negli armadi; stato, tempi e scarti delle pick and place; schede controllate e difetti dell\'AOI).',
+    ],
+    pagine: [['/produzione/stoccaggio', 'Produzione → Stoccaggio componenti'], ['/produzione/pick-place', 'Produzione → Pick & Place'], ['/produzione/aoi', 'Produzione → AOI']],
   },
   {
     id: 'flusso-produzione', area: 'commesse', titolo: 'Il flusso di produzione nel cruscotto: da acquistare, da preparare, in produzione, da spedire, spedite nel mese',
