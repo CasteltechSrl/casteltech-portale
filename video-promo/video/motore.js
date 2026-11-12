@@ -11,24 +11,27 @@
   const mix = (a, b, k) => a + (b - a) * k;
   const finestra = 1440 / 1600;
   const PRIMA = 0.5, DOPO = 0.75;            // pausa prima della voce nella scena e dopo
+  const PAUSE = { caos: [0.15, 0.35] };       // scena iniziale più stretta (Adriano 12/11/2026: inizio di 8–9 s)
   const DURATE = window.DURATE;
 
   // inizio e durata di ogni scena
   let t0 = 0;
   const scene = window.STORIA.map(s => {
     const voce = DURATE[s.id] ?? 5;
-    const dur = PRIMA + voce + DOPO + (s.extra === 'finale' ? 2.5 : 0) + (s.extra === 'caos' ? 0.3 : 0);
-    const sc = { ...s, inizio: t0, dur, voce };
+    const [prima, dopo] = PAUSE[s.extra] || [PRIMA, DOPO];
+    const dur = prima + voce + dopo + (s.extra === 'finale' ? 2.5 : 0);
+    const sc = { ...s, inizio: t0, dur, voce, prima };
     t0 += dur; return sc;
   });
   window.DURATA_TOTALE = t0;
   window.SCENE = scene;
 
   // ── elementi fissi ──
-  palco.innerHTML = `<div id="griglia"></div><div id="strato-caos"></div>
+  palco.innerHTML = `<div id="griglia"></div><div id="sfondo-intro"><i></i><i></i><i></i><i></i></div><div id="strato-caos"></div>
     <div id="finestra"><div id="barra"><i></i><i></i><i></i><div id="indirizzo">portale.tuaazienda.it</div></div><div id="vista"></div></div>
     <div id="strato-extra"></div><div id="capitolo"></div><div id="sottotitolo"></div>`;
-  const vista = $('#vista'), fin = $('#finestra'), cap = $('#capitolo'), sott = $('#sottotitolo'), extra = $('#strato-extra'), caos = $('#strato-caos');
+  const vista = $('#vista'), fin = $('#finestra'), cap = $('#capitolo'), sott = $('#sottotitolo'), extra = $('#strato-extra'), caos = $('#strato-caos'), sfondo = $('#sfondo-intro'), griglia = $('#griglia');
+  const macchie = [...sfondo.querySelectorAll('i')];
   const immagini = {};
   const img = nome => {
     if (!immagini[nome]) { const i = document.createElement('img'); i.src = `riprese/${nome}.png`; vista.appendChild(i); immagini[nome] = i; }
@@ -45,8 +48,8 @@
     const uniti = [];
     for (const p of pezzi) { if (uniti.length && uniti[uniti.length - 1].length < 28) uniti[uniti.length - 1] += ' ' + p; else uniti.push(p); }
     const tot = uniti.reduce((a, p) => a + p.length, 0);
-    let x = (tl - PRIMA) / s.voce * tot;
-    if (x < 0) return tl > PRIMA - 0.3 ? uniti[0] : '';
+    let x = (tl - s.prima) / s.voce * tot;
+    if (x < 0) return tl > s.prima - 0.3 ? uniti[0] : '';
     for (const p of uniti) { if (x < p.length) return p; x -= p.length; }
     return tl < s.dur - 0.25 ? uniti[uniti.length - 1] : '';
   }
@@ -98,11 +101,27 @@
   ];
   const PROG = ['Posta', 'Fogli Excel', 'Gestionale', 'Visualizzatore CAD', 'Fatturazione', 'Home banking', 'Calendario', 'Cartelle condivise', 'Rubrica clienti', 'Programma tempi'];
   let rnd = 11; const caso = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
-  const posCarte = CARTE.map((c, i) => ({ x: 120 + caso() * 1560, y: 140 + caso() * 760, r: (caso() - .5) * 40, d: i * 0.35 + 0.2, dx: (caso() - .5) * 80, dy: (caso() - .5) * 60 }));
-  const posProg = PROG.map((p, i) => ({ x: 80 + (i % 5) * 360 + caso() * 80, y: i < 5 ? 70 + caso() * 40 : 930 + caso() * 30, d: 4.5 + i * 0.32 }));
+  const posCarte = CARTE.map((c, i) => ({ x: 120 + caso() * 1560, y: 140 + caso() * 760, r: (caso() - .5) * 40, d: 0.1 + i * 0.2, dx: (caso() - .5) * 80, dy: (caso() - .5) * 60 }));
+  const posProg = PROG.map((p, i) => ({ x: 80 + (i % 5) * 360 + caso() * 80, y: i < 5 ? 70 + caso() * 40 : 930 + caso() * 30, d: 2.9 + i * 0.17 }));
   caos.innerHTML = CARTE.map(c => `<div class="carta"><div class="ico" style="background:${c[1]}">${c[2]}</div>${c[0]}</div>`).join('')
     + PROG.map(p => `<div class="prog">${p}</div>`).join('');
   const carteEl = [...caos.querySelectorAll('.carta')], progEl = [...caos.querySelectorAll('.prog')];
+
+  // momento della scritta "10 programmi diversi." = verso la fine della voce della scena iniziale
+  const scenaCaos = scene.find(x => x.extra === 'caos');
+  const tDieci = scenaCaos ? scenaCaos.prima + scenaCaos.voce - 1.7 : 6.4;
+
+  // sfondo caldo della scena iniziale: macchie di colore sfumate che si muovono piano (al posto della griglia)
+  const MACCHIE = [['#ff7a45', 560, 380, 0.9], ['#d6336c', 1380, 300, 1.3], ['#7048e8', 1250, 820, 0.7], ['#19c2a6', 420, 860, 1.1]];
+  function mostraSfondo(t, op) {
+    sfondo.style.opacity = op; griglia.style.opacity = 0.10 * (1 - op);
+    macchie.forEach((el, i) => {
+      const [col, x, y, v] = MACCHIE[i];
+      const dx = Math.sin(t * 0.35 * v + i * 1.7) * 140, dy = Math.cos(t * 0.28 * v + i) * 90, sc = 1 + 0.12 * Math.sin(t * 0.5 + i);
+      el.style.background = `radial-gradient(circle, ${col} 0%, transparent 65%)`;
+      el.style.transform = `translate(${x + dx - 450}px, ${y + dy - 450}px) scale(${sc})`;
+    });
+  }
 
   function mostraCaos(tl, scena) {
     // scena: 'caos' (si accumulano) o 'reveal' (volano dentro la finestra)
@@ -111,7 +130,7 @@
       const p = posCarte[i];
       if (scena === 'caos') {
         const k = ease((tl - p.d) / 0.6), agita = Math.sin(tl * 2.2 + i) * 6;
-        const dim = lin((tl - 6.2) / 0.5);
+        const dim = lin((tl - tDieci + 0.2) / 0.5);
         el.style.opacity = lin((tl - p.d) / 0.3) * (1 - 0.55 * dim);
         el.style.filter = `blur(${dim * 3}px)`;
         el.style.transform = `translate(${p.x + p.dx * (1 - k)}px, ${p.y - 120 * (1 - k) + agita}px) rotate(${p.r + Math.sin(tl * 1.3 + i) * 3}deg) scale(${0.7 + 0.3 * k})`;
@@ -135,6 +154,7 @@
     const tl = t - s.inizio;
     extra.innerHTML = '';
     caos.style.display = 'none';
+    mostraSfondo(t, s.extra === 'caos' ? 1 : s.extra === 'reveal' ? 1 - ease(tl / 1.4) : 0);
     // finestra: nascosta nel caos, cresce nel reveal, si rimpicciolisce nel finale
     let fs = 1, fo = 1, fy = 0;
     if (s.extra === 'caos') { fo = 0; mostraCaos(tl, 'caos'); }
@@ -150,7 +170,7 @@
 
     // testi grandi e badge
     if (s.extra === 'caos') {
-      const k = lin((tl - 6.4) / 0.5);
+      const k = lin((tl - tDieci) / 0.4);
       extra.innerHTML = `<div class="grande" style="top:430px;font-size:92px;opacity:${k};transform:scale(${mix(1.2, 1, ease(k))});text-shadow:0 10px 40px #000">10 programmi diversi.</div>`;
     }
     if (s.extra === 'reveal') {

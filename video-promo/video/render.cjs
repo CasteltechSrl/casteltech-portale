@@ -1,6 +1,6 @@
 /*
  * Crea il video: un fotogramma alla volta da index.html (Playwright), poi voce + musica con ffmpeg.
- * Uso (dalla cartella video-promo): node video/render.cjs [uscita.mp4] [--da=sec --a=sec per una prova]
+ * Uso (dalla cartella video-promo): node video/render.cjs [uscita.mp4] [--voce=maschile|femminile] [--da=sec --a=sec per una prova]
  */
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
@@ -9,10 +9,11 @@ const qui = __dirname, base = path.join(qui, '..');
 const arg = Object.fromEntries(process.argv.slice(2).filter(a => a.startsWith('--')).map(a => a.slice(2).split('=')));
 const uscita = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join(base, 'uscita', 'video-portale.mp4');
 const FPS = Number(arg.fps || 30);
+const VOCE = arg.voce || 'maschile';  // maschile | femminile (cartelle voce/maschile e voce/femminile)
 
 const testi = JSON.parse(fs.readFileSync(path.join(base, 'testi.json'), 'utf8'));
 const durate = {};
-for (const b of testi.battute) durate[b.id] = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(base, 'voce', b.id + '.mp3')]).toString());
+for (const b of testi.battute) durate[b.id] = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path.join(base, 'voce', VOCE, b.id + '.mp3')]).toString());
 fs.writeFileSync(path.join(qui, 'dati.js'), `window.DURATE = ${JSON.stringify(durate)};\nwindow.TESTI = ${JSON.stringify(Object.fromEntries(testi.battute.map(b => [b.id, b.scritta])))};\n`);
 
 (async () => {
@@ -22,7 +23,7 @@ fs.writeFileSync(path.join(qui, 'dati.js'), `window.DURATE = ${JSON.stringify(du
   await p.goto('file://' + path.join(qui, 'index.html'));
   await p.waitForFunction(() => [...document.images].every(i => i.complete));
   const totale = await p.evaluate(() => window.DURATA_TOTALE);
-  const scene = await p.evaluate(() => window.SCENE.map(s => ({ id: s.id, inizio: s.inizio })));
+  const scene = await p.evaluate(() => window.SCENE.map(s => ({ id: s.id, inizio: s.inizio, prima: s.prima })));
   const da = Number(arg.da || 0), a = Math.min(Number(arg.a || totale), totale);
   console.log(`Durata ${totale.toFixed(1)} s, fotogrammi da ${da} a ${a}`);
   if (arg.fotogrammi) {  // prova: solo alcuni fotogrammi in PNG (es. --fotogrammi=12,31.5)
@@ -41,11 +42,11 @@ fs.writeFileSync(path.join(qui, 'dati.js'), `window.DURATE = ${JSON.stringify(du
   await b.close();
   // audio: voce di ogni scena all'inizio della scena + 0,5 s, musica sotto (abbassata quando parla la voce)
   const wav = path.join(path.dirname(uscita), 'musica.wav');
-  execFileSync('python3', [path.join(base, 'musica.py'), String(totale), wav]);
+  execFileSync('python3', [path.join(base, 'musica.py'), String(totale), wav, String(scene[1].inizio)]);
   const ingressi = ['-i', muto, '-i', wav], filtri = [];
   scene.forEach((s, i) => {
-    ingressi.push('-i', path.join(base, 'voce', s.id + '.mp3'));
-    const ms = Math.round((s.inizio + 0.5 - da) * 1000);
+    ingressi.push('-i', path.join(base, 'voce', VOCE, s.id + '.mp3'));
+    const ms = Math.round((s.inizio + s.prima - da) * 1000);
     if (ms >= 0) filtri.push(`[${i + 2}:a]adelay=${ms}|${ms},volume=1.6[v${i}]`);
   });
   const voci = filtri.map((_, i) => `[v${i}]`).join('');

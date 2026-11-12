@@ -1,5 +1,5 @@
 """Musica di sottofondo generata (niente diritti d'autore): pad morbido + arpeggio + battito leggero.
-Uso: python3 musica.py <durata_secondi> <uscita.wav>
+Uso: python3 musica.py <durata_secondi> <uscita.wav> [secondo in cui entra il ritmo]
 Prima parte (problema, 0-6 s) più cupa e tesa, poi dal "reveal" accordi aperti e ritmo.
 """
 import sys, wave
@@ -10,7 +10,7 @@ SR = 44100
 t = np.arange(int(DUR * SR)) / SR
 rng = np.random.default_rng(3)
 BPM = 104; beat = 60 / BPM; bar = beat * 4
-REVEAL = 10.0  # secondi: entra il ritmo
+REVEAL = float(sys.argv[3]) if len(sys.argv) > 3 else 8.0  # secondi: entra il ritmo (inizio della seconda scena)
 
 def nota(n):  # numero MIDI -> Hz
     return 440 * 2 ** ((n - 69) / 12)
