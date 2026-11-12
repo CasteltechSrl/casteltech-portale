@@ -1185,3 +1185,7 @@ dialog.domanda::backdrop { background: rgba(0, 0, 0, .35); }
 nav.filtri-rapidi { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1rem; }
 nav.filtri-rapidi a.attivo { font-weight: 650; text-decoration: underline; }
 table.elenco tr.spento td { opacity: .55; }
+/* Dipendenti → Persone e auto: ricerca nelle tabelle ACI */
+.aci-risultati { list-style: none; margin: .4rem 0 0; padding: 0; max-height: 18rem; overflow-y: auto; }
+.aci-risultati li { padding: .15rem 0; border-bottom: 1px solid var(--bordo); }
+.aci-risultati button.link { text-align: left; }

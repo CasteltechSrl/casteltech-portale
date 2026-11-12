@@ -1632,11 +1632,14 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'nota-spese', area: 'dipendenti', titolo: 'Nota spese e rimborso chilometrico',
-    parole: 'nota spese rimborso km chilometrico chilometri trasferta viaggio auto tariffa aci destinazione cliente pranzo parcheggio pedaggio modulo excel pagato da pagare',
+    parole: 'nota spese rimborso km chilometrico chilometri trasferta viaggio auto tariffa aci tabelle gazzetta ufficiale costo chilometrico qualifica inquadramento livello marca modello destinazione cliente pranzo parcheggio pedaggio modulo excel pagato da pagare',
     testo: [
       'Dipendenti → Nota spese funziona come il "Modulo rimborso km" in Excel: una nota al mese per persona, una riga per viaggio con data, partenza, destinazione, km di andata, altre spese (pranzo, parcheggio, pedaggi) e note.',
       'I km di andata si scrivono da soli scegliendo una destinazione dell\'elenco (Destinazioni e km); il viaggio è di andata e ritorno (km × 2), togli la spunta A/R per la sola andata. Rimborso = km × tariffa dell\'auto + altre spese.',
       'Le persone e le loro auto con la tariffa al km (tabelle ACI) stanno in Dipendenti → Persone e auto. La tariffa si copia nella nota quando la crei: cambiarla dopo non cambia le note già fatte.',
+      'Tabelle ACI (dal 12/11/2026): in Persone e auto la casella "Cerca l\'auto nelle tabelle ACI" trova il modello mentre scrivi (es. "tesla model 3", "passat tdi 150"); un clic riempie marca, modello e tariffa al km della nuova auto (o, con il tasto ACI, di un\'auto già scritta). La tariffa è il costo al km della tabella ufficiale (15.000 km all\'anno) e si può sempre correggere a mano.',
+      'Ogni anno a dicembre l\'Agenzia delle Entrate pubblica le tabelle nuove nella Gazzetta Ufficiale (valgono dal 1° gennaio): scarica il PDF del supplemento da gazzettaufficiale.it e caricalo in fondo a Persone e auto ("Carica le tabelle ACI"), oppure chiedi a Claude. Dal 1° gennaio, finché mancano, la pagina lo ricorda; caricate quelle nuove, le auto scelte dall\'ACI mostrano la tariffa nuova e "Usa le tariffe ACI" le aggiorna tutte (le note spese già fatte non cambiano).',
+      'Qualifica della persona: l\'inquadramento del cedolino o del contratto (OPERAIO, IMPIEGATO, APPRENDISTA, QUADRO, con il livello se vuoi: "IMPIEGATO 3° LIVELLO"), per gli altri il ruolo (SOCIO AMMINISTRATORE, TIROCINANTE). È solo un promemoria: non entra nei conti.',
       'Sotto ogni persona c\'è il riepilogo dell\'anno: totale, pagato, da pagare (come il foglio RIEPILOGO). "Segna pagato" registra un rimborso, anche un acconto. "Stampa" prepara il modulo da firmare (anche in PDF).',
       '"Importa il modulo Excel" carica un vecchio modulo dell\'anno: destinazioni, persone con l\'auto e le note dei mesi compilati.',
     ],

@@ -653,6 +653,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    avvisi se voci ≠ totali. Cedolini nuovi dalla cartella "Da acquisire" letti da soli (`leggiDocumentoPaghe`); storico 2019-04 → 2026-09 (736 cedolini)
    nel file cedolini.json.gz (Project Files → dipendenti, preparato con `tools/cedolini-da-pdf.ts` + pdftotext), stesso pulsante "Storico dall'archivio".
    Area riservata: tabella persone × mesi (netto), pagina persona (`/riservata/persona?p=`), pagina cedolino con le voci.
+   Tariffe ACI e qualifica (Adriano 12/11/2026; migrazione 095 `tariffe_aci` + `rimborsi_veicoli.aci_id/aci_anno/aci_testo`, regole in `engine/tariffe-aci.ts`, letture in
+   `tariffe-aci-servizio.ts`, test in `tests/tariffe-aci.test.ts`): Persone e auto → "Cerca l'auto nelle tabelle ACI" (GET `/dipendenti/aci/cerca`, copia in memoria dell'ultimo anno,
+   `cercaTariffe`) riempie marca, modello e tariffa = COSTO KM 15.000 KM della tabella; tabelle dal PDF della Gazzetta Ufficiale (S.O. di dicembre, `leggiTabelleAci` sul testo di
+   `testoPdf`, anno da "FRINGE BENEFIT 2026", ~5.100 righe) caricato in fondo alla pagina (POST `/dipendenti/aci/carica`) o da Claude (POST `/api/claude/aci`); dal 1° gennaio avviso
+   se manca l'anno in corso; auto collegate a un anno prima → tariffa nuova per "ID Modello" ACI e "Usa le tariffe ACI" (`aggiornaAutoAci`), note spese già fatte invariate.
+   Qualifica della persona = inquadramento del cedolino (OPERAIO, IMPIEGATO, APPRENDISTA, QUADRO, livello facoltativo) o ruolo, menu `QUALIFICHE`; solo promemoria, non entra nei conti.
 4m. ✅ Sicurezza (Adriano 12/11/2026; menu Sicurezza dopo Dipendenti, `/sicurezza` = `rotte/sicurezza.ts`, regole in `engine/sicurezza.ts`, letture e ricerca in `sicurezza-servizio.ts`,
    riquadro in `views/sicurezza.ts`, migrazione 094, test in `tests/sicurezza.test.ts`). Schede di sicurezza (SDS) dei prodotti chimici in `sicurezza_schede` (PDF ≤ 4 MB nel database,
    più grandi = solo `percorso_drive`; pericoli = frasi H della sezione 2 letti con `pericoliDaTesto`, pittogrammi GHS con `pittogrammi`; `statoScheda`: revisione prima del 2021 o oltre

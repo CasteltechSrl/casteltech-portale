@@ -29,6 +29,8 @@
  *   POST /api/claude/sicurezza/scheda        → PDF come application/octet-stream (anche vuoto) + intestazione x-dati = JSON in base64 con i dati della scheda
  *                                              (prodotto, produttore, categoria, tipo, data_revisione, pericoli, parole, percorso_drive…): stesso prodotto = si aggiorna
  *   POST /api/claude/sicurezza/voci          → { sezioni: { sic_adempimenti: [...], sic_impianti: [...] } } = righe dello scadenzario dai documenti del Drive
+ *   POST /api/claude/aci                     → PDF della Gazzetta Ufficiale con le tabelle ACI (application/octet-stream): sostituisce le righe di quell'anno
+ *   GET  /api/claude/aci                     → anni caricati con il numero di modelli
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
@@ -48,6 +50,7 @@ import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAntic
 import { datiXmlFattura } from '../../engine/xml-fic.js';
 import { elencoSchede, nuovaScheda, ripulisciScheda, salvaScheda, sostituisciFile, MAX_PDF, type DatiScheda } from '../sicurezza-servizio.js';
 import { importaVoci } from './registri.js';
+import { caricaTabelleAci } from '../tariffe-aci-servizio.js';
 import { controllaFileQualita } from '../../engine/qualita.js';
 import { SEZIONI_SICUREZZA } from '../../engine/sicurezza.js';
 import { CATEGORIE_MOVIMENTO, codiceSiaValido, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
@@ -115,6 +118,12 @@ export function rotteApiClaude() {
     }
     const id = await nuovaScheda(d as DatiScheda, pdf ? { nome, dati: pdf } : null, dati.fonte === 'internet' ? 'internet' : 'drive', 'Claude');
     res.json({ id, aggiornata: false, file: !!pdf && pdf.length <= MAX_PDF });
+  });
+  r.post('/aci', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
+    try { res.json(await caricaTabelleAci(req.body as Buffer)); } catch (e: any) { res.status(400).json({ errore: String(e?.message ?? e) }); }
+  });
+  r.get('/aci', async (_req, res) => {
+    res.json(await q(`SELECT anno, count(*)::int AS modelli FROM tariffe_aci GROUP BY anno ORDER BY anno`));
   });
   r.post('/sicurezza/voci', async (req, res) => {
     try { res.json(await importaVoci(controllaFileQualita(req.body, SEZIONI_SICUREZZA), SEZIONI_SICUREZZA)); }

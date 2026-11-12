@@ -23,6 +23,8 @@ import {
 import { chiedePasswordRiservata, vedePaghe } from '../../engine/ruoli.js';
 import { caricaStoricoCedolini, caricaStoricoCosti, importaModuloKm, leggiDocumentoPaghe, registraDocumentoPaghe, totaliNoteAnno } from '../dipendenti-servizio.js';
 import { totaliCedolini } from '../../engine/cedolini.js';
+import { aggiornaAutoAci, caricaTabelleAci, cercaAci, rigaAci, tariffeNuove, ultimoAnnoAci } from '../tariffe-aci-servizio.js';
+import { etichettaAci, tabellaDaCaricare } from '../../engine/tariffe-aci.js';
 
 declare module 'express-session' { interface SessionData { pagheSbloccate?: number } }
 
@@ -38,6 +40,9 @@ const numero = (v: unknown): number | null => {
   const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
   return Number.isFinite(n) ? n : null;
 };
+
+/** Suggerimenti per la casella Qualifica (Adriano 12/11/2026): l'inquadramento del cedolino o il ruolo; si può scrivere altro. */
+export const QUALIFICHE = ['OPERAIO', 'IMPIEGATO', 'APPRENDISTA', 'QUADRO', 'DIRIGENTE', 'SOCIO AMMINISTRATORE', 'SOCIO', 'COLLABORATORE', 'TIROCINANTE'];
 
 function menuDipendenti(attiva: 'costi' | 'note' | 'persone' | 'riservata'): Raw {
   const voci = [['costi', '/dipendenti', 'Costo del personale'], ['note', '/dipendenti/note-spese', 'Nota spese'],
@@ -172,10 +177,13 @@ export function rotteDipendenti() {
 
   // ───────────────────────────── persone e auto ─────────────────────────────
   r.get('/persone', async (req, res) => {
-    const [persone, veicoli] = await Promise.all([
+    const [persone, veicoli, annoAci] = await Promise.all([
       q(`SELECT d.*, (SELECT count(*)::int FROM note_spese n WHERE n.dipendente_id = d.id) AS note FROM dipendenti d ORDER BY d.attivo DESC, d.nome`),
-      q(`SELECT v.*, (SELECT count(*)::int FROM note_spese n WHERE n.veicolo_id = v.id) AS note FROM rimborsi_veicoli v ORDER BY v.anno DESC NULLS LAST`),
+      q(`SELECT v.*, v.tariffa_km::float AS tariffa_km, (SELECT count(*)::int FROM note_spese n WHERE n.veicolo_id = v.id) AS note FROM rimborsi_veicoli v ORDER BY v.anno DESC NULLS LAST`),
+      ultimoAnnoAci(),
     ]);
+    const nuove = await tariffeNuove(veicoli.filter((v: any) => v.attivo));
+    const daAggiornare = [...nuove].filter(([id, r]) => Math.abs(r.costoKm - Number(veicoli.find((v: any) => v.id === id)?.tariffa_km)) >= 0.00005);
     const tipi = ['dipendente', 'socio', 'collaboratore', 'tirocinante'];
     const opz = (sel: string) => tipi.map(t => html`<option value="${t}" ${t === sel ? raw('selected') : ''}>${t}</option>`);
     res.send(pagina(req, 'Persone e auto', html`
@@ -187,32 +195,68 @@ export function rotteDipendenti() {
         <thead><tr><th>Nome</th><th>Tipo</th><th>Qualifica</th><th>Attivo</th><th>Note</th><th></th></tr></thead>
         <tbody>
           <tr class="nuova-riga"><td><input name="nome" form="p-nuova" class="maiuscolo" required placeholder="NOME COGNOME"></td>
-            <td><select name="tipo" form="p-nuova">${opz('dipendente')}</select></td><td><input name="qualifica" form="p-nuova" class="maiuscolo"></td><td></td>
+            <td><select name="tipo" form="p-nuova">${opz('dipendente')}</select></td><td><input name="qualifica" form="p-nuova" class="maiuscolo" list="qualifiche" placeholder="es. IMPIEGATO 3° LIVELLO"></td><td></td>
             <td><input name="note" form="p-nuova"></td><td><form method="post" action="/dipendenti/persone" id="p-nuova"><button class="primario">Aggiungi</button></form></td></tr>
           ${persone.map((p: any) => html`<tr class="${p.attivo ? '' : 'tenue'}"><td><input name="nome" form="p-${p.id}" value="${p.nome}" class="maiuscolo" required></td>
-            <td><select name="tipo" form="p-${p.id}">${opz(p.tipo)}</select></td><td><input name="qualifica" form="p-${p.id}" value="${p.qualifica ?? ''}" class="maiuscolo"></td>
+            <td><select name="tipo" form="p-${p.id}">${opz(p.tipo)}</select></td><td><input name="qualifica" form="p-${p.id}" value="${p.qualifica ?? ''}" class="maiuscolo" list="qualifiche"></td>
             <td><input type="checkbox" name="attivo" value="1" form="p-${p.id}" ${p.attivo ? raw('checked') : ''}></td><td><input name="note" form="p-${p.id}" value="${p.note ?? ''}"></td>
             <td class="nowrap"><form method="post" action="/dipendenti/persone/${p.id}" id="p-${p.id}"><button>Salva</button></form>
               ${p.note ? '' : html`<form method="post" action="/dipendenti/persone/${p.id}/elimina" class="inline" data-conferma="${`Eliminare ${p.nome}?`}"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
         </tbody></table></div>
+      <datalist id="qualifiche">${QUALIFICHE.map(x => html`<option value="${x}">`)}</datalist>
+      <p class="nota"><b>Qualifica</b> = l'inquadramento scritto nel cedolino o nel contratto: per i dipendenti OPERAIO, IMPIEGATO, APPRENDISTA, QUADRO
+        (se vuoi con il livello del contratto, es. "IMPIEGATO 3° LIVELLO" o "OPERAIO 4° LIVELLO"); per gli altri il ruolo (SOCIO AMMINISTRATORE, TIROCINANTE…).
+        Serve solo come promemoria in questo elenco: non entra in nessun conto (il costo per qualifica arriva dalle note contabili dello studio paghe).</p>
       ${persone.length ? html`<p class="nota">Una persona con note spese non si elimina: togli la spunta "Attivo".</p>` : ''}
       <h2>Auto e tariffa al km</h2>
       <p class="nota">La tariffa si copia nella nota spese quando la nota si crea: cambiarla qui non cambia le note già fatte.</p>
+      ${tabellaDaCaricare(annoAci, annoOggi()) ? html`<p class="avviso">${annoAci ? `Le tabelle ACI caricate sono del ${annoAci}: ` : 'Le tabelle ACI non sono ancora caricate: '}carica quelle del ${annoOggi()} (riquadro "Tabelle ACI" in fondo alla pagina).</p>` : ''}
+      ${daAggiornare.length ? html`<form method="post" action="/dipendenti/veicoli/aggiorna-aci" class="avviso">${daAggiornare.length === 1 ? "Un'auto ha" : `${daAggiornare.length} auto hanno`} la tariffa ACI di un anno prima:
+        con le tabelle ${annoAci} la tariffa cambia (vedi sotto la tariffa di ogni auto). <button class="primario">Usa le tariffe ACI ${annoAci}</button></form>` : ''}
+      ${annoAci ? html`<div class="blocco cerca-aci" id="cerca-aci">
+        <label>Cerca l'auto nelle tabelle ACI ${annoAci} <input id="aci-testo" placeholder="es. tesla model 3, passat tdi 150, panda" autocomplete="off" size="40"></label>
+        <span class="nota" id="aci-per">Il risultato scelto riempie la riga "nuova auto" (marca, modello e tariffa); con il tasto ACI di un'auto già scritta riempie quella.</span>
+        <ul id="aci-risultati" class="aci-risultati"></ul></div>` : ''}
       <div class="tabella-scorre"><table class="editor">
         <thead><tr><th>Persona</th><th>Marca</th><th>Modello</th><th>Anno</th><th>€/km</th><th>Attiva</th><th></th></tr></thead>
         <tbody>
           ${persone.length ? html`<tr class="nuova-riga"><td><select name="dipendente_id" form="v-nuova" required>${persone.filter((p: any) => p.attivo).map((p: any) => html`<option value="${p.id}">${p.nome}</option>`)}</select></td>
             <td><input name="marca" form="v-nuova" class="maiuscolo"></td><td><input name="modello" form="v-nuova" class="maiuscolo"></td>
-            <td><input name="anno" form="v-nuova" inputmode="numeric" size="5"></td><td><input name="tariffa_km" form="v-nuova" inputmode="decimal" size="6" required placeholder="0,46"></td><td></td>
+            <td><input name="anno" form="v-nuova" inputmode="numeric" size="5"></td><td><input name="tariffa_km" form="v-nuova" inputmode="decimal" size="6" required placeholder="0,46">
+              <input type="hidden" name="aci_riga" form="v-nuova"><div class="nota aci-scelta"></div></td><td></td>
             <td><form method="post" action="/dipendenti/veicoli" id="v-nuova"><button class="primario">Aggiungi</button></form></td></tr>` : ''}
           ${veicoli.map((v: any) => html`<tr class="${v.attivo ? '' : 'tenue'}"><td>${persone.find((p: any) => p.id === v.dipendente_id)?.nome ?? ''}</td>
             <td><input name="marca" form="v-${v.id}" value="${v.marca ?? ''}" class="maiuscolo"></td><td><input name="modello" form="v-${v.id}" value="${v.modello ?? ''}" class="maiuscolo"></td>
             <td><input name="anno" form="v-${v.id}" value="${v.anno ?? ''}" inputmode="numeric" size="5"></td>
-            <td><input name="tariffa_km" form="v-${v.id}" value="${numCampo(Number(v.tariffa_km), 4)}" inputmode="decimal" size="6" required></td>
+            <td><input name="tariffa_km" form="v-${v.id}" value="${numCampo(Number(v.tariffa_km), 4)}" inputmode="decimal" size="6" required>
+              <input type="hidden" name="aci_riga" form="v-${v.id}"><div class="nota aci-scelta">${v.aci_testo ? `ACI ${v.aci_anno}: ${v.aci_testo}` : ''}</div>
+              ${nuove.get(v.id) && daAggiornare.some(([id]) => id === v.id) ? html`<div class="nota negativo">ACI ${annoAci}: ${num(nuove.get(v.id)!.costoKm, 4)} €/km</div>` : ''}</td>
             <td><input type="checkbox" name="attivo" value="1" form="v-${v.id}" ${v.attivo ? raw('checked') : ''}></td>
-            <td class="nowrap"><form method="post" action="/dipendenti/veicoli/${v.id}" id="v-${v.id}"><button>Salva</button></form>
+            <td class="nowrap"><form method="post" action="/dipendenti/veicoli/${v.id}" id="v-${v.id}">${annoAci ? html`<button type="button" class="link aci-per" data-form="v-${v.id}">ACI</button> ` : ''}<button>Salva</button></form>
               ${v.note ? '' : html`<form method="post" action="/dipendenti/veicoli/${v.id}/elimina" class="inline" data-conferma="Eliminare questa auto?"><button class="link negativo">Elimina</button></form>`}</td></tr>`)}
-        </tbody></table></div>`));
+        </tbody></table></div>
+      <h2>Tabelle ACI</h2>
+      <p class="nota">Le tariffe vengono dalle "Tabelle nazionali dei costi chilometrici di esercizio di autovetture e motocicli" dell'ACI, che l'Agenzia delle Entrate
+        pubblica ogni anno a dicembre nella Gazzetta Ufficiale (supplemento ordinario, valgono dal 1° gennaio). Il costo al km è quello della tabella
+        (percorrenza di 15.000 km all'anno). ${annoAci ? `Caricate: anno ${annoAci}.` : 'Nessuna tabella caricata.'}<br>
+        Ogni anno, quando escono: cerca "tabelle ACI" su <a href="https://www.gazzettaufficiale.it" target="_blank" rel="noopener">gazzettaufficiale.it</a>,
+        scarica il PDF del supplemento e caricalo qui (oppure chiedi a Claude di farlo). Le auto collegate all'ACI propongono da sole la tariffa nuova.</p>
+      <form class="blocco" id="carica-aci"><input type="file" id="file-aci" accept=".pdf"> <button type="button" class="primario" id="avvia-aci">Carica le tabelle ACI</button>
+        <span id="esito-aci" class="nota"></span></form>`, { script: 'dipendenti.js' }));
+  });
+  r.get('/aci/cerca', async (req, res) => {
+    const { anno, righe } = await cercaAci(String(req.query.q ?? ''));
+    res.json({ anno, righe: righe.map(x => ({ riga: x.id, marca: x.marca, modello: x.modello, etichetta: x.etichetta, costo: x.costoKm })) });
+  });
+  r.post('/aci/carica', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
+    try {
+      const e = await caricaTabelleAci(req.body as Buffer);
+      res.json({ messaggio: `Tabelle ACI ${e.anno} caricate: ${e.righe.toLocaleString('it-IT')} modelli.` });
+    } catch (e: any) { res.status(400).json({ errore: String(e?.message ?? e) }); }
+  });
+  r.post('/veicoli/aggiorna-aci', async (_req, res) => {
+    const n = await aggiornaAutoAci();
+    vai(res, '/dipendenti/persone', n ? `Tariffa ACI aggiornata su ${n} auto (le note spese già fatte non cambiano).` : 'Nessuna auto da aggiornare.');
   });
   const datiPersona = (b: any) => ({ nome: maiuscolo(String(b.nome ?? '').trim()), tipo: ['dipendente', 'socio', 'collaboratore', 'tirocinante'].includes(b.tipo) ? b.tipo : 'dipendente',
     qualifica: maiuscolo(String(b.qualifica ?? '').trim()) || null, note: String(b.note ?? '').trim() || null });
@@ -242,13 +286,17 @@ export function rotteDipendenti() {
   r.post('/veicoli', async (req, res) => {
     const v = datiVeicolo(req.body);
     if (v.tariffa == null || v.tariffa <= 0 || v.tariffa > 5) return vai(res, '/dipendenti/persone', 'Scrivi la tariffa al km (es. 0,46).');
-    await q(`INSERT INTO rimborsi_veicoli (dipendente_id, marca, modello, anno, tariffa_km) VALUES ($1,$2,$3,$4,$5)`, [Number(req.body.dipendente_id), v.marca, v.modello, v.anno, v.tariffa]);
+    const aci = await rigaAci(Number(req.body.aci_riga));
+    await q(`INSERT INTO rimborsi_veicoli (dipendente_id, marca, modello, anno, tariffa_km, aci_id, aci_anno, aci_testo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [Number(req.body.dipendente_id), v.marca, v.modello, v.anno, v.tariffa, aci?.idAci ?? null, aci?.anno ?? null, aci ? etichettaAci(aci) : null]);
     vai(res, '/dipendenti/persone', 'Auto aggiunta.');
   });
   r.post('/veicoli/:id', async (req, res) => {
     const v = datiVeicolo(req.body);
     if (v.tariffa == null || v.tariffa <= 0 || v.tariffa > 5) return vai(res, '/dipendenti/persone', 'Scrivi la tariffa al km (es. 0,46).');
     await q(`UPDATE rimborsi_veicoli SET marca = $2, modello = $3, anno = $4, tariffa_km = $5, attivo = $6 WHERE id = $1`, [Number(req.params.id), v.marca, v.modello, v.anno, v.tariffa, req.body.attivo === '1']);
+    const aci = await rigaAci(Number(req.body.aci_riga));
+    if (aci) await q(`UPDATE rimborsi_veicoli SET aci_id = $2, aci_anno = $3, aci_testo = $4 WHERE id = $1`, [Number(req.params.id), aci.idAci, aci.anno, etichettaAci(aci)]);
     vai(res, '/dipendenti/persone', 'Auto salvata.');
   });
   r.post('/veicoli/:id/elimina', async (req, res) => {
