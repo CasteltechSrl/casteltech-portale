@@ -151,3 +151,7 @@ table.righe-fattura .cod { width: 26mm; } table.righe-fattura .q { width: 21mm; 
 .nota-stampa { font-size: 8.5pt; margin: 2mm 0 0; }
 .nota-condizioni { font-size: 7.5pt; color: #444; }
 .barra-stampa .bottone-email { background: #fff; color: #1b5e52; font-weight: 600; padding: 4px 12px; border-radius: 4px; text-decoration: none; }
+
+/* Autofattura incorporata nella pagina del documento (Adriano 12/11/2026): solo il foglio, sfondo grigio come un visore PDF */
+body.incorporata { background: #d9d9d9; }
+body.incorporata .pagina { margin: 10px auto; }

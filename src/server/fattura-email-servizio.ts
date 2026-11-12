@@ -8,7 +8,7 @@ import { q, q1 } from './db.js';
 import { gmailConfigurato, inviaGmail, mittentePer } from './gmail.js';
 import { descriviMittente, intestazioneDa } from '../engine/mittenti-email.js';
 import { elencoIndirizzi, indirizzoEmail, messaggioEmail } from '../engine/conferme-ordine.js';
-import { addebitaBollo, calcolaTotali } from '../engine/amministrazione.js';
+import { addebitaBollo, calcolaTotali, siglaNazione } from '../engine/amministrazione.js';
 import { bloccoInvioCortesia, destinatarioFattura, emailFattura, nomeFilePdfFattura } from '../engine/fattura-email.js';
 import { caricaAliquote } from './amministrazione-servizio.js';
 import { pdfFattura } from './pdf-fattura.js';
@@ -36,6 +36,23 @@ export async function datiStampaFattura(id: number) {
   // Prima si ricadeva sui dati attuali del cliente e una vecchia fattura poteva diventare split payment nella stampa (controllo del 4/11/2026).
   const cliente = { ...fotografia, split_payment: d.intestatario && d.numero != null ? !!fotografia.split_payment : !!attuale?.split_payment };
   return { d, righe: righeIva, azienda, cliente, totali, scadenze, intento, pagamento };
+}
+
+/**
+ * Dati dell'autofattura impaginata (Adriano 12/11/2026): fornitore estero come all'emissione (fotografia), in bozza dall'anagrafica;
+ * fattura del fornitore collegata (numero, data, valuta, cambio); totali dalle righe, senza bollo.
+ */
+export async function datiStampaAutofattura(id: number) {
+  const d = await q1<any>(`SELECT * FROM documenti WHERE id = $1 AND tipo = 'autofattura'`, [id]);
+  if (!d) return null;
+  const righe = await q<any>(`SELECT * FROM documenti_righe WHERE documento_id = $1 ORDER BY posizione`, [id]);
+  const azienda = (await q1<any>(`SELECT valore FROM impostazioni WHERE chiave = 'azienda'`))?.valore ?? {};
+  const f = d.fornitore_id ? await q1<any>(`SELECT * FROM fornitori_anagrafica WHERE id = $1`, [d.fornitore_id]) : null;
+  const fornitore = d.intestatario && d.numero != null ? d.intestatario : f ? { ...f, nazione: siglaNazione(f.paese) ?? '' } : {};
+  const fattura = d.ricevuto_id ? await q1<any>(`SELECT numero, data::text AS data, valuta, cambio::float AS cambio FROM documenti_ricevuti WHERE id = $1`, [d.ricevuto_id]) : null;
+  const righeIva = righe.map(r => ({ ...r, aliquota_iva: r.solo_descrizione ? null : r.aliquota_iva || 'IVA22' }));
+  const totali = calcolaTotali(righeIva, await caricaAliquote(), 'IVA22', { addebita: false });
+  return { d, righe: righeIva, azienda, fornitore, totali, fattura };
 }
 
 export async function pdfDellaFattura(id: number): Promise<{ nome: string; dati: Buffer } | null> {

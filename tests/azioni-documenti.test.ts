@@ -9,7 +9,7 @@ test('documenti emessi: pulsanti per tipo', () => {
   const azioni = (t: string) => pulsantiDocumenti(t).map(p => p.azione);
   assert.deepEqual(azioni('fattura'), ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'invia', 'elimina']);
   assert.deepEqual(azioni('nota_credito'), ['stampa', 'xml', 'excel', 'invia', 'elimina']);
-  assert.deepEqual(azioni('autofattura'), ['xml', 'excel', 'invia', 'elimina']);
+  assert.deepEqual(azioni('autofattura'), ['stampa', 'xml', 'excel', 'invia', 'elimina']);
   assert.deepEqual(azioni('ddt'), ['stampa', 'excel', 'fattura_ddt', 'gia_fatturato', 'annulla', 'elimina']);
   // Elimina e Annulla chiedono conferma; la stampa apre una scheda nuova
   const f = pulsantiDocumenti('ddt');

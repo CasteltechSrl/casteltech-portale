@@ -66,7 +66,7 @@ const P: Record<AzioneDocumenti, PulsanteDocumenti> = {
 export function pulsantiDocumenti(tipo: string): PulsanteDocumenti[] {
   const a: AzioneDocumenti[] = tipo === 'fattura' ? ['stampa', 'xml', 'excel', 'incassa', 'duplica', 'nota_credito', 'invia', 'elimina']
     : tipo === 'nota_credito' ? ['stampa', 'xml', 'excel', 'invia', 'elimina']
-    : tipo === 'autofattura' ? ['xml', 'excel', 'invia', 'elimina']
+    : tipo === 'autofattura' ? ['stampa', 'xml', 'excel', 'invia', 'elimina']
     : tipo === 'ddt' ? ['stampa', 'excel', 'fattura_ddt', 'gia_fatturato', 'annulla', 'elimina']
     : ['excel'];
   return a.map(x => P[x]);
@@ -88,7 +88,7 @@ export function motivoNonEliminabile(d: DocumentoElenco): string | null {
 export function motivoEscluso(azione: AzioneDocumenti, d: DocumentoElenco): string | null {
   switch (azione) {
     case 'elimina': return motivoNonEliminabile(d);
-    case 'stampa': return ['fattura', 'nota_credito', 'ddt'].includes(d.tipo) ? null : 'non ha la stampa';
+    case 'stampa': return ['fattura', 'nota_credito', 'ddt', 'autofattura'].includes(d.tipo) ? null : 'non ha la stampa';
     case 'excel': return null;
     case 'invia':
       if (d.origine === 'fic') return 'viene da Fatture in Cloud (inviato da lì)';
