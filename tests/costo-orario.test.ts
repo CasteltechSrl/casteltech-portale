@@ -104,3 +104,17 @@ test('costo orario: anni con più soci al lavoro non sono attendibili', () => {
   assert.equal(media(mesi2).sociAlLavoro, true);
   assert.equal(media(mesi2).attendibile, false);
 });
+
+test('costo orario: titolare e familiare senza cedolino entrano nell\'ora azienda, non nell\'ora operatore', () => {
+  const m = costoOrarioMesi({
+    mesi: [{ anno: 2026, mese: 1 }, { anno: 2026, mese: 2 }],
+    personale: [{ anno: 2026, mese: 1, qualifica: 'OPERAIO', lordo: 1350, contributi: 400, tfr: 0, altri: 0 }],
+    ore: [{ anno: 2026, mese: 1, qualifica: 'OPERAIO', mensilita: 'ordinaria', ore: 160, giorni: 20 }],
+    gestione: [{ anno: 2026, mese: 1, famiglie: { servizi: 4000 }, fonte: 'portale' }, { anno: 2026, mese: 2, famiglie: { servizi: 4000 }, fonte: 'portale' }],
+    senzaCedolino: { oreMese: 240, costoMese: 400 },
+  });
+  vicino(m[0].azienda.orario, 4400 / 400);
+  vicino(m[0].produzione.orario, (1350 + 400 + 100) / 160);
+  assert.equal(m[1].valido, false);
+  assert.equal(m[1].azienda.ore, 0);
+});

@@ -835,7 +835,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    cedolini senza ore stimati sui colleghi del mese, togliendo il TFR liquidato); ora azienda = spese di gestione del Punto di pareggio (servizi, godimento, compensi dei soci, ammortamenti,
    oneri, finanziari) ÷ tutte le ore; materie e lavorazioni rivendute (`CATEGORIE_ESCLUSE`: montaggi esterni, progettazione, R&S) fuori. Mese per mese, anno per anno e ultimi 12 mesi
    (somma costi ÷ somma ore, solo mesi con cedolini); anni con soci al lavoro / troppe ore stimate = "non confrontabile"/"cautela". "Usa nei preventivi nuovi" = scrive le tariffe
-   (impostazioni 'tariffe', ricarico invariato), i preventivi salvati non cambiano.
+   (impostazioni 'tariffe', ricarico invariato), i preventivi salvati non cambiano. Adriano 12/11/2026 sera: titolare e familiare senza cedolino (impostazioni 'costo_orario',
+   `IMPOSTAZIONI_COSTO_ORARIO`: ore al mese + compenso annuo del familiare, riquadro nella pagina) = ore e costo in più all'ora azienda di ogni mese con i cedolini; attrezzature comprate
+   fuori (c'è l'ammortamento); il leasing resta anche finito ("qualcosa bisogna sempre acquistare"); aggiornamento automatico delle tariffe dopo la copia serale quando arriva un
+   mese di cedolini nuovo (`aggiornaTariffeSeServe`, `ultimoMeseApplicato`; spunta per spegnerlo).
    ✅ Punto di pareggio (Adriano 6/11/2026, dal file "Analisi CASTELTECH SRL" del commercialista; tasto in Analisi, `/amministrazione/analisi/pareggio` + `.xlsx`,
    conti in `engine/pareggio.ts`, letture in `pareggio-servizio.ts`, pagina in `rotte/pareggio.ts`, migrazione 078 `conto_economico_mensile`, test in `tests/pareggio.test.ts`):
    MEDIA mensile di ogni voce (famiglie `FAMIGLIE`: ricavi, materie prime = variabili, servizi, affitti/leasing, personale, compensi, ammortamenti, oneri, finanziari) nel periodo

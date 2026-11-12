@@ -7,7 +7,7 @@
 import { Router, type Request } from 'express';
 import { layout } from '../views/layout.js';
 import { html, num } from '../views/html.js';
-import { q, q1 } from '../db.js';
+import { q1 } from '../db.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
 import { tastiAnalisi } from './analisi.js';
 import { vedePaghe } from '../../engine/ruoli.js';
@@ -15,8 +15,7 @@ import { nomeMeseIt } from '../../engine/pareggio.js';
 import { famiglia } from '../../engine/pareggio.js';
 import { media, mediaDodiciMesi, mediePerAnno, tariffeProposte, CATEGORIE_ESCLUSE, DIVISORE_TFR, ORE_MESE_PIENO, SCARTO_MAX, STIMATE_MAX, type MediaCostoOrario, type Valore } from '../../engine/costo-orario.js';
 import { categoria } from '../../engine/categorie-acquisti.js';
-import { datiCostoOrario, mesiConOre } from '../costo-orario-servizio.js';
-import { caricaTariffe } from '../catalogo-db.js';
+import { datiCostoOrario, mesiConOre, impostazioniCostoOrario, salvaImpostazioniCostoOrario, scriviTariffe } from '../costo-orario-servizio.js';
 
 const ora = (n: number | null | undefined) => (n == null ? '—' : `${num(n, 2)} €/h`);
 const euro = (n: number) => `${num(n, 0)} €`;
@@ -44,7 +43,7 @@ export function rotteCostoOrario() {
     }
     const periodo = await mesiConOre();
     if (!periodo) return res.send(pagina(req, 'Costo orario', html`<p class="avviso">Nessun cedolino nel portale: carica le buste paga da Dipendenti → Buste paga.</p>`));
-    const { mesi, escluse, tariffe } = await datiCostoOrario({ da: periodo.primo, a: periodo.ultimo });
+    const { mesi, escluse, attrezzature, impostazioni: imp, tariffe } = await datiCostoOrario({ da: periodo.primo, a: periodo.ultimo });
     const anni = mediePerAnno(mesi);
     const annoScelto = Number(req.query.anno) || anni[0]?.anno || Number(periodo.ultimo.slice(0, 4));
     const dodici = mediaDodiciMesi(mesi, periodo.ultimo);
@@ -80,6 +79,16 @@ export function rotteCostoOrario() {
         <button>Usa nei preventivi nuovi</button> <a href="/impostazioni/tariffe">Tariffe in Impostazioni</a>
       </form>
 
+      <form method="post" action="/amministrazione/analisi/costo-orario/impostazioni" class="riquadro non-stampare">
+        <b>Chi lavora senza cedolino</b> (le ore entrano nell'ora azienda di ogni mese con i cedolini)<br>
+        <label>Ore al mese del titolare <input name="oreTitolareMese" inputmode="decimal" size="5" value="${num(imp.oreTitolareMese, 0)}"></label>
+        <label>Ore al mese del familiare <input name="oreFamiliareMese" inputmode="decimal" size="5" value="${num(imp.oreFamiliareMese, 0)}"></label>
+        <label>Compenso del familiare all'anno, tutto compreso (€) <input name="compensoFamiliareAnno" inputmode="decimal" size="7" value="${num(imp.compensoFamiliareAnno, 0)}"></label><br>
+        <label><input type="checkbox" name="automatico" value="1" ${imp.automatico ? 'checked' : ''}> Aggiorna da solo le tariffe dei preventivi nuovi ogni mese
+          (la sera, quando arrivano i cedolini di un mese nuovo${imp.ultimoMeseApplicato ? `; ultimo: ${imp.ultimoMeseApplicato}` : ''})</label>
+        <button>Salva</button>
+      </form>
+
       <h2>Anno per anno</h2>
       <table><thead><tr><th>Anno</th><th class="num">Ora azienda</th><th class="num">Operatore produzione</th><th class="num">Operatore ufficio</th>
         <th class="num">Azienda + produzione</th><th class="num">Spese di gestione</th><th class="num">Costo dipendenti</th><th class="num">Ore lavorate</th><th>Note</th></tr></thead>
@@ -100,6 +109,7 @@ export function rotteCostoOrario() {
             m.tfrLiquidato ? `TFR liquidato ${euro(m.tfrLiquidato)} escluso` : '',
             m.cedoliniSenzaOre ? `ore stimate per ${m.cedoliniSenzaOre} ${m.cedoliniSenzaOre === 1 ? 'cedolino' : 'cedolini'}` : '',
             escluse[m.chiave] ? `lavorazioni rivendute ${euro(escluse[m.chiave])} escluse` : '',
+            attrezzature[m.chiave] ? `attrezzature comprate ${euro(attrezzature[m.chiave])} escluse (c'è l'ammortamento)` : '',
             !m.valido ? 'senza cedolini: fuori dalle medie' : '',
           ].filter(Boolean).join(' · ');
           return html`<tr><td>${nomeMeseIt(m.mese)}</td>${cella(m.produzione)}${cella(m.ufficio)}${cella(m.azienda)}
@@ -113,16 +123,19 @@ export function rotteCostoOrario() {
           const tot: Record<string, number> = {};
           for (const m of mesiAnno.filter(x => x.valido)) for (const [k, v] of Object.entries(m.azienda.famiglie)) tot[k] = (tot[k] ?? 0) + (v ?? 0);
           const n = mesiAnno.filter(x => x.valido).length || 1;
-          return Object.entries(tot).sort((a, b) => b[1] - a[1]).map(([k, v]) => html`<tr><td>${famiglia(k as never).nome} <small class="tenue">${famiglia(k as never).spiegazione}</small></td>
-            <td class="num">${euro(v)}</td><td class="num">${euro(v / n)}</td></tr>`);
+          const fam = imp.compensoFamiliareAnno / 12 * mesiAnno.filter(x => x.valido).length;
+          return [...Object.entries(tot).sort((a, b) => b[1] - a[1]).map(([k, v]) => html`<tr><td>${famiglia(k as never).nome} <small class="tenue">${famiglia(k as never).spiegazione}</small></td>
+            <td class="num">${euro(v)}</td><td class="num">${euro(v / n)}</td></tr>`),
+            fam ? html`<tr><td>Compenso del familiare <small class="tenue">dalle impostazioni sopra</small></td><td class="num">${euro(fam)}</td><td class="num">${euro(fam / n)}</td></tr>` : ''];
         })()}</tbody></table>
 
       <h2>Come si calcola</h2>
       <ul class="nota">
         <li><b>Ora operatore</b> = costo dei dipendenti ÷ ore lavorate dei cedolini. Costo = lordo + INPS e INAIL dell'azienda + enti + TFR che matura (lordo ÷ ${num(DIVISORE_TFR, 1)}).
           Il TFR <b>liquidato</b> a chi esce non conta: è maturato negli anni prima. Operai, apprendisti e tirocinanti = produzione; impiegati = ufficio.</li>
-        <li><b>Ora azienda</b> = spese di gestione ÷ ore lavorate di tutti i dipendenti. Spese = servizi (energia, commercialista, pulizie, trasporti, consulenze…), affitto e leasing,
-          il compenso dell'amministratore con l'INPS, ammortamenti, imposte e oneri, interessi: i costi fissi del Punto di pareggio senza i dipendenti.</li>
+        <li><b>Ora azienda</b> = spese di gestione ÷ ore lavorate di tutti: dipendenti (cedolini) + titolare e familiare (${num(imp.oreTitolareMese + imp.oreFamiliareMese, 0)} ore al mese, dalle impostazioni sopra). Spese = servizi (energia, commercialista, pulizie, trasporti, consulenze…), affitto e leasing,
+          il compenso dell'amministratore con l'INPS e quello del familiare, ammortamenti, imposte e oneri, interessi: i costi fissi del Punto di pareggio senza i dipendenti.
+          Le attrezzature comprate non contano (c'è già l'ammortamento); il leasing resta anche quando un contratto finisce: prima o poi se ne fa un altro.</li>
         <li>Fuori dall'ora azienda il materiale che si rivende o si consuma (componenti, PCB, lamine, stagno…: nel preventivo sono voci a parte) e le lavorazioni comprate
           e rivendute (${CATEGORIE_ESCLUSE.map(c => categoria(c).nome.toLowerCase()).join(', ')}). Nei mesi con il bilancino le lavorazioni non si separano.</li>
         <li>Cedolini senza ore (soprattutto quelli del vecchio studio, 2019–2021, e i mesi con la liquidazione): ore stimate dal lordo con le ore per euro dei colleghi dello stesso
@@ -137,19 +150,23 @@ export function rotteCostoOrario() {
 
   r.post('/costo-orario/tariffe', async (req: Request, res) => {
     if (!(await puoVedere(req))) return res.status(403).send('Pagina riservata');
-    const periodo = await mesiConOre();
-    if (!periodo) return res.redirect('/amministrazione/analisi/costo-orario');
-    const { mesi } = await datiCostoOrario({ da: periodo.primo, a: periodo.ultimo });
-    const p = tariffeProposte(mediaDodiciMesi(mesi, periodo.ultimo));
-    const attuali = await caricaTariffe();
-    const nuove = {
-      ...attuali,
-      costoAziendaH: p.costoAziendaH ?? attuali.costoAziendaH,
-      costoOperatoreProduzioneH: p.costoOperatoreProduzioneH ?? attuali.costoOperatoreProduzioneH,
-      costoOperatoreUfficioH: p.costoOperatoreUfficioH ?? attuali.costoOperatoreUfficioH,
-    };
-    await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('tariffe', $1) ON CONFLICT (chiave) DO UPDATE SET valore = $1, aggiornato_il = now()`, [JSON.stringify(nuove)]);
-    res.redirect(`/amministrazione/analisi/costo-orario?msg=${encodeURIComponent(`Tariffe aggiornate: azienda ${nuove.costoAziendaH} €/h, produzione ${nuove.costoOperatoreProduzioneH} €/h, ufficio ${nuove.costoOperatoreUfficioH} €/h. Valgono per i preventivi nuovi.`)}`);
+    const n = await scriviTariffe();
+    if (!n) return res.redirect('/amministrazione/analisi/costo-orario');
+    res.redirect(`/amministrazione/analisi/costo-orario?msg=${encodeURIComponent(`Tariffe aggiornate: azienda ${n.costoAziendaH} €/h, produzione ${n.costoOperatoreProduzioneH} €/h, ufficio ${n.costoOperatoreUfficioH} €/h. Valgono per i preventivi nuovi.`)}`);
+  });
+
+  r.post('/costo-orario/impostazioni', async (req: Request, res) => {
+    if (!(await puoVedere(req))) return res.status(403).send('Pagina riservata');
+    const numero = (v: unknown, d: number) => { const x = Number(String(v ?? '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(x) && x >= 0 ? x : d; };
+    const imp = await impostazioniCostoOrario();
+    await salvaImpostazioniCostoOrario({
+      ...imp,
+      oreTitolareMese: numero(req.body.oreTitolareMese, imp.oreTitolareMese),
+      oreFamiliareMese: numero(req.body.oreFamiliareMese, imp.oreFamiliareMese),
+      compensoFamiliareAnno: numero(req.body.compensoFamiliareAnno, imp.compensoFamiliareAnno),
+      automatico: req.body.automatico === '1',
+    });
+    res.redirect(`/amministrazione/analisi/costo-orario?msg=${encodeURIComponent('Impostazioni salvate.')}`);
   });
 
   return r;

@@ -8,7 +8,9 @@
  *   + TFR maturato (lordo ÷ 13,5); il TFR LIQUIDATO a chi esce NON conta (è maturato negli anni prima: Cristina e Loretta nel 2026).
  *   Operai, apprendisti e tirocinanti = produzione; impiegati = ufficio.
  * - costo azienda = tutte le spese di gestione del mese (servizi, affitti e leasing, compenso del socio amministratore con l'INPS,
- *   ammortamenti, imposte e oneri, oneri finanziari: i costi fissi del Punto di pareggio tranne i dipendenti) ÷ ore lavorate di TUTTI i dipendenti.
+ *   ammortamenti, imposte e oneri, oneri finanziari: i costi fissi del Punto di pareggio tranne i dipendenti) ÷ ore lavorate di TUTTI
+ *   (dipendenti + titolare e familiare senza cedolino, `ImpostazioniCostoOrario`). Le attrezzature comprate non contano: c'è già l'ammortamento.
+ *   Il leasing resta anche quando un contratto finisce (Adriano 12/11/2026: "qualcosa bisogna sempre acquistare").
  *   Materie prime e di consumo restano fuori: nel preventivo sono voci a parte.
  * Ogni mese ha il suo valore; la media annua è la somma dei costi ÷ la somma delle ore (così un mese con la tredicesima o con poche ore
  * non pesa più degli altri). Mesi senza ore nei cedolini: valore vuoto e fuori dalle medie.
@@ -20,7 +22,23 @@ export interface RigaCostoPersonale { anno: number; mese: number; qualifica: str
 /** Un cedolino (tabella cedolini). */
 export interface RigaOre { anno: number; mese: number; qualifica: string | null; mensilita: string; ore: number | null; giorni: number | null; lordo?: number }
 /** Spese di gestione del mese per famiglia del Punto di pareggio. */
-export interface GestioneMese { anno: number; mese: number; famiglie: Partial<Record<CodiceFamiglia, number>>; fonte: string }
+export interface GestioneMese {
+  anno: number; mese: number; famiglie: Partial<Record<CodiceFamiglia, number>>; fonte: string;
+}
+
+/**
+ * Persone che lavorano senza cedolino (Adriano 12/11/2026): il titolare (il compenso è già nelle spese di gestione, mancano le ore:
+ * "almeno 11 ore al giorno lun–ven + 3–4 nel weekend") e il familiare che aiuta (8 ore al giorno, compenso a fine anno "tutto compreso").
+ * Si aggiungono a ogni mese con i cedolini: ore all'ora azienda, il compenso del familiare alle spese di gestione. Impostazioni 'costo_orario'.
+ */
+export interface ImpostazioniCostoOrario { oreTitolareMese: number; oreFamiliareMese: number; compensoFamiliareAnno: number; automatico: boolean; ultimoMeseApplicato?: string }
+export const IMPOSTAZIONI_COSTO_ORARIO: ImpostazioniCostoOrario = {
+  oreTitolareMese: 225,      // 11 h × 5 giorni + 3,5 h nel weekend, ~2.700 ore l'anno tolte ferie e feste
+  oreFamiliareMese: 147,     // 8 h al giorno, ~1.760 ore l'anno
+  compensoFamiliareAnno: 4000,
+  automatico: true,          // Adriano 12/11/2026: tariffe dei preventivi aggiornate da sole ogni mese
+};
+
 
 export type Reparto = 'produzione' | 'ufficio' | 'socio';
 
@@ -65,7 +83,7 @@ export interface MeseCostoOrario {
   chiave: string; anno: number; mese: number;
   produzione: Valore; ufficio: Valore;
   /** costo azienda: spese di gestione ÷ ore di tutti i dipendenti */
-  azienda: Valore & { famiglie: Partial<Record<CodiceFamiglia, number>>; fonte: string };
+  azienda: Valore & { famiglie: Partial<Record<CodiceFamiglia, number>>; fonte: string; oreSenzaCedolino: number };
   tfrLiquidato: number;
   /** lordo dei dipendenti nei cedolini e nella nota contabile: se non tornano mancano cedolini o note (vedi `attendibile`) */
   lordoCedolini: number; lordoNota: number;
@@ -80,7 +98,11 @@ export interface MeseCostoOrario {
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const valore = (costo: number, ore: number): Valore => ({ costo: r2(costo), ore: r2(ore), orario: ore > 0 ? r2(costo / ore) : null });
 
-export function costoOrarioMesi(opz: { mesi: { anno: number; mese: number }[]; personale: RigaCostoPersonale[]; ore: RigaOre[]; gestione: GestioneMese[] }): MeseCostoOrario[] {
+export function costoOrarioMesi(opz: {
+  mesi: { anno: number; mese: number }[]; personale: RigaCostoPersonale[]; ore: RigaOre[]; gestione: GestioneMese[];
+  /** titolare e familiare senza cedolino: ore e costo da aggiungere a ogni mese con i cedolini */
+  senzaCedolino?: { oreMese: number; costoMese: number };
+}): MeseCostoOrario[] {
   return opz.mesi.map(({ anno, mese }) => {
     const chiave = chiaveMese(anno, mese);
     const stesso = <T extends { anno: number; mese: number }>(x: T) => x.anno === anno && x.mese === mese;
@@ -118,12 +140,15 @@ export function costoOrarioMesi(opz: { mesi: { anno: number; mese: number }[]; p
     const famiglie: Partial<Record<CodiceFamiglia, number>> = {};
     let gestione = 0;
     for (const f of FAMIGLIE_GESTIONE) { const v = g?.famiglie[f] ?? 0; if (v) { famiglie[f] = r2(v); gestione += v; } }
-    const oreTutte = ore.produzione + ore.ufficio;
+    const oreDipendenti = ore.produzione + ore.ufficio;
+    const extra = oreDipendenti > 0 ? opz.senzaCedolino : undefined;
+    if (extra) gestione += extra.costoMese;
+    const oreTutte = oreDipendenti + (extra?.oreMese ?? 0);
     return {
       chiave, anno, mese,
       produzione: valore(costo.produzione, ore.produzione), ufficio: valore(costo.ufficio, ore.ufficio),
-      azienda: { ...valore(gestione, oreTutte), famiglie, fonte: g?.fonte ?? '' },
-      tfrLiquidato: r2(tfrLiquidato), lordoCedolini: r2(lordoCedolini), lordoNota: r2(lordoNota), soci, cedoliniSenzaOre, cedolini, valido: oreTutte > 0,
+      azienda: { ...valore(gestione, oreTutte), famiglie, fonte: g?.fonte ?? '', oreSenzaCedolino: extra?.oreMese ?? 0 },
+      tfrLiquidato: r2(tfrLiquidato), lordoCedolini: r2(lordoCedolini), lordoNota: r2(lordoNota), soci, cedoliniSenzaOre, cedolini, valido: oreDipendenti > 0,
     };
   });
 }
