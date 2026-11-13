@@ -131,7 +131,8 @@ export function rotteApiClaude() {
     res.json({ salvati: await salvaPrezziOnline(Array.isArray(req.body?.prezzi) ? req.body.prezzi : []) });
   });
   r.post('/armadi/cerca-prezzi', async (req, res) => {
-    res.json({ esito: await cercaPrezziOnline(Math.min(1000, Number(req.body?.max) || 300), !!req.body?.soloCasteltech) });
+    res.json({ esito: await cercaPrezziOnline(Math.min(1000, Number(req.body?.max) || 300), !!req.body?.soloCasteltech,
+      { escludi: Array.isArray(req.body?.escludi) ? req.body.escludi.map(String) : [], ancoraSenzaPrezzo: !!req.body?.ancoraSenzaPrezzo }) });
   });
   // Descrizioni dei codici di un cliente con i P/N (Adriano 13/11/2026, file di Selea e Idea): { cliente_id, componenti: [{ codice, descrizione }] }
   r.post('/armadi/descrizioni-cliente', async (req, res) => {
