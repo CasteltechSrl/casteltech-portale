@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, leggiArchivioBobine, leggiCodiceSelea, leggiSigla, percentualeValida,
+  descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, leggiArchivioBobine, leggiCodiceSelea, leggiSigla, percentualeConPrezzo, percentualeValida,
   pnDaDescrizione, pnPulito, prezzoOnline, proprietario, quote, riepilogo, scegliPrezzo, stimePerGruppo, tabellaSigle,
 } from '../src/engine/armadi.js';
 import { cercaGuida } from '../src/engine/guida.js';
@@ -113,4 +113,15 @@ test('stoccaggio: rotte montate prima delle pagine delle macchine, guida', () =>
   const index = readFileSync(new URL('../src/server/index.ts', import.meta.url), 'utf8');
   assert.ok(index.indexOf('rotteArmadi()') > 0 && index.indexOf('rotteArmadi()') < index.indexOf('rotteMacchine()'));
   assert.equal(cercaGuida('valore magazzino bobine clienti')[0]?.argomento.id, 'stoccaggio-componenti');
+});
+
+test('% dei codici con prezzo e pagina divisa in senza / con prezzo con filtro per proprietario (Adriano 13/11/2026)', () => {
+  assert.equal(percentualeConPrezzo(1631, 149), 90.9);
+  assert.equal(percentualeConPrezzo(10, 0), 100);
+  assert.equal(percentualeConPrezzo(0, 0), null);
+  const rotta = readFileSync(new URL('../src/server/rotte/armadi.ts', import.meta.url), 'utf8');
+  assert.match(rotta, /<th>Proprietario<\/th>/);
+  assert.match(rotta, /Componenti senza prezzo/);
+  assert.match(rotta, /Componenti con il prezzo/);
+  assert.match(rotta, /di_\$\{sez\}/);
 });
