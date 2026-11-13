@@ -16,7 +16,7 @@
     const casella = document.createElement('input');
     casella.type = 'search';
     casella.className = 'cerca-menu';
-    casella.placeholder = '🔍 cerca prodotto (codice o descrizione)…';
+    casella.placeholder = menu.dataset.cerca || '🔍 cerca prodotto (codice o descrizione)…';
     casella.setAttribute('aria-label', 'Cerca nel menu dei prodotti');
     casella.autocomplete = 'off';
     menu.before(casella);

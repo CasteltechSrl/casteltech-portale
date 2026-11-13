@@ -399,6 +399,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (avanzi); SANDRA = Arilan, REBIX = NIT, SoloKeys = Inc.; sigle in `SIGLE_CLIENTI`, scelte dell'ufficio in impostazioni 'armadi'. Descrizioni completate (archivio, componenti clienti, codice
    Casteltech o Selea, P/N). Prezzo: a mano > ultimo acquisto (fatture fornitori, autofatture, ordini a fornitore, archivio) > online (`cercaPn`, in background) > armadio > stima del gruppo.
    Valore dei clienti per cliente con "% di riconoscimento" (predefinita 100 %).
+   Tabella per proprietario con % dei codici con prezzo, elenco diviso "senza prezzo" / "con il prezzo" con filtro Proprietario (`di_senza`/`di_con`). Sigle: colonna Cliente
+   (impostazioni 'armadi' `clientiSigle`, `clientiDelleSigle`/`gruppiSigle`): sigle dello stesso cliente in una riga sola, "Di chi è" separato (Euroautomations = materiale Casteltech).
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei

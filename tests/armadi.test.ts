@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, leggiArchivioBobine, leggiCodiceSelea, leggiSigla, percentualeConPrezzo, percentualeValida,
-  pnDaDescrizione, pnPulito, prezzoOnline, proprietario, quote, riepilogo, scegliPrezzo, stimePerGruppo, tabellaSigle,
+  pnDaDescrizione, pnPulito, prezzoOnline, proprietario, quote, riepilogo, scegliPrezzo, stimePerGruppo, tabellaSigle, clientiDelleSigle, gruppiSigle,
 } from '../src/engine/armadi.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -124,4 +124,28 @@ test('% dei codici con prezzo e pagina divisa in senza / con prezzo con filtro p
   assert.match(rotta, /Componenti senza prezzo/);
   assert.match(rotta, /Componenti con il prezzo/);
   assert.match(rotta, /di_\$\{sez\}/);
+});
+
+test('sigle raggruppate per cliente: "Di chi è" non cambia, una riga per cliente (Adriano 13/11/2026)', () => {
+  const clienti = [{ id: 7, ragione_sociale: 'EUROAUTOMATIONS S.R.L.' }, { id: 9, ragione_sociale: 'ARILAN S.R.L.' }];
+  const sigle = ['EUR.AUT.', 'EURO', 'EUROAUTOM', 'SANDRA', 'XYZ'];
+  const tabella = { 'EUR.AUT.': 'casteltech', EURO: 'casteltech', EUROAUTOM: 'casteltech', SANDRA: 'c9', XYZ: '' };
+  // Proposte: EUROAUTOM da SIGLE_CLIENTI anche se il materiale è di Casteltech, SANDRA dal "Di chi è"; le scelte salvate vincono
+  const k = clientiDelleSigle(sigle, clienti, tabella, { 'EUR.AUT.': 'c7', EURO: 'c7' });
+  assert.deepEqual(k, { 'EUR.AUT.': 'c7', EURO: 'c7', EUROAUTOM: 'c7', SANDRA: 'c9', XYZ: '' });
+  const pezzi = new Map([['EUR.AUT.', 10], ['EURO', 5], ['EUROAUTOM', 1], ['SANDRA', 3], ['XYZ', 2]]);
+  const g = gruppiSigle(sigle, tabella, k, pezzi, new Map([['c7', 'EUROAUTOMATIONS S.R.L.'], ['c9', 'ARILAN S.R.L.']]));
+  assert.equal(g.length, 3);
+  assert.deepEqual(g[0], { sigle: ['SANDRA'], cliente: 'c9', diChi: 'c9', diversi: false, pezzi: 3 });   // Arilan prima di Euroautomations
+  assert.deepEqual(g[1], { sigle: ['EUR.AUT.', 'EURO', 'EUROAUTOM'], cliente: 'c7', diChi: 'casteltech', diversi: false, pezzi: 16 });
+  assert.equal(g[2].sigle[0], 'XYZ');
+  // Scelte diverse nella stessa riga: vale la più frequente, segnalata
+  const g2 = gruppiSigle(['A', 'B', 'C'], { A: 'casteltech', B: 'casteltech', C: 'c7' }, { A: 'c7', B: 'c7', C: 'c7' }, new Map());
+  assert.equal(g2[0].diChi, 'casteltech');
+  assert.equal(g2[0].diversi, true);
+  // "— nessuno —" salvato = sigla sola anche se proposta
+  assert.equal(clientiDelleSigle(['EUROAUTOM'], clienti, {}, { EUROAUTOM: '' }).EUROAUTOM, '');
+  const rotta = readFileSync('src/server/rotte/armadi.ts', 'utf8');
+  assert.match(rotta, /<th>Cliente<\/th><th>Di chi è<\/th>/);
+  assert.match(rotta, /SEPARATORE_SIGLE/);
 });

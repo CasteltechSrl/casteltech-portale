@@ -5,7 +5,7 @@
  */
 import express, { Router, type Request } from 'express';
 import { PAGINE_MACCHINE } from '../../engine/macchine.js';
-import { NOMI_FONTI, percentualeConPrezzo, percentualeValida, riconoscimentoDi, type FontePrezzo, type Quota } from '../../engine/armadi.js';
+import { NOMI_FONTI, SEPARATORE_SIGLE, gruppiSigle, percentualeConPrezzo, percentualeValida, riconoscimentoDi, type FontePrezzo, type Quota } from '../../engine/armadi.js';
 import { corrispondeRicerca } from '../../engine/ricerca.js';
 import { layout } from '../views/layout.js';
 import { html, euro, euroUnitario, num, raw } from '../views/html.js';
@@ -101,6 +101,10 @@ export function rotteArmadi() {
     };
     const pezziSigla = new Map<string, number>();
     for (const x of d.quote) if (x.proprietario.sigla) pezziSigla.set(x.proprietario.sigla, (pezziSigla.get(x.proprietario.sigla) ?? 0) + x.quantita);
+    const gruppi = gruppiSigle(d.sigle, d.tabella, d.clientiSigle, pezziSigla, new Map(d.clienti.map(c => [`c${c.id}`, c.ragione_sociale])));
+    const menuClienti = (nome: string, valore: string) => html`<select name="${nome}" class="cercabile" data-cerca="🔍 cerca cliente…">
+      <option value="" ${valore ? '' : raw('selected')}>— nessuno —</option>
+      ${d.clienti.map(c => html`<option value="c${c.id}" ${valore === `c${c.id}` ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>`;
 
     const carica = html`
       <details class="blocco" ${vuoto ? raw('open') : ''}>
@@ -178,10 +182,15 @@ export function rotteArmadi() {
             <label class="spunta"><input type="radio" name="regola" value="bobina" ${d.imp.regola === 'bobina' ? raw('checked') : ''}> la sigla della bobina</label>
             <label class="spunta"><input type="radio" name="regola" value="articolo" ${d.imp.regola === 'articolo' ? raw('checked') : ''}> la sigla del codice (anagrafica degli armadi)</label>
           </fieldset>
+          <p class="nota">Colonna <b>Cliente</b>: a quale cliente in anagrafica si riferisce la sigla (es. "EUR.AUT.", "EURO", "EUROAUTOM" = Euroautomations).
+            Dopo il Salva le sigle dello stesso cliente stanno in una riga sola; "Di chi è" non cambia e vale per tutte le sigle della riga.
+            Per staccare le sigle, scegli "— nessuno —" come cliente.</p>
           <table>
-            <thead><tr><th>Sigla</th><th class="num">Pezzi</th><th>Di chi è</th></tr></thead>
-            <tbody>${d.sigle.map(s => html`<tr class="${d.tabella[s] ? '' : 'evidenza'}"><td>${s}</td><td class="num">${num(pezziSigla.get(s) ?? 0, 0)}</td>
-              <td>${menuProprietari(`s:${s}`, d.tabella[s] ?? '')}</td></tr>`)}</tbody>
+            <thead><tr><th>Sigla</th><th class="num">Pezzi</th><th>Cliente</th><th>Di chi è</th></tr></thead>
+            <tbody>${gruppi.map(g => { const k = g.sigle.join(SEPARATORE_SIGLE); return html`<tr class="${g.diChi ? '' : 'evidenza'}">
+              <td>${g.sigle.join(', ')}${g.sigle.length > 1 ? html`<br><small>${g.sigle.length} sigle</small>` : ''}</td><td class="num">${num(g.pezzi, 0)}</td>
+              <td>${menuClienti(`k:${k}`, g.cliente)}</td>
+              <td>${menuProprietari(`s:${k}`, g.diChi)}${g.diversi ? html`<br><small>le sigle avevano scelte diverse: col Salva vale questa per tutte</small>` : ''}</td></tr>`; })}</tbody>
           </table>
           <button class="primario">Salva</button>
         </form>
@@ -275,9 +284,14 @@ export function rotteArmadi() {
 
   r.post('/stoccaggio/sigle', async (req, res) => {
     const imp = await impostazioniArmadi();
-    const proprietari = { ...imp.proprietari };
-    for (const [k, v] of Object.entries(req.body)) if (k.startsWith('s:')) proprietari[k.slice(2)] = String(v ?? '');
-    await salvaImpostazioniArmadi({ proprietari, regola: req.body.regola === 'articolo' ? 'articolo' : 'bobina' });
+    const proprietari = { ...imp.proprietari }, clientiSigle = { ...imp.clientiSigle };
+    // Una riga può avere più sigle (stesso cliente): "Di chi è" e "Cliente" valgono per tutte
+    for (const [k, v] of Object.entries(req.body)) {
+      const sigle = k.slice(2).split(SEPARATORE_SIGLE).filter(Boolean);
+      if (k.startsWith('s:')) for (const s of sigle) proprietari[s] = String(v ?? '');
+      if (k.startsWith('k:')) for (const s of sigle) clientiSigle[s] = /^c\d+$/.test(String(v)) ? String(v) : '';
+    }
+    await salvaImpostazioniArmadi({ proprietari, clientiSigle, regola: req.body.regola === 'articolo' ? 'articolo' : 'bobina' });
     res.redirect(torna('Sigle salvate.'));
   });
 
