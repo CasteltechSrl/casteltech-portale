@@ -313,6 +313,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    protezioni per l'onda (fori e zone segnati sul disegno con "Segna le protezioni", salvati in `pacchetti_scheda.protezioni`).
    Segnalazioni "Va bene" (migrazione 037, `pacchetti_scheda.accettate`, `engine/scheda/accettate.ts`): chiave livello|testo, applicate in
    lettura (`conAccettate`): non contano tra gli errori né nel preventivo, componenti non più critici nelle stampe; restano dopo Rianalizza.
+   Risposte alle osservazioni (Adriano 13/11/2026, "solo va bene spesso non è sufficiente"; `rispondi`/`riapri`/`risposteDaRivedere` in `engine/scheda/accettate.ts`,
+   `osservazioni-servizio.ts`, vista unica `views/osservazioni.ts`, POST `/preventivi/documenti/:id/rispondi` (anche `/accetta`), test in `tests/osservazioni.test.ts`): ogni voce di `accettate`
+   ha `esito` (aperta / va_bene / produzione; le vecchie {da, il} = va_bene) e `risposte` [{da, il, testo, momento preventivo|produzione, prezzo}] mai cancellate ("riapri" le tiene).
+   "produzione" = non pesa sul preventivo (`chiusaPerPreventivo`) ma resta aperta nella pre-produzione (nonFare con l'ultima risposta) e i componenti restano rossi; si chiude lì
+   (form con `torna`). Spunta "cambia il prezzo" = avviso nel preventivo finché `aggiornato_il` è più vecchio della risposta. Riquadro "Osservazioni sui documenti del cliente" nel preventivo
+   (sola lettura: la pagina è un modulo) anche per gli altri preventivi dello stesso `gruppo_quantita`; la pre-produzione trova il pacchetto anche dal gruppo.
    File di testo in UTF-8 se validi (Ω di KiCad), altrimenti Latin-1; ponticelli SolderJumper/NetTie non sono componenti.
    Cartella grande (Adriano 29/10/2026; `engine/scheda/scelta-file.ts`, POST `/preventivi/documenti/:id/scelta`): il browser manda prima nomi e
    dimensioni, il portale sceglie i file utili; PDF, 3D (STEP da 80 MB), immagini, ODB++, .doc/.dsn…, file oltre 25 MB (zip oltre 60 MB) non si

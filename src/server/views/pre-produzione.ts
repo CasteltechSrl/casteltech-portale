@@ -10,9 +10,9 @@ import { NOMI_ARRIVO } from '../../engine/ordini-fornitore.js';
 import { NOMI_STATO_MATERIALE, firmaLeggibile, materialePronto, type StatoMateriale } from '../../engine/pre-produzione.js';
 import type { DatiPreProduzione } from '../pre-produzione-servizio.js';
 import { layout, type Utente } from './layout.js';
+import { elencoOsservazioni } from './osservazioni.js';
 import { html, data, num, euro, euroUnitario, ore, raw } from './html.js';
 
-const ETICHETTE_LIVELLO: Record<string, string> = { errore: 'Da chiarire', avviso: 'Attenzione', info: 'Nota' };
 const CLASSE_STATO: Record<StatoMateriale, string> = { cliente: 'accettato', in_casa: 'evaso', arrivato: 'evaso', parziale: 'parziale', ordinato: 'inviato', da_ordinare: 'rifiutato', senza_prezzo: 'da_evadere', non_montato: 'annullato' };
 const kb = (b: number) => b >= 1024 * 1024 ? `${num(b / 1024 / 1024, 1)} MB` : `${num(Math.max(1, b / 1024), 0)} KB`;
 const NOMI_SPUNTE: [string, string][] = [
@@ -101,9 +101,9 @@ export function paginaPreProduzione(utente: Utente | undefined, d: DatiPreProduz
       <div class="griglia-scheda-cliente">
         <div>
           <h3>Preanalisi dei documenti</h3>
-          ${a ? (a.segnalazioni.length ? html`<ul class="segnalazioni">${(['errore', 'avviso', 'info'] as const).flatMap(lv => [...a.segnalazioni.filter(s => s.livello === lv && !s.accettata), ...a.segnalazioni.filter(s => s.livello === lv && s.accettata)].map(s => html`
-              <li class="${lv}${s.accettata ? ' accettata' : ''}"><span class="livello-segn">${s.accettata ? 'Controllata' : ETICHETTE_LIVELLO[lv]}</span> ${s.testo}${s.refs?.length ? html` <small class="nota">(${s.refs.slice(0, 12).join(', ')}${s.refs.length > 12 ? '…' : ''})</small>` : ''}${s.accettata ? html` <small class="nota">— va bene per ${s.accettata.da}, ${data(s.accettata.il)}</small>` : ''}</li>`))}</ul>
-              ${segnAperte.length ? html`<p class="nota">Le segnalazioni si chiudono con «Va bene» nella <a href="/preventivi/documenti/${d.pacchetto!.id}#da-controllare">pagina dei documenti</a>, dopo averle chiarite con il cliente.</p>` : ''}`
+          ${a ? (a.segnalazioni.length ? html`${elencoOsservazioni(a.segnalazioni, { pacchettoId: d.pacchetto!.id, momento: 'produzione', modifica: true, torna: `/commesse/${c.id}/pre-produzione` })}
+              ${segnAperte.length ? html`<p class="nota">Le osservazioni rimaste aperte o segnate «da vedere prima della produzione» si chiudono qui (Rispondi o Va bene) o nella
+                <a href="/preventivi/documenti/${d.pacchetto!.id}#da-controllare">pagina dei documenti</a> con il disegno del Gerber; le risposte date al preventivo restano scritte sotto.</p>` : ''}`
             : html`<p class="nota">Nessuna incongruenza trovata nei documenti.</p>`) : html`<p class="nota">Nessun documento del cliente analizzato.</p>`}
           ${a?.noteCliente.length ? html`<h3>Note del cliente (dalla BOM)</h3><ul class="note-cliente">${a.noteCliente.map(n => html`<li><b>${n.refs.join(', ')}</b>: ${n.nota}</li>`)}</ul>` : ''}
         </div>

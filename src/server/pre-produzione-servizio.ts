@@ -99,10 +99,13 @@ export async function datiPreProduzione(commessaId: number): Promise<DatiPreProd
 async function leggiPacchetto(preventivoId: number, revisioneId: number | null): Promise<Pacchetto | null> {
   const leggi = (sql: string, par: unknown[]) => q1<any>(`SELECT p.id, p.nome, p.analizzato_il, p.file_elenco, p.analisi, p.accettate, p.protezioni, p.preventivo_id FROM pacchetti_scheda p ${sql}`, par);
   let p = await leggi(`WHERE p.preventivo_id = $1 ORDER BY p.analizzato_il DESC NULLS LAST, p.id DESC LIMIT 1`, [preventivoId]);
+  // stessa quotazione per più quantità (gruppo_quantita): il pacchetto è collegato al primo preventivo del gruppo
+  if (!p) { p = await leggi(`JOIN preventivi g ON g.id = p.preventivo_id JOIN preventivi v ON v.id = $1
+    WHERE v.gruppo_quantita IS NOT NULL AND g.gruppo_quantita = v.gruppo_quantita AND p.analisi IS NOT NULL ORDER BY p.analizzato_il DESC NULLS LAST, p.id DESC LIMIT 1`, [preventivoId]); if (p) p.stesso_gruppo = true; }
   if (!p && revisioneId) p = await leggi(`JOIN preventivi v ON v.id = p.preventivo_id WHERE v.revisione_id = $1 AND p.analisi IS NOT NULL ORDER BY p.analizzato_il DESC NULLS LAST, p.id DESC LIMIT 1`, [revisioneId]);
   if (!p) return null;
   return { id: p.id, nome: p.nome, analizzato_il: p.analizzato_il, file: p.file_elenco ?? [], analisi: p.analisi ? conAccettate(p.analisi, p.accettate) : null,
-    protezioni: p.protezioni ?? null, stesso: p.preventivo_id === preventivoId };
+    protezioni: p.protezioni ?? null, stesso: p.preventivo_id === preventivoId || !!p.stesso_gruppo };
 }
 
 /** Salva checklist, cosa fare / non fare, "già in casa" e via libera. Restituisce il messaggio per l'ufficio (o l'errore). */

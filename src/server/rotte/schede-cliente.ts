@@ -19,9 +19,10 @@ import { ETICHETTE_TIPO } from '../../engine/scheda/classifica.js';
 import { TITOLI_FOGLIO, type Foglio } from '../../engine/scheda/documentazione.js';
 import { decomprimi, fileDelPacchetto, type Disegno } from '../schede-cliente-servizio.js';
 import { paginaStampa, type Protezioni } from '../views/stampa-scheda-cliente.js';
-import { chiaveSegnalazione, conAccettate } from '../../engine/scheda/accettate.js';
+import { conAccettate } from '../../engine/scheda/accettate.js';
+import { elencoOsservazioni } from '../views/osservazioni.js';
+import { riapriOsservazione, salvaRisposta } from '../osservazioni-servizio.js';
 
-const ETICHETTE_LIVELLO: Record<Segnalazione['livello'], string> = { errore: 'Da chiarire', avviso: 'Attenzione', info: 'Nota' };
 /** Email della richiesta del cliente (pacchetto mandato dal pulsante di Gmail): mittente, oggetto e testo da leggere. */
 const riquadroEmail = (e: { mittente: string; oggetto: string; data?: string; testo: string } | null) => e ? html`
   <details class="blocco email-richiesta" open><summary><b>Email del cliente</b> · ${e.mittente}${e.data ? ` · ${e.data}` : ''} · «${e.oggetto}»</summary>
@@ -44,7 +45,7 @@ export function rotteSchedeCliente() {
         chiedi: 'Eliminare {n} pacchett{o|i} e la loro analisi? I file originali sul Drive non cambiano; i preventivi già fatti restano.' }],
     });
     const elenco = await q<any>(`SELECT p.id, p.nome, p.stato, p.creato_il, p.analisi->'conteggi' AS conteggi, p.analisi->'lavorazione' AS lavorazione,
-        (SELECT count(*)::int FROM jsonb_array_elements(p.analisi->'segnalazioni') s WHERE s->>'livello' = 'errore' AND NOT p.accettate ? (s->>'livello' || '|' || (s->>'testo'))) AS errori,
+        (SELECT count(*)::int FROM jsonb_array_elements(p.analisi->'segnalazioni') s WHERE s->>'livello' = 'errore' AND coalesce(p.accettate->(s->>'livello' || '|' || (s->>'testo'))->>'esito', CASE WHEN p.accettate ? (s->>'livello' || '|' || (s->>'testo')) THEN 'va_bene' ELSE 'aperta' END) = 'aperta') AS errori,
         c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
       FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN utenti u ON u.id = p.creato_da
       ORDER BY p.creato_il DESC LIMIT 200`);
@@ -187,7 +188,6 @@ export function rotteSchedeCliente() {
       ${aggiungiFileForm}
       ${file.length ? html`<h2>File</h2><ul>${file.map(f => html`<li>${f.nome} <small class="nota">${kb(f.byte)}${f.nota ? ` · ${f.nota}` : ''}</small></li>`)}</ul>` : ''}`, req.query.errore ? String(req.query.errore) : undefined));
     const c = a.conteggi, l = a.lavorazione;
-    const perLivello = (lv: Segnalazione['livello']) => [...a.segnalazioni.filter(s => s.livello === lv && !s.accettata), ...a.segnalazioni.filter(s => s.livello === lv && s.accettata)];
     res.send(pag(req, p.nome, html`
       <div class="intestazione-pagina">
         <h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1>
@@ -244,11 +244,10 @@ export function rotteSchedeCliente() {
         </section>
         <section class="blocco" id="da-controllare">
           <h2>Da controllare</h2>
-          ${a.segnalazioni.length ? html`<ul class="segnalazioni">${(['errore', 'avviso', 'info'] as const).flatMap(lv => perLivello(lv).map(s => html`
-            <li class="${lv}${s.accettata ? ' accettata' : ''}"><span class="livello-segn">${s.accettata ? 'Controllata' : ETICHETTE_LIVELLO[lv]}</span> ${s.testo}${s.refs?.length ? html` <span class="refs">${s.refs.map(x => html`<button type="button" class="link rif" data-ref="${x}">${x}</button> `)}</span>` : ''}
-              <form method="post" action="/preventivi/documenti/${p.id}/accetta" class="inline"><input type="hidden" name="chiave" value="${chiaveSegnalazione(s)}">${s.accettata
-                ? html`<small class="nota">va bene per ${s.accettata.da}, ${data(s.accettata.il)}</small> <button class="link" name="annulla" value="1">annulla</button>`
-                : html`<button class="link va-bene" title="Ho controllato: va bene così (non conta più tra gli errori e i componenti non sono più critici nelle stampe)">Va bene</button>`}</form></li>`))}</ul>`
+          <p class="nota">Rispondi alle osservazioni: quello che cambia il prezzo si chiarisce prima del preventivo; il resto si segna «da vedere prima della produzione»
+            e torna nella pre-produzione della commessa, con le risposte.</p>
+          ${a.segnalazioni.length ? elencoOsservazioni(a.segnalazioni, { pacchettoId: p.id, momento: 'preventivo', modifica: true,
+              refs: refs => html`${refs.map(x => html`<button type="button" class="link rif" data-ref="${x}">${x}</button> `)}` })
           : html`<p class="nota">Nessuna incongruenza trovata.</p>`}
         </section>
       </div>
@@ -339,16 +338,22 @@ export function rotteSchedeCliente() {
   });
 
   // "Va bene" su una segnalazione (o annulla): chiave livello|testo, chi e quando
-  r.post('/:id/accetta', async (req, res, next) => {
-    if (!/^\d+$/.test(req.params.id)) return next();
+  // "Va bene" (vecchio indirizzo) e risposte alle osservazioni (Adriano 13/11/2026)
+  const rispondiOsservazione = async (req: Request, res: express.Response, next: express.NextFunction) => {
+    const idTesto = String(req.params.id);
+    if (!/^\d+$/.test(idTesto)) return next();
+    const id = Number(idTesto);
     const chiave = String(req.body.chiave ?? '').slice(0, 2000);
+    const utente = req.session.utente!.nome;
     if (chiave) {
-      if (req.body.annulla) await q(`UPDATE pacchetti_scheda SET accettate = accettate - $2::text WHERE id = $1`, [req.params.id, chiave]);
-      else await q(`UPDATE pacchetti_scheda SET accettate = accettate || jsonb_build_object($2::text, jsonb_build_object('da', $3::text, 'il', now())) WHERE id = $1`,
-        [req.params.id, chiave, req.session.utente!.nome]);
+      if (req.body.annulla) await riapriOsservazione(id, chiave, utente);
+      else await salvaRisposta(id, chiave, { testo: req.body.testo, esito: req.body.esito, prezzo: !!req.body.prezzo, momento: req.body.momento }, utente);
     }
-    res.redirect(`/preventivi/documenti/${req.params.id}#da-controllare`);
-  });
+    const torna = String(req.body.torna ?? '');
+    res.redirect(/^\/(commesse|preventivi)\/[\w\-/?=&#.]*$/.test(torna) && !torna.startsWith('//') ? torna : `/preventivi/documenti/${id}#da-controllare`);
+  };
+  r.post('/:id/accetta', rispondiOsservazione);
+  r.post('/:id/rispondi', rispondiOsservazione);
 
   // ── documentazione di produzione (stampa) ──
   r.get('/:id/stampa', async (req, res, next) => {

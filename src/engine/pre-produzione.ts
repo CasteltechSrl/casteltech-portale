@@ -158,7 +158,7 @@ export interface FontiProposta {
   noteMontaggio?: string | null;        // scheda tecnica della revisione
   noteCliente?: { refs: string[]; nota: string }[];
   segnalazioniProdotto?: { testo: string; numero?: string | null }[];   // storico delle commesse precedenti
-  segnalazioniPreanalisi?: { livello: string; testo: string; accettata?: unknown }[];
+  segnalazioniPreanalisi?: { livello: string; testo: string; accettata?: unknown; risposte?: { testo: string; da: string }[] }[];
   componentiCritici?: string[];         // righe della BOM non quotate / non disponibili
   notePreventivo?: string | null;
 }
@@ -181,7 +181,12 @@ export function propostaCosaFare(f: FontiProposta): { fare: string[]; nonFare: s
   for (const n of f.noteCliente ?? []) fare.push(`Nota del cliente su ${n.refs.join(', ')}: ${n.nota}`);
   for (const s of f.segnalazioniProdotto ?? []) fare.push(`Dalle commesse precedenti${s.numero ? ` (${s.numero})` : ''}: ${s.testo}`);
   if (f.noteMontaggio?.trim()) fare.push(`Note di montaggio: ${f.noteMontaggio.trim()}`);
-  for (const s of f.segnalazioniPreanalisi ?? []) if (!s.accettata && s.livello !== 'info') nonFare.push(`Non partire finché non è chiarito: ${s.testo}`);
+  // risposte alle osservazioni (Adriano 13/11/2026): l'ultima risposta accompagna la segnalazione fino alla produzione
+  const ultima = (s: { risposte?: { testo: string; da: string }[] }) => { const r = s.risposte?.at(-1); return r ? ` (risposta di ${r.da}: ${r.testo})` : ''; };
+  for (const s of f.segnalazioniPreanalisi ?? []) {
+    if (!s.accettata && s.livello !== 'info') nonFare.push(`Non partire finché non è chiarito: ${s.testo}${ultima(s)}`);
+    else if (s.accettata && s.risposte?.length) fare.push(`Osservazione sui documenti già chiarita: ${s.testo}${ultima(s)}`);
+  }
   for (const k of f.componentiCritici ?? []) nonFare.push(`Non montare senza il materiale confermato: ${k}`);
   if (c.onda) nonFare.push('Non passare in onda schede con componenti sensibili non protetti (vedi protezioni sul disegno).');
   if (!c.lavaggio && !c.puliziaSaldature) nonFare.push('Non lavare le schede: il cliente non lo ha chiesto (flussante no-clean).');

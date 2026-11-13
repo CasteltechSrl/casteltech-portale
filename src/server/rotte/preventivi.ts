@@ -1,6 +1,8 @@
 /**
  * Pagine dei preventivi: elenco, nuovo, modifica, calcolo in tempo reale, salvataggio, duplica.
  */
+import { osservazioniDelPreventivo } from '../osservazioni-servizio.js';
+import { riquadroOsservazioni } from '../views/osservazioni.js';
 import { prezzoInAnagraficaDaPreventivo, salvaSceltaAnagrafica } from '../prezzo-anagrafica-servizio.js';
 import { leggiSceltaAnagrafica } from '../../engine/prezzo-anagrafica.js';
 import { elencoRevisioni, pdfRevisione } from '../revisioni-servizio.js';
@@ -217,6 +219,8 @@ export function rottePreventivi() {
     if (!p) return res.status(404).send('Preventivo non trovato');
     // documenti del cliente da cui è nato il preventivo: banner "da validare" e BOM da quotare con la spunta Componenti
     p.pacchetto = await q1(`SELECT id, nome, bom_id, fonti->>'bom' AS bom_file FROM pacchetti_scheda WHERE preventivo_id = $1`, [p.id]);
+    // osservazioni dei documenti del cliente con le risposte (Adriano 13/11/2026), anche dagli altri preventivi della stessa quotazione
+    p.osservazioni = await osservazioniDelPreventivo(p.id);
     // prezzo in anagrafica del codice (Adriano 11/11/2026): accanto al prezzo del vecchio portale, per capire se avvisare il cliente
     p.anagrafica = p.prodotto_id ? await q1(`SELECT codice, prezzo_vendita::float AS prezzo, prezzo_fonte AS fonte, prezzo_data::text AS data FROM prodotti WHERE id = $1`, [p.prodotto_id]) : null;
     if (p.anagrafica) p.anagrafica.scaglioni = (await scaglioniDi([p.prodotto_id])).get(p.prodotto_id) ?? [];
@@ -785,6 +789,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
         e premi <b>Salva</b>, così diventa una bozza normale.
         <ul>${String(salvato.note ?? '').split('\n').filter(r => r.startsWith('Da controllare:')).flatMap(r => r.replace(/^Da controllare: /, '').replace(/\.$/, '').split('; ')).map(x => html`<li>${x}</li>`)}</ul></div>` : ''}
     ${riquadroPrezziPrecedenti(salvato)}
+    ${riquadroOsservazioni(salvato?.osservazioni, salvato?.aggiornato_il)}
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">
