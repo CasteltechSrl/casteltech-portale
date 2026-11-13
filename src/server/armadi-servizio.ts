@@ -7,12 +7,12 @@ import { testoDaFile } from '../engine/componenti-clienti.js';
 import { candidatiRiga } from '../engine/righe-fattura.js';
 import { pnKey } from '../engine/codifica/bom.js';
 import {
-  chiaviArticolo, descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, pnPulito, stimePerGruppo, leggiArchivioBobine, leggiSigla, pnDaDescrizione, prezzoOnline, quote, riepilogo,
+  chiaviArticolo, clientiDelleSigle, descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, pnPulito, stimePerGruppo, leggiArchivioBobine, leggiSigla, pnDaDescrizione, prezzoOnline, quote, riepilogo,
   scegliPrezzo, senzaSuffisso, tabellaSigle, SEPARATORE_FILE, type ArticoloLetto, type BobinaLetta, type PrezzoCandidato, type Regola,
   type Riconoscimento, type ScelteSigle,
 } from '../engine/armadi.js';
 
-export interface ImpostazioniArmadi { proprietari: ScelteSigle; riconoscimento: Riconoscimento; regola: Regola; caricato_il?: string; online?: { ultimo?: string; esito?: string } }
+export interface ImpostazioniArmadi { proprietari: ScelteSigle; clientiSigle: ScelteSigle; riconoscimento: Riconoscimento; regola: Regola; caricato_il?: string; online?: { ultimo?: string; esito?: string } }
 
 /** % di riconoscimento iniziale dei componenti dei clienti (Adriano 13/11/2026: 100 %, poi si cambia cliente per cliente nella pagina). */
 export const RICONOSCIMENTO_INIZIALE = 100;
@@ -21,6 +21,7 @@ export async function impostazioniArmadi(): Promise<ImpostazioniArmadi> {
   const v = (await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'armadi'`))?.valore ?? {};
   return {
     proprietari: v.proprietari ?? {},
+    clientiSigle: v.clientiSigle ?? {},
     riconoscimento: { predefinita: Number.isFinite(v.riconoscimento?.predefinita) ? v.riconoscimento.predefinita : RICONOSCIMENTO_INIZIALE, clienti: v.riconoscimento?.clienti ?? {} },
     regola: v.regola === 'articolo' ? 'articolo' : 'bobina',
     caricato_il: v.caricato_il, online: v.online,
@@ -304,6 +305,7 @@ export async function datiArmadi() {
     q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`)]);
   const sigle = [...new Set([...articoli.map(a => leggiSigla(a.proprietario_file).sigla), ...bobine.map(b => leggiSigla(b.sigla).sigla)])].filter(s => s && s !== 'CASTELTECH').sort();
   const tabella = tabellaSigle(sigle, clienti, imp.proprietari);
+  const clientiSigle = clientiDelleSigle(sigle, clienti, tabella, imp.clientiSigle);
   const qq = quote(articoli, bobine, tabella, imp.regola);
-  return { imp, articoli, bobine, clienti, sigle, tabella, quote: qq, riepilogo: riepilogo(qq, imp.riconoscimento) };
+  return { imp, articoli, bobine, clienti, sigle, tabella, clientiSigle, quote: qq, riepilogo: riepilogo(qq, imp.riconoscimento) };
 }

@@ -151,6 +151,48 @@ export function tabellaSigle(sigle: string[], clienti: { id: number; ragione_soc
   return out;
 }
 
+/**
+ * Cliente di ogni sigla (Adriano 13/11/2026: "Eur.aut., Euro, Euroautom… sono tutte Euroautomations"): scelta salvata > "Di chi è" = un cliente >
+ * cliente proposto da SIGLE_CLIENTI. Il cliente serve solo a raggruppare le sigle; di chi è il materiale lo dice sempre "Di chi è"
+ * (es. Euroautomations: materiale di Casteltech). '' = nessun cliente.
+ */
+export function clientiDelleSigle(sigle: string[], clienti: { id: number; ragione_sociale: string }[], tabella: ScelteSigle, scelte: ScelteSigle = {}): ScelteSigle {
+  const out: ScelteSigle = {};
+  for (const s of sigle) {
+    if (s in scelte) { out[s] = scelte[s]; continue; }
+    if (/^c\d+$/.test(tabella[s] ?? '')) { out[s] = tabella[s]; continue; }
+    const re = SIGLE_CLIENTI[s];
+    const c = re && re !== 'casteltech' ? clienti.find(x => re.test(x.ragione_sociale.toUpperCase())) : undefined;
+    out[s] = c ? `c${c.id}` : '';
+  }
+  return out;
+}
+
+export interface GruppoSigle { sigle: string[]; cliente: string; diChi: string; diversi: boolean; pezzi: number }
+
+/** Righe della tabella "Di chi sono": le sigle con lo stesso cliente in una riga sola (prima i gruppi per nome del cliente, poi le sigle sole). */
+export function gruppiSigle(sigle: string[], tabella: ScelteSigle, clientiSigle: ScelteSigle, pezzi: Map<string, number>, nomi: Map<string, string> = new Map()): GruppoSigle[] {
+  const perCliente = new Map<string, string[]>();
+  const sole: GruppoSigle[] = [];
+  for (const s of sigle) {
+    const k = clientiSigle[s] ?? '';
+    if (k) perCliente.set(k, [...(perCliente.get(k) ?? []), s]);
+    else sole.push({ sigle: [s], cliente: '', diChi: tabella[s] ?? '', diversi: false, pezzi: pezzi.get(s) ?? 0 });
+  }
+  const gruppi: GruppoSigle[] = [...perCliente].map(([cliente, ss]) => {
+    const valori = ss.map(s => tabella[s] ?? '');
+    const conta = new Map<string, number>();
+    for (const v of valori) conta.set(v, (conta.get(v) ?? 0) + 1);
+    const diChi = [...conta].sort((a, b) => b[1] - a[1] || (a[0] ? -1 : 1))[0][0];
+    return { sigle: ss, cliente, diChi, diversi: conta.size > 1, pezzi: ss.reduce((t, s) => t + (pezzi.get(s) ?? 0), 0) };
+  });
+  gruppi.sort((a, b) => (nomi.get(a.cliente) ?? a.cliente).localeCompare(nomi.get(b.cliente) ?? b.cliente));
+  return [...gruppi, ...sole];
+}
+
+/** Separatore delle sigle di una riga raggruppata nei nomi dei campi del modulo. */
+export const SEPARATORE_SIGLE = '|';
+
 export type Regola = 'bobina' | 'articolo';
 export interface Proprietario { tipo: 'casteltech' | 'cliente' | 'da_chiarire'; clienteId: number | null; sigla: string; perConto: string | null }
 
