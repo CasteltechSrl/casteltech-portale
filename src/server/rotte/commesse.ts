@@ -18,6 +18,7 @@ import { leggiPreventivo } from '../preventivi-servizio.js';
 import {
   PROGRAMMI, STATI_COMMESSA, aggiungiTempi, fasiCommessa, fasiPreviste, haCommessePrecedenti, leggiCommessa, proponiNumero, rilevazioniCommessa,
   programmaForno, salvaCommessa, spedizioniDelleCommesse, salvaRientro, schedaTecnica, schedaTecnicaDaProporre, caricaOperatori, numeriFasi, segnalazioniCommessa, segnalazioniProdotto,
+  fasiDelCatalogo, preventivoDellaCommessa, preventivoVuoto, prodottiConCliente, salvaCommessaLibera,
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
 import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
@@ -37,6 +38,10 @@ import { fasiAperte, ricaricaPromemoria } from '../promemoria.js';
 import { partiRoma } from '../../engine/promemoria.js';
 import { html, data, num, ore, raw, type Raw } from '../views/html.js';
 import { leggiPreProduzione } from '../../engine/pre-produzione.js';
+import { caricaCatalogo } from '../catalogo-db.js';
+import {
+  MODI_SCHEDA, datiDaCompletare, fasiProposte, fasiScelte, leggiSenzaPreventivo, modoScheda, type FaseCatalogo, type ModoScheda, type SceltaFase,
+} from '../../engine/schede-libere.js';
 
 const STATI_TESTO: Record<string, string> = { aperta: 'aperta', in_produzione: 'in produzione', rientrata: 'rientrata', analizzata: 'analizzata', chiusa: 'chiusa' };
 
@@ -45,7 +50,9 @@ export function rotteCommesse() {
 
   // ── Elenco ──
   const elencoCommesse = (cerca: string, limite = 2000) => q(`
-      SELECT c.id, c.numero, c.creato_il, c.data_consegna, c.quantita, c.stato, c.ordine_cliente, c.intestazione, p.numero AS preventivo
+      SELECT c.id, c.numero, c.creato_il, c.data_consegna, c.quantita, c.stato, c.ordine_cliente, c.intestazione, p.numero AS preventivo,
+        c.preventivo_id, c.senza_preventivo, c.referente_cliente, c.scheda_tecnica,
+        NOT EXISTS (SELECT 1 FROM commesse_fasi f WHERE f.commessa_id = c.id) AS senza_fasi
       FROM commesse c LEFT JOIN preventivi p ON p.id = c.preventivo_id
       WHERE $1 = '' OR c.numero ILIKE '%'||$1||'%' OR (c.intestazione->>'cliente') ILIKE '%'||$1||'%'
         OR (c.intestazione->>'codice') ILIKE '%'||$1||'%' OR c.ordine_cliente ILIKE '%'||$1||'%'
@@ -53,7 +60,9 @@ export function rotteCommesse() {
   // vista "Da fare" (predefinita) / "Spedite o chiuse" / "Tutte": spedita = schede uscite con DDT (engine/commesse-spedite.ts)
   const conSpedizioni = async (cerca: string, vista: VistaCommesse) => {
     const [righe, sped] = await Promise.all([elencoCommesse(cerca), spedizioniDelleCommesse()]);
-    return righe.map(c => ({ ...c, sped: (sped.get(c.id) ?? NESSUNA_SPEDIZIONE) as SpedizioneCommessa }))
+    return righe.map(c => ({ ...c, sped: (sped.get(c.id) ?? NESSUNA_SPEDIZIONE) as SpedizioneCommessa,
+        manca: datiDaCompletare({ referente: c.referente_cliente, ordineCliente: c.ordine_cliente, consegna: c.data_consegna, scheda: c.scheda_tecnica, senzaFasi: c.senza_fasi }),
+        modo: c.preventivo_id ? null : leggiSenzaPreventivo(c.senza_preventivo)?.modo ?? null }))
       .filter(c => cerca !== '' && vista === 'dafare' ? true : nellaVista(vista, c.stato, c.sped.spedita));
   };
   const statoTesto = (stato: string, spedita: boolean) => spedita && stato !== 'chiusa' ? `${STATI_TESTO[stato] ?? stato}, spedita` : (STATI_TESTO[stato] ?? stato);
@@ -63,9 +72,9 @@ export function rotteCommesse() {
       { header: 'Numero', key: 'numero', width: 14 }, { header: 'Data', key: 'creato_il', formato: 'data' }, { header: 'Cliente', key: 'cliente', width: 36 },
       { header: 'Codice', key: 'codice', width: 18 }, { header: 'Rev.', key: 'revisione', width: 6 }, { header: 'Descrizione', key: 'descrizione', width: 40 },
       { header: 'Q.tà', key: 'quantita', formato: 'intero' }, { header: 'Ordine cliente', key: 'ordine_cliente', width: 18 }, { header: 'Consegna', key: 'data_consegna', formato: 'data' },
-      { header: 'Preventivo', key: 'preventivo', width: 14 }, { header: 'Spedite', key: 'spedite', formato: 'intero' },
+      { header: 'Preventivo', key: 'preventivo', width: 14 }, { header: 'Da completare', key: 'manca', width: 30 }, { header: 'Spedite', key: 'spedite', formato: 'intero' },
       { header: 'DDT', key: 'ddt', width: 14 }, { header: 'Stato', key: 'stato', width: 22 },
-    ], righe.map(c => ({ ...c, cliente: c.intestazione?.cliente, codice: c.intestazione?.codice, revisione: c.intestazione?.revisione, descrizione: c.intestazione?.descrizione,
+    ], righe.map(c => ({ ...c, preventivo: c.preventivo ?? (c.modo ? `senza (${c.modo})` : ''), manca: c.manca.join(', '), cliente: c.intestazione?.cliente, codice: c.intestazione?.codice, revisione: c.intestazione?.revisione, descrizione: c.intestazione?.descrizione,
       spedite: c.sped.spedite || null, ddt: c.sped.ddt.map((x: SpedizioneCommessa['ddt'][number]) => x.numero).join(', '), stato: statoTesto(c.stato, c.sped.spedita) }))));
   });
 
@@ -84,7 +93,7 @@ export function rotteCommesse() {
       pulsanti: [
         { azione: 'stampa', testo: 'Stampa scheda', serve: '1', nuovaScheda: true, titolo: 'Scheda di produzione da stampare (si apre in una scheda nuova)' },
         { azione: 'rientro', testo: 'Rientro', serve: '1', titolo: 'Inserisci o correggi il rientro della commessa' },
-        { azione: 'duplica', testo: 'Duplica', serve: '1', titolo: 'Nuova commessa dallo stesso preventivo, con quantità, referente e scheda tecnica copiati: numero nuovo, ordine e date da scrivere' },
+        { azione: 'duplica', testo: 'Duplica', serve: '1', titolo: 'Nuova commessa dallo stesso preventivo (o dalla stessa scheda senza preventivo), con quantità, referente e scheda tecnica copiati: numero nuovo, ordine e date da scrivere' },
         { azione: 'elimina', testo: 'Elimina', serve: '1+', pericolo: true,
           titolo: 'Elimina le commesse create per errore (quelle con tempi registrati o già avanzate si eliminano una per volta dalla loro pagina)',
           chiedi: 'Eliminare {n} commess{a|e}? Spariscono anche le fasi e le segnalazioni scritte su ' + '{questa|queste} commess{a|e}; il preventivo resta.\n\n'
@@ -95,8 +104,14 @@ export function rotteCommesse() {
     res.send(String(layout({
       titolo: 'Commesse', utente: req.session.utente, attiva: 'commesse', largo: true, script: 'elenco.js', avviso: req.query.msg ? String(req.query.msg) : undefined,
       contenuto: html`
-      <div class="intestazione-pagina"><h1>Commesse</h1></div>
-      <p class="nota">Una commessa si crea da un preventivo: apri il preventivo e premi <strong>Crea commessa</strong>.</p>
+      <div class="intestazione-pagina"><h1>Commesse e schede di produzione</h1>
+        <div class="azioni">
+          <a class="bottone" href="/commesse/nuova?modo=urgente" title="${MODI_SCHEDA.urgente.spiegazione}">+ Scheda urgente</a>
+          <a class="bottone" href="/commesse/nuova?modo=consuntivo" title="${MODI_SCHEDA.consuntivo.spiegazione}">+ Scheda a consuntivo</a>
+        </div></div>
+      <p class="nota">Una commessa si crea da un preventivo: apri il preventivo e premi <strong>Crea commessa</strong>. Senza preventivo:
+        <strong>+ Scheda urgente</strong> (scegli tu le poche fasi da fare) o <strong>+ Scheda a consuntivo</strong> (tutte le fasi stampate, l'operatore scrive quelle che fa).
+        I dati che non hai subito (referente, programmi, note del cliente e di montaggio…) si scrivono dopo aprendo la commessa: la colonna <strong>Da completare</strong> dice cosa manca.</p>
       <section class="blocco">
         <h2>Schede scansionate</h2>
         <p class="nota">Metti la scansione delle schede compilate nella cartella Google Drive condivisa con il portale (la stessa degli ordini):
@@ -120,14 +135,16 @@ export function rotteCommesse() {
       ${modulo.apri}
       <div class="tabella-scorre"><table class="elenco">
         <thead><tr>${casellaTutti()}<th>Numero</th><th>Data</th><th>Cliente</th><th>Codice</th><th>Rev.</th><th>Descrizione</th><th class="n">Q.tà</th>
-          <th>Ordine cliente</th><th>Consegna</th><th>Preventivo</th><th class="n">Spedite</th><th>Stato</th></tr></thead>
+          <th>Ordine cliente</th><th>Consegna</th><th>Preventivo</th><th>Da completare</th><th class="n">Spedite</th><th>Stato</th></tr></thead>
         <tbody>${righe.map(c => html`
           <tr class="cliccabile" data-href="/commesse/${c.id}">
             ${casella(c.id, c.numero)}
             <td class="nowrap"><a href="/commesse/${c.id}">${c.numero}</a></td><td>${data(c.creato_il)}</td>
             <td>${c.intestazione?.cliente}</td><td>${c.intestazione?.codice}</td><td>${c.intestazione?.revisione}</td>
             <td class="taglia">${c.intestazione?.descrizione}</td><td class="n">${num(c.quantita, 0)}</td>
-            <td>${c.ordine_cliente}</td><td>${data(c.data_consegna)}</td><td>${c.preventivo}</td>
+            <td>${c.ordine_cliente}</td><td>${data(c.data_consegna)}</td>
+            <td>${c.preventivo ?? (c.modo ? html`<span class="etichetta" title="${MODI_SCHEDA[c.modo as ModoScheda].spiegazione}">senza · ${c.modo}</span>` : '')}</td>
+            <td class="nota" data-valore="${c.manca.length}">${c.manca.join(', ')}</td>
             <td class="n nowrap" data-valore="${c.sped.spedite}">${c.sped.spedite ? html`${num(c.sped.spedite, 0)}${c.sped.ddt.map((x: SpedizioneCommessa['ddt'][number]) => html` <a href="/amministrazione/documenti/${x.id}" title="${num(x.quantita, 0)} pz">DDT ${x.numero}</a>`)}` : ''}</td>
             <td><span class="stato ${c.sped.spedita ? 'chiusa' : c.stato}">${statoTesto(c.stato, c.sped.spedita)}</span></td>
           </tr>`)}</tbody></table></div>${barra}
@@ -138,6 +155,23 @@ export function rotteCommesse() {
 
   // ── Nuova, da preventivo ──
   r.get('/nuova', async (req, res) => {
+    // scheda senza preventivo (Adriano 13/11/2026): urgente o a consuntivo
+    const modo = modoScheda(req.query.modo);
+    if (!Number(req.query.preventivo) && modo) {
+      const copia = Number(req.query.copia) ? await leggiCommessa(Number(req.query.copia)) : undefined;
+      const daCopiare = copia && !copia.preventivo_id ? copia : undefined;
+      const sp = { ...(leggiSenzaPreventivo(daCopiare?.senza_preventivo) ?? { doppiaFaccia: false, schedePannello: 1 }), modo };
+      const catalogo = await fasiDelCatalogo();
+      const dati: DatiCommessa = {
+        numero: await proponiNumero(), ordineCliente: '', referenteCliente: daCopiare?.referente_cliente ?? '', dataOrdine: null, dataConsegna: null,
+        quantita: daCopiare?.quantita ?? 0, primoLotto: modo === 'consuntivo', segnalazioni: '',
+        scheda: schedaTecnica(daCopiare?.scheda_tecnica ?? {}),
+      };
+      return res.send(await paginaCommessa(req, preventivoVuoto(await caricaCatalogo(), sp, daCopiare ?? {}), dati, undefined, undefined, undefined, undefined, {
+        modo, catalogo, prodotti: await prodottiConCliente(), prodottoId: daCopiare?.prodotto_id ?? null, revisione: daCopiare?.intestazione?.revisione ?? '',
+        scelte: fasiProposte(catalogo, modo, daCopiare ? await fasiCommessa(daCopiare) : undefined),
+      }));
+    }
     const prev = await leggiPreventivo(Number(req.query.preventivo) || 0);
     if (!prev) return res.status(404).send('Preventivo non trovato');
     // Duplica dall'elenco: si riprendono quantità, referente e scheda tecnica della commessa copiata (stesso preventivo)
@@ -162,6 +196,21 @@ export function rotteCommesse() {
     const b = req.body ?? {};
     const id = b.id ? Number(b.id) : undefined;
     const dati = datiDaForm(b);
+    const modo = modoScheda(b.modo);
+    if (b.libera && modo) {
+      const sp = leggiSenzaPreventivo({ modo, doppiaFaccia: !!b.doppiaFaccia, schedePannello: b.schedePannello })!;
+      const catalogo = await fasiDelCatalogo();
+      const esito = await salvaCommessaLibera({ id, prodottoId: Number(b.prodottoId) || 0, revisione: String(b.revisione ?? ''), senza: sp,
+        fasi: fasiScelte(catalogo, b.fasi), dati, utenteId: req.session.utente!.id });
+      if (esito.errore) {
+        const comm = id ? await leggiCommessa(id) : undefined;
+        const scelte: Record<string, SceltaFase> = Object.fromEntries(catalogo.map(f => [f.codice,
+          { si: !!b.fasi?.[f.codice]?.si, tempo: String(b.fasi?.[f.codice]?.tempo ?? ''), persone: String(b.fasi?.[f.codice]?.persone ?? '') }]));
+        return res.status(400).send(await paginaCommessa(req, preventivoVuoto(await caricaCatalogo(), sp, comm ?? {}), dati, comm, esito.errore, undefined, undefined, {
+          modo, catalogo, prodotti: await prodottiConCliente(), prodottoId: Number(b.prodottoId) || null, revisione: String(b.revisione ?? ''), scelte }));
+      }
+      return res.redirect(`/commesse/${esito.id}?salvata=1`);
+    }
     const esito = await salvaCommessa({ id, preventivoId: Number(b.preventivoId), dati, utenteId: req.session.utente!.id });
     if (esito.errore) {
       const prev = await leggiPreventivo(Number(b.preventivoId));
@@ -178,14 +227,17 @@ export function rotteCommesse() {
     if (!/^\d+$/.test(req.params.id)) return next();
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
-    const prev = await leggiPreventivo(c.preventivo_id);
-    if (!prev) return res.status(404).send('Preventivo della commessa non trovato');
+    const prev = await preventivoDellaCommessa(c);
     const dati: DatiCommessa = {
       numero: c.numero, ordineCliente: c.ordine_cliente ?? '', referenteCliente: c.referente_cliente ?? '',
       dataOrdine: dataIso(c.data_ordine), dataConsegna: dataIso(c.data_consegna), quantita: c.quantita, primoLotto: c.primo_lotto,
       segnalazioni: c.segnalazioni ?? '', scheda: schedaTecnica(c.scheda_tecnica), stato: c.stato,
     };
-    res.send(await paginaCommessa(req, prev, dati, c, req.query.msg ? String(req.query.msg) : undefined, req.query.salvata ? 'Commessa salvata' : undefined));
+    const sp = c.preventivo_id ? null : leggiSenzaPreventivo(c.senza_preventivo);
+    const catalogo = sp ? await fasiDelCatalogo() : [];
+    res.send(await paginaCommessa(req, prev, dati, c, req.query.msg ? String(req.query.msg) : undefined, req.query.salvata ? 'Commessa salvata' : undefined, undefined,
+      sp ? { modo: sp.modo, catalogo, prodotti: await prodottiConCliente(), prodottoId: c.prodotto_id, revisione: c.intestazione?.revisione ?? '',
+        scelte: fasiProposte(catalogo, sp.modo, await fasiCommessa(c)) } : undefined));
   });
 
   // ── Scheda di pre-produzione (Adriano 5/11/2026): tutto in una pagina prima del via libera ──
@@ -206,7 +258,7 @@ export function rotteCommesse() {
   r.get('/:id/scheda', async (req, res) => {
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
-    const prev = await leggiPreventivo(c.preventivo_id);
+    const prev = await preventivoDellaCommessa(c);
     const fasi = await fasiCommessa(c);
     const storico = await segnalazioniProdotto(c.prodotto_id);
     const qr = await QRCode.toString(indirizzoQr(req, c.codice_qr), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
@@ -227,7 +279,7 @@ export function rotteCommesse() {
   r.post('/:id/tempi', async (req, res) => {
     const c = await leggiCommessa(Number(req.params.id));
     if (!c) return res.status(404).send('Commessa non trovata');
-    const prev = await leggiPreventivo(c.preventivo_id);
+    const prev = await preventivoDellaCommessa(c);
     const codici = new Set<string>((prev?.catalogo?.fasi ?? []).map((f: any) => f.codice));
     const persone = Object.fromEntries((await fasiCommessa(c)).map(f => [f.codice, f.persone]));
     const numero = (x: unknown) => { const n = Number(String(x ?? '').replace(',', '.')); return String(x ?? '').trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined; };
@@ -249,7 +301,7 @@ export function rotteCommesse() {
     const msg = req.query.ok === 'conferma' ? 'Rientro confermato. Con "Crea DDT" prepari la bolla con le schede spedite' : req.query.ok ? 'Salvato' : undefined;
     // fasi fatte insieme su una riga ("FASI 5+6 INSIEME"): il tempo si divide come da preventivo, l'ufficio controlla e salva
     const fasi = await fasiCommessa(c);
-    const numeri = new Map([...(await fasiConNumeroAttuale(await leggiPreventivo(c.preventivo_id))), ...fasi]
+    const numeri = new Map([...(await fasiConNumeroAttuale(await preventivoDellaCommessa(c))), ...fasi]
       .map(f => [String(f.numero).toUpperCase(), f.codice] as [string, string]));
     const ripartisci = <T extends RigaForm>(rs: T[]) => ripartisciFasiInsieme(rs, fasi, numeri);
     const giaSalvate = ripartisci(await rilevazioniCommessa(c.id));
@@ -326,10 +378,11 @@ export function rotteCommesse() {
     const azione = String(req.body?.azione ?? '');
     if (['stampa', 'rientro', 'duplica'].includes(azione)) {
       if (ids.length !== 1) return torna('Questa azione vale per una commessa alla volta: selezionane una sola.');
-      const c = await q1<{ preventivo_id: number }>(`SELECT preventivo_id FROM commesse WHERE id = $1`, [ids[0]]);
+      const c = await q1<{ preventivo_id: number | null; senza_preventivo: unknown }>(`SELECT preventivo_id, senza_preventivo FROM commesse WHERE id = $1`, [ids[0]]);
       if (!c) return torna('Commessa non trovata.');
       if (azione === 'stampa') return res.redirect(`/commesse/${ids[0]}/scheda`);
       if (azione === 'rientro') return res.redirect(`/commesse/${ids[0]}/rientro`);
+      if (!c.preventivo_id) return res.redirect(`/commesse/nuova?modo=${leggiSenzaPreventivo(c.senza_preventivo)?.modo ?? 'urgente'}&copia=${ids[0]}`);
       return res.redirect(`/commesse/nuova?preventivo=${c.preventivo_id}&copia=${ids[0]}`);
     }
     if (azione === 'elimina') {
@@ -388,10 +441,18 @@ function datiDaForm(b: any): DatiCommessa {
 
 // ───────────────────────────── pagina della commessa (form) ─────────────────────────────
 
-async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?: any, errore?: string, messaggio?: string, rigaOrdine?: number): Promise<string> {
+/** Scheda senza preventivo: prodotto scelto dall'anagrafica e fasi spuntate nel modulo. */
+interface StatoLibera {
+  modo: ModoScheda; catalogo: FaseCatalogo[]; prodotti: Awaited<ReturnType<typeof prodottiConCliente>>;
+  prodottoId: number | null; revisione: string; scelte: Record<string, SceltaFase>;
+}
+
+async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?: any, errore?: string, messaggio?: string, rigaOrdine?: number,
+  libera?: StatoLibera): Promise<string> {
   const i = prev.intestazione ?? {};
-  const doppia = !!prev.parametri?.doppiaFaccia;
-  const fasi = salvata ? await fasiCommessa(salvata) : fasiPreviste(prev, d.quantita || prev.n_schede, d.primoLotto);
+  // senza preventivo TOP/BOT si sceglie nel modulo: le caselle BOT dei programmi restano sempre visibili
+  const doppia = libera ? true : !!prev.parametri?.doppiaFaccia;
+  const fasi = salvata ? await fasiCommessa(salvata) : libera ? [] : fasiPreviste(prev, d.quantita || prev.n_schede, d.primoLotto);
   const storico = (prev.prodotto_id ? await segnalazioniProdotto(prev.prodotto_id) : []).filter(s => !salvata || s.numero !== salvata.numero || s.origine !== 'ufficio');
   const st = d.scheda;
   const aperte = salvata ? await fasiAperte({ commessaId: salvata.id }) : [];
@@ -405,12 +466,14 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
   const fineLav = leggiFineLavorazione(salvata?.fine_lavorazione);
   const finite = fineLav.reduce((a, x) => a + x.quantita, 0);
   return String(layout({
-    titolo: salvata ? `Commessa ${salvata.numero}` : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
+    titolo: salvata ? `Commessa ${salvata.numero}` : libera ? MODI_SCHEDA[libera.modo].nome : 'Nuova commessa', utente: req.session.utente, attiva: 'commesse', avviso: errore,
     contenuto: html`
     <form method="post" action="/commesse/salva" autocomplete="off">
-    <input type="hidden" name="id" value="${salvata?.id ?? ''}"><input type="hidden" name="preventivoId" value="${prev.id}">${rigaOrdine && !salvata ? html`<input type="hidden" name="rigaOrdine" value="${rigaOrdine}">` : ''}
+    <input type="hidden" name="id" value="${salvata?.id ?? ''}"><input type="hidden" name="preventivoId" value="${prev.id ?? ''}">
+    ${libera ? html`<input type="hidden" name="libera" value="1"><input type="hidden" name="modo" value="${libera.modo}">` : ''}${rigaOrdine && !salvata ? html`<input type="hidden" name="rigaOrdine" value="${rigaOrdine}">` : ''}
     <div class="intestazione-pagina">
-      <h1>${salvata ? html`Commessa ${salvata.numero} <span class="stato ${salvata.stato}">${STATI_TESTO[salvata.stato]}</span>` : 'Nuova commessa'}</h1>
+      <h1>${salvata ? html`Commessa ${salvata.numero} <span class="stato ${salvata.stato}">${STATI_TESTO[salvata.stato]}</span>` : libera ? MODI_SCHEDA[libera.modo].nome : 'Nuova commessa'}
+        ${libera && salvata ? html` <span class="etichetta" title="${MODI_SCHEDA[libera.modo].spiegazione}">senza preventivo · ${libera.modo}</span>` : ''}</h1>
       <div class="azioni">
         ${messaggio ? html`<span class="nota positivo">${messaggio}</span>` : ''}
         ${req.query.tempi ? html`<span class="nota positivo">Tempi aggiunti: ${String(req.query.tempi)}</span>` : ''}
@@ -421,7 +484,7 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
           <button form="ddt-commessa" class="${['rientrata', 'analizzata', 'chiusa'].includes(salvata.stato) && !ddt.length ? 'primario' : ''}"
             title="Prepara il DDT con le schede della commessa (quelle del rientro, o tutte), cliente e ordine già compilati">Crea DDT</button>
           <a class="bottone" href="/ordini/fornitori/commessa/${salvata.id}" title="Componenti della BOM quotata non ancora ordinati né arrivati → bozza di ordine a fornitore">Cosa manca</a>` : ''}
-        <button class="primario">${salvata ? 'Salva' : 'Crea commessa'}</button>
+        <button class="primario">${salvata ? 'Salva' : libera ? 'Crea la scheda' : 'Crea commessa'}</button>
         ${salvata ? html`<button form="elimina-commessa" class="pericolo" title="Elimina la commessa creata per errore"
           data-conferma="${confermaEliminaCommessa({ numero: salvata.numero, stato: STATI_TESTO[salvata.stato] ?? salvata.stato, tempi: nTempi })}">Elimina</button>` : ''}
       </div>
@@ -437,11 +500,11 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
 
     <div class="griglia-preventivo">
     <section class="colonna-dati">
-      <fieldset class="blocco">
+      ${libera ? fieldsetProdottoLibero(libera, prev) : html`<fieldset class="blocco">
         <legend>Prodotto</legend>
         <p class="riepilogo"><strong>${i.cliente}</strong> · ${i.codice}${i.revisione ? html` rev. ${i.revisione}` : ''}<br>${i.descrizione}<br>
           <span class="nota">Preventivo <a href="/preventivi/${prev.id}">${prev.numero}</a> · ${doppia ? 'TOP + BOT' : 'Solo TOP'} · ${num(prev.n_schede_pannello, 0)} schede per pannello</span></p>
-      </fieldset>
+      </fieldset>`}
 
       <fieldset class="blocco">
         <legend>Commessa</legend>
@@ -475,9 +538,10 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       </fieldset>
 
       <fieldset class="blocco">
-        <legend>Note di montaggio</legend>
-        <textarea name="scheda[noteMontaggio]" rows="4">${st.noteMontaggio}</textarea>
-        <p class="nota">Programmi, lamine, materiali e note di montaggio si ripropongono alla prossima commessa dello stesso prodotto.</p>
+        <legend>Note di montaggio e del cliente</legend>
+        <label>Note di montaggio <textarea name="scheda[noteMontaggio]" rows="4">${st.noteMontaggio}</textarea></label>
+        <label>Note del cliente <textarea name="scheda[noteCliente]" rows="2" placeholder="Richieste particolari del cliente (imballo, marcature, collaudo…)">${st.noteCliente}</textarea></label>
+        <p class="nota">Programmi, lamine, materiali e note si ripropongono alla prossima commessa dello stesso prodotto. Si possono scrivere anche dopo: salva e ristampa la scheda.</p>
       </fieldset>
 
       <fieldset class="blocco">
@@ -489,8 +553,9 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
     </section>
 
     <section class="colonna-risultati">
-      <h2>Fasi sulla scheda ${salvata ? '' : html`<span class="nota">(anteprima: si aggiornano al salvataggio)</span>`}</h2>
-      ${salvata ? await tabellaFasiConTempi(salvata, fasi, prev) : tabellaFasi(fasi)}
+      ${libera ? html`${sceltaFasi(libera)}${salvata ? html`<h2>Tempi registrati</h2>${await tabellaFasiConTempi(salvata, fasi, prev)}` : ''}`
+        : html`<h2>Fasi sulla scheda ${salvata ? '' : html`<span class="nota">(anteprima: si aggiornano al salvataggio)</span>`}</h2>
+      ${salvata ? await tabellaFasiConTempi(salvata, fasi, prev) : tabellaFasi(fasi)}`}
     </section>
     </div>
     </form>
@@ -499,6 +564,46 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
       <form id="ddt-commessa" method="post" action="/amministrazione/documenti/ddt-da-commessa/${salvata.id}"></form>
       <form id="fine-lav-commessa" method="post" action="/commesse/${salvata.id}/fine-lavorazione"></form>` : ''}`,
   }));
+}
+
+/** Prodotto della scheda senza preventivo: codice dall'anagrafica (con il suo cliente), revisione, TOP/BOT, schede per pannello. */
+function fieldsetProdottoLibero(l: StatoLibera, prev: any): Raw {
+  const sp = prev.senzaPreventivo ?? {};
+  return html`<fieldset class="blocco">
+    <legend>Prodotto</legend>
+    <p class="nota">${MODI_SCHEDA[l.modo].spiegazione}</p>
+    <label>Codice (cliente) <select name="prodottoId" class="cercabile" required>
+      <option value="">— scegli il codice —</option>
+      ${l.prodotti.map(p => html`<option value="${p.id}" data-codice="${p.codice}" data-descrizione="${p.descrizione ?? ''} ${p.cliente}" ${p.id === l.prodottoId ? raw('selected') : ''}>${p.codice}${p.descrizione ? ` — ${p.descrizione}` : ''} · ${p.cliente}${p.revisione ? ` (rev. ${p.revisione})` : ''}</option>`)}
+    </select></label>
+    <p class="nota">Il codice non c'è? Aggiungilo in <a href="/anagrafiche/prodotti" target="_blank" rel="noopener">Anagrafiche → Prodotti</a> con il suo cliente, poi ricarica questa pagina.</p>
+    <div class="riga-campi">
+      <label>Revisione <input name="revisione" value="${l.revisione}" class="maiuscolo corto" maxlength="20" placeholder="ultima"></label>
+      <label>Schede per pannello <input name="schedePannello" value="${sp.schedePannello ?? 1}" inputmode="numeric" class="corto"></label>
+      <label class="spunta"><input type="checkbox" name="doppiaFaccia" ${sp.doppiaFaccia ? raw('checked') : ''}> TOP + BOT</label>
+    </div>
+    <p class="nota">Revisione vuota = l'ultima del codice (o "0" se non ne ha). Per fare il prezzo dopo, dal rientro di questa scheda: Preventivi → Nuovo.</p>
+  </fieldset>`;
+}
+
+/** Fasi da stampare sulla scheda senza preventivo: spunta, persone e tempo previsto del lotto (facoltativo). */
+function sceltaFasi(l: StatoLibera): Raw {
+  const gruppi = [...new Set(l.catalogo.map(f => f.gruppo))];
+  return html`<h2>Fasi sulla scheda</h2>
+    <p class="nota">${l.modo === 'consuntivo'
+      ? 'A consuntivo sono tutte spuntate: sulla scheda si stampano tutte, l\'operatore scrive i tempi solo di quelle che fa. Togli la spunta a quelle che di sicuro non servono.'
+      : 'Spunta le fasi da fare. Il tempo previsto del lotto è facoltativo (1.30 = 1h 30\'); vuoto = sulla scheda nessun tempo previsto.'}
+      Persone vuote = quelle del catalogo. Le fasi si possono cambiare anche dopo: salva e ristampa.</p>
+    <div class="tabella-scorre"><table class="fasi scelta-fasi">
+      <thead><tr><th>Sì</th><th>N.</th><th>Fase</th><th class="n">Pers.</th><th class="n">Tempo lotto</th></tr></thead>
+      <tbody>${gruppi.map(g => html`<tr class="riga-gruppo"><td colspan="5">${g}</td></tr>
+        ${l.catalogo.filter(f => f.gruppo === g).map(f => {
+          const x = l.scelte[f.codice] ?? { si: false, tempo: '', persone: '' };
+          return html`<tr><td><input type="checkbox" name="fasi[${f.codice}][si]" value="1" ${x.si ? raw('checked') : ''} aria-label="Stampa la fase ${f.numero}"></td>
+            <td>${f.numero}</td><td>${f.nome}${f.unaTantum ? html` <span class="etichetta">1° lotto</span>` : ''}</td>
+            <td class="n"><input name="fasi[${f.codice}][persone]" value="${x.persone}" placeholder="${num(f.persone, 1)}" class="cortissimo" inputmode="decimal"></td>
+            <td class="n"><input name="fasi[${f.codice}][tempo]" value="${x.tempo}" placeholder="—" class="corto" inputmode="decimal" data-tempo="minuti"></td></tr>`;
+        })}`)}</tbody></table></div>`;
 }
 
 /** Tabella fasi della commessa salvata: previsto, effettivo già registrato e caselle per aggiungere tempi. */
@@ -579,7 +684,7 @@ function righeDaForm(b: any, personeFase: Record<string, number>): RigaForm[] {
 async function paginaRientro(req: Request, c: any, righeArrivate: RigaForm[],
   esito?: { messaggio?: string; errore?: string; lette?: { da: number; incerte: Set<number>; acquisizione: number } }): Promise<string> {
   const i = c.intestazione ?? {};
-  const prev = await leggiPreventivo(c.preventivo_id);
+  const prev = await preventivoDellaCommessa(c);
   const fasi = await fasiCommessa(c);
   const tutte = await fasiConNumeroAttuale(prev);
   const altre = tutte.filter(f => !fasi.some(x => x.codice === f.codice));
@@ -773,11 +878,13 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
   <table class="griglia"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
     <tr>${cella('CODICE', i.codice)}${cella('DESCRIZIONE', i.descrizione)}${cella('REV.', i.revisione)}${cella('NR. COMMESSA', c.numero, 'forte')}</tr>
     <tr>${cella('CLIENTE', i.cliente)}${cella('REFERENTE CLIENTE', c.referente_cliente)}${cella('NR. ORDINE CLIENTE', c.ordine_cliente)}${cella("QTA' / PANN.", quantita, 'forte')}</tr>
-    <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo)}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
+    <tr>${cella('DATA ORDINE', data(c.data_ordine))}${cella('CONSEGNA', data(c.data_consegna))}${cella('PREVENTIVO', c.numero_preventivo
+      ?? (leggiSenzaPreventivo(c.senza_preventivo)?.modo === 'consuntivo' ? 'A CONSUNTIVO' : c.preventivo_id ? '' : 'SENZA (URGENTE)'))}${cella('LOTTO', c.primo_lotto ? 'PRIMO LOTTO' : 'RIPETIZIONE')}</tr>
     <tr>${cella('PROG. ARMADIO', prog('progArmadio'))}${cella('PROG. SERIGRAFIA', prog('progSerigrafia'))}${cella('LAMINA', prog('lamina'))}${cella('PASTA', st.pasta)}</tr>
     <tr>${cella('PROG. P&P FOX', prog('progPePFox'))}${cella('PROG. P&P IPULSE', prog('progPePIpulse'))}${cella('PROG. AOI', prog('progAOI'))}${cella('PROG. FORNO', html`${lato('TOP', forno.top)}${lato('BOT', doppia ? forno.bot : '—')}`)}</tr>
   </table>
-  <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO</div><div class="testo">${st.noteMontaggio}</div></div>
+  <div class="riquadro note"><div class="etic">NOTE DI MONTAGGIO${st.noteCliente ? ' · NOTE DEL CLIENTE' : ''}</div><div class="testo">${st.noteMontaggio}${st.noteCliente
+    ? html`${st.noteMontaggio ? html`<br>` : ''}<b>Cliente:</b> ${st.noteCliente}` : ''}</div></div>
   <div class="riquadro segnalazioni"><div class="etic">SEGNALAZIONI</div>
     ${segnalazioni.length ? html`<ul>${segnalazioni.map(s => html`<li>${s}</li>`)}</ul>` : ''}</div>
   <table class="griglia spedizioni"><tr>${sped.map((x, k) => html`<td>
@@ -805,17 +912,17 @@ function schedaStampa(c: any, prev: any, fasi: FaseScheda[], storico: { testo: s
     <thead><tr><th class="nr" rowspan="2">NR</th><th rowspan="2">DESCRIZIONE FASE</th><th class="pers" rowspan="2">PERS.</th><th colspan="2">TEMPO PREVISTO LOTTO (hh:mm)</th><th colspan="2" class="eff">TEMPO EFFETTIVO LOTTO (hh:mm)</th></tr>
       <tr><th class="t">CICLO</th><th class="t">UOMO</th><th class="t eff">CICLO</th><th class="t eff">UOMO</th></tr></thead>
     <tbody>${perGruppo(fasi).map(g => html`
-      <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="t">${ore(tot(g.fasi))}</td><td class="t">${ore(totUomo(g.fasi))}</td>
+      <tr class="riga-gruppo"><td colspan="3">${g.gruppo}</td><td class="t">${tot(g.fasi) ? ore(tot(g.fasi)) : ''}</td><td class="t">${totUomo(g.fasi) ? ore(totUomo(g.fasi)) : ''}</td>
         <td class="t eff">${haReali ? ore(totReale(g.fasi.map(f => f.codice))) : ''}</td><td class="t eff">${haReali ? ore(totRealeUomo(g.fasi.map(f => f.codice))) : ''}</td></tr>
       ${g.fasi.map(f => html`<tr><td class="nr">${f.numero}</td><td>${f.nome}</td><td class="pers">${num(f.persone, 1)}</td>
-        <td class="t">${ore(f.cicloSec)}</td><td class="t">${ore(f.uomoSec)}</td>
+        <td class="t">${f.cicloSec ? ore(f.cicloSec) : ''}</td><td class="t">${f.uomoSec ? ore(f.uomoSec) : ''}</td>
         <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].cicloSec)}</b>` : ''}</td>
         <td class="t eff">${reali[f.codice] ? html`<b>${ore(reali[f.codice].uomoSec)}</b>` : ''}</td></tr>`)}`)}
     ${nonPreviste.length ? html`<tr class="riga-gruppo"><td colspan="7">ALTRE FASI (non previste)</td></tr>
       ${nonPreviste.map(k => html`<tr><td class="nr">${nomeFase(k).numero}</td><td>${nomeFase(k).nome}</td><td class="pers"></td>
         <td class="t"></td><td class="t"></td><td class="t eff"><b>${ore(reali[k].cicloSec)}</b></td><td class="t eff"><b>${ore(reali[k].uomoSec)}</b></td></tr>`)}` : ''}
-      <tr class="riga-totale"><td colspan="3">TOTALE</td><td class="t">${ore(tot(fasi))}</td><td class="t">${ore(totUomo(fasi))}</td>
-        <td class="t eff">${haReali ? ore(totReale(Object.keys(reali))) : ''}</td><td class="t eff">${haReali ? ore(totRealeUomo(Object.keys(reali))) : ''}</td></tr>
+${tot(fasi) || haReali ? html`      <tr class="riga-totale"><td colspan="3">TOTALE</td><td class="t">${ore(tot(fasi))}</td><td class="t">${ore(totUomo(fasi))}</td>
+        <td class="t eff">${haReali ? ore(totReale(Object.keys(reali))) : ''}</td><td class="t eff">${haReali ? ore(totRealeUomo(Object.keys(reali))) : ''}</td></tr>` : ''}
     </tbody>
   </table>
 </section>
