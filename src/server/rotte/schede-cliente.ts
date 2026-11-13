@@ -49,8 +49,8 @@ export function rotteSchedeCliente() {
         c.ragione_sociale AS cliente, u.nome AS utente, p.email IS NOT NULL AS da_gmail
       FROM pacchetti_scheda p LEFT JOIN clienti c ON c.id = p.cliente_id LEFT JOIN utenti u ON u.id = p.creato_da
       ORDER BY p.creato_il DESC LIMIT 200`);
-    res.send(pag(req, 'Documenti commesse', html`
-      <div class="intestazione-pagina"><h1>Documenti commesse</h1><a href="/preventivi">← Preventivi</a></div>
+    res.send(pag(req, 'Documenti prodotti', html`
+      <div class="intestazione-pagina"><h1>Documenti prodotti</h1><a href="/preventivi">← Preventivi</a></div>
       <section class="blocco stretto-form" id="carica-pacchetto">
         <h2>Carica i documenti di una scheda</h2>
         <p class="nota">Un caricamento per scheda: BOM (Excel o CSV), pick and place (txt, csv), Gerber, forature, file CAD (GenCAD), anche in uno zip
@@ -177,7 +177,7 @@ export function rotteSchedeCliente() {
           <button class="primario">Salva</button>
         </form></details>`;
     if (!a) return res.send(pag(req, p.nome, html`
-      <div class="intestazione-pagina"><h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1><a href="/preventivi/documenti">← Documenti commesse</a></div>
+      <div class="intestazione-pagina"><h1>${p.nome}${p.cliente ? html` <small class="nota">${p.cliente}</small>` : ''}</h1><a href="/preventivi/documenti">← Documenti prodotti</a></div>
       ${p.errore ? html`<p class="avviso">${p.errore}</p>` : ''}
       ${p.stato === 'in_analisi'
         ? html`<p class="avviso info">Analisi in corso: ricarica la pagina tra qualche secondo. Se dopo un paio di minuti è ancora così, premi «Analizza di nuovo».</p>`
@@ -196,7 +196,7 @@ export function rotteSchedeCliente() {
           ${p.fonti?.bom ? (p.bom_id
             ? html`<a class="bottone" href="/quotazioni/bom/${p.bom_id}">Codifica della BOM ↗</a>`
             : html`<form method="post" action="/preventivi/documenti/${p.id}/codifica" class="inline"><button title="Manda la BOM alla sezione Quotazioni: codici Casteltech, prezzi e reperibilità">Codifica la BOM</button></form>`) : ''}
-          <a href="/preventivi/documenti">← Documenti commesse</a>
+          <a href="/preventivi/documenti">← Documenti prodotti</a>
         </div>
       </div>
       ${req.query.msg ? html`<p class="avviso info chiudibile">${String(req.query.msg)}</p>` : ''}

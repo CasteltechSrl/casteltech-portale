@@ -32,7 +32,8 @@ test('Commerciale nell\'ordine di Adriano: CRM, Quotazioni componenti, Preventiv
 
 test('Documenti (Adriano 12/11/2026): i documenti che arrivano, tolti da Commerciale, stessi indirizzi', () => {
   const g = MENU_GRUPPI.find(x => x.chiave === 'documenti')!;
-  assert.deepEqual(g.voci.slice(0, 3), [['Arrivati', ''], ['Documenti commesse', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire']]);
+  assert.deepEqual(g.voci.slice(0, 5), [['Arrivati', ''], ['Prodotti', '/preventivi/documenti'], ['Cliente', '/ordini/acquisire?sezione=clienti'],
+    ['Fornitore', '/ordini/acquisire?sezione=fornitori'], ['Schede di produzione', '/ordini/acquisire?sezione=produzione']]);
   // seconda parte: i documenti che produciamo noi (Adriano 12/11/2026), con il titoletto
   const emessi = g.voci.slice(g.voci.findIndex(v => v[0] === 'Emessi da noi') + 1).map(v => v[0]);
   assert.deepEqual(emessi, ['Preventivi', "Conferme d'ordine", 'DDT', 'Fatture', 'Note di credito', 'Autofatture', 'Ordini a fornitore']);

@@ -248,5 +248,5 @@ test('acquisizioni: sezioni per provenienza (Adriano 13/11/2026)', () => {
   assert.equal(sezioneAcquisizione('ddt_ricevuto', 'cliente'), 'clienti');
   assert.equal(sezioneAcquisizione('export_fatture'), 'altri');
   assert.equal(sezioneAcquisizione('altro'), 'altri');
-  assert.deepEqual(SEZIONI_ACQUISIZIONE.map(z => z.chiave), ['produzione', 'clienti', 'fornitori', 'altri']);
+  assert.deepEqual(SEZIONI_ACQUISIZIONE.map(z => z.chiave), ['clienti', 'fornitori', 'produzione', 'altri']);
 });
