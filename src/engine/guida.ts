@@ -532,6 +532,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/preventivi/documenti', 'Da documenti del cliente'], ['/preventivi', 'Elenco preventivi']],
   },
   {
+    id: 'piu-quantita', area: 'preventivi', titolo: 'Preventivo per più lotti insieme (es. 25, 50, 100 pezzi)',
+    parole: 'lotti lotto 25 50 100 fasce fascia velocità pick place chip ricarico buste cartoni scatole stessa quotazione copia altre prezzi componenti distributori',
+    testo: [
+      'Quando il cliente chiede il prezzo per più quantità non si rifà il lavoro tre volte: si crea un preventivo per quantità, collegati tra loro, con gli stessi dati e la stessa BOM. Codifica, prezzi e correzioni della BOM si fanno UNA volta sola in Quotazioni: la BOM ha una colonna per ogni quantità e i prezzi dei distributori (che dipendono dalla quantità) sono già letti, niente richieste in più.',
+      'Dai documenti del cliente: in "Schede da quotare" scrivi le quantità con la virgola (es. 25, 50, 100; se la mail dice "lotti da 25, 50, 100pz" sono già proposte) e premi "Crea il preventivo da validare". Da un preventivo già salvato: riquadro "Quotare anche altre quantità" sotto Schede, scrivi le quantità e premi "Crea i preventivi".',
+      'Per ogni quantità cambiano da sole: velocità del pick and place e ricarico secondo le fasce di Impostazioni → Tariffe (velocità 1-10 schede 3000 chip/h, 11-25 4000, 26-100 6000, 101-300 7000, oltre 300 8000; ricarico 1-10 schede 35 %, 11-50 30 %, 51-1000 25 %, oltre 1000 20 %), buste, cartoni e bombolette in proporzione alle schede, costo dei componenti a scheda dalla BOM per quella quantità. Con la spunta Campionatura il ricarico resta quello scritto.',
+      'Si lavora su un preventivo solo: correggi, Salva, poi "Copia nelle altre quantità". Gli altri prendono spunte, tempi, tariffe, prezzi dei materiali, prodotto, BOM e note; tengono la loro quantità e rifanno velocità, ricarico, buste, cartoni e costo componenti. I preventivi già accettati, rifiutati o archiviati non si toccano. I prezzi a scheda scritti a mano nella stampa restano di ognuno.',
+      'Nel riquadro "Stessa quotazione" c\'è la tabella di confronto: schede, numero del preventivo, prezzo a scheda senza e con una tantum, ricarico.',
+    ],
+    passi: ['Scrivi le quantità (es. 25, 50, 100) in "Schede da quotare" o nel riquadro "Quotare anche altre quantità".', 'Lavora su un preventivo e sulla sua BOM, poi Salva.', 'Premi "Copia nelle altre quantità" e controlla la tabella dei prezzi.'],
+    pagine: [['/preventivi/documenti', 'Da documenti del cliente'], ['/impostazioni/tariffe', 'Impostazioni → Tariffe (fasce)']],
+  },
+  {
     id: 'punti-saldatura', area: 'preventivi', titolo: 'Punti di saldatura THT e stagno nel preventivo',
     parole: 'punti saldatura mano tht piedini pin reofori refori fori gerber foratura stagno filo saldatrice onda grammi conta contare calcolare',
     testo: [

@@ -4,6 +4,8 @@
  * I file originali restano sul Drive del cliente (Adriano, 27/10/2026): nel database vanno solo i file che servono
  * a rileggere il pacchetto (BOM, pick and place, Gerber, forature, CAD), compressi, più il risultato.
  */
+import { bomPerLeQuantita, caricaFasce } from './preventivi-quantita-servizio.js';
+import { parametriPerQuantita } from '../engine/fasce-quantita.js';
 import { createHash } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
@@ -381,8 +383,10 @@ export async function creaPreventivoDaPacchetto(id: number, nSchede: number, ute
     p.email ? notaRichiesta(p.email) : '',
     `Valori presi dai documenti: ${compilati.map(v => `${v.codice} = ${String(v.valore).replace('.', ',')}`).join(', ')}.`,
     daControllare.length ? `Da controllare: ${daControllare.join('; ')}.` : '', ...nonQuotati].filter(Boolean).join('\n');
+  // velocità P&P e ricarico dalle fasce della quantità (Adriano 13/11/2026)
+  const perQ = parametriPerQuantita({ nSchede, parametri: { ...standard, ...parametri, ...costo } as Record<string, number>, ricarico: tariffe.ricarico }, nSchede, await caricaFasce());
   const dati = normalizza({
-    tariffe, nSchede, nSchedeInPCB: 1, parametri: { ...standard, ...parametri, ...costo },
+    tariffe: { ...tariffe, ricarico: perQ.ricarico }, nSchede, nSchedeInPCB: 1, parametri: perQ.parametri,
     clienteId: p.cliente_id, prodottoId: prodotto?.id ?? null, bomId: p.bom_id ?? null,
     cliente: p.ragione_sociale ?? '', codice: prodotto?.codice ?? proposta?.codice ?? '', descrizione: prodotto?.descrizione ?? proposta?.descrizione ?? '',
     revisione: proposta?.revisione ?? '', note,
@@ -399,7 +403,7 @@ async function segnaDaValidare(preventivoId: number, pacchettoId: number) {
  * BOM del pacchetto nella sezione Componenti (codifica, prezzi e reperibilità dai distributori): si crea una volta sola,
  * poi si riusa. Ritorna l'id della BOM, o null se il pacchetto non ha una BOM.
  */
-export async function bomDelPacchetto(id: number, schede: number, utenteId: number): Promise<number | null> {
+export async function bomDelPacchetto(id: number, schede: number | number[], utenteId: number): Promise<number | null> {
   const p = await q1<{ nome: string; bom_id: number | null }>(`SELECT nome, bom_id FROM pacchetti_scheda WHERE id = $1`, [id]);
   if (!p) return null;
   if (p.bom_id && await q1(`SELECT 1 FROM bom_analisi WHERE id = $1`, [p.bom_id])) return p.bom_id;
@@ -407,7 +411,7 @@ export async function bomDelPacchetto(id: number, schede: number, utenteId: numb
   if (!f) return null;
   const nomeFile = f.nome.split('/').pop()!;
   const righe = unisciAlternative(await leggiFileBom(nomeFile, f.dati));
-  const bomId = await creaAnalisi({ nome: p.nome, fileNome: nomeFile, righe, quantita: [schede], utenteId });
+  const bomId = await creaAnalisi({ nome: p.nome, fileNome: nomeFile, righe, quantita: Array.isArray(schede) ? schede : [schede], utenteId });
   await q(`UPDATE pacchetti_scheda SET bom_id = $2 WHERE id = $1`, [id, bomId]);
   avviaElaborazione(bomId);
   return bomId;
@@ -417,9 +421,13 @@ export async function bomDelPacchetto(id: number, schede: number, utenteId: numb
 export async function quotaBomPacchetto(preventivoId: number, schede: number, utenteId: number) {
   const p = await q1<{ id: number }>(`SELECT id FROM pacchetti_scheda WHERE preventivo_id = $1`, [preventivoId]);
   if (!p) throw new Error('Il preventivo non viene dai documenti del cliente.');
-  const bomId = await bomDelPacchetto(p.id, schede, utenteId);
+  // quotazione per più quantità (Adriano 13/11/2026): la BOM nasce con una colonna per ogni quantità
+  const gruppo = (await q<{ n_schede: number }>(`SELECT n_schede FROM preventivi WHERE gruppo_quantita IS NOT NULL
+    AND gruppo_quantita = (SELECT gruppo_quantita FROM preventivi WHERE id = $1) ORDER BY n_schede`, [preventivoId])).map(x => x.n_schede);
+  const bomId = await bomDelPacchetto(p.id, gruppo.length > 1 ? gruppo : schede, utenteId);
   if (!bomId) throw new Error('Nei documenti del cliente non c\'è una BOM da quotare.');
   await q(`UPDATE preventivi SET bom_id = $2 WHERE id = $1`, [preventivoId, bomId]);
+  await bomPerLeQuantita(preventivoId, bomId);   // BOM già esistente: si aggiungono le quantità che mancano
   const b = await q1<{ nome: string; stato: string; creato_il: string }>(`SELECT nome, stato, creato_il FROM bom_analisi WHERE id = $1`, [bomId]);
   return { bomId, nome: b!.nome, stato: b!.stato, creatoIl: b!.creato_il };
 }

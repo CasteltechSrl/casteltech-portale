@@ -286,6 +286,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `pareggiaSulPiuGrande`); il calcolo non cambia, "Crea ordine" (`prezziComeInStampa`) e l'avviso "sotto il preventivo" in fattura usano il prezzo scritto a mano. La stampa è sempre
    l'ultima versione salvata: `Cache-Control: no-store`, "Stampa" con modifiche non salvate prima salva (`public/preventivo.js`), la scheda già aperta si ricarica
    da sola se il preventivo cambia (GET `/preventivi/:id/stampa/versione`, `public/stampa.js`).
+   Più quantità in una quotazione (Adriano 13/11/2026, Digifly DGFAM V3 25/50/100 pz; migrazione 097 `preventivi.gruppo_quantita` = id del primo, regole in `engine/fasce-quantita.ts`,
+   `preventivi-quantita-servizio.ts`, test in `tests/fasce-quantita.test.ts`): un preventivo per quantità con gli stessi dati, catalogo e BOM. "Schede da quotare" dei documenti accetta
+   "25, 50, 100" (proposte da `quantitaDaEmail`: "lotti da 25, 50, 100pz"); riquadro "Stessa quotazione" sotto Schede (tabella €/scheda e ricarico, "Crea i preventivi" = `creaAltreQuantita`,
+   "Copia nelle altre quantità" = `copiaNelleAltreQuantita`, non tocca accettati/rifiutati/archiviati). Per quantità: velocità P&P TOP/BOT e ricarico dalle fasce (impostazioni 'fasce_quantita',
+   Impostazioni → Tariffe, formato degli scaglioni del listino; iniziali P&P 1-10=3000, 11-25=4000, 26-100=6000, 101-300=7000, 301+=8000; ricarico 1-10=35, 11-50=30, 51-1000=25, 1001+=20;
+   campionatura tiene il suo ricarico, SMD a mano tiene la velocità), buste/cartoni/bombolette in proporzione (`PARAMETRI_IN_PROPORZIONE`), costo componenti dalla BOM per quella quantità;
+   la BOM collegata prende una colonna per quantità (`quantitaNellaBom`, prezzi dalla cache). Anche il preventivo singolo dai documenti prende velocità e ricarico della sua fascia.
 2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):
    Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
    Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,
