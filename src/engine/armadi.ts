@@ -306,12 +306,17 @@ export function pnDaDescrizione(s: string | null | undefined): string | null {
  * delle etichette ("1P", "P", "3N1", "30P") e dei distributori ("771-", "863-", "576-"), poi ogni P/N scritto nelle descrizioni (prima tra parentesi).
  * Al massimo `max`, senza doppioni.
  */
-export function candidatiPn(pn: string | null | undefined, descrizioni: (string | null | undefined)[], max = 5): string[] {
+export function candidatiPn(pn: string | null | undefined, descrizioni: (string | null | undefined)[], max = 6, codice?: string | null): string[] {
   const out: string[] = [];
   const testi = descrizioni.map(d => pulito(d).toUpperCase()).join(' ');
   const metti = (x: string | null | undefined) => {
     const v = (x ?? '').toUpperCase().replace(/[.,;:?)]+$/, '').replace(/^\(+/, '');
-    if (v.length >= 5 && sembraPn(v) && !/[%,]|MM$|^H\.|^RS-?\d{3}$/.test(v) && !out.includes(v)) out.push(v);
+    if (v.length >= 5 && sembraPn(v) && !/[%,=+]|MM$|^H\.|^RS-?\d{3}|MBPS$|-CRI$|_SPEZZ|^P?CB_|^(AEC|C0G|NP0|X[5-8]R)|^\d*X?(SOD|SOT|SSOP|TSSOP|MSOP|DFN|XFDFN|QFN)\d*[A-Z]?$/.test(v) && !out.includes(v)) out.push(v);
+  };
+  /** "LM2575HVS-ADJ/NOPB-ND" → "LM2575HVS-ADJ/NOPB", "BAS16:3000:09316" → "BAS16" */
+  const varianti = (x: string) => {
+    const nd = /^(.{5,})-ND$/i.exec(x); if (nd) metti(nd[1]);
+    if (x.includes(':')) metti(x.split(':')[0]);
   };
   if (pn) {
     const p = pn.toUpperCase();
@@ -329,8 +334,16 @@ export function candidatiPn(pn: string | null | undefined, descrizioni: (string 
     const fuori = t.replace(/\([^()]*\)/g, ' ').split(/\s+/);
     for (const w of [...dentro, ...fuori]) {
       const x = w.replace(/[.,;:?]+$/, '');
-      if (x.length >= 6) { metti(x); const dd = /^\d{2,3}-(.+)$/.exec(x); if (dd && /[A-Z]/.test(dd[1])) metti(dd[1]); }
+      if (x.length >= 6) { metti(x); varianti(x); const dd = /^\d{2,3}-(.+)$/.exec(x); if (dd && /[A-Z]/.test(dd[1])) metti(dd[1]); }
     }
+  }
+  if (pn) varianti(pn.toUpperCase());
+  // il codice dell'armadio (Adriano 13/11/2026: "alcuni P/N sono nella descrizione o nel codice"): codice intero se sembra un P/N
+  // (2041119-1, AD8009JRTZR2), altrimenti l'ultimo pezzo dei codici a famiglia (TI-MORSETTO-350-6-1984659 → 1984659)
+  const c = (codice ?? '').toUpperCase().replace(/_[A-Z]{1,4}$/, '').replace(/[._]+$/, '');
+  if (c) {
+    if (/^[A-Z]{2}-/.test(c)) { const u = c.split('-').pop()!; if (u.length >= 6 && /\d{3}/.test(u)) metti(u); }
+    else if (!/\s/.test(c) && !/^PCB/.test(c)) metti(c);
   }
   return out.slice(0, max);
 }

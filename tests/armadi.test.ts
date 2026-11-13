@@ -158,4 +158,11 @@ test('P/N da provare presso i distributori: prefissi delle etichette tolti, P/N 
   assert.equal(candidatiPn(null, ['R SMD 0R 1% 0402    (YAG RC0402JR-070RL) (VIS CRCW04020000Z0EDC)'])[0], 'RC0402JR-070RL');
   assert.deepEqual(candidatiPn('H.12.5MM', ['CONDENSATORE ELETTROLITICO 50V 220UF H.12.5MM']), []);
   assert.ok(candidatiPn('PICEEEFT1E102UP', ['C SMD ELETTROLITICO 1000UF 20%,25V CASE G (PAN EEE-FT1E102UP 25V)']).includes('EEE-FT1E102UP'));
+  // P/N nel codice dell'armadio e codici DigiKey "-ND" (Adriano 13/11/2026, codici Casteltech)
+  assert.deepEqual(candidatiPn(null, [], 6, '2041119-1'), ['2041119-1']);
+  assert.deepEqual(candidatiPn(null, ['CONN'], 6, 'TI-MORSETTO-350-6-2041119-1'), []);
+  assert.ok(candidatiPn('LM2575HVS-ADJ/NOPB-ND', [], 6, 'IC-TO2635-LM2575HVSADJ').includes('LM2575HVS-ADJ/NOPB'));
+  assert.ok(candidatiPn('BAS16:3000:09316', [], 6).includes('BAS16'));
+  assert.deepEqual(candidatiPn(null, ['IC 8XFDFN W25Q16JVUXIM AEC-Q200 C0GNP0 RS-422/RS-485 20MBPS'], 6), ['W25Q16JVUXIM']);
+  assert.deepEqual(candidatiPn(null, [], 6, 'PCB_KEYM8'), []);
 });

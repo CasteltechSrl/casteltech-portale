@@ -261,28 +261,29 @@ let ricercaInCorso: { iniziata: string; fatti: number; totale: number } | null =
 export const statoRicercaOnline = () => ricercaInCorso;
 
 /** Codici senza prezzo d'acquisto (o a mano) con un P/N, mai cercati negli ultimi 30 giorni: prima quelli di Casteltech. */
-export async function codiciDaCercare(max: number, soloCasteltech: boolean) {
+export async function codiciDaCercare(max: number, soloCasteltech: boolean, ancoraSenzaPrezzo = false) {
   const imp = await impostazioniArmadi();
   const righe = await q<{ codice: string; pn: string | null; descrizione: string | null; descrizione_cliente: string | null; quantita: number; proprietario_file: string | null; sigle: string[] }>(
     `SELECT a.codice, a.pn, a.descrizione, cc.descrizione AS descrizione_cliente, a.quantita, a.proprietario_file,
        coalesce(array_agg(DISTINCT b.sigla) FILTER (WHERE b.sigla IS NOT NULL), '{}') AS sigle
      FROM armadi_articoli a LEFT JOIN armadi_bobine b ON b.codice = a.codice LEFT JOIN componenti_clienti cc ON cc.id = a.componente_cliente_id
      WHERE coalesce(a.prezzo_fonte, '') NOT IN ('manuale', 'acquisto')
-       AND (a.cercato_online_il IS NULL OR a.cercato_online_il < now() - interval '30 days')
-     GROUP BY a.codice, cc.descrizione`);
+       AND (a.cercato_online_il IS NULL OR a.cercato_online_il < now() - interval '30 days' OR ($1 AND a.prezzo_online IS NULL))
+     GROUP BY a.codice, cc.descrizione`, [ancoraSenzaPrezzo]);
   const diCasteltech = (r: typeof righe[number]) => [r.proprietario_file, ...r.sigle].some(s => {
     const l = leggiSigla(s); return l.casteltech || imp.proprietari[l.sigla] === 'casteltech';
   });
   // P/N da provare: quello salvato (ripulito) e quelli scritti nelle descrizioni (Adriano 13/11/2026, codici Selea e Idea)
-  const ordinate = righe.map(r => ({ ...r, cast: diCasteltech(r), candidati: candidatiPn(r.pn, [r.descrizione, r.descrizione_cliente]) }))
+  const ordinate = righe.map(r => ({ ...r, cast: diCasteltech(r), candidati: candidatiPn(r.pn, [r.descrizione, r.descrizione_cliente], 6, r.codice) }))
     .filter(r => r.candidati.length && (!soloCasteltech || r.cast)).sort((a, b) => Number(b.cast) - Number(a.cast));
   return ordinate.slice(0, max);
 }
 
 /** Cerca i prezzi presso i distributori collegati (in sottofondo; usa i prezzi già letti anche se vecchi). */
-export async function cercaPrezziOnline(max = 300, soloCasteltech = false): Promise<string> {
+/** `escludi`: distributori a cui non chiedere (limite del giorno finito); `ancoraSenzaPrezzo`: riprova anche i codici cercati da poco e rimasti senza prezzo. */
+export async function cercaPrezziOnline(max = 300, soloCasteltech = false, opz: { escludi?: string[]; ancoraSenzaPrezzo?: boolean } = {}): Promise<string> {
   if (ricercaInCorso) return 'Una ricerca è già in corso.';
-  const lista = await codiciDaCercare(max, soloCasteltech);
+  const lista = await codiciDaCercare(max, soloCasteltech, !!opz.ancoraSenzaPrezzo);
   if (!lista.length) return 'Non ci sono codici da cercare: hanno tutti un prezzo d\'acquisto o sono stati cercati negli ultimi 30 giorni.';
   ricercaInCorso = { iniziata: new Date().toISOString(), fatti: 0, totale: lista.length };
   setImmediate(async () => {
@@ -291,7 +292,7 @@ export async function cercaPrezziOnline(max = 300, soloCasteltech = false): Prom
       const { cercaPn } = await import('./fornitori.js');
       for (let i = 0; i < lista.length; i += 20) {
         const blocco = lista.slice(i, i + 20);
-        const esito = await cercaPn([...new Set(blocco.flatMap(x => x.candidati))], { cacheLunga: true });
+        const esito = await cercaPn([...new Set(blocco.flatMap(x => x.candidati))], { cacheLunga: true, escludi: (opz.escludi ?? []) as any });
         errori = Object.entries(esito.errori).map(([f, e]) => `${f}: ${e}`).join('; ');
         const voci = blocco.map(x => {
           // il primo P/N che ha un prezzo; se non è quello salvato, diventa il P/N del codice

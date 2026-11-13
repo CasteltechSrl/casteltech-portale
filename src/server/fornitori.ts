@@ -406,7 +406,7 @@ async function conRiprova<T>(fn: () => Promise<T>): Promise<T> {
  * `soloCache` ("Rielabora", Adriano 4/11/2026: ogni richiesta costa o consuma il limite giornaliero): si usano solo i prezzi già letti,
  * anche più vecchi di 24 ore, e non si chiama nessun distributore.
  */
-export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?: boolean; cacheLunga?: boolean; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
+export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?: boolean; cacheLunga?: boolean; escludi?: Fornitore[]; avanzamento?: (fatti: number) => void } = {}): Promise<EsitoRicerca> {
   const attivi = fornitoriConfigurati();
   const unici = [...new Map(pns.filter(Boolean).map(p => [pnKey(p)!, p.trim()])).entries()].filter(([k]) => k);
   const perPn = new Map<string, Partial<Record<Fornitore, RisultatoFornitore>>>(unici.map(([k]) => [k, {}]));
@@ -421,7 +421,8 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?:
       if (f === 'wurth' && !codiceWurth(pn)) continue; // a Würth si chiedono solo i suoi codici
       // cacheLunga: va bene anche una risposta vecchia, si chiede solo il P/N mai cercato
       const c = opz.forza ? null : await daCache(f, k, opz.soloCache || opz.cacheLunga ? 24 * 365 : ORE_CACHE);
-      if (c) segna(k, f, c); else if (!opz.soloCache) daCercare[f].push([k, pn]);
+      // escludi (Adriano 13/11/2026, DigiKey e Farnell al limite del giorno): la cache si usa, ma a loro non si chiede
+      if (c) segna(k, f, c); else if (!opz.soloCache && !opz.escludi?.includes(f)) daCercare[f].push([k, pn]);
     }
   }
   const lavori: Promise<void>[] = [];
