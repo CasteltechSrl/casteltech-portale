@@ -24,7 +24,9 @@ export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string]
     ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'],
     ['Autofatture', '/amministrazione/documenti?tipo=autofattura'], ['Ordini a fornitore', '/ordini/fornitori']] },
   { chiave: 'commerciale', nome: 'Commerciale', voci: [['CRM', '/crm'], ['Quotazioni componenti', '/quotazioni'], ['Preventivi', '/preventivi'], ['Ordini clienti', '/ordini/cruscotto'], ['Conferme d\'ordine', '/ordini/conferme']] },
-  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo']] },
+  { chiave: 'acquisti', nome: 'Acquisti', voci: [['Ordini a fornitore', '/ordini/fornitori'], ['DDT ricevuti', '/acquisti/ddt'], ['Fatture fornitori', '/amministrazione/ricevuti'], ['Acquisti per fornitore e mese', '/amministrazione/ricevuti/mesi'], ['Miglior prezzo di un P/N', '/quotazioni/prezzo'],
+    // Adriano 13/11/2026: voci del materiale di consumo della scheda con costo, giacenza e cruscotto
+    ['Materiale di consumo', '/acquisti/materiale-consumo']] },
   { chiave: 'produzione', nome: 'Produzione', voci: [['Flusso di produzione', '/cruscotto?flusso=preparare'], ['Commesse', '/commesse'], ['Gantt della produzione', '/ordini/gantt'], ['Codifica componenti', '/produzione/codifica-componenti'],
     // Adriano 12/11/2026: pagine delle macchine, pronte per il collegamento con le API (engine/macchine.ts)
     ['Stoccaggio componenti', '/produzione/stoccaggio'], ['Pick & Place', '/produzione/pick-place'], ['AOI', '/produzione/aoi']] },
