@@ -527,8 +527,8 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
         <table class="tabella-programmi">
           <thead><tr><th></th><th>TOP</th>${doppia ? html`<th>BOT</th>` : ''}</tr></thead>
           <tbody>${PROGRAMMI.map(([k, nome]) => html`<tr><th>${nome}</th>
-            <td><input name="scheda[programmi][${k}][top]" value="${st.programmi[k]?.top}" maxlength="80" placeholder="${k === 'progForno' ? (doppia ? 'TOP+BOT STD' : 'TOP STD') : ''}"></td>
-            ${doppia ? html`<td><input name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}" maxlength="80" placeholder="${k === 'progForno' ? 'TOP STD' : ''}"></td>`
+            <td><input name="scheda[programmi][${k}][top]" value="${st.programmi[k]?.top}" maxlength="200" placeholder="${k === 'progForno' ? (doppia ? 'TOP+BOT STD' : 'TOP STD') : ''}"></td>
+            ${doppia ? html`<td><input name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}" maxlength="200" placeholder="${k === 'progForno' ? 'TOP STD' : ''}"></td>`
               : html`<input type="hidden" name="scheda[programmi][${k}][bot]" value="${st.programmi[k]?.bot}">`}</tr>`)}
           </tbody></table>
         <div class="riga-campi">

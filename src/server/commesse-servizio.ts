@@ -15,6 +15,7 @@ import { SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
 import { leggiFineLavorazione } from '../engine/flusso.js';
 import { spedizioniCommesse, type SpedizioneCommessa } from '../engine/commesse-spedite.js';
 import { caricaCatalogo } from './catalogo-db.js';
+import { leggiProgrammi, riempiVuote, aggiornaDaCommessa } from '../engine/programmi-prodotto.js';
 import { leggiSenzaPreventivo, type FaseCatalogo, type SenzaPreventivo } from '../engine/schede-libere.js';
 
 // ───────────────────────────── scheda tecnica (intestazione della MASTERspec) ─────────────────────────────
@@ -177,6 +178,11 @@ async function scriviCommessa(o: {
         VALUES ($1,$2,$3,$4,$5,$6)`, [id, f.codice, i, f.persone, Math.round(f.cicloSec), Math.round(f.uomoSec)]);
     // la scheda tecnica si ripropone alla prossima commessa dello stesso prodotto/revisione
     await c.query(`UPDATE prodotti_revisioni SET scheda_tecnica = $2 WHERE id = $1`, [o.revisioneId, d.scheda]);
+    // i programmi scritti nella commessa tornano sul prodotto (Adriano 13/11/2026): le caselle vuote non cancellano quelli del prodotto
+    const chiavi = PROGRAMMI.map(([k]) => k);
+    const pr = (await c.query(`SELECT p.id, p.programmi FROM prodotti p JOIN prodotti_revisioni r ON r.prodotto_id = p.id WHERE r.id = $1`, [o.revisioneId])).rows[0];
+    if (pr) await c.query(`UPDATE prodotti SET programmi = $2 WHERE id = $1`,
+      [pr.id, aggiornaDaCommessa(leggiProgrammi(pr.programmi, chiavi), leggiProgrammi(d.scheda.programmi, chiavi))]);
     // le segnalazioni scritte nella commessa vanno nello storico del prodotto: stampate anche sulle prossime schede
     await c.query(`DELETE FROM segnalazioni WHERE commessa_id = $1 AND origine = 'ufficio'`, [id]);
     if (d.segnalazioni) await c.query(`INSERT INTO segnalazioni (prodotto_id, revisione_id, commessa_id, origine, testo, rilevante_prossime, autore_id)
@@ -362,10 +368,18 @@ export async function numeriFasi(): Promise<Map<string, string>> {
 export async function schedaTecnicaDaProporre(revisioneId: number | null, prodottoId: number | null): Promise<SchedaTecnica> {
   const vuota = (x: any) => !x || JSON.stringify(schedaTecnica(x)) === JSON.stringify(schedaTecnica({}));
   const rev = revisioneId ? await q1<{ scheda_tecnica: any }>(`SELECT scheda_tecnica FROM prodotti_revisioni WHERE id = $1`, [revisioneId]) : null;
-  if (!vuota(rev?.scheda_tecnica)) return schedaTecnica(rev!.scheda_tecnica);
-  const ultima = prodottoId ? await q1<{ scheda_tecnica: any }>(`SELECT c.scheda_tecnica FROM commesse c JOIN prodotti_revisioni r ON r.id = c.revisione_id
-    WHERE r.prodotto_id = $1 ORDER BY c.creato_il DESC, c.id DESC LIMIT 1`, [prodottoId]) : null;
-  return schedaTecnica(ultima?.scheda_tecnica);
+  let scheda: SchedaTecnica;
+  if (!vuota(rev?.scheda_tecnica)) scheda = schedaTecnica(rev!.scheda_tecnica);
+  else {
+    const ultima = prodottoId ? await q1<{ scheda_tecnica: any }>(`SELECT c.scheda_tecnica FROM commesse c JOIN prodotti_revisioni r ON r.id = c.revisione_id
+      WHERE r.prodotto_id = $1 ORDER BY c.creato_il DESC, c.id DESC LIMIT 1`, [prodottoId]) : null;
+    scheda = schedaTecnica(ultima?.scheda_tecnica);
+  }
+  // caselle ancora vuote: i programmi delle macchine scritti sul prodotto (Adriano 13/11/2026)
+  const prod = prodottoId ? await q1<{ programmi: unknown }>(`SELECT programmi FROM prodotti WHERE id = $1`, [prodottoId]) : null;
+  const chiavi = PROGRAMMI.map(([k]) => k);
+  const { programmi } = riempiVuote(leggiProgrammi(scheda.programmi, chiavi), leggiProgrammi(prod?.programmi, chiavi));
+  return schedaTecnica({ ...scheda, programmi: { ...scheda.programmi, ...programmi } });
 }
 
 export { programmaForno } from '../engine/forno.js';
