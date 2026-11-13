@@ -66,3 +66,31 @@ export async function caricaNoteSchede(elenco: { prodotto_id?: number; nuovo?: P
   });
   return esito;
 }
+
+/**
+ * Toglie i prodotti aggiunti per sbaglio dal caricamento delle schede vecchie (Adriano 13/11/2026, "scarta anche Kairos"):
+ * solo se il prodotto non è usato da nessuna parte (preventivi, commesse, ordini, documenti, segnalazioni diverse da 'schede vecchie').
+ */
+export async function scartaProdottiSchede(elenco: { cliente_id: unknown; codice: unknown }[], conferma: boolean): Promise<{ tolti: string[]; tenuti: string[] }> {
+  const esito = { tolti: [] as string[], tenuti: [] as string[] };
+  await transazione(async c => {
+    for (const x of elenco) {
+      const codice = String(x.codice ?? '').trim().toUpperCase();
+      const p = (await c.query(`SELECT id FROM prodotti WHERE cliente_id = $1 AND upper(codice) = $2`, [Number(x.cliente_id), codice])).rows[0];
+      if (!p) continue;
+      const u = (await c.query(`SELECT
+          (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = $1)
+        + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = $1)
+        + (SELECT count(*)::int FROM ordini_righe WHERE prodotto_id = $1)
+        + (SELECT count(*)::int FROM documenti_righe WHERE prodotto_id = $1)
+        + (SELECT count(*)::int FROM segnalazioni WHERE prodotto_id = $1 AND coalesce(categoria, '') <> $2) AS usi`, [p.id, CATEGORIA_SCHEDE_VECCHIE])).rows[0];
+      if (u.usi) { esito.tenuti.push(codice); continue; }
+      esito.tolti.push(codice);
+      if (!conferma) continue;
+      await c.query(`DELETE FROM segnalazioni WHERE prodotto_id = $1`, [p.id]);
+      await c.query(`DELETE FROM prodotti_revisioni WHERE prodotto_id = $1`, [p.id]);
+      await c.query(`DELETE FROM prodotti WHERE id = $1`, [p.id]);
+    }
+  });
+  return esito;
+}
