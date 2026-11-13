@@ -4,6 +4,7 @@
  *   va svegliato di notte) una copia in BACKUP_DIR (disco di Render), tenendo gli ultimi 30 giorni;
  * - in qualsiasi momento dal pannello Impostazioni → Backup (scarica il file).
  * Ripristino: tools/ripristina-backup.ts
+ * Traffico di Neon (13/11/2026): con BACKUP_DIR le righe uguali all'ultimo backup si prendono dal disco (backup-cache.ts), da Neon solo impronte e righe cambiate.
  */
 import { createGzip } from 'node:zlib';
 import { createWriteStream, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
@@ -11,6 +12,7 @@ import { join } from 'node:path';
 import { Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { pool } from './db.js';
+import { CacheRighe, impronta } from './backup-cache.js';
 
 /**
  * Tabelle che NON vanno nel backup: le sessioni di login e la cache di 24 ore dei prezzi dei distributori.
@@ -91,8 +93,21 @@ export async function* testoBackup(tabelle: string[], leggi: LettoreTabelle, cre
  * preventivi interi) e si riscrivevano in testo, con fino a 16 pezzi in coda prima della compressione: il backup aggiungeva ~200 MB.
  * Ora ogni riga arriva già in JSON da PostgreSQL (row_to_json, file in base64), i pezzi pesano al massimo ~4 MB e in coda ce n'è uno solo.
  */
-export async function scriviBackup(destinazione: Writable): Promise<void> {
+export async function scriviBackup(destinazione: Writable, opz: { cache?: string | null } = {}): Promise<void> {
+  // un backup alla volta: la copia delle righe sul disco (backup-cache.ts) non si usa da due backup insieme
+  const prima = inCorso;
+  let fine!: () => void;
+  inCorso = new Promise<void>(r => { fine = r; });
+  await prima;
+  try { await scriviBackupDaSolo(destinazione, opz.cache === undefined ? cartellaCache() : opz.cache); } finally { fine(); }
+}
+let inCorso: Promise<void> = Promise.resolve();
+/** Cartella della copia delle righe dell'ultimo backup (dentro BACKUP_DIR, sul disco di Render). */
+export const cartellaCache = () => process.env.BACKUP_DIR ? join(process.env.BACKUP_DIR, 'cache-righe') : null;
+
+async function scriviBackupDaSolo(destinazione: Writable, cartella: string | null): Promise<void> {
   const c = await pool.connect();
+  const cache = cartella ? new CacheRighe(cartella) : null;
   try {
     await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const tabelle = (await c.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public'`)).rows
@@ -105,18 +120,41 @@ export async function scriviBackup(destinazione: Writable): Promise<void> {
       if (!colonne.has(r.t)) colonne.set(r.t, []);
       colonne.get(r.t)!.push({ nome: r.nome, file: r.tipo === 'bytea' });
     }
-    const leggi: LettoreTabelle = async (t, da, n) => {
-      const scelte = (colonne.get(t) ?? []).map(k => { const q = `"${k.nome.replace(/"/g, '""')}"`;
-        return k.file ? `CASE WHEN ${q} IS NULL THEN NULL ELSE json_build_object('__bytea', translate(encode(${q}, 'base64'), E'\n', '')) END AS ${q}` : q; });
-      return (await c.query<{ j: string }>(`SELECT row_to_json(x)::text AS j FROM (SELECT ${scelte.join(', ') || '*'} FROM "${t}" ORDER BY ctid LIMIT $1 OFFSET $2) x`, [n, da])).rows.map(r => r.j);
+    // colonne della riga come le scrive il backup (file in base64); `pre` = alias della tabella per la lettura con la copia
+    const scelte = (t: string, pre = '') => (colonne.get(t) ?? []).map(k => { const nome = `"${k.nome.replace(/"/g, '""')}"`, q = pre + nome;
+      return k.file ? `CASE WHEN ${q} IS NULL THEN NULL ELSE json_build_object('__bytea', translate(encode(${q}, 'base64'), E'\n', '')) END AS ${nome}` : `${q} AS ${nome}`; });
+    const leggiDalDatabase: LettoreTabelle = async (t, da, n) =>
+      (await c.query<{ j: string }>(`SELECT row_to_json(x)::text AS j FROM (SELECT ${scelte(t).join(', ') || '*'} FROM "${t}" ORDER BY ctid LIMIT $1 OFFSET $2) x`, [n, da])).rows.map(r => r.j);
+    // con la copia sul disco: da Neon arrivano le impronte di tutte le righe, poi solo le righe nuove o cambiate
+    let corrente: { t: string; righe: { k: string; h: string }[] } | null = null;
+    const leggiConCopia: LettoreTabelle = async (t, da, n) => {
+      if (!cache || cache.spenta) return leggiDalDatabase(t, da, n);
+      const lat = `FROM "${t}" riga_, LATERAL (SELECT ${scelte(t, 'riga_.').join(', ') || 'riga_.*'}) x`;
+      if (corrente?.t !== t) {
+        corrente = { t, righe: (await c.query<{ k: string; h: string }>(`SELECT riga_.ctid::text AS k, md5(row_to_json(x)::text) AS h ${lat} ORDER BY riga_.ctid`)).rows };
+        cache.apri(t);
+      }
+      const pezzo = corrente.righe.slice(da, da + n);
+      const testi = pezzo.map(r => cache.leggi(r.h));
+      const mancanti = pezzo.filter((_, i) => testi[i] == null).map(r => r.k);
+      if (mancanti.length) {
+        const dal = new Map((await c.query<{ k: string; j: string }>(`SELECT riga_.ctid::text AS k, row_to_json(x)::text AS j ${lat} WHERE riga_.ctid = ANY($1::tid[])`, [mancanti])).rows.map(r => [r.k, r.j]));
+        pezzo.forEach((r, i) => { if (testi[i] == null) testi[i] = dal.get(r.k) ?? null; });
+      }
+      if (testi.some(x => x == null)) throw new Error(`Backup: righe di ${t} non lette`);
+      cache.prese += pezzo.length - mancanti.length; cache.lette += mancanti.length;
+      pezzo.forEach((r, i) => cache.scrivi(impronta(testi[i]!), testi[i]!));
+      return testi as string[];
     };
     const quante = async (t: string) => {
       const r = (await c.query<{ b: string | null }>(`SELECT (pg_total_relation_size(c.oid) / greatest(c.reltuples, 1))::bigint AS b FROM pg_class c WHERE c.oid = $1::regclass`, [`"${t}"`])).rows[0];
       return righePerVolta(Number(r?.b ?? 0));
     };
-    await pipeline(Readable.from(testoBackup(ordinaPerDipendenze(tabelle, legami), leggi, undefined, quante), { highWaterMark: 1 }), createGzip(), destinazione);
+    await pipeline(Readable.from(testoBackup(ordinaPerDipendenze(tabelle, legami), cache ? leggiConCopia : leggiDalDatabase, undefined, quante), { highWaterMark: 1 }), createGzip(), destinazione);
     await c.query('COMMIT');
+    if (cache) { cache.conferma(); console.log(`Backup: ${cache.prese} righe dalla copia sul disco, ${cache.lette} lette dal database`); }
   } catch (e) {
+    cache?.annulla();
     await c.query('ROLLBACK').catch(() => {});
     throw e;
   } finally { c.release(); }

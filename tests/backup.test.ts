@@ -74,3 +74,39 @@ test('backup: righe già scritte in JSON dal database e meno righe per volta se 
   assert.deepEqual(letture, ['0+3', '3+3', '6+3']);
   assert.deepEqual(JSON.parse(testo).tabelle.preventivi, righe.map(r => JSON.parse(r)));
 });
+
+test('backup: copia delle righe sul disco (Neon, traffico 13/11/2026): righe uguali dalla copia, cambiate dal database', async () => {
+  const { mkdtempSync, readdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { CacheRighe, impronta } = await import('../src/server/backup-cache.js');
+  const dir = mkdtempSync(join(tmpdir(), 'cache-righe-'));
+  const righe = ['{"id":1,"nome":"A"}', '{"id":2,"nome":"è"}'];
+  const c1 = new CacheRighe(dir);
+  c1.apri('clienti');
+  assert.equal(c1.leggi(impronta(righe[0])), null, 'prima volta: niente copia');
+  for (const r of righe) c1.scrivi(impronta(r), r);
+  c1.apri('vecchia'); c1.scrivi(impronta('{}'), '{}');
+  c1.conferma();
+  assert.deepEqual(readdirSync(dir).sort(), ['clienti.dat', 'clienti.idx', 'vecchia.dat', 'vecchia.idx']);
+
+  const c2 = new CacheRighe(dir);
+  c2.apri('clienti');
+  assert.equal(c2.leggi(impronta(righe[1])), righe[1], 'riga uguale presa dalla copia, accenti compresi');
+  assert.equal(c2.leggi(impronta('{"id":2,"nome":"B"}')), null, 'riga cambiata: si legge dal database');
+  c2.scrivi(impronta(righe[1]), righe[1]);
+  c2.conferma();
+  assert.deepEqual(readdirSync(dir).sort(), ['clienti.dat', 'clienti.idx'], 'la tabella non più nel backup si toglie, la copia non cresce');
+
+  const c3 = new CacheRighe(dir);
+  c3.apri('clienti');
+  assert.equal(c3.leggi(impronta(righe[0])), null, 'solo le righe dell\'ultimo backup');
+  c3.annulla();
+  assert.deepEqual(readdirSync(dir).sort(), ['clienti.dat', 'clienti.idx'], 'backup non riuscito: resta la copia di prima');
+
+  writeFileSync(join(dir, 'clienti.dat'), Buffer.alloc(200));   // file rovinato
+  const c4 = new CacheRighe(dir);
+  c4.apri('clienti');
+  assert.equal(c4.leggi(impronta(righe[1])), null, 'copia rovinata: mai una riga sbagliata, si rilegge dal database');
+  c4.annulla();
+});
