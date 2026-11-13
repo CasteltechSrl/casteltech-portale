@@ -13,7 +13,7 @@ import type { DatiAzienda } from '../../engine/amministrazione.js';
 import { riepilogo } from '../../engine/riepilogo.js';
 import { noteDaStampare } from '../../engine/non-quotati.js';
 import {
-  VERSIONI_STAMPA, SETTIMANE_MAX, acquistoMateriale, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
+  VERSIONI_STAMPA, SETTIMANE_MAX, acquistoMateriale, type PrezzoQuantita, contenutoStampa, materialeVenduto, testoConsegna, validitaOfferta,
   type Ritocchi, type VersioneStampa,
 } from '../../engine/stampa-preventivo.js';
 import { CLAUSOLE_FORNITURA, APPROVAZIONE_FORNITURA, ACCETTAZIONE_PREVENTIVO, REVISIONE_CONDIZIONI } from '../../engine/condizioni.js';
@@ -35,11 +35,12 @@ export interface EmailStampa {
 
 /** ut = dettaglio dei costi una tantum (Adriano 4/11/2026; `?ut=0` lo toglie) */
 /** allegato = ultima pagina con alternative da confermare e problemi di acquisto (Adriano 5/11/2026: sempre, `?allegato=0` la toglie) */
-export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean; ut: boolean; allegato?: boolean }
+/** quantita = tabella dei prezzi delle altre quantità della stessa quotazione (Adriano 13/11/2026; `?quantita=0` la toglie) */
+export interface OpzioniStampa { versione: VersioneStampa; condizioni: boolean; firma: boolean; ut: boolean; allegato?: boolean; quantita?: boolean }
 
 /** Scelte della stampa nell'indirizzo (solo quelle diverse dal solito). */
 export function parametriStampa(x: OpzioniStampa): Record<string, string> {
-  return { vista: x.versione, ...(x.condizioni ? {} : { condizioni: '0' }), ...(x.firma ? {} : { firma: '0' }), ...(x.ut ? {} : { ut: '0' }), ...(x.allegato === false ? { allegato: '0' } : {}) };
+  return { vista: x.versione, ...(x.condizioni ? {} : { condizioni: '0' }), ...(x.firma ? {} : { firma: '0' }), ...(x.ut ? {} : { ut: '0' }), ...(x.allegato === false ? { allegato: '0' } : {}), ...(x.quantita === false ? { quantita: '0' } : {}) };
 }
 /** Righe vuote del modulo per aggiungere righe alla stampa. */
 const RIGHE_VUOTE = 2;
@@ -79,6 +80,8 @@ export function stampaPreventivo(o: {
   alternative?: AlternativaDaConfermare[];
   /** componenti non trovati o con problemi di acquisto (Adriano 5/11/2026), nello stesso foglio */
   problemiAcquisto?: ComponenteDaVerificare[];
+  /** prezzi delle quantità della stessa quotazione (Adriano 13/11/2026); vuoto = preventivo da solo */
+  quantita?: PrezzoQuantita[];
 }): Raw {
   const { p, d, ris, opz, nonQuotati } = o;
   const conAllegato = opz.allegato !== false;
@@ -133,6 +136,17 @@ export function stampaPreventivo(o: {
       case 'sconto': return html`<tr class="prodotto sconto"><td></td><td><b>${x.descrizione}</b></td><td></td><td></td><td class="n">− ${euro(x.importo)}</td></tr>`;
     }
   });
+  const gruppo = o.quantita ?? [];
+  const tabQuantita = gruppo.length > 1 && opz.quantita !== false;
+  const conUtQ = gruppo.some(x => x.unaTantum > 0);
+  const tabellaQuantita = tabQuantita ? html`<div class="etic titoletto">Prezzi per quantità</div>
+  <table class="righe tabella-quantita">
+    <thead><tr><th class="n">Quantità</th><th class="n">Prezzo a scheda</th><th class="n">Importo del lotto</th>
+      ${conUtQ ? html`<th class="n">Costi una tantum (primo lotto)</th><th class="n">Prezzo a scheda con una tantum</th>` : ''}</tr></thead>
+    <tbody>${gruppo.map(x => html`<tr class="${x.questo ? 'questo' : ''}"><td class="n"><b>${num(x.schede, 0)} pz</b></td><td class="n"><b>${euroUnitario(x.prezzoScheda)}</b></td>
+      <td class="n">${euro(x.lotto)}</td>${conUtQ ? html`<td class="n">${euro(x.unaTantum)}</td><td class="n">${x.conUnaTantum != null ? euroUnitario(x.conUnaTantum) : ''}</td>` : ''}</tr>`)}</tbody>
+  </table>
+  <p class="nota-quantita">Il dettaglio qui sopra, il riquadro dei prezzi e il totale si riferiscono a ${num(d.nSchede, 0)} pz.</p>` : '';
   const noteStampate = noteDaStampare(rit.noteCliente, rit.noteInterne, d.note ?? '', nonQuotati ?? []);
   const valoreRiga = (k: number, campo: 'descrizione' | 'quantita' | 'prezzo') => {
     const x = rit.righe[k];
@@ -167,6 +181,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
     <a href="${link({ condizioni: !opz.condizioni })}" class="${opz.condizioni ? 'si' : ''}">Condizioni generali</a>
     <a href="${link({ firma: !opz.firma })}" class="${opz.firma ? 'si' : ''}">Spazio firma del cliente</a>
     ${r.unaTantum > 0 && opz.versione !== 'essenziale' ? html`<a href="${link({ ut: !opz.ut })}" class="${opz.ut ? 'si' : ''}" title="Voci sotto i costi una tantum (documentazione, programmazione, lamina…)">Dettaglio dei costi una tantum</a>` : ''}
+    ${gruppo.length > 1 ? html`<a href="${link({ quantita: !tabQuantita })}" class="${tabQuantita ? 'si' : ''}" title="Tabella con i prezzi di tutte le quantità della stessa quotazione">Tabella delle quantità (${gruppo.map(x => x.schede).join(', ')} pz)</a>` : ''}
     ${daComponenti ? html`<a href="${link({ allegato: !conAllegato })}" class="${conAllegato ? 'si' : ''}" title="Ultima pagina: codici alternativi da confermare e componenti non trovati o con problemi di acquisto">Pagina componenti (alternative e problemi di acquisto)</a>` : ''}
   </div>
   <form class="ritocchi" method="post" action="/preventivi/${p.id}/stampa">
@@ -209,7 +224,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
         revisioni: { elenco: o.email.revisioni ?? [], link: rid => `/preventivi/revisioni/${rid}/pdf` } })}
     ${o.email.stato === 'da_validare' ? html`<p class="aiuto"><b>Preventivo da validare</b>: controllalo e salvalo, poi si può mandare.</p>` : html`
     <form method="post" action="/preventivi/${p.id}/email" data-conferma="Mandare il preventivo per email con il PDF allegato (${VERSIONI_STAMPA.find(v => v.codice === opz.versione)?.nome ?? ''})?">
-      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}"><input type="hidden" name="allegato" value="${conAllegato ? '1' : '0'}">
+      <input type="hidden" name="vista" value="${opz.versione}"><input type="hidden" name="condizioni" value="${opz.condizioni ? '1' : '0'}"><input type="hidden" name="firma" value="${opz.firma ? '1' : '0'}"><input type="hidden" name="ut" value="${opz.ut ? '1' : '0'}"><input type="hidden" name="allegato" value="${conAllegato ? '1' : '0'}"><input type="hidden" name="quantita" value="${opz.quantita === false ? '0' : '1'}">
       ${o.email.richiesta ? html`<p class="aiuto">Risposta alla richiesta "${o.email.richiesta.oggetto}" di ${o.email.richiesta.mittente}.</p>` : ''}
       <label>A <input name="a" value="${o.email.a}" placeholder="indirizzo@cliente.it (più indirizzi con la virgola)"></label>
       <label>Cc <input name="cc" value=""></label>
@@ -242,6 +257,7 @@ ${consegna ? '' : html`<div class="messaggio-stampa manca-consegna">Prima di sta
     <thead><tr><th class="codice">Codice</th><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo unitario</th><th class="n">Importo</th></tr></thead>
     <tbody>${corpo}</tbody>
   </table>
+  ${tabellaQuantita}
 
   ${noteStampate ? html`<div class="etic titoletto">Note</div><p class="note">${noteStampate}</p>` : ''}
   ${alternative.length || problemi.length ? html`<p class="avviso-alternative">${fraseAlternative(alternative.length, problemi.length)}</p>` : ''}

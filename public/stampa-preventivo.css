@@ -149,3 +149,8 @@ table.tabella-alternative .conferma { white-space: nowrap; width: 24mm; }
 .titolo-sezione { font-size: 10.5pt; margin: 6mm 0 0; }
 .titolo-sezione + .spiega-alternative { border-top: 0; padding-top: 1mm; margin-top: 1mm; }
 table.tabella-alternative tr.non-quotato td:last-child { color: #a11; font-weight: 600; }
+
+/* Prezzi per quantità della stessa quotazione (Adriano 13/11/2026) */
+.tabella-quantita { margin-top: 2mm; }
+.tabella-quantita tr.questo td { background: #e8f3f0; }
+.nota-quantita { font-size: 8pt; color: #666; font-style: italic; margin: 1mm 0 0; }
