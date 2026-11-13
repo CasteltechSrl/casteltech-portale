@@ -34,6 +34,7 @@
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
+import { caricaArmadi, cercaPrezziOnline, datiArmadi, dividiFile, salvaPrezziOnline, statoRicercaOnline } from '../armadi-servizio.js';
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
@@ -121,6 +122,21 @@ export function rotteApiClaude() {
   });
   r.post('/aci', express.raw({ type: 'application/octet-stream', limit: '30mb' }), async (req, res) => {
     try { res.json(await caricaTabelleAci(req.body as Buffer)); } catch (e: any) { res.status(400).json({ errore: String(e?.message ?? e) }); }
+  });
+  // Stoccaggio componenti (Adriano 13/11/2026): file degli armadi (ItemList + separatore + reel_archive), prezzi trovati online, stato
+  r.post('/armadi', express.raw({ type: 'application/octet-stream', limit: '40mb' }), async (req, res) => {
+    try { res.json(await caricaArmadi(dividiFile(req.body as Buffer), req.query.conferma === '1')); } catch (e: any) { res.status(400).json({ errore: String(e?.message ?? e) }); }
+  });
+  r.post('/armadi/prezzi', async (req, res) => {
+    res.json({ salvati: await salvaPrezziOnline(Array.isArray(req.body?.prezzi) ? req.body.prezzi : []) });
+  });
+  r.post('/armadi/cerca-prezzi', async (req, res) => {
+    res.json({ esito: await cercaPrezziOnline(Math.min(1000, Number(req.body?.max) || 300), !!req.body?.soloCasteltech) });
+  });
+  r.get('/armadi', async (_req, res) => {
+    const d = await datiArmadi();
+    res.json({ impostazioni: d.imp, ricerca: statoRicercaOnline(), riepilogo: d.riepilogo, sigle: d.tabella,
+      senzaPrezzo: d.articoli.filter(a => a.prezzo == null).map(a => ({ codice: a.codice, pn: a.pn, descrizione: a.descrizione, quantita: a.quantita, proprietario: a.proprietario_file })) });
   });
   r.get('/aci', async (_req, res) => {
     res.json(await q(`SELECT anno, count(*)::int AS modelli FROM tariffe_aci GROUP BY anno ORDER BY anno`));
