@@ -14,7 +14,9 @@ const art = (codice: string) => iniziali.find(m => m.codice === codice)!;
 const v = (c: string) => voceMagazzino(c)!;
 
 test('Materiale di consumo: le stesse voci del riquadro della commessa, con unità di gestione', () => {
-  assert.deepEqual(VOCI_MAGAZZINO.map(x => x.codice), vociConsumo(null, 0).map(x => x.codice));
+  assert.deepEqual(VOCI_MAGAZZINO.filter(x => !x.soloAcquisti).map(x => x.codice), vociConsumo(null, 0).map(x => x.codice));
+  // flussante diviso negli Acquisti: liquido per l'onda (voce della scheda) e gel per le riprese SMD
+  assert.deepEqual(VOCI_MAGAZZINO.filter(x => x.soloAcquisti).map(x => x.codice), ['flussanteGel']);
   assert.equal(v('pastaSaldante').unita, 'kg');
   assert.equal(v('kaptonNastro').unita, 'm');
   assert.equal(v('kaptonNastro').dallaScheda, 0.01);   // la scheda conta il Kapton in cm
@@ -25,6 +27,9 @@ test('Materiale di consumo: articoli dell\'anagrafica nella voce giusta', () => 
   assert.equal(voceProposta(art('MC-BAR-001')), 'stagnoSaldatrice');
   assert.equal(voceProposta(art('MC-FIL-001')), 'filo');
   assert.equal(voceProposta(art('MC-FLU-004')), 'flussante');
+  assert.equal(voceProposta(art('MC-FLU-008')), 'flussante');      // pasta flussante concentrata: diventa liquido
+  assert.equal(voceProposta(art('MC-FLU-006')), 'flussanteGel');
+  assert.equal(voceProposta(art('MC-FLU-007')), 'flussanteGel');
   assert.equal(voceProposta(art('MC-KAP-003')), 'kaptonNastro');
   assert.equal(voceProposta(art('MC-KAP-011')), 'kaptonBollini');
   assert.equal(voceProposta(art('MC-COA-002')), 'conformal');
@@ -43,6 +48,8 @@ test('Materiale di consumo: contenuto della confezione letto da unità e descriz
   assert.equal(contenutoProposto(art('MC-FLU-001'), v('flussante')), 25);        // tanica 25 L
   assert.equal(contenutoProposto(art('MC-FLU-008'), v('flussante')), 0.1);       // 100 ML
   assert.equal(contenutoProposto(art('MC-FLU-006'), v('flussante')), null);      // siringa 10 G: non è un volume
+  assert.equal(contenutoProposto(art('MC-FLU-006'), v('flussanteGel')), 10);     // nel gel: 10 g
+  assert.equal(contenutoProposto(art('MC-FLU-007'), v('flussanteGel')), 300);
   assert.equal(contenutoProposto(art('MC-KAP-003'), v('kaptonNastro')), 33);     // 6 MM X 33 M
   assert.equal(contenutoProposto(art('MC-KAP-011'), v('kaptonBollini')), 1000);  // CF. 1000
   assert.equal(contenutoProposto(art('MC-COA-002'), v('conformal')), 1);         // spray

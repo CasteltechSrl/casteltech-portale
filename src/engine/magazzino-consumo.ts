@@ -17,7 +17,7 @@ import { vociConsumo } from './consumi.js';
 
 export type Dimensione = 'massa' | 'volume' | 'lunghezza' | 'pezzi' | 'bombolette';
 /** Unità di gestione della voce e fattore per passare dall'unità della scheda (g, ml, cm) a quella della voce. */
-export interface VoceMagazzino { codice: string; nome: string; unita: string; dimensione: Dimensione; dallaScheda: number }
+export interface VoceMagazzino { codice: string; nome: string; unita: string; dimensione: Dimensione; dallaScheda: number; soloAcquisti?: boolean }
 
 const UNITA_VOCE: Record<string, { unita: string; dimensione: Dimensione; dallaScheda: number }> = {
   pastaSaldante: { unita: 'kg', dimensione: 'massa', dallaScheda: 0.001 },
@@ -31,8 +31,17 @@ const UNITA_VOCE: Record<string, { unita: string; dimensione: Dimensione; dallaS
   conformal: { unita: 'bomb.', dimensione: 'bombolette', dallaScheda: 1 },
 };
 
-/** Le voci della scheda di produzione, nello stesso ordine del riquadro della commessa. */
-export const VOCI_MAGAZZINO: VoceMagazzino[] = vociConsumo(null, 0).map(v => ({ codice: v.codice, nome: v.nome, ...UNITA_VOCE[v.codice] }));
+/**
+ * Le voci della scheda di produzione, nello stesso ordine del riquadro della commessa. Negli Acquisti il flussante è diviso
+ * (Adriano 13/11/2026): liquido per la saldatrice a onda (la voce della scheda) e in gel per le riprese SMD a pennello (`soloAcquisti`:
+ * non c'è sulla scheda, scende solo con un inventario nuovo).
+ */
+export const VOCI_MAGAZZINO: VoceMagazzino[] = vociConsumo(null, 0).flatMap(v => {
+  const voce: VoceMagazzino = { codice: v.codice, nome: v.codice === 'flussante' ? 'Flussante liquido (saldatrice a onda)' : v.nome, ...UNITA_VOCE[v.codice] };
+  return v.codice === 'flussante'
+    ? [voce, { codice: 'flussanteGel', nome: 'Flussante in gel (riprese SMD)', unita: 'g', dimensione: 'massa' as const, dallaScheda: 1, soloAcquisti: true }]
+    : [voce];
+});
 export const voceMagazzino = (codice: string) => VOCI_MAGAZZINO.find(v => v.codice === codice);
 
 /** Quanto vale una unità di misura scritta (KG, G, L, ML, M, CM) nella base della sua dimensione (g, ml, cm). */
@@ -54,7 +63,7 @@ export function voceProposta(m: ArticoloBase): string | null {
     case 'PAS': return 'pastaSaldante';
     case 'BAR': return 'stagnoSaldatrice';
     case 'FIL': return 'filo';
-    case 'FLU': return 'flussante';
+    case 'FLU': return /\bGEL\b|GELFLUX/.test(d) ? 'flussanteGel' : 'flussante';
     case 'KAP': return /BOLLIN/.test(d) ? 'kaptonBollini' : 'kaptonNastro';
     case 'COA':
       if (/DILUENT|SPELLICOL/.test(d)) return null;
