@@ -401,6 +401,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Valore dei clienti per cliente con "% di riconoscimento" (predefinita 100 %).
    Tabella per proprietario con % dei codici con prezzo, elenco diviso "senza prezzo" / "con il prezzo" con filtro Proprietario (`di_senza`/`di_con`). Sigle: colonna Cliente
    (impostazioni 'armadi' `clientiSigle`, `clientiDelleSigle`/`gruppiSigle`): sigle dello stesso cliente in una riga sola, "Di chi è" separato (Euroautomations = materiale Casteltech).
+   Codici dei clienti senza prezzo (Adriano 13/11/2026, Selea e Idea): elenchi del cliente con le descrizioni via POST `/api/claude/armadi/descrizioni-cliente` (`caricaDescrizioniCliente`:
+   componenti_clienti + armadi_articoli); `candidatiPn` = P/N salvato ripulito (1P, 3N1, 30P, P, "771-") + P/N delle descrizioni, si prova il primo che ha un prezzo.
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei

@@ -3,11 +3,11 @@
  * Regole in engine/armadi.ts. Niente timer: tutto si legge all'apertura della pagina (Neon).
  */
 import { q, q1, transazione } from './db.js';
-import { testoDaFile } from '../engine/componenti-clienti.js';
+import { maiuscoloPulito, testoDaFile } from '../engine/componenti-clienti.js';
 import { candidatiRiga } from '../engine/righe-fattura.js';
 import { pnKey } from '../engine/codifica/bom.js';
 import {
-  chiaviArticolo, clientiDelleSigle, descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, pnPulito, stimePerGruppo, leggiArchivioBobine, leggiSigla, pnDaDescrizione, prezzoOnline, quote, riepilogo,
+  candidatiPn, chiaviArticolo, clientiDelleSigle, descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, pnPulito, stimePerGruppo, leggiArchivioBobine, leggiSigla, pnDaDescrizione, prezzoOnline, quote, riepilogo,
   scegliPrezzo, senzaSuffisso, tabellaSigle, SEPARATORE_FILE, type ArticoloLetto, type BobinaLetta, type PrezzoCandidato, type Regola,
   type Riconoscimento, type ScelteSigle,
 } from '../engine/armadi.js';
@@ -227,6 +227,34 @@ export async function salvaPrezziOnline(voci: { codice: string; prezzo: number; 
   return valide.length;
 }
 
+/**
+ * Elenco dei codici di un cliente con le descrizioni (Adriano 13/11/2026: file di Selea e Idea Automazione con i P/N nelle descrizioni):
+ * entra nei componenti del cliente (aggiunge e aggiorna) e completa subito gli articoli degli armadi con lo stesso codice:
+ * descrizione dove manca o era solo ricavata, P/N dove manca. Resta anche ai prossimi caricamenti degli armadi.
+ */
+export async function caricaDescrizioniCliente(clienteId: number, componenti: { codice: string; descrizione: string | null }[]) {
+  const letti = new Map<string, { codice: string; descrizione: string | null; famiglia: null; gruppo: null }>();
+  for (const c of componenti) {
+    const codice = String(c.codice ?? '').trim().toUpperCase(), descrizione = maiuscoloPulito(c.descrizione) || null;
+    if (!codice) continue;
+    const prima = letti.get(codice);   // codice ripetuto: vale la descrizione più lunga (di solito quella con più P/N)
+    if (!prima || (descrizione?.length ?? 0) > (prima.descrizione?.length ?? 0)) letti.set(codice, { codice, descrizione, famiglia: null, gruppo: null });
+  }
+  const { caricaComponentiCliente } = await import('./componenti-clienti-servizio.js');
+  const esito = await caricaComponentiCliente(clienteId, [...letti.values()], true);
+  const aggiornati = await q<{ codice: string }>(`UPDATE armadi_articoli a SET componente_cliente_id = cc.id,
+      descrizione = CASE WHEN a.descrizione IS NULL OR coalesce(a.descrizione_fonte, '') <> 'armadi' THEN cc.descrizione ELSE a.descrizione END,
+      descrizione_fonte = CASE WHEN a.descrizione IS NULL OR coalesce(a.descrizione_fonte, '') <> 'armadi' THEN 'componenti del cliente' ELSE a.descrizione_fonte END,
+      cercato_online_il = NULL
+    FROM componenti_clienti cc WHERE cc.cliente_id = $1 AND upper(cc.codice) = upper(a.codice) AND cc.descrizione IS NOT NULL RETURNING a.codice`, [clienteId]);
+  // P/N dove manca, dalla descrizione appena arrivata
+  const senzaPn = await q<{ codice: string; descrizione: string }>(`SELECT codice, descrizione FROM armadi_articoli WHERE pn IS NULL AND descrizione IS NOT NULL AND codice = ANY($1)`,
+    [aggiornati.map(x => x.codice)]);
+  const pn = senzaPn.map(x => ({ codice: x.codice, pn: pnDaDescrizione(x.descrizione) })).filter(x => x.pn);
+  if (pn.length) await q(`UPDATE armadi_articoli a SET pn = x.pn FROM jsonb_to_recordset($1::jsonb) AS x(codice text, pn text) WHERE a.codice = x.codice`, [JSON.stringify(pn)]);
+  return { ...esito, articoliAggiornati: aggiornati.length, pnTrovati: pn.length };
+}
+
 // ── Ricerca dei prezzi presso i distributori ────────────────────────────────
 
 let ricercaInCorso: { iniziata: string; fatti: number; totale: number } | null = null;
@@ -235,16 +263,19 @@ export const statoRicercaOnline = () => ricercaInCorso;
 /** Codici senza prezzo d'acquisto (o a mano) con un P/N, mai cercati negli ultimi 30 giorni: prima quelli di Casteltech. */
 export async function codiciDaCercare(max: number, soloCasteltech: boolean) {
   const imp = await impostazioniArmadi();
-  const righe = await q<{ codice: string; pn: string; quantita: number; proprietario_file: string | null; sigle: string[] }>(
-    `SELECT a.codice, a.pn, a.quantita, a.proprietario_file, coalesce(array_agg(DISTINCT b.sigla) FILTER (WHERE b.sigla IS NOT NULL), '{}') AS sigle
-     FROM armadi_articoli a LEFT JOIN armadi_bobine b ON b.codice = a.codice
-     WHERE a.pn IS NOT NULL AND coalesce(a.prezzo_fonte, '') NOT IN ('manuale', 'acquisto')
+  const righe = await q<{ codice: string; pn: string | null; descrizione: string | null; descrizione_cliente: string | null; quantita: number; proprietario_file: string | null; sigle: string[] }>(
+    `SELECT a.codice, a.pn, a.descrizione, cc.descrizione AS descrizione_cliente, a.quantita, a.proprietario_file,
+       coalesce(array_agg(DISTINCT b.sigla) FILTER (WHERE b.sigla IS NOT NULL), '{}') AS sigle
+     FROM armadi_articoli a LEFT JOIN armadi_bobine b ON b.codice = a.codice LEFT JOIN componenti_clienti cc ON cc.id = a.componente_cliente_id
+     WHERE coalesce(a.prezzo_fonte, '') NOT IN ('manuale', 'acquisto')
        AND (a.cercato_online_il IS NULL OR a.cercato_online_il < now() - interval '30 days')
-     GROUP BY a.codice`);
+     GROUP BY a.codice, cc.descrizione`);
   const diCasteltech = (r: typeof righe[number]) => [r.proprietario_file, ...r.sigle].some(s => {
     const l = leggiSigla(s); return l.casteltech || imp.proprietari[l.sigla] === 'casteltech';
   });
-  const ordinate = righe.map(r => ({ ...r, cast: diCasteltech(r) })).filter(r => !soloCasteltech || r.cast).sort((a, b) => Number(b.cast) - Number(a.cast));
+  // P/N da provare: quello salvato (ripulito) e quelli scritti nelle descrizioni (Adriano 13/11/2026, codici Selea e Idea)
+  const ordinate = righe.map(r => ({ ...r, cast: diCasteltech(r), candidati: candidatiPn(r.pn, [r.descrizione, r.descrizione_cliente]) }))
+    .filter(r => r.candidati.length && (!soloCasteltech || r.cast)).sort((a, b) => Number(b.cast) - Number(a.cast));
   return ordinate.slice(0, max);
 }
 
@@ -258,20 +289,24 @@ export async function cercaPrezziOnline(max = 300, soloCasteltech = false): Prom
     let trovati = 0, errori = '';
     try {
       const { cercaPn } = await import('./fornitori.js');
-      for (let i = 0; i < lista.length; i += 50) {
-        const blocco = lista.slice(i, i + 50);
-        const esito = await cercaPn(blocco.map(x => x.pn), { cacheLunga: true });
+      for (let i = 0; i < lista.length; i += 20) {
+        const blocco = lista.slice(i, i + 20);
+        const esito = await cercaPn([...new Set(blocco.flatMap(x => x.candidati))], { cacheLunga: true });
         errori = Object.entries(esito.errori).map(([f, e]) => `${f}: ${e}`).join('; ');
         const voci = blocco.map(x => {
-          const r = esito.perPn.get(pnKey(x.pn) ?? '') ?? {};
-          const offerte = Object.values(r).flatMap(v => v?.offerte ?? []);
-          const p = prezzoOnline(offerte, x.quantita);
-          return { codice: x.codice, prezzo: p?.prezzo ?? null, nota: p?.nota ?? null };
+          // il primo P/N che ha un prezzo; se non è quello salvato, diventa il P/N del codice
+          for (const pn of x.candidati) {
+            const r = esito.perPn.get(pnKey(pn) ?? '') ?? {};
+            const p = prezzoOnline(Object.values(r).flatMap(v => v?.offerte ?? []), x.quantita);
+            if (p) return { codice: x.codice, prezzo: p.prezzo, nota: pn === x.pn ? p.nota : `${p.nota} (P/N ${pn})`, pn };
+          }
+          return { codice: x.codice, prezzo: null, nota: null, pn: null };
         });
         trovati += voci.filter(v => v.prezzo).length;
-        await q(`UPDATE armadi_articoli a SET prezzo_online = coalesce(x.prezzo, a.prezzo_online), prezzo_online_nota = coalesce(x.nota, a.prezzo_online_nota), cercato_online_il = now()
-          FROM jsonb_to_recordset($1::jsonb) AS x(codice text, prezzo numeric, nota text) WHERE a.codice = x.codice`, [JSON.stringify(voci)]);
-        ricercaInCorso!.fatti = Math.min(lista.length, i + 50);
+        await q(`UPDATE armadi_articoli a SET prezzo_online = coalesce(x.prezzo, a.prezzo_online), prezzo_online_nota = coalesce(x.nota, a.prezzo_online_nota),
+            pn = coalesce(x.pn, a.pn), cercato_online_il = now()
+          FROM jsonb_to_recordset($1::jsonb) AS x(codice text, prezzo numeric, nota text, pn text) WHERE a.codice = x.codice`, [JSON.stringify(voci)]);
+        ricercaInCorso!.fatti = Math.min(lista.length, i + 20);
       }
       await ricalcolaPrezzi();
       await salvaImpostazioniArmadi({ online: { ultimo: new Date().toISOString(), esito: `${trovati} prezzi trovati su ${lista.length} codici cercati${errori ? ` (${errori})` : ''}` } });
