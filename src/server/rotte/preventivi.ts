@@ -26,6 +26,8 @@ import { etichettaBreve, etichettaCompleta } from '../views/etichette.js';
 import { variabiliUsate } from '../../engine/espressioni.js';
 import { FILE_SINGOLA, costoBomPerPreventivo } from '../codifica-servizio.js';
 import { quotaBomPacchetto } from '../schede-cliente-servizio.js';
+import { copiaNelleAltreQuantita, creaAltreQuantita, quantitaDelGruppo, type QuantitaGruppo } from '../preventivi-quantita-servizio.js';
+import { quantitaDaTesto } from '../../engine/fasce-quantita.js';
 import { puntiSaldaturaPreventivo } from '../punti-saldatura-servizio.js';
 import { STAGNO_A_PUNTO } from '../../engine/scheda/piedini.js';
 import { caricaAzienda } from '../amministrazione-servizio.js';
@@ -218,6 +220,7 @@ export function rottePreventivi() {
     // prezzo in anagrafica del codice (Adriano 11/11/2026): accanto al prezzo del vecchio portale, per capire se avvisare il cliente
     p.anagrafica = p.prodotto_id ? await q1(`SELECT codice, prezzo_vendita::float AS prezzo, prezzo_fonte AS fonte, prezzo_data::text AS data FROM prodotti WHERE id = $1`, [p.prodotto_id]) : null;
     if (p.anagrafica) p.anagrafica.scaglioni = (await scaglioniDi([p.prodotto_id])).get(p.prodotto_id) ?? [];
+    p.quantita = await quantitaDelGruppo(p.id);
     const cat: Catalogo = p.catalogo;
     const dati = datiDaRiga(p);
     res.send(pagina(req.session.utente, cat, dati, calcola(cat, dati), p, await elencoClienti(), dati.clienteId ? await prodottiPerCliente(dati.clienteId) : [],
@@ -455,6 +458,28 @@ export function rottePreventivi() {
     res.redirect(`/preventivi/${req.params.id}`);
   });
 
+  // una quotazione per più quantità (Adriano 13/11/2026): altre quantità dallo stesso preventivo e stessa BOM
+  r.post('/:id/quantita', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    const quantita = quantitaDaTesto(req.body.quantita);
+    if (!quantita.length) return res.redirect(`/preventivi/${id}?msg=${encodeURIComponent('Scrivi le quantità da aggiungere, es. 25, 50.')}`);
+    try {
+      const nuovi = await creaAltreQuantita(id, quantita, req.session.utente!.id);
+      res.redirect(`/preventivi/${id}?msg=${encodeURIComponent(nuovi.length ? `Creati ${nuovi.length} preventivi per le altre quantità: li trovi nel riquadro «Stessa quotazione» sotto Schede.` : 'Quelle quantità ci sono già.')}`);
+    } catch (e: any) { res.redirect(`/preventivi/${id}?msg=${encodeURIComponent(e.message)}`); }
+  });
+  r.post('/:id/copia-quantita', async (req, res, next) => {
+    if (!/^\d+$/.test(req.params.id)) return next();
+    const id = Number(req.params.id);
+    try {
+      const x = await copiaNelleAltreQuantita(id, req.session.utente!.id);
+      const msg = [x.aggiornati.length ? `Aggiornati ${x.aggiornati.join(', ')}.` : 'Nessun preventivo da aggiornare.',
+        x.saltati.length ? `Non toccati (già chiusi): ${x.saltati.join(', ')}.` : ''].filter(Boolean).join(' ');
+      res.redirect(`/preventivi/${id}?msg=${encodeURIComponent(msg)}`);
+    } catch (e: any) { res.redirect(`/preventivi/${id}?msg=${encodeURIComponent(e.message)}`); }
+  });
+
   // duplica con catalogo, tariffe e prezzi materiali ATTUALI
   r.post('/:id/duplica', async (req, res) => {
     const id = await duplica(Number(req.params.id), req.session.utente!.id);
@@ -571,7 +596,29 @@ function riquadroSpunte(generali: Catalogo['parametri'], spunta: (cod: string) =
   })}</div>`;
 }
 
-/** Duplica con catalogo, tariffe e prezzi materiali ATTUALI. */
+/**
+ * Riquadro "Stessa quotazione, altre quantità" (Adriano 13/11/2026): i preventivi collegati con prezzo a scheda e ricarico,
+ * la casella per aggiungere quantità e "Copia nelle altre quantità" (le modifiche di questo preventivo, salvate, passano agli altri).
+ */
+function riquadroQuantita(salvato: any): Raw {
+  const g: QuantitaGruppo[] = salvato.quantita ?? [];
+  return html`<details class="altre-quantita" ${g.length ? raw('open') : ''}>
+    <summary>${g.length ? `Stessa quotazione, ${g.length} quantità` : 'Quotare anche altre quantità'}</summary>
+    ${g.length ? html`<table class="quantita-gruppo"><thead><tr><th class="n">Schede</th><th>Preventivo</th><th class="n">€/scheda</th><th class="n">con u.t.</th><th class="n">Ricarico</th></tr></thead><tbody>
+      ${g.map(x => html`<tr class="${x.id === salvato.id ? 'questo' : ''}"><td class="n">${x.nSchede}</td>
+        <td>${x.id === salvato.id ? html`<b>${x.numero}</b> (questo)` : html`<a href="/preventivi/${x.id}">${x.numero}</a>`} <span class="stato ${x.stato}">${x.stato.replace('_', ' ')}</span></td>
+        <td class="n">${euro(x.prezzoScheda)}</td><td class="n">${euro(x.prezzoSchedaConUnaTantum)}</td><td class="n">${x.ricarico ? num((x.ricarico - 1) * 100, 1) + '%' : ''}</td></tr>`)}
+    </tbody></table>
+    <p class="nota">Lavora su un preventivo solo e sulla sua BOM, salva, poi premi <b>Copia nelle altre quantità</b>: velocità P&amp;P, ricarico, buste e cartoni
+      seguono le fasce di <a href="/impostazioni/tariffe">Impostazioni → Tariffe</a>, il costo componenti la BOM per ogni quantità.</p>
+    <button form="copia-quantita" data-conferma="${`Copiare i dati SALVATI di ${salvato.numero} negli altri preventivi della quotazione? Ognuno tiene la sua quantità; velocità P&P, ricarico, buste, cartoni e costo componenti si rifanno per quantità. Se hai modifiche non salvate, prima premi Salva.`}">Copia nelle altre quantità</button>` : html`
+    <p class="nota">Il cliente chiede più quantità (es. 25, 50, 100)? Si crea un preventivo per quantità con gli stessi dati e la stessa BOM:
+      cambiano velocità P&amp;P e ricarico (fasce in <a href="/impostazioni/tariffe">Impostazioni → Tariffe</a>), buste e cartoni in proporzione, costo componenti per quantità.</p>`}
+    <div class="riga-campi"><label>Aggiungi quantità <input form="altre-quantita" name="quantita" placeholder="es. 25, 50" size="14"></label>
+      <button form="altre-quantita" title="Salva prima le modifiche: i preventivi nuovi partono da quello salvato">Crea i preventivi</button></div>
+  </details>`;
+}
+
 /** Elimina i preventivi; quelli già diventati commessa restano (la commessa li usa per la scheda e il consuntivo). */
 async function eliminaPreventivi(ids: number[]): Promise<{ eliminati: number; conCommessa: string[] }> {
   const conCommessa = (await q<{ numero: string }>(`SELECT DISTINCT p.numero FROM preventivi p JOIN commesse c ON c.preventivo_id = p.id WHERE p.id = ANY($1)`, [ids])).map(x => x.numero);
@@ -767,6 +814,7 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
           <label>Schede per pannello <input inputmode="numeric" data-campo="nSchedeInPCB" value="${d.nSchedeInPCB}"></label>
           <label>Pannelli <output id="nPCB">${nPannelli(d.nSchede, d.nSchedeInPCB)}</output></label>
         </div>
+        ${salvato ? riquadroQuantita(salvato) : ''}
       </fieldset>
 
       <fieldset class="blocco">
@@ -865,6 +913,8 @@ function pagina(utente: any, cat: Catalogo, d: DatiPreventivo, ris: Risultato, s
     ${domandaAnagrafica(salvato)}
     ${salvato ? html`<form method="post" action="/preventivi/${salvato.id}/stato" id="stato-preventivo"></form>
     <form method="post" action="/preventivi/${salvato.id}/duplica" id="duplica-preventivo"></form>
+    <form method="post" action="/preventivi/${salvato.id}/quantita" id="altre-quantita"></form>
+    <form method="post" action="/preventivi/${salvato.id}/copia-quantita" id="copia-quantita"></form>
     <form method="post" action="/preventivi/${salvato.id}/elimina" id="elimina-preventivo"></form>` : ''}
 `,
   }));

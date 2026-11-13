@@ -8,6 +8,8 @@ import { q, q1 } from '../db.js';
 import { casella, casellaTutti, idsSpuntati, moduloAzioni } from '../views/azioni-elenco.js';
 import { layout } from '../views/layout.js';
 import { data, html, num, type Raw } from '../views/html.js';
+import { creaAltreQuantita } from '../preventivi-quantita-servizio.js';
+import { quantitaDaEmail, quantitaDaTesto } from '../../engine/fasce-quantita.js';
 import { aggiornaDatiPacchetto, aggiornaPreventivoDaPacchetto, aggiungiFile, analizzaPacchetto, ricodificaBom, sostituisciFile, bomDelPacchetto, creaPacchetto, creaPreventivoDaPacchetto, dividiPerVersioni, scegliFileDaCaricare, sincronizzaVersioni, type FileElenco } from '../schede-cliente-servizio.js';
 import { richiesteDaEmail, versioniDaDividere } from '../../engine/scheda/versioni.js';
 import { creaAnalisi, avviaElaborazione, leggiFileBom } from '../codifica-servizio.js';
@@ -134,7 +136,9 @@ export function rotteSchedeCliente() {
     const clienti = await q<{ id: number; ragione_sociale: string }>(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     const richieste = richiesteDaEmail(p.email);
     const daDividere = versioni.length || padre ? [] : versioniDaDividere(richieste);
-    const schedeProposte = p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
+    // più quantità nella mail ("lotti da 25, 50, 100pz", Adriano 13/11/2026): proposte tutte, un preventivo per quantità
+    const piuQuantita = p.quantita ? [] : quantitaDaEmail(p.email?.testo);
+    const schedeProposte = piuQuantita.length ? piuQuantita.join(', ') : p.quantita ?? (richieste.length === 1 ? richieste[0].quantita : 100);
     // più codici nella stessa mail (Elemaster 20149766 / 1022303): si divide come le versioni, un pacchetto per codice
     const perCodice = richieste.some(x => x.codice);
     const nomeParte = perCodice ? 'codice' : 'versione';
@@ -208,8 +212,8 @@ export function rotteSchedeCliente() {
                 data-conferma="Mettere nel preventivo ${p.preventivo_numero} i numeri letti da questi file (SMD, feeder, lati, THT, punti di saldatura, item)? Tariffe, scelte dell'ufficio e prezzi scritti a mano restano; i cambi si scrivono nelle note. Se il preventivo è già accettato o ha un ordine se ne crea uno nuovo.">
                 <button title="Dopo aver caricato i file aggiornati del cliente">Aggiorna il preventivo con questi file</button></form>`
             : html`<form method="post" action="/preventivi/documenti/${p.id}/preventivo" class="crea-preventivo">
-                <label>Schede da quotare <input name="schede" inputmode="numeric" value="${schedeProposte}" required></label>
-                <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare">Crea il preventivo da validare</button></form>`}
+                <label>Schede da quotare <small class="unita">anche più quantità, es. 25, 50, 100</small><input name="schede" value="${schedeProposte}" required></label>
+                <button class="primario" title="Preventivo con i numeri qui sotto, da controllare e salvare; con più quantità uno per quantità, collegati">Crea il preventivo da validare</button></form>`}
           <table class="dati-scheda"><tbody>
             ${a.prodotto ? html`<tr><th>Prodotto letto dai file <small class="nota">(da convalidare)</small></th><td>${[
               a.prodotto.codice && `codice ${a.prodotto.codice}`, a.prodotto.descrizione && `descrizione ${a.prodotto.descrizione}`,
@@ -316,16 +320,22 @@ export function rotteSchedeCliente() {
 
   r.post('/:id/preventivo', async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return next();
-    const schede = Math.round(Number(String(req.body.schede ?? '').replace(',', '.')));
-    if (!(schede > 0)) return res.redirect(`/preventivi/documenti/${req.params.id}`);
+    // una o più quantità ("25, 50, 100", Adriano 13/11/2026): il primo preventivo con la prima, gli altri collegati
+    const quantita = quantitaDaTesto(req.body.schede);
+    if (!quantita.length) return res.redirect(`/preventivi/documenti/${req.params.id}`);
+    const [schede, ...altre] = quantita;
     const esistente = await q1<{ preventivo_id: number | null }>(`SELECT preventivo_id FROM pacchetti_scheda WHERE id = $1`, [req.params.id]);
     // già creato (pagina vecchia rimasta aperta, doppio clic): si riapre quello, con le schede scritte qui se è ancora da validare
     if (esistente?.preventivo_id) {
-      await q(`UPDATE preventivi SET n_schede = $2 WHERE id = $1 AND stato = 'da_validare'`, [esistente.preventivo_id, schede]);
+      if (!altre.length) await q(`UPDATE preventivi SET n_schede = $2 WHERE id = $1 AND stato = 'da_validare'`, [esistente.preventivo_id, schede]);
+      else await creaAltreQuantita(esistente.preventivo_id, quantita, req.session.utente!.id).catch(() => []);
       return res.redirect(`/preventivi/${esistente.preventivo_id}`);
     }
-    try { res.redirect(`/preventivi/${await creaPreventivoDaPacchetto(Number(req.params.id), schede, req.session.utente!.id)}`); }
-    catch (e: any) { res.redirect(`/preventivi/documenti?errore=${encodeURIComponent(e.message)}`); }
+    try {
+      const id = await creaPreventivoDaPacchetto(Number(req.params.id), schede, req.session.utente!.id);
+      if (altre.length) await creaAltreQuantita(id, altre, req.session.utente!.id);
+      res.redirect(`/preventivi/${id}`);
+    } catch (e: any) { res.redirect(`/preventivi/documenti?errore=${encodeURIComponent(e.message)}`); }
   });
 
   // "Va bene" su una segnalazione (o annulla): chiave livello|testo, chi e quando

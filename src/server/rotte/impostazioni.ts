@@ -2,6 +2,8 @@
  * Pannello Impostazioni (solo ufficio): tariffe, fasi, parametri, materiali, voci di costo, utenti.
  * Le modifiche valgono per i NUOVI preventivi: quelli salvati restano calcolati come al momento del salvataggio.
  */
+import { caricaFasce, salvaFasce } from '../preventivi-quantita-servizio.js';
+import { erroriFasce } from '../../engine/fasce-quantita.js';
 import { REGISTRO_AGGIUNTE } from '../../engine/codifica/aggiunte.js';
 import express, { Router, type Request } from 'express';
 import { conCampo } from '../../engine/errori-campo.js';
@@ -107,6 +109,7 @@ export function rotteImpostazioni() {
   // ── Tariffe ──
   r.get('/tariffe', async (req, res) => {
     const t = await caricaTariffe();
+    const fasce = await caricaFasce();
     res.send(pag(req, 'Tariffe', html`
       <form method="post" class="blocco stretto-form">
         <p class="nota">Valori proposti nei nuovi preventivi (modificabili anche nel singolo preventivo).</p>
@@ -115,7 +118,23 @@ export function rotteImpostazioni() {
         <label>Costo ufficio (pre-produzione) <span class="unita">€/h per persona</span><input name="costoOperatoreUfficioH" inputmode="decimal" value="${t.costoOperatoreUfficioH}"></label>
         <label>Ricarico <span class="unita">es. 1,25</span><input name="ricarico" inputmode="decimal" value="${t.ricarico}"></label>
         <button class="primario">Salva tariffe</button>
-      </form>`, req.query.ok ? 'Tariffe salvate.' : undefined));
+      </form>
+      <form method="post" action="/impostazioni/tariffe/fasce" class="blocco stretto-form" id="fasce-quantita">
+        <h2>Fasce per quantità</h2>
+        <p class="nota">Valgono nei preventivi creati dai documenti del cliente e quando si quotano più quantità insieme (es. 25, 50, 100):
+          ogni quantità prende la sua velocità del pick and place e il suo ricarico. Scrivi le fasce come gli scaglioni del listino,
+          es. <code>1-10=3000; 11-25=4000; 301+=8000</code>. Buste, cartoni e bombolette crescono in proporzione alle schede.</p>
+        <label>Velocità pick and place <span class="unita">chip/h per numero di schede</span><input name="pepChipH" value="${fasce.pepChipH}"></label>
+        <label>Ricarico <span class="unita">% per numero di schede</span><input name="ricarico" value="${fasce.ricarico}"></label>
+        <button class="primario">Salva le fasce</button>
+      </form>`, req.query.ok ? 'Tariffe salvate.' : req.query.fasce ? String(req.query.fasce) : undefined));
+  });
+  r.post('/tariffe/fasce', async (req, res) => {
+    const f = { pepChipH: String(req.body.pepChipH ?? '').trim(), ricarico: String(req.body.ricarico ?? '').trim() };
+    const errori = erroriFasce(f);
+    if (errori.length) return res.redirect(`/impostazioni/tariffe?fasce=${encodeURIComponent(errori.join(' '))}`);
+    await salvaFasce(f);
+    res.redirect(`/impostazioni/tariffe?fasce=${encodeURIComponent('Fasce per quantità salvate.')}`);
   });
   r.post('/tariffe', async (req, res) => {
     const n = (k: string) => Number(String(req.body[k] ?? '').replace(',', '.')) || 0;
