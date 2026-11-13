@@ -34,6 +34,7 @@
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
+import { caricaProgrammi } from '../programmi-prodotto-servizio.js';
 import { caricaArmadi, caricaDescrizioniCliente, cercaPrezziOnline, datiArmadi, dividiFile, salvaPrezziOnline, statoRicercaOnline } from '../armadi-servizio.js';
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -224,6 +225,13 @@ export function rotteApiClaude() {
     res.json({ anno, prodotti: await prodottiVendutiNellAnno(anno) });
   });
 
+  // programmi delle macchine sui prodotti (Adriano 13/11/2026): [{prodotto_id, programmi}], riempie solo le caselle vuote del prodotto
+  // e delle commesse aperte/in produzione; senza ?conferma=1 risponde solo con cosa farebbe
+  r.post('/programmi', async (req, res) => {
+    const elenco = Array.isArray(req.body?.elenco) ? req.body.elenco : null;
+    if (!elenco) return res.status(400).json({ errore: 'Serve elenco: [{prodotto_id, programmi}].' });
+    res.json(await caricaProgrammi(elenco.map((x: any) => ({ prodotto_id: Number(x?.prodotto_id), programmi: x?.programmi })), req.query.conferma === '1'));
+  });
   r.post('/documentazione', async (req, res) => {
     const b = req.body ?? {};
     const cliente = String(b.cliente ?? '').trim(), codice = String(b.codice ?? '').trim();

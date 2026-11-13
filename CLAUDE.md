@@ -416,6 +416,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    componenti_clienti + armadi_articoli); `candidatiPn` = P/N salvato ripulito (1P, 3N1, 30P, P, "771-") + P/N delle descrizioni, si prova il primo che ha un prezzo.
    P/N anche nel codice (Adriano 13/11/2026, codici Casteltech): `candidatiPn(pn, descrizioni, max, codice)` prova anche il codice se è un P/N (2041119-1), i codici DigiKey senza "-ND" e, nelle descrizioni, il resto dopo "1P" (1P865060253008 = 865060253008); gli stessi P/N servono anche a trovare l'ultimo acquisto (fatture, autofatture, ordini a fornitore), e "445-10657-1-" diventa "445-10657-1-ND";
    `cercaPn(..., { escludi: ['digikey','farnell'] })` per non toccare i distributori al limite; POST `/api/claude/armadi/cerca-prezzi` con `escludi` e `ancoraSenzaPrezzo` (riprova i senza prezzo anche entro 30 giorni).
+3-quinquies. ✅ Programmi delle macchine sul prodotto (Adriano 13/11/2026; migrazione 101 `prodotti.programmi`, regole in `engine/programmi-prodotto.ts`, letture in
+   `programmi-prodotto-servizio.ts`, pagina `rotte/programmi-prodotto.ts` = tasto "Programmi" in Anagrafiche → Prodotti → `/anagrafiche/prodotti/:id/programmi`, test in `tests/programmi-prodotto.test.ts`):
+   serigrafia, FOX, iPulse ("M1: x · M4: y"), AOI ecc. TOP/BOT come le chiavi di `PROGRAMMI`; la commessa nuova riempie SOLO le caselle vuote della scheda tecnica (`riempiVuote`),
+   salvando la commessa il prodotto si aggiorna (`aggiornaDaCommessa`). Caricamento da Claude POST `/api/claude/programmi` {elenco} (solo con `?conferma=1`: riempie prodotto e commesse aperte, mai sovrascrive).
+   Primo caricamento 13/11/2026 dai nomi delle macchine (AOI da immagini, FOX da essemtec.sql, iPulse.xlsx, HTGD.xlsx): Project Files → programmi-macchine.
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei
