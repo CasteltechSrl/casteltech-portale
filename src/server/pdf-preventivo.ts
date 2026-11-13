@@ -3,6 +3,7 @@
  * (views/stampa-preventivo.ts: righe, riquadro verde, totale e condizioni da engine/stampa-preventivo.ts `contenutoStampa`),
  * impaginato come il PDF della conferma d'ordine (pdf-lib, niente browser sul server).
  */
+import type { PrezzoQuantita } from '../engine/stampa-preventivo.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
@@ -31,6 +32,8 @@ export interface DatiPdfPreventivo {
   alternative?: AlternativaDaConfermare[];
   /** componenti non trovati o con problemi di acquisto, nello stesso foglio (Adriano 5/11/2026) */
   problemiAcquisto?: ComponenteDaVerificare[];
+  /** prezzi delle quantità della stessa quotazione (Adriano 13/11/2026), tabella sotto le righe */
+  quantita?: PrezzoQuantita[];
 }
 
 const VERDE = rgb(0x1b / 255, 0x5e / 255, 0x52 / 255);
@@ -182,6 +185,33 @@ export async function pdfPreventivo(d: DatiPdfPreventivo): Promise<Buffer> {
     y -= alto;
     linea(p, M, y, L - M, RIGA, 0.5);
     y -= 1.5;
+  }
+
+  // ── prezzi per quantità della stessa quotazione (Adriano 13/11/2026) ──
+  const gq = d.quantita ?? [];
+  if (gq.length > 1) {
+    const conUt = gq.some(x => x.unaTantum > 0);
+    const tit = conUt ? ['QUANTITÀ', 'PREZZO A SCHEDA', 'IMPORTO DEL LOTTO', 'UNA TANTUM (1° LOTTO)', 'A SCHEDA CON UNA TANTUM'] : ['QUANTITÀ', 'PREZZO A SCHEDA', 'IMPORTO DEL LOTTO'];
+    const largo = (L - 2 * M) / tit.length;
+    const alto = 14 + gq.length * 13 + 22;
+    if (y - 14 - alto < PIEDE + 10) { p = nuovaPagina(); y = H - M - 10; }
+    y -= 12;
+    scrivi(p, 'PREZZI PER QUANTITÀ', M, y, { dim: 6.5, colore: GRIGIO });
+    y -= 6;
+    linea(p, M, y, L - M);
+    tit.forEach((t, i) => scrivi(p, t, M + (i + 1) * largo - PAD, y - 9, { f: grassetto, dim: 6.3, colore: GRIGIO, destra: true }));
+    y -= 13;
+    linea(p, M, y, L - M);
+    for (const x of gq) {
+      const v = [`${num(x.schede, 0)} pz`, euroUnitario(x.prezzoScheda), euro(x.lotto), ...(conUt ? [euro(x.unaTantum), x.conUnaTantum != null ? euroUnitario(x.conUnaTantum) : ''] : [])];
+      if (x.questo) p.drawRectangle({ x: M, y: y - 13, width: L - 2 * M, height: 13, color: VERDE_CHIARO });
+      v.forEach((t, i) => scrivi(p, t, M + (i + 1) * largo - PAD, y - 9.5, { f: i < 2 ? grassetto : font, dim: DIM, destra: true }));
+      y -= 13;
+      linea(p, M, y, L - M, RIGA, 0.5);
+    }
+    y -= 10;
+    scrivi(p, `Il dettaglio qui sopra, il riquadro dei prezzi e il totale si riferiscono a ${num(d.nSchede, 0)} pz.`, M, y, { f: corsivo, dim: 7.5, colore: GRIGIO });
+    y -= 4;
   }
 
   // ── note per il cliente ──

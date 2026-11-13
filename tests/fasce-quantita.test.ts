@@ -60,3 +60,23 @@ test('collegamenti: pagina dei documenti, preventivo, impostazioni, guida', () =
   assert.match(readFileSync('db/migrazioni/097_preventivi_quantita.sql', 'utf8'), /gruppo_quantita/);
   assert.equal(cercaGuida('preventivo più quantità 25 50 100')[0]?.argomento.id, 'piu-quantita');
 });
+
+test('stampa: tabella dei prezzi per quantità, stessi centesimi delle righe, prezzi scritti a mano di ognuno', async () => {
+  const { prezziPerQuantita } = await import('../src/engine/stampa-preventivo.js');
+  const ris = (scheda: number, lotto: number, ut: number) => ({ fasi: [], voci: [], totali: { nSchede: 0, prezzoSchedaSecondoLotto: scheda, totaleSecondoLotto: lotto, costiUnaTantum: ut } }) as any;
+  const { riepilogo } = await import('../src/engine/riepilogo.js');
+  // riepilogo legge i totali del calcolo: si controlla solo che la tabella segua i suoi numeri
+  const g = [
+    { id: 2, nSchede: 50, ris: ris(9.18, 459, 370), stampa: null },
+    { id: 1, nSchede: 25, ris: ris(11.87, 296.64, 370), stampa: { prezzi: { senza: 11.5 } } },
+  ];
+  const t = prezziPerQuantita(g, 1);
+  assert.deepEqual(t.map(x => x.schede), [25, 50]);
+  assert.equal(t[0].questo, true);
+  assert.equal(t[0].prezzoScheda, 11.5);
+  assert.equal(t[0].lotto, 287.5);
+  const r50 = riepilogo(g[0].ris);
+  assert.equal(t[1].lotto, r50.prezzoLotto);
+  assert.match(readFileSync('src/server/pdf-preventivo.ts', 'utf8'), /PREZZI PER QUANTITÀ/);
+  assert.match(readFileSync('src/server/views/stampa-preventivo.ts', 'utf8'), /tabella-quantita/);
+});

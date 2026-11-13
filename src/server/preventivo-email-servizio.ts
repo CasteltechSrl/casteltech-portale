@@ -14,7 +14,7 @@ import { destinatarioPreventivo, emailPreventivo } from '../engine/preventivo-em
 import { calcola, datiDaRiga, leggiPreventivo, nPannelli } from './preventivi-servizio.js';
 import { caricaAzienda } from './amministrazione-servizio.js';
 import type { Catalogo } from './catalogo-db.js';
-import { consegnaCompleta, contenutoStampa, leggiRitocchi, materialeVenduto, testoConsegna, validitaOfferta, versioneStampa } from '../engine/stampa-preventivo.js';
+import { prezziPerQuantita, consegnaCompleta, contenutoStampa, leggiRitocchi, materialeVenduto, testoConsegna, validitaOfferta, versioneStampa } from '../engine/stampa-preventivo.js';
 import { AZIENDA_PREDEFINITA, type ClienteStampa, type OpzioniStampa } from './views/stampa-preventivo.js';
 import { nomeFilePdfPreventivo, pdfPreventivo } from './pdf-preventivo.js';
 import { costoBomPerPreventivo } from './codifica-servizio.js';
@@ -22,7 +22,7 @@ import { noteDaStampare, righeNonQuotateNelleNote } from '../engine/non-quotati.
 
 /** Opzioni della stampa dall'indirizzo (?vista=…&condizioni=0&firma=0&ut=0) o dal modulo dell'email. */
 export const opzioniStampa = (x: Record<string, unknown>): OpzioniStampa =>
-  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0', ut: x.ut !== '0', allegato: x.allegato !== '0' });
+  ({ versione: versioneStampa(x.vista), condizioni: x.condizioni !== '0', firma: x.firma !== '0', ut: x.ut !== '0', allegato: x.allegato !== '0', quantita: x.quantita !== '0' });
 
 /** Tutto quello che serve alla stampa (pagina e PDF): preventivo, calcolo, azienda, cliente, ritocchi. */
 export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
@@ -47,8 +47,11 @@ export async function datiStampaPreventivo(id: number, opz: OpzioniStampa) {
     const b = await costoBomPerPreventivo(dati.bomId, dati.nSchede).catch(() => null);
     if (b && b.stato === 'pronta') { nonQuotati = b.nonQuotati; alternative = b.alternative ?? []; problemiAcquisto = b.problemiAcquisto ?? []; }
   }
+  // stessa quotazione per più quantità (Adriano 13/11/2026): prezzi di ogni quantità per la tabella della stampa
+  const gruppo = p.gruppo_quantita ? await q<any>(`SELECT id, n_schede, risultato, stampa FROM preventivi WHERE gruppo_quantita = $1 ORDER BY n_schede`, [p.gruppo_quantita]) : [];
+  const quantita = gruppo.length > 1 ? prezziPerQuantita(gruppo.map(g => ({ id: g.id, nSchede: g.n_schede, ris: g.id === p.id ? calcola(cat, dati) : g.risultato, stampa: g.stampa })), p.id) : [];
   return {
-    p, d: dati, ris: calcola(cat, dati), doppia, nonQuotati, alternative, problemiAcquisto,
+    p, d: dati, ris: calcola(cat, dati), doppia, nonQuotati, alternative, problemiAcquisto, quantita,
     nLamine: Number(v('nLamine')) > 0 ? Number(v('nLamine')) : (doppia ? 2 : 1),
     nPannelli: nPannelli(dati.nSchede, dati.nSchedeInPCB),
     azienda: await caricaAzienda(), cliente: cliente ?? null, opz, rit: leggiRitocchi(p.stampa),
@@ -79,6 +82,7 @@ export async function pdfDelPreventivo(id: number, opz: OpzioniStampa, revisione
     codice: i.codice ?? '', revisione: i.revisione, nSchede: x.d.nSchede,
     righe: cont.righe, riquadro: cont.riquadro, scontato: cont.scontato, primoLotto: cont.primoLotto, totale: cont.totale,
     note, pagamento: x.cliente?.pagamento, alternative: opz.allegato === false ? [] : x.alternative, problemiAcquisto: opz.allegato === false ? [] : x.problemiAcquisto,
+    quantita: opz.quantita === false ? [] : x.quantita,
     validita: validitaOfferta(x.p.creato_il, materialeVenduto(x.ris)), consegna: testoConsegna(x.rit.consegna, x.acquisto), condizioni: opz.condizioni, firma: opz.firma,
   });
   return { nome: nomeFileRevisione(nomeFilePdfPreventivo(x.p.numero, i.codice ?? ''), revisione), dati };

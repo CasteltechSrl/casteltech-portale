@@ -293,6 +293,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Impostazioni → Tariffe, formato degli scaglioni del listino; iniziali P&P 1-10=3000, 11-25=4000, 26-100=6000, 101-300=7000, 301+=8000; ricarico 1-10=35, 11-50=30, 51-1000=25, 1001+=20;
    campionatura tiene il suo ricarico, SMD a mano tiene la velocità), buste/cartoni/bombolette in proporzione (`PARAMETRI_IN_PROPORZIONE`), costo componenti dalla BOM per quella quantità;
    la BOM collegata prende una colonna per quantità (`quantitaNellaBom`, prezzi dalla cache). Anche il preventivo singolo dai documenti prende velocità e ricarico della sua fascia.
+   Al cliente UN PDF (scelta di Adriano 13/11/2026): stampa e PDF di un preventivo del gruppo con la tabella "Prezzi per quantità" sotto le righe (`prezziPerQuantita` in
+   `engine/stampa-preventivo.ts`: prezzi dei ritocchi di ognuno, lotto e una tantum come le sue righe), dettaglio e totale della sua quantità; `?quantita=0` (OpzioniStampa.quantita) la toglie.
 2b. 🟡 Preventivo dai documenti del cliente (Adriano 27/10/2026; `rotte/schede-cliente.ts`, `schede-cliente-servizio.ts`, `engine/scheda/*`, migrazione 035):
    Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
    Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,

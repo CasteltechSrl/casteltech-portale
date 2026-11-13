@@ -393,3 +393,22 @@ export function contenutoStampa(o: { ris: Risultato; nSchede: number; doppia: bo
   if (conti.sconto > 0) righe.push({ tipo: 'sconto', descrizione: conti.etichettaSconto, importo: conti.sconto });
   return { righe, riquadro, totale: conti.totale, scontato: conti.sconto > 0, primoLotto: r.unaTantum > 0, prezzoScheda: r.prezzoScheda, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum };
 }
+
+/** Una riga della tabella "Prezzi per quantità" (Adriano 13/11/2026: un PDF solo per 25, 50, 100 pz). */
+export interface PrezzoQuantita { schede: number; prezzoScheda: number; lotto: number; unaTantum: number; conUnaTantum: number | null; questo: boolean }
+
+/**
+ * Tabella delle quantità della stessa quotazione: per ognuna i prezzi come li stampa il suo preventivo (calcolati o scritti a mano
+ * nei suoi ritocchi, con il suo sconto), lotto = prezzo a scheda × schede, una tantum a parte. Dalla quantità più piccola.
+ */
+export function prezziPerQuantita(gruppo: { id: number; nSchede: number; ris: Risultato; stampa: unknown }[], idQuesto: number): PrezzoQuantita[] {
+  return [...gruppo].sort((a, b) => a.nSchede - b.nSchede).map(g => {
+    const r = riepilogo(g.ris);
+    const rit = leggiRitocchi(g.stampa);
+    const base = { prezzoScheda: r.prezzoScheda, lotto: r.prezzoLotto, unaTantum: r.unaTantum, nSchede: g.nSchede, prezzoSchedaConUnaTantum: r.prezzoSchedaConUnaTantum };
+    const x = prezziRiquadro(base, rit);
+    // lotto e una tantum come le righe della stampa di quella quantità (stessi centesimi), senza le righe in più
+    const c = contiStampa(basePrezzi(base, rit.prezzi), { ...rit, righe: [] });
+    return { schede: g.nSchede, prezzoScheda: x.senza, lotto: c.lotto, unaTantum: x.con != null ? c.unaTantum : 0, conUnaTantum: x.con, questo: g.id === idQuesto };
+  });
+}
