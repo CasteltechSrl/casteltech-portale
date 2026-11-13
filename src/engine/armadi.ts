@@ -317,6 +317,7 @@ export function candidatiPn(pn: string | null | undefined, descrizioni: (string 
   const varianti = (x: string) => {
     const nd = /^(.{5,})-ND$/i.exec(x); if (nd) metti(nd[1]);
     if (x.includes(':')) metti(x.split(':')[0]);
+    if (/^\d{3,4}-.+-$/.test(x)) metti(x + 'ND');   // codice DigiKey tagliato "445-10657-1-" = "445-10657-1-ND" (come negli acquisti)
   };
   if (pn) {
     const p = pn.toUpperCase();

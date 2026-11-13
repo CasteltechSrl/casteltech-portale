@@ -140,7 +140,9 @@ async function preparaRighe(articoli: ArticoloLetto[], bobine: BobinaLetta[]) {
     const pn = pnPulito(componente?.pn) ?? pnBobine.map(pnPulito).find(Boolean) ?? pnTesto ?? null;
     const produttore = componente?.produttore ?? bs.find(b => b.produttore && !['MOUSER', 'ROHS', 'ARROW', 'DIGIKEY', 'FARNELL', 'TME'].includes(b.produttore))?.produttore ?? null;
     const descr = descrizioneArticolo(a, { componente, componenteCliente, pn, produttore });
-    const chiavi = chiaviArticolo(a.codice, [componente?.pn, componente?.codice_produzione, componente?.codice_gestionale, ...pnBobine, pnTesto, pn]);
+    const chiavi = chiaviArticolo(a.codice, [componente?.pn, componente?.codice_produzione, componente?.codice_gestionale, ...pnBobine, pnTesto, pn,
+      // tutti i P/N scritti nel codice e nelle descrizioni, anche per l'ultimo acquisto (Adriano 13/11/2026: "incrocia con quelli acquistati")
+      ...candidatiPn(pn, [a.descrizione, a.descrizioneAlt, componenteCliente?.descrizione, descr.testo], 10, a.codice)]);
     const v = vecchi.get(a.codice);
     const scelto = prezzoArticolo(ctx, { codice: a.codice, chiavi, codiceProduzione: componente?.codice_produzione ?? null, descrizione: descr.testo, manuale: v?.prezzo_manuale ?? null,
       online: v?.prezzo_online ?? null, onlineNota: v?.prezzo_online_nota ?? null, armadio: a.prezzo });
@@ -200,7 +202,7 @@ export async function ricalcolaPrezzi(): Promise<number> {
   const pnBobine = new Map<string, string[]>();
   for (const b of await q<{ codice: string; pn: string }>(`SELECT DISTINCT codice, pn FROM armadi_bobine WHERE pn IS NOT NULL`)) pnBobine.set(b.codice, [...(pnBobine.get(b.codice) ?? []), b.pn]);
   const righe = art.map(a => {
-    const s = prezzoArticolo(ctx, { codice: a.codice, chiavi: chiaviArticolo(a.codice, [a.pn, a.cp, a.cpp, a.cpg, ...(pnBobine.get(a.codice) ?? [])]), codiceProduzione: a.cpp, descrizione: a.descrizione,
+    const s = prezzoArticolo(ctx, { codice: a.codice, chiavi: chiaviArticolo(a.codice, [a.pn, a.cp, a.cpp, a.cpg, ...(pnBobine.get(a.codice) ?? []), ...candidatiPn(a.pn, [a.descrizione], 10, a.codice)]), codiceProduzione: a.cpp, descrizione: a.descrizione,
       manuale: a.prezzo_manuale, online: a.prezzo_online, onlineNota: a.prezzo_online_nota, armadio: a.prezzo_armadio });
     return { codice: a.codice, prezzo: s?.prezzo ?? null, prezzo_fonte: s?.fonte ?? null, prezzo_data: s?.data ?? null, prezzo_nota: s?.nota ?? null };
   });
