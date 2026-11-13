@@ -165,4 +165,5 @@ test('P/N da provare presso i distributori: prefissi delle etichette tolti, P/N 
   assert.ok(candidatiPn('BAS16:3000:09316', [], 6).includes('BAS16'));
   assert.deepEqual(candidatiPn(null, ['IC 8XFDFN W25Q16JVUXIM AEC-Q200 C0GNP0 RS-422/RS-485 20MBPS'], 6), ['W25Q16JVUXIM']);
   assert.deepEqual(candidatiPn(null, [], 6, 'PCB_KEYM8'), []);
+  assert.deepEqual(candidatiPn(null, ['CAP ELE D10 470UF 20 10V (WURTH 1P865060253008)'], 6, 'CE-D10-470UF-20-10V'), ['865060253008']);
 });
