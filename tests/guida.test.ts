@@ -54,6 +54,7 @@ test('guida: la ricerca porta all\'argomento giusto, anche con "+" e parole dive
   assert.ok(primi('ordinare una lamina serigrafica', 2).includes('materiali-consumo'));
   assert.ok(primi('codice della pasta saldante', 2).includes('materiali-consumo'));
   assert.ok(primi('punte weller', 2).includes('materiali-consumo'));
+  assert.ok(primi('giacenza e valore del materiale di consumo', 2).includes('magazzino-consumo'));
   assert.ok(primi('restituire componenti del cliente con il ddt', 3).includes('ddt-emessi'));
   assert.ok(primi('modificare un ddt già emesso', 2).includes('ddt-emessi'));
   assert.ok(primi('cancellare una riga del ddt', 3).includes('ddt-emessi'));

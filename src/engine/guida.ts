@@ -957,6 +957,19 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/ordini/fornitori', 'Ordini a fornitore'], ['/quotazioni', 'Quotazioni (BOM)']],
   },
   {
+    id: 'magazzino-consumo', area: 'ordini', titolo: 'Materiale di consumo: costo, giacenza e cruscotto (pasta saldante, stagno, flussante, Kapton…)',
+    parole: 'materiale consumo consumabili giacenza giacenze magazzino scorta scorte inventario inventari valore costo al kg al metro al litro prezzo ultimo acquisto pasta saldante stagno saldatrice barre filo saldatura flussante viteria viti kapton nastro bollini pasta termoconduttiva conformal coating bombolette copertura rotazione consumo mensile cruscotto quanto ne ho',
+    testo: [
+      'Acquisti → Materiale di consumo raccoglie le voci del riquadro «Materiale di consumo» della scheda di produzione: pasta saldante, stagno della saldatrice, flussante, filo di saldatura, viteria, Kapton (nastro e bollini), pasta termoconduttiva, conformal coating.',
+      'Ogni voce mette insieme gli articoli MC-… di Anagrafiche → Materiali di consumo (pasta saldante = tutti i vasetti MC-PAS, filo = le bobine MC-FIL…) e ha due numeri: il PREZZO = quanto è costata una confezione (o un kg, un litro) all\'ultimo acquisto, e il COSTO = prezzo per unità di misura (€/kg per pasta, stagno e filo, €/l per il flussante, €/m per il Kapton, €/pz per bollini e viteria, €/g per la pasta termoconduttiva, €/bombola per il conformal). Si aggiornano da soli: vale l\'acquisto più recente tra ordini a fornitore emessi, righe delle fatture dei fornitori e ultimo acquisto dell\'anagrafica.',
+      'Per passare dal prezzo al costo il portale legge dalla descrizione quanta materia c\'è in una confezione ("VASETTO 500 G" = 0,5 kg, "NASTRO 6 MM X 33 M" = 33 m, "CF. 1000" = 1000 bollini). Quando non lo capisce (es. latta di conformal, siringa di flussante in gel) la voce lo segnala: aprila e scrivilo nella colonna «Contenuto» degli articoli. Nella stessa tabella un articolo si sposta in un\'altra voce o si toglie («nessuna»); per la viteria, che non ha articoli, si può scrivere il costo a mano.',
+      'GIACENZA: si parte dall\'inventario scritto a mano (nella pagina di tutte le voci, nella sua unità: es. 2,5 kg di pasta; oppure dentro la voce contando le confezioni articolo per articolo). Da lì sale con gli ordini a fornitore emessi dopo l\'inventario (si carica quando si ordina) e scende con il materiale usato nelle commesse rientrate dopo: quello scritto al rientro della scheda, oppure, se manca, il previsto dal preventivo (segnato "stimato"). Un inventario nuovo riparte da capo; uno sbagliato si elimina dai movimenti della voce.',
+      'CRUSCOTTO in cima: valore del materiale in casa (giacenza × costo di oggi), giacenza media (media nel tempo dall\'inventario, al massimo 12 mesi), acquistato negli ultimi 12 mesi, consumo all\'anno, copertura (quanti mesi dura il materiale in casa) e rotazione (quante volte l\'anno si consuma la giacenza media). Con la scorta minima scritta nella voce, le voci sotto scorta diventano evidenti. In fondo la spesa anno per anno di ogni voce.',
+    ],
+    passi: ['Acquisti → Materiale di consumo.', 'In «Caricare la giacenza» scrivi quanto c\'è oggi per ogni voce e premi Salva l\'inventario.', 'Apri una voce per correggere il contenuto delle confezioni, la scorta minima o contare le confezioni una per una.'],
+    pagine: [['/acquisti/materiale-consumo', 'Acquisti → Materiale di consumo'], ['/anagrafiche/materiali', 'Anagrafiche → Materiali di consumo']],
+  },
+  {
     id: 'ddt-ricevuti', area: 'ordini', titolo: 'DDT in ingresso: merce arrivata e materiale dei clienti, incrocio e anomalie',
     parole: 'ddt ricevuto ricevuti ingresso bolla scansione scansionare incrocio incrociare anomalia anomalie conto lavoro arrivata',
     testo: [
