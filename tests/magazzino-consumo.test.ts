@@ -14,9 +14,11 @@ const art = (codice: string) => iniziali.find(m => m.codice === codice)!;
 const v = (c: string) => voceMagazzino(c)!;
 
 test('Materiale di consumo: le stesse voci del riquadro della commessa, con unità di gestione', () => {
-  assert.deepEqual(VOCI_MAGAZZINO.filter(x => !x.soloAcquisti).map(x => x.codice), vociConsumo(null, 0).map(x => x.codice));
-  // flussante diviso negli Acquisti: liquido per l'onda (voce della scheda) e gel per le riprese SMD
-  assert.deepEqual(VOCI_MAGAZZINO.filter(x => x.soloAcquisti).map(x => x.codice), ['flussanteGel']);
+  assert.deepEqual(VOCI_MAGAZZINO.map(x => x.codice), vociConsumo(null, 0).map(x => x.codice));
+  // flussante diviso (Adriano 13/11/2026): liquido per l'onda e gel per le riprese SMD, nella stessa colonna della scheda
+  const scheda = vociConsumo(null, 0);
+  assert.equal(scheda.find(x => x.codice === 'flussante')!.colonna, scheda.find(x => x.codice === 'flussanteGel')!.colonna);
+  assert.equal(v('flussanteGel').unita, 'g');
   assert.equal(v('pastaSaldante').unita, 'kg');
   assert.equal(v('kaptonNastro').unita, 'm');
   assert.equal(v('kaptonNastro').dallaScheda, 0.01);   // la scheda conta il Kapton in cm

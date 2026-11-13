@@ -76,7 +76,7 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   `public/articoli-ordine.js`); casella "note / specifiche" per riga (`documenti_righe.note`, `RigaConferma.note`), stampata nel PDF con `descrizioneConNota`.
   Materiale di consumo negli Acquisti (Adriano 13/11/2026; `/acquisti/materiale-consumo` = `rotte/magazzino-consumo.ts`, regole in `engine/magazzino-consumo.ts`, letture in
   `magazzino-consumo-servizio.ts`, migrazione 099 `materiali_consumo.voce_consumo/contenuto` + `consumo_inventari`, test in `tests/magazzino-consumo.test.ts`): le voci del riquadro della commessa
-  (`VOCI_MAGAZZINO` da `vociConsumo`, unità kg/l/m/pz/g/bomb.; flussante diviso: liquido per l'onda + `flussanteGel` per le riprese, `soloAcquisti`) raggruppano gli articoli MC-… (`voceProposta`, contenuto della confezione `contenutoProposto`, l'ufficio corregge);
+  (`VOCI_MAGAZZINO` da `vociConsumo`, unità kg/l/m/pz/g/bomb.; flussante diviso anche sulla scheda e nel rientro: `flussante` liquido per l'onda + `flussanteGel` per le riprese, stessa colonna della stampa) raggruppano gli articoli MC-… (`voceProposta`, contenuto della confezione `contenutoProposto`, l'ufficio corregge);
   prezzo = acquisto più recente (ordini a fornitore emessi, righe fatture abbinate, anagrafica), costo per unità `costoInVoce` (riga in un'unità di natura diversa = niente costo);
   giacenza = ultimo inventario + ordini emessi dopo − consumi delle commesse rientrate dopo (scritti, altrimenti previsto del preventivo "stimato"), `situazioneGiacenza`;
   cruscotto: valore, giacenza media nel tempo (max 12 mesi), acquistato 12 mesi, consumo annuo, copertura, rotazione, scorta minima (impostazioni 'magazzino_consumo'); spesa anno per anno.

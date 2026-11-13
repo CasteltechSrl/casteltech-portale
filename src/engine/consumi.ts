@@ -32,7 +32,9 @@ export function vociConsumo(prev: any, quantita: number): VoceConsumo[] {
   return [
     voce('pastaSaldante', 'Pasta saldante', 'Pasta saldante', 'gr', pos('crema')),
     voce('stagnoSaldatrice', 'Stagno saldatrice', 'Stagno saldatrice', 'gr', stagnoSald > 0 ? stagnoSald : null),
-    voce('flussante', 'Flussante liquido / gel', 'Flussante liquido / gel', 'ml', null),
+    // Adriano 13/11/2026: due voci nella stessa colonna, liquido per la saldatrice a onda e gel per le riprese SMD a pennello
+    voce('flussante', 'Flussante liquido / gel', 'Flussante liquido (onda)', 'ml', null),
+    voce('flussanteGel', 'Flussante liquido / gel', 'Flussante in gel (riprese)', 'gr', null),
     voce('filo', 'Filo di saldatura', 'Filo di saldatura', 'gr', pos('stagnoInFilo')),
     voce('viteria', 'Viteria', 'Viteria', 'pz', null, false, pos('viteria') != null ? `${nf(v.viteria)} €` : ''),
     voce('kaptonNastro', 'Kapton', 'Kapton nastro', 'cm', pos('kaptonInNastro')),
