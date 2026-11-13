@@ -334,6 +334,8 @@ export function candidatiPn(pn: string | null | undefined, descrizioni: (string 
     const fuori = t.replace(/\([^()]*\)/g, ' ').split(/\s+/);
     for (const w of [...dentro, ...fuori]) {
       const x = w.replace(/[.,;:?]+$/, '');
+      // "1P" davanti = il resto è il P/N (etichette Würth, Yageo…), anche nelle descrizioni (Adriano 13/11/2026)
+      if (/^1P./.test(x) && x.length > 6) metti(x.slice(2));
       if (x.length >= 6) { metti(x); varianti(x); const dd = /^\d{2,3}-(.+)$/.exec(x); if (dd && /[A-Z]/.test(dd[1])) metti(dd[1]); }
     }
   }
