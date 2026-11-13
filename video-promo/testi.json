@@ -1,0 +1,67 @@
+{
+  "_nota": "Testi del video: 'voce' = cosa legge la voce sintetica (scritto come si pronuncia), 'scritta' = sottotitolo piccolo, 'velocita' facoltativa per battuta. Due voci: maschile e femminile (cartelle voce/maschile e voce/femminile). Rigenerare con python3 voce.py e poi render.cjs --voce=... 'stringi': true accorcia le pause tra le parole (ffmpeg silenceremove).",
+  "battute": [
+    {
+      "id": "v1",
+      "scritta": "Ogni giorno arrivano email, ordini, disegni, preventivi, fatture. Sparsi in dieci programmi diversi.",
+      "voce": "Ogni giorno arrivano imèil, ordini, disegni, preventivi, fatture. Sparsi in dieci programmi diversi.",
+      "velocita": "+12%",
+      "stringi": true
+    },
+    {
+      "id": "v2",
+      "scritta": "E se bastasse un solo portale per gestire tutta l'azienda? Dai documenti alla produzione, dalla qualità alla sicurezza.",
+      "voce": "E se bastasse un solo portale per gestire tutta l'azienda? Dai documenti alla produzione, dalla qualità alla sicurezza."
+    },
+    {
+      "id": "v3",
+      "scritta": "Arriva una richiesta d'offerta: l'intelligenza artificiale legge distinta, Gerber e pick and place, conta i componenti, trova gli errori e prepara il preventivo. In pochi secondi.",
+      "voce": "Arriva una richiesta d'offerta: l'intelligenza artificiale legge distinta, gherber e pick-end-pleis, conta i componenti, trova gli errori e prepara il preventivo. In pochi secondi."
+    },
+    {
+      "id": "v4",
+      "scritta": "Ogni mattina sai cosa fare: ordini, acquisti, produzione e spedizioni, in una sola pagina.",
+      "voce": "Ogni mattina sai cosa fare: ordini, acquisti, produzione e spedizioni, in una sola pagina."
+    },
+    {
+      "id": "v5",
+      "scritta": "I componenti si codificano da soli, con i prezzi dei distributori a confronto. Il preventivo diventa ordine, e l'ordine commessa.",
+      "voce": "I componenti si codificano da soli, con i prezzi dei distributori a confronto. Il preventivo diventa ordine, e l'ordine commessa."
+    },
+    {
+      "id": "v6",
+      "scritta": "In reparto si lavora con il QR: i tempi arrivano dal telefono e il Gantt si aggiorna da solo.",
+      "voce": "In reparto si lavora con il cu-erre: i tempi arrivano dal telefono, e il gant si aggiorna da solo."
+    },
+    {
+      "id": "v6b",
+      "scritta": "E può collegarsi direttamente alle macchine: armadi di stoccaggio, pick and place, SPI e AOI. Componenti, tempi e difetti arrivano da soli nel portale.",
+      "voce": "E può collegarsi direttamente alle macchine: armadi di stoccaggio, pick-end-pleis, espiài e a-o-i. Componenti, tempi e difetti arrivano da soli nel portale."
+    },
+    {
+      "id": "v7",
+      "scritta": "DDT e fatture elettroniche partono allo SdI con un clic. Le fatture dei fornitori arrivano da sole, e la banca si abbina alle scadenze.",
+      "voce": "Di-di-ti e fatture elettroniche partono allo sdì con un clic. Le fatture dei fornitori arrivano da sole, e la banca si abbina alle scadenze."
+    },
+    {
+      "id": "v8",
+      "scritta": "E i numeri parlano chiaro: margini, clienti, previsione di cassa.",
+      "voce": "E i numeri parlano chiaro: margini, clienti, previsione di cassa."
+    },
+    {
+      "id": "v9",
+      "scritta": "Dalla email alla fattura. Un solo portale, semplice e completo.",
+      "voce": "Dalla email alla fattura. Un solo portale: semplice, e completo."
+    }
+  ],
+  "voci": {
+    "maschile": {
+      "voce": "it-IT-GiuseppeMultilingualNeural",
+      "velocita": "+6%"
+    },
+    "femminile": {
+      "voce": "it-IT-IsabellaNeural",
+      "velocita": "+8%"
+    }
+  }
+}

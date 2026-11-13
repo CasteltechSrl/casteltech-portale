@@ -1,0 +1,10 @@
+{"documenti": {"email":"Email del cliente","controllare":"Da controllare","perPreventivo":"Per il preventivo","disegno":"Disegno della scheda","r7":"hanno un valore diverso","c12":"della BOM non sono nel pick"},
+ "preventivo": {"prezzo":"PREZZO A SCHEDA","margini":"MARGINI","unatantum":"UNA TANTUM"},
+ "cruscotto": {"fare":"DA FARE OGGI","produzione":"PRODUZIONE","ordini":"ORDINI CLIENTI"},
+ "flusso": {"inprod":"3 · In produzione"},
+ "bom": {"materiali":"Materiali per 500 schede","reper":"Reperibilit"},
+ "fatture": {"inviato":"SdI consegnato"},
+ "banca": {"abbinare":"Da abbinare"},
+ "analisi": {"grafico":"Fatturato per mese","fatturato":"FATTURATO"},
+ "clienti": {"classifica":"Classifica"},
+ "schedastampa": {"qr":"SCHEDA DI PRODUZIONE"}}
