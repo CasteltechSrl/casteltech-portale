@@ -17,12 +17,13 @@ import { vociConsumo } from './consumi.js';
 
 export type Dimensione = 'massa' | 'volume' | 'lunghezza' | 'pezzi' | 'bombolette';
 /** Unità di gestione della voce e fattore per passare dall'unità della scheda (g, ml, cm) a quella della voce. */
-export interface VoceMagazzino { codice: string; nome: string; unita: string; dimensione: Dimensione; dallaScheda: number; soloAcquisti?: boolean }
+export interface VoceMagazzino { codice: string; nome: string; unita: string; dimensione: Dimensione; dallaScheda: number }
 
 const UNITA_VOCE: Record<string, { unita: string; dimensione: Dimensione; dallaScheda: number }> = {
   pastaSaldante: { unita: 'kg', dimensione: 'massa', dallaScheda: 0.001 },
   stagnoSaldatrice: { unita: 'kg', dimensione: 'massa', dallaScheda: 0.001 },
   flussante: { unita: 'l', dimensione: 'volume', dallaScheda: 0.001 },
+  flussanteGel: { unita: 'g', dimensione: 'massa', dallaScheda: 1 },
   filo: { unita: 'kg', dimensione: 'massa', dallaScheda: 0.001 },
   viteria: { unita: 'pz', dimensione: 'pezzi', dallaScheda: 1 },
   kaptonNastro: { unita: 'm', dimensione: 'lunghezza', dallaScheda: 0.01 },
@@ -31,17 +32,9 @@ const UNITA_VOCE: Record<string, { unita: string; dimensione: Dimensione; dallaS
   conformal: { unita: 'bomb.', dimensione: 'bombolette', dallaScheda: 1 },
 };
 
-/**
- * Le voci della scheda di produzione, nello stesso ordine del riquadro della commessa. Negli Acquisti il flussante è diviso
- * (Adriano 13/11/2026): liquido per la saldatrice a onda (la voce della scheda) e in gel per le riprese SMD a pennello (`soloAcquisti`:
- * non c'è sulla scheda, scende solo con un inventario nuovo).
- */
-export const VOCI_MAGAZZINO: VoceMagazzino[] = vociConsumo(null, 0).flatMap(v => {
-  const voce: VoceMagazzino = { codice: v.codice, nome: v.codice === 'flussante' ? 'Flussante liquido (saldatrice a onda)' : v.nome, ...UNITA_VOCE[v.codice] };
-  return v.codice === 'flussante'
-    ? [voce, { codice: 'flussanteGel', nome: 'Flussante in gel (riprese SMD)', unita: 'g', dimensione: 'massa' as const, dallaScheda: 1, soloAcquisti: true }]
-    : [voce];
-});
+const NOMI_ACQUISTI: Record<string, string> = { flussante: 'Flussante liquido (saldatrice a onda)', flussanteGel: 'Flussante in gel (riprese SMD)' };
+/** Le voci della scheda di produzione, nello stesso ordine del riquadro della commessa (flussante liquido e gel separati, Adriano 13/11/2026). */
+export const VOCI_MAGAZZINO: VoceMagazzino[] = vociConsumo(null, 0).map(v => ({ codice: v.codice, nome: NOMI_ACQUISTI[v.codice] ?? v.nome, ...UNITA_VOCE[v.codice] }));
 export const voceMagazzino = (codice: string) => VOCI_MAGAZZINO.find(v => v.codice === codice);
 
 /** Quanto vale una unità di misura scritta (KG, G, L, ML, M, CM) nella base della sua dimensione (g, ml, cm). */

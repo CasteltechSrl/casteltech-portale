@@ -56,6 +56,6 @@ test('materiale di consumo nella pagina della commessa: previsto a scheda e sul 
   assert.equal(conf.usatoScheda, '');
   // senza preventivo: elenco completo, previsto vuoto
   const libere = righeConsumoCommessa(null, 10, null);
-  assert.equal(libere.length, 9);
+  assert.equal(libere.length, 10);   // flussante liquido e gel separati (13/11/2026)
   assert.ok(libere.every(r => !r.previstoScheda && !r.previstoLotto && !r.usatoLotto));
 });
