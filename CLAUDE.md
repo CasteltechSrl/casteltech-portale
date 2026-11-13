@@ -249,6 +249,11 @@ Il backup si scrive a pezzi (`scriviBackup`: 100 righe per volta, gzip in stream
 database in memoria (30/10/2026 il backup costruito in un colpo solo faceva uscire il portale con stato 134).
 Memoria del backup (Adriano 11/11/2026, avviso "picco 409 MB su 512"): righe già in JSON da PostgreSQL (`row_to_json`, bytea in base64), pezzi da ~4 MB
 (`righePerVolta`), un solo pezzo in coda; avvio con `--max-old-space-size=300` (`npm start`) così Node libera la memoria prima. In prova: picco da 537 a 286 MB.
+Traffico di rete di Neon (Adriano 13/11/2026, avviso "82 % dei 5 GB del mese" il 13): ogni backup leggeva da Neon tutto il database (~120 MB, ~20 copie
+al mese tra serali e "prima di eliminare"). Ora `scriviBackup` usa la copia delle righe dell'ultimo backup sul disco di Render (`server/backup-cache.ts`,
+cartella `BACKUP_DIR/cache-righe`, ~40 MB): da Neon arrivano le impronte md5 delle righe (~3,5 MB) e solo le righe nuove o cambiate; file di backup identico,
+un backup alla volta, copia rovinata o disco pieno = si legge dal database come prima. Una lettura nuova che porta molte righe grandi (preventivi.catalogo/risultato,
+file bytea) va evitata o limitata alle colonne che servono.
 Nel backup TUTTE le tabelle (Adriano 31/10/2026) tranne `TABELLE_ESCLUSE` (sessioni, cache prezzi), in ordine di dipendenza
 (`ordinaPerDipendenze`); copie oltre 750 MB tolte dalle più vecchie (almeno 5). `tools/ripristina-backup.ts` segue l'ordine del file.
 
