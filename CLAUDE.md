@@ -370,6 +370,12 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    test in `tests/commesse-spedite.test.ts`): l'elenco Commesse si apre su "Da fare" (`?vista=spedite|tutte`); spedita = schede uscite con DDT di vendita emessi (collegati alla commessa o alla
    riga d'ordine, oppure stesso cliente + prodotto/codice dal giorno della commessa, divisi prima alle commesse finite poi alle più vecchie, mai oltre la quantità) ≥ quantità, o ≥ 90 % a rientro
    confermato. Calcolato in lettura, lo stato salvato non cambia; colonna "Spedite" con i DDT; la ricerca trova anche le spedite.
+3-ter. ✅ Schede senza preventivo e dati da completare (Adriano 13/11/2026; regole in `engine/schede-libere.ts`, `salvaCommessaLibera`/`preventivoDellaCommessa`/`preventivoVuoto`
+   in `commesse-servizio.ts`, migrazione 096 `commesse.senza_preventivo`, test in `tests/schede-libere.test.ts`): Commesse → "+ Scheda urgente" (`/commesse/nuova?modo=urgente`: fasi
+   spuntate dall'ufficio, tempo previsto facoltativo) o "+ Scheda a consuntivo" (tutte le fasi del catalogo spuntate, senza tempi; l'operatore scrive quelle che fa). Codice SOLO
+   dall'anagrafica (cliente dal prodotto), revisione vuota = l'ultima, TOP/BOT e schede per pannello nel modulo; fasi modificabili anche dopo. Dove serviva il preventivo si usa
+   `preventivoDellaCommessa(c)` (catalogo di oggi, nessun previsto). Elenco: colonna "Da completare" (`datiDaCompletare`: referente, ordine cliente, consegna, programmi, fasi);
+   scheda tecnica con `noteCliente` stampate nel riquadro delle note di montaggio; previsto 0 = cella vuota nella stampa.
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei

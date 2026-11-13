@@ -14,6 +14,8 @@ import type { Operatore } from '../engine/operatori.js';
 import { SQL_CAUSALE_DA_FATTURARE } from '../engine/ddt.js';
 import { leggiFineLavorazione } from '../engine/flusso.js';
 import { spedizioniCommesse, type SpedizioneCommessa } from '../engine/commesse-spedite.js';
+import { caricaCatalogo } from './catalogo-db.js';
+import { leggiSenzaPreventivo, type FaseCatalogo, type SenzaPreventivo } from '../engine/schede-libere.js';
 
 // ───────────────────────────── scheda tecnica (intestazione della MASTERspec) ─────────────────────────────
 /** Campi con TOP e BOT, nell'ordine della scheda. */
@@ -32,6 +34,8 @@ export interface SchedaTecnica {
   forno: string;                 // (vecchio campo unico del forno: ora è progForno con TOP e BOT)
   materiali: Record<string, string>;
   noteMontaggio: string;
+  /** Note del cliente (Adriano 13/11/2026): richieste particolari, stampate nel riquadro delle note di montaggio. */
+  noteCliente: string;
 }
 
 export function schedaTecnica(x: any): SchedaTecnica {
@@ -42,6 +46,7 @@ export function schedaTecnica(x: any): SchedaTecnica {
     forno: testo(x?.forno),
     materiali: Object.fromEntries(MATERIALI_SALDATURA.map(([k]) => [k, testo(x?.materiali?.[k])])),
     noteMontaggio: testo(x?.noteMontaggio),
+    noteCliente: testo(x?.noteCliente),
   };
 }
 
@@ -91,51 +96,126 @@ export async function haCommessePrecedenti(prodottoId: number, escludi?: number)
     [prodottoId, escludi ?? null]));
 }
 
-/** Crea o aggiorna una commessa. Restituisce l'id, oppure un errore in italiano. */
+/** Crea o aggiorna una commessa dal preventivo. Restituisce l'id, oppure un errore in italiano. */
 export async function salvaCommessa(opz: { id?: number; preventivoId: number; dati: DatiCommessa; utenteId: number }): Promise<{ id?: number; errore?: string }> {
   const prev = await leggiPreventivo(opz.preventivoId);
   if (!prev) return { errore: 'Preventivo non trovato' };
   if (!prev.revisione_id || !prev.cliente_id) return { errore: 'Il preventivo non ha cliente e codice dalle anagrafiche: aprilo, sceglili e salvalo' };
   const d = opz.dati;
   if (!(d.quantita > 0)) return { errore: 'Indica la quantità di schede' };
+  return scriviCommessa({
+    id: opz.id, dati: d, utenteId: opz.utenteId, preventivoId: prev.id, revisioneId: prev.revisione_id, clienteId: prev.cliente_id,
+    intestazione: prev.intestazione ?? {}, pannelli: nPannelli(d.quantita, prev.n_schede_pannello), fasi: fasiPreviste(prev, d.quantita, d.primoLotto),
+    senza: null,
+  });
+}
+
+/**
+ * Crea o aggiorna una scheda di produzione SENZA preventivo (Adriano 13/11/2026): prodotto e cliente dall'anagrafica,
+ * revisione scritta (vuota = l'ultima del prodotto, altrimenti "0"), fasi scelte nel modulo.
+ */
+export async function salvaCommessaLibera(opz: {
+  id?: number; prodottoId: number; revisione: string; senza: SenzaPreventivo; fasi: FaseScheda[]; dati: DatiCommessa; utenteId: number;
+}): Promise<{ id?: number; errore?: string }> {
+  const d = opz.dati;
+  const prod = opz.prodottoId ? await q1<{ id: number; codice: string; descrizione: string | null; cliente_id: number | null; cliente: string | null }>(
+    `SELECT p.id, p.codice, p.descrizione, p.cliente_id, c.ragione_sociale AS cliente FROM prodotti p LEFT JOIN clienti c ON c.id = p.cliente_id WHERE p.id = $1`,
+    [opz.prodottoId]) : null;
+  if (!prod) return { errore: 'Scegli il prodotto dall\'anagrafica (codice del cliente)' };
+  if (!prod.cliente_id) return { errore: `Il codice ${prod.codice} non ha il cliente: assegnalo in Anagrafiche → Prodotti` };
+  if (!(d.quantita > 0)) return { errore: 'Indica la quantità di schede' };
+  if (!opz.fasi.length) return { errore: 'Spunta almeno una fase da stampare sulla scheda' };
+  let revisione = opz.revisione.trim().toUpperCase().slice(0, 20);
+  if (!revisione) revisione = (await q1<{ revisione: string }>(`SELECT revisione FROM prodotti_revisioni WHERE prodotto_id = $1 ORDER BY creato_il DESC, id DESC LIMIT 1`,
+    [prod.id]))?.revisione ?? '0';
+  const rev = await q1<{ id: number }>(`INSERT INTO prodotti_revisioni (prodotto_id, revisione) VALUES ($1,$2)
+    ON CONFLICT (prodotto_id, revisione) DO UPDATE SET revisione = EXCLUDED.revisione RETURNING id`, [prod.id, revisione]);
+  // scheda tecnica vuota su una scheda nuova: quella della revisione o dell'ultima commessa dello stesso codice
+  const vuota = JSON.stringify(d.scheda) === JSON.stringify(schedaTecnica({}));
+  const dati = !opz.id && vuota ? { ...d, scheda: await schedaTecnicaDaProporre(rev!.id, prod.id) } : d;
+  return scriviCommessa({
+    id: opz.id, dati, utenteId: opz.utenteId, preventivoId: null, revisioneId: rev!.id, clienteId: prod.cliente_id,
+    intestazione: { cliente: prod.cliente ?? '', codice: prod.codice, revisione, descrizione: prod.descrizione ?? '' },
+    pannelli: nPannelli(d.quantita, opz.senza.schedePannello), fasi: opz.fasi, senza: opz.senza,
+  });
+}
+
+async function scriviCommessa(o: {
+  id?: number; dati: DatiCommessa; utenteId: number; preventivoId: number | null; revisioneId: number; clienteId: number;
+  intestazione: Record<string, unknown>; pannelli: number; fasi: FaseScheda[]; senza: SenzaPreventivo | null;
+}): Promise<{ id?: number; errore?: string }> {
+  const d = o.dati;
   const numero = d.numero.trim().toUpperCase();
-  const pannelli = nPannelli(d.quantita, prev.n_schede_pannello);
-  const fasi = fasiPreviste(prev, d.quantita, d.primoLotto);
   return transazione(async c => {
-    const doppio = numero && (await c.query(`SELECT 1 FROM commesse WHERE numero = $1 AND id IS DISTINCT FROM $2`, [numero, opz.id ?? null])).rowCount;
+    const doppio = numero && (await c.query(`SELECT 1 FROM commesse WHERE numero = $1 AND id IS DISTINCT FROM $2`, [numero, o.id ?? null])).rowCount;
     if (doppio) return { errore: `Esiste già una commessa numero ${numero}` };
-    const campi = [d.ordineCliente || null, d.referenteCliente || null, d.dataOrdine, d.dataConsegna, d.quantita, pannelli, d.primoLotto,
-      d.segnalazioni || null, d.scheda, prev.intestazione ?? {}];
-    let id = opz.id;
+    const campi = [d.ordineCliente || null, d.referenteCliente || null, d.dataOrdine, d.dataConsegna, d.quantita, o.pannelli, d.primoLotto,
+      d.segnalazioni || null, d.scheda, o.intestazione];
+    let id = o.id;
     if (id) {
+      // senza preventivo il prodotto si può ancora cambiare; con il preventivo resta quello del preventivo
       await c.query(`UPDATE commesse SET ordine_cliente=$2, referente_cliente=$3, data_ordine=$4, data_consegna=$5, quantita=$6, n_pannelli=$7,
         primo_lotto=$8, segnalazioni=$9, scheda_tecnica=$10, intestazione=$11, numero=coalesce(nullif($12, ''), numero),
-        stato=coalesce($13, stato), aggiornato_il=now() WHERE id=$1`, [id, ...campi, numero, d.stato ?? null]);
+        stato=coalesce($13, stato), senza_preventivo = $14,
+        revisione_id = CASE WHEN preventivo_id IS NULL THEN $15 ELSE revisione_id END, cliente_id = CASE WHEN preventivo_id IS NULL THEN $16 ELSE cliente_id END,
+        aggiornato_il=now() WHERE id=$1`, [id, ...campi, numero, d.stato ?? null, o.senza, o.revisioneId, o.clienteId]);
       await c.query(`DELETE FROM commesse_fasi WHERE commessa_id = $1`, [id]);
     } else {
       id = (await c.query(`INSERT INTO commesse (ordine_cliente, referente_cliente, data_ordine, data_consegna, quantita, n_pannelli, primo_lotto,
-          segnalazioni, scheda_tecnica, intestazione, numero, preventivo_id, revisione_id, cliente_id, codice_qr, creato_da)
+          segnalazioni, scheda_tecnica, intestazione, numero, preventivo_id, revisione_id, cliente_id, codice_qr, creato_da, senza_preventivo)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           coalesce(nullif($11, ''), 'C' || to_char(now(), 'YYYY') || '-' || lpad(nextval('numerazione_commesse')::text, 4, '0')),
-          $12,$13,$14,$15,$16) RETURNING id`,
-        [...campi, numero, prev.id, prev.revisione_id, prev.cliente_id, randomBytes(9).toString('base64url'), opz.utenteId])).rows[0].id;
+          $12,$13,$14,$15,$16,$17) RETURNING id`,
+        [...campi, numero, o.preventivoId, o.revisioneId, o.clienteId, randomBytes(9).toString('base64url'), o.utenteId, o.senza])).rows[0].id;
       // se il numero proposto è stato accettato, la numerazione va avanti
       if (/^C\d{4}-\d+$/.test(numero)) await c.query(`SELECT setval('numerazione_commesse', greatest((SELECT last_value FROM numerazione_commesse),
         coalesce(substring($1 from '^C\\d{4}-(\\d+)$')::int, 0)), true)`, [numero]);
-      await c.query(`UPDATE preventivi SET stato = 'accettato', aggiornato_il = now() WHERE id = $1 AND stato IN ('bozza', 'inviato')`, [prev.id]);
+      if (o.preventivoId) await c.query(`UPDATE preventivi SET stato = 'accettato', aggiornato_il = now() WHERE id = $1 AND stato IN ('bozza', 'inviato')`, [o.preventivoId]);
     }
-    for (const [i, f] of fasi.entries())
+    for (const [i, f] of o.fasi.entries())
       await c.query(`INSERT INTO commesse_fasi (commessa_id, fase_codice, ordine, persone_previste, ciclo_previsto_sec, uomo_previsto_sec)
         VALUES ($1,$2,$3,$4,$5,$6)`, [id, f.codice, i, f.persone, Math.round(f.cicloSec), Math.round(f.uomoSec)]);
     // la scheda tecnica si ripropone alla prossima commessa dello stesso prodotto/revisione
-    await c.query(`UPDATE prodotti_revisioni SET scheda_tecnica = $2 WHERE id = $1`, [prev.revisione_id, d.scheda]);
+    await c.query(`UPDATE prodotti_revisioni SET scheda_tecnica = $2 WHERE id = $1`, [o.revisioneId, d.scheda]);
     // le segnalazioni scritte nella commessa vanno nello storico del prodotto: stampate anche sulle prossime schede
     await c.query(`DELETE FROM segnalazioni WHERE commessa_id = $1 AND origine = 'ufficio'`, [id]);
     if (d.segnalazioni) await c.query(`INSERT INTO segnalazioni (prodotto_id, revisione_id, commessa_id, origine, testo, rilevante_prossime, autore_id)
-      VALUES ((SELECT prodotto_id FROM prodotti_revisioni WHERE id = $1), $1, $2, 'ufficio', $3, true, $4)`, [prev.revisione_id, id, d.segnalazioni, opz.utenteId]);
+      VALUES ((SELECT prodotto_id FROM prodotti_revisioni WHERE id = $1), $1, $2, 'ufficio', $3, true, $4)`, [o.revisioneId, id, d.segnalazioni, o.utenteId]);
     return { id };
   });
 }
+
+/** Fasi attive del catalogo (Impostazioni → Fasi), per le schede senza preventivo. */
+export async function fasiDelCatalogo(): Promise<FaseCatalogo[]> {
+  const numeri = await numeriFasi();
+  return (await caricaCatalogo()).fasi.filter(f => !FASI_TOLTE_DALLA_SCHEDA.includes(f.codice)).map(f => ({ codice: f.codice, numero: numeri.get(f.codice) ?? f.numero,
+    nome: f.nome, gruppo: f.gruppo, unaTantum: f.unaTantum, tariffa: f.tariffa, persone: Number(f.persone) || 1 }));
+}
+
+/**
+ * Il preventivo della commessa; per una scheda senza preventivo un "preventivo" vuoto con il catalogo di oggi
+ * (nomi e numeri delle fasi, voci di consumo senza previsto), TOP/BOT e schede per pannello scritti nella commessa.
+ */
+export async function preventivoDellaCommessa(c: any): Promise<any> {
+  if (c.preventivo_id) { const p = await leggiPreventivo(c.preventivo_id); if (p) return p; }
+  const sp = leggiSenzaPreventivo(c.senza_preventivo);
+  return preventivoVuoto(await caricaCatalogo(), sp, c);
+}
+
+export function preventivoVuoto(catalogo: Catalogo, sp: SenzaPreventivo | null, c: any = {}): any {
+  return {
+    id: null, numero: null, senzaPreventivo: sp ?? { modo: 'urgente', doppiaFaccia: false, schedePannello: 1 }, catalogo,
+    intestazione: c.intestazione ?? {}, parametri: { doppiaFaccia: sp?.doppiaFaccia ? 1 : 0 },
+    n_schede: c.quantita ?? 0, n_schede_pannello: sp?.schedePannello ?? 1, revisione_id: c.revisione_id ?? null, prodotto_id: c.prodotto_id ?? null,
+    cliente_id: c.cliente_id ?? null,
+  };
+}
+
+/** Prodotti dell'anagrafica con il cliente (menu della scheda senza preventivo). */
+export const prodottiConCliente = () => q<{ id: number; codice: string; descrizione: string | null; cliente: string; revisione: string | null }>(
+  `SELECT p.id, p.codice, p.descrizione, c.ragione_sociale AS cliente,
+     (SELECT r.revisione FROM prodotti_revisioni r WHERE r.prodotto_id = p.id ORDER BY r.creato_il DESC, r.id DESC LIMIT 1) AS revisione
+   FROM prodotti p JOIN clienti c ON c.id = p.cliente_id ORDER BY c.ragione_sociale, p.codice`);
 
 /** Fasi salvate della commessa, con i nomi dal catalogo del preventivo. */
 export async function fasiCommessa(commessa: any): Promise<FaseScheda[]> {

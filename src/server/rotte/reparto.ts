@@ -11,9 +11,8 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import bcrypt from 'bcryptjs';
 import { q, q1, transazione } from '../db.js';
 import { eUfficio } from '../../engine/ruoli.js';
-import { leggiPreventivo } from '../preventivi-servizio.js';
 import { AIUTO_TEMPO, secondiDaTempo } from '../../engine/tempi-scritti.js';
-import { caricaOperatori, fasiCommessa, leggiCommessa, numeriFasi } from '../commesse-servizio.js';
+import { caricaOperatori, fasiCommessa, leggiCommessa, numeriFasi, preventivoDellaCommessa } from '../commesse-servizio.js';
 import { annullaFase, fasiAperte, pianificaFase } from '../promemoria.js';
 import { hhmm, minutiDelGiorno, partiRoma } from '../../engine/promemoria.js';
 import { VERSIONE } from '../views/layout.js';
@@ -344,7 +343,7 @@ async function commessaDaQr(codice: string) {
   if (!c) return null;
   const numeri = await numeriFasi();
   const previste: FaseScelta[] = (await fasiCommessa(c)).map(f => ({ ...f, numero: numeri.get(f.codice) ?? f.numero }));
-  const prev = c.preventivo_id ? await leggiPreventivo(c.preventivo_id) : null;
+  const prev = await preventivoDellaCommessa(c);   // senza preventivo: le altre fasi dal catalogo di oggi
   const giaPreviste = new Set(previste.map(f => f.codice));
   const altre: FaseScelta[] = ((prev?.catalogo?.fasi ?? []) as any[]).filter(f => !giaPreviste.has(f.codice) && numeri.has(f.codice))
     .map(f => ({ codice: f.codice, numero: numeri.get(f.codice)!, nome: f.nome, persone: Number(f.persone) || 1 }));

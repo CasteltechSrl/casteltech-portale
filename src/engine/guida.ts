@@ -973,12 +973,34 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'crea-commessa', area: 'commesse', titolo: 'Creare una commessa e stampare la scheda di produzione',
     parole: 'commessa nuova creare scheda produzione stampa qr lotto masterspec fogli tempi',
     testo: [
-      'Una commessa si crea da un preventivo: apri il preventivo e premi "Crea commessa" (o spunta il preventivo nell\'elenco). Le fasi del preventivo si ricalcolano sulla quantità del lotto.',
+      'Una commessa si crea da un preventivo: apri il preventivo e premi "Crea commessa" (o spunta il preventivo nell\'elenco). Le fasi del preventivo si ricalcolano sulla quantità del lotto. Senza preventivo: vedi "Scheda di produzione senza preventivo".',
       'La scheda di produzione si stampa in 2 fogli fronte/retro: prima pagina come la MASTERspec, fasi in una tabella compatta, fogli tempi e il QR in alto a destra che il reparto inquadra con il telefono.',
       'La scheda tecnica (programmi, lamine, paste, programma forno, note) resta sulla revisione del prodotto e si ripropone ai lotti successivi. Le segnalazioni della produzione vanno nello storico del prodotto e si stampano sulle schede successive.',
     ],
     passi: ['Apri il preventivo accettato.', 'Crea commessa, controlla quantità e dati, salva.', 'Stampa scheda di produzione.'],
     pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse']],
+  },
+  {
+    id: 'scheda-senza-preventivo', area: 'commesse', titolo: 'Scheda di produzione senza preventivo: urgente o a consuntivo',
+    parole: 'scheda produzione senza preventivo da zero urgente subito in produzione consuntivo prezzo prima volta tutte le fasi stampate scegliere fasi aggiungere fasi a mano nuova scheda',
+    testo: [
+      'Dall\'elenco Commesse si può creare una scheda di produzione anche senza preventivo, in due modi. "+ Scheda urgente": quando bisogna andare subito in produzione; spunti tu le poche fasi da fare (il tempo previsto è facoltativo). "+ Scheda a consuntivo": quando si lavora a consuntivo per fare il prezzo la prima volta; sulla scheda si stampano TUTTE le fasi senza tempi previsti e l\'operatore scrive i tempi solo di quelle che fa.',
+      'Codice e cliente si scelgono SOLO dall\'anagrafica (il menu ha la casella cerca: codice, descrizione o cliente). Se il codice non c\'è si aggiunge prima in Anagrafiche → Prodotti con il suo cliente. Revisione vuota = l\'ultima del codice. Si scelgono anche TOP + BOT e le schede per pannello.',
+      'Dopo, la scheda funziona come le altre: stampa con il QR, tempi dal telefono, rientro, DDT. Le fasi si possono cambiare anche dopo (spunte nella pagina della commessa, poi Salva e ristampa). Nell\'elenco la colonna Preventivo dice "senza · urgente" o "senza · consuntivo"; con Duplica se ne fa un\'altra uguale.',
+      'I tempi del rientro di una scheda a consuntivo sono la base per fare il primo preventivo del prodotto (Preventivi → Nuovo).',
+    ],
+    passi: ['Commesse → "+ Scheda urgente" o "+ Scheda a consuntivo".', 'Scegli il codice, scrivi quantità e (se li hai) ordine, referente, consegna.', 'Controlla le fasi spuntate, premi "Crea la scheda", poi "Stampa scheda di produzione".'],
+    pagine: [['/commesse/nuova?modo=urgente', 'Nuova scheda urgente'], ['/commesse/nuova?modo=consuntivo', 'Nuova scheda a consuntivo'], ['/commesse', 'Commesse']],
+  },
+  {
+    id: 'scheda-da-completare', area: 'commesse', titolo: 'Completare dopo i dati della scheda: referente, programmi, note del cliente e di montaggio',
+    parole: 'da completare dati mancanti referente cliente nomi programmi note cliente note montaggio dopo modificare scheda già stampata elenco schede',
+    testo: [
+      'I dati che non si hanno subito si scrivono dopo: apri la commessa dall\'elenco, completa referente, ordine del cliente, consegna, programmi e lamine, note di montaggio e note del cliente, premi Salva e ristampa la scheda. Vale anche per commesse già in produzione.',
+      'Nell\'elenco Commesse la colonna "Da completare" dice cosa manca ancora: referente, ordine cliente, consegna, programmi (nessun programma né pasta scritti), fasi. Cliccando il titolo della colonna le commesse con più dati mancanti vanno in cima.',
+      'Le note del cliente si stampano nel riquadro delle note di montaggio ("Cliente: …"). Programmi e note si ripropongono alla prossima commessa dello stesso prodotto.',
+    ],
+    pagine: [['/commesse', 'Commesse']],
   },
   {
     id: 'rientro', area: 'commesse', titolo: 'Rientro della scheda compilata',

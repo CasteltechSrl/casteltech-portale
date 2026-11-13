@@ -211,3 +211,9 @@ test('guida: il registro delle modifiche si trova', () => {
   assert.ok(cercaGuida('chi ha cambiato cosa').slice(0, 3).some(r => r.argomento.id === 'registro'));
   assert.ok(cercaGuida('registro eliminazioni').slice(0, 3).some(r => r.argomento.id === 'registro'));
 });
+
+test('guida: scheda di produzione senza preventivo e dati da completare (Adriano 13/11/2026)', () => {
+  assert.ok(primi('scheda di produzione senza preventivo', 3).includes('scheda-senza-preventivo'));
+  assert.ok(primi('scheda a consuntivo tutte le fasi', 3).includes('scheda-senza-preventivo'));
+  assert.ok(primi('note cliente referente da completare', 3).includes('scheda-da-completare'));
+});
