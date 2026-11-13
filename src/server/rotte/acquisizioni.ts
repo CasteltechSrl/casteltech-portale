@@ -239,7 +239,7 @@ export function rotteAcquisizioni() {
           <form method="post" action="/ordini/acquisire/drive"><button>Controlla adesso la cartella</button></form>`
         : html`<p class="nota">Non collegata: manca la chiave dell'account di servizio (GOOGLE_SERVICE_ACCOUNT su Render). Intanto i file si caricano qui sotto.</p>`}
       </section>
-      ${scelta && scelta.chiave !== 'clienti' ? '' : html`<section class="blocco" id="ordine-a-voce">
+      <section class="blocco" id="ordine-a-voce">
         <h2>Ordine a voce o per telefono</h2>
         <p class="nota">Il cliente ha chiamato o ha detto l'ordine a voce, senza documento: scegli il cliente e premi «Scrivi l'ordine».
           Si apre la stessa pagina degli ordini letti dall'IA, con le righe vuote: scegli i prodotti dal menu (codice, descrizione e prezzo arrivano dall'anagrafica),
@@ -249,7 +249,7 @@ export function rotteAcquisizioni() {
             ${clientiElenco.map(c => html`<option value="${c.id}">${c.ragione_sociale}</option>`)}</select></label>
           <label>Ricevuto <select name="come"><option value="telefono">per telefono</option><option value="voce">a voce</option></select></label>
           <button class="primario">Scrivi l'ordine</button></form>
-      </section>`}
+      </section>
       <section class="blocco">
         <h2>Carica ordini</h2>
         <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt),
