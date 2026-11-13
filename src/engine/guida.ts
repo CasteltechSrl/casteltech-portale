@@ -994,11 +994,12 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   },
   {
     id: 'scheda-da-completare', area: 'commesse', titolo: 'Completare dopo i dati della scheda: referente, programmi, note del cliente e di montaggio',
-    parole: 'da completare dati mancanti referente cliente nomi programmi note cliente note montaggio dopo modificare scheda già stampata elenco schede',
+    parole: 'da completare dati mancanti referente cliente nomi programmi note cliente note montaggio dopo modificare scheda già stampata elenco schede materiale di consumo pasta stagno kapton previsto usato',
     testo: [
       'I dati che non si hanno subito si scrivono dopo: apri la commessa dall\'elenco, completa referente, ordine del cliente, consegna, programmi e lamine, note di montaggio e note del cliente, premi Salva e ristampa la scheda. Vale anche per commesse già in produzione.',
       'Nell\'elenco Commesse la colonna "Da completare" dice cosa manca ancora: referente, ordine cliente, consegna, programmi (nessun programma né pasta scritti), fasi. Cliccando il titolo della colonna le commesse con più dati mancanti vanno in cima.',
       'Le note del cliente si stampano nel riquadro delle note di montaggio ("Cliente: …"). Programmi e note si ripropongono alla prossima commessa dello stesso prodotto.',
+      'Sotto "Programmi e lamine" il riquadro "Materiale di consumo" elenca pasta saldante, stagno, flussante, filo, viteria, Kapton, pasta termoconduttiva e conformal coating: previsto dal preventivo (a scheda e sul lotto) e usato, scritto al Rientro dal totale del lotto annotato sul foglio tempi.',
     ],
     pagine: [['/commesse', 'Commesse']],
   },
