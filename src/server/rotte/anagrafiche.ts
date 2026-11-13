@@ -295,7 +295,7 @@ export function rotteAnagrafiche() {
     const filtro = Number(req.query.cliente) || 0;
     const clienti = await elencoClienti();
     const prodotti = await q(`SELECT p.id, p.codice, p.descrizione, p.cliente_id,
-        (SELECT count(*)::int FROM jsonb_each(p.programmi) e WHERE coalesce(e.value->>'top', '') <> '' OR coalesce(e.value->>'bot', '') <> '') AS n_programmi, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_nota, p.prezzo_data::text AS prezzo_data,
+        (SELECT count(*)::int FROM jsonb_each(p.programmi) e WHERE coalesce(e.value->>'top', '') <> '' OR coalesce(e.value->>'bot', '') <> '') AS n_programmi, p.note_montaggio <> '' AS con_note, p.prezzo_vendita::float AS prezzo, p.prezzo_fonte, p.prezzo_nota, p.prezzo_data::text AS prezzo_data,
         (SELECT count(*)::int FROM prodotti_revisioni r JOIN preventivi v ON v.revisione_id = r.id WHERE r.prodotto_id = p.id) AS preventivi,
         (SELECT count(*)::int FROM ordini_righe o WHERE o.prodotto_id = p.id)
           + (SELECT count(*)::int FROM prodotti_revisioni r JOIN commesse k ON k.revisione_id = r.id WHERE r.prodotto_id = p.id)
@@ -352,7 +352,7 @@ export function rotteAnagrafiche() {
             <td><input name="scaglioni" form="p-${p.id}" class="scaglioni" value="${scriviScaglioni(scaglioni.get(p.id) ?? [])}"
               placeholder="un prezzo per tutte le quantità" title="Facoltativi: es. 1-5=10; 6-20=8; 21+=7 (21+ = da 21 in su)"></td><td class="n">${p.preventivi}</td>
             <td class="nowrap"><a class="bottone" href="/anagrafiche/prodotti/${p.id}/documentazione" title="${documentazione.get(p.id) ? `Documentazione del cliente: ${documentazione.get(p.id)!.n} revisioni, ultima ${documentazione.get(p.id)!.ultima}` : 'Documentazione del cliente (BOM, pick and place, Gerber): nessuna revisione caricata'}">Doc${documentazione.get(p.id) ? html` <span class="conta">${documentazione.get(p.id)!.ultima}</span>` : ''}</a>
-              <a class="bottone" href="/anagrafiche/prodotti/${p.id}/programmi" title="Programmi delle macchine (serigrafia, FOX, iPulse, AOI…) che la commessa prende da sola">Programmi${p.n_programmi ? html` <span class="conta">${p.n_programmi}</span>` : ''}</a>
+              <a class="bottone" href="/anagrafiche/prodotti/${p.id}/programmi" title="Programmi delle macchine (serigrafia, FOX, iPulse, AOI…) e note di montaggio che la commessa prende da sola">Programmi${p.n_programmi ? html` <span class="conta">${p.n_programmi}</span>` : ''}${p.con_note ? html` <span class="conta" title="Ci sono note di montaggio">N</span>` : ''}</a>
               <a class="bottone" href="${linkAnalisiProdotto(p)}" title="Analisi del prodotto: pezzi e fatturato anno per anno, preventivi e consuntivo delle commesse">Analisi</a>
               <form method="post" action="/anagrafiche/prodotti/${p.id}" id="p-${p.id}" class="inline"><input type="hidden" name="filtro" value="${filtro}"><button>Salva</button></form>
               ${eliminabile(p) ? html`<form method="post" action="/anagrafiche/prodotti/${p.id}/elimina" class="inline"

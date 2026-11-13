@@ -16,6 +16,7 @@ import { leggiFineLavorazione } from '../engine/flusso.js';
 import { spedizioniCommesse, type SpedizioneCommessa } from '../engine/commesse-spedite.js';
 import { caricaCatalogo } from './catalogo-db.js';
 import { leggiProgrammi, riempiVuote, aggiornaDaCommessa } from '../engine/programmi-prodotto.js';
+import { noteDaProporre } from '../engine/note-prodotto.js';
 import { leggiSenzaPreventivo, type FaseCatalogo, type SenzaPreventivo } from '../engine/schede-libere.js';
 
 // ───────────────────────────── scheda tecnica (intestazione della MASTERspec) ─────────────────────────────
@@ -183,6 +184,8 @@ async function scriviCommessa(o: {
     const pr = (await c.query(`SELECT p.id, p.programmi FROM prodotti p JOIN prodotti_revisioni r ON r.prodotto_id = p.id WHERE r.id = $1`, [o.revisioneId])).rows[0];
     if (pr) await c.query(`UPDATE prodotti SET programmi = $2 WHERE id = $1`,
       [pr.id, aggiornaDaCommessa(leggiProgrammi(pr.programmi, chiavi), leggiProgrammi(d.scheda.programmi, chiavi))]);
+    // le note di montaggio scritte nella commessa tornano sul prodotto (Adriano 13/11/2026): vuote = restano quelle del prodotto
+    if (pr && d.scheda.noteMontaggio.trim()) await c.query(`UPDATE prodotti SET note_montaggio = $2 WHERE id = $1`, [pr.id, d.scheda.noteMontaggio.trim()]);
     // le segnalazioni scritte nella commessa vanno nello storico del prodotto: stampate anche sulle prossime schede
     await c.query(`DELETE FROM segnalazioni WHERE commessa_id = $1 AND origine = 'ufficio'`, [id]);
     if (d.segnalazioni) await c.query(`INSERT INTO segnalazioni (prodotto_id, revisione_id, commessa_id, origine, testo, rilevante_prossime, autore_id)
@@ -376,10 +379,11 @@ export async function schedaTecnicaDaProporre(revisioneId: number | null, prodot
     scheda = schedaTecnica(ultima?.scheda_tecnica);
   }
   // caselle ancora vuote: i programmi delle macchine scritti sul prodotto (Adriano 13/11/2026)
-  const prod = prodottoId ? await q1<{ programmi: unknown }>(`SELECT programmi FROM prodotti WHERE id = $1`, [prodottoId]) : null;
+  const prod = prodottoId ? await q1<{ programmi: unknown; note_montaggio: string }>(`SELECT programmi, note_montaggio FROM prodotti WHERE id = $1`, [prodottoId]) : null;
   const chiavi = PROGRAMMI.map(([k]) => k);
   const { programmi } = riempiVuote(leggiProgrammi(scheda.programmi, chiavi), leggiProgrammi(prod?.programmi, chiavi));
-  return schedaTecnica({ ...scheda, programmi: { ...scheda.programmi, ...programmi } });
+  // note di montaggio vuote: quelle scritte sul prodotto (anche dalle vecchie schede di produzione, Adriano 13/11/2026)
+  return schedaTecnica({ ...scheda, programmi: { ...scheda.programmi, ...programmi }, noteMontaggio: noteDaProporre(scheda.noteMontaggio, prod?.note_montaggio ?? '') });
 }
 
 export { programmaForno } from '../engine/forno.js';

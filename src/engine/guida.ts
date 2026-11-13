@@ -1028,12 +1028,13 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
   // ── Commesse ──
   {
     id: 'crea-commessa', area: 'commesse', titolo: 'Creare una commessa e stampare la scheda di produzione',
-    parole: 'commessa nuova creare scheda produzione stampa qr lotto masterspec fogli tempi',
+    parole: 'commessa nuova creare scheda produzione stampa qr lotto masterspec fogli tempi note montaggio segnalazioni schede vecchie word spec costruzione',
     testo: [
       'Una commessa si crea da un preventivo: apri il preventivo e premi "Crea commessa" (o spunta il preventivo nell\'elenco). Le fasi del preventivo si ricalcolano sulla quantità del lotto. Senza preventivo: vedi "Scheda di produzione senza preventivo".',
       'La scheda di produzione si stampa in 2 fogli fronte/retro: prima pagina come la MASTERspec, fasi in una tabella compatta, fogli tempi e il QR in alto a destra che il reparto inquadra con il telefono.',
       'La scheda tecnica (programmi, lamine, paste, programma forno, note) resta sulla revisione del prodotto e si ripropone ai lotti successivi. Le segnalazioni della produzione vanno nello storico del prodotto e si stampano sulle schede successive.',
       'Programmi delle macchine sul prodotto: in Anagrafiche → Prodotti il tasto "Programmi" (con il numero dei programmi scritti) apre i nomi dei programmi di armadio, serigrafia (HTGD), lamina, P&P FOX (prima il PANNELLO_, altrimenti il SINGOLO_), P&P iPulse (se c\'è su tutte e due le macchine: "M1: nome · M4: nome"), AOI e forno, con TOP e BOT. Una commessa nuova li prende da sola nelle caselle vuote del riquadro "Programmi e lamine"; quando salvi una commessa con un programma scritto, il programma torna sul prodotto. I programmi mancanti si scrivono a mano.',
+      'Note di montaggio del prodotto: nella stessa pagina (tasto "Programmi", con "N" se ci sono note) c\'è il riquadro "Note di montaggio" che vale per ogni lotto: non montare, componenti alternativi, attenzioni, separazione delle schede, imballo. Una commessa nuova le prende se la sua scheda tecnica non ha note; quando salvi una commessa con le note scritte, tornano sul prodotto. Sotto ci sono le segnalazioni dello storico, stampate sulle prossime schede. Le note e le segnalazioni delle vecchie schede di produzione in Word (cartella 01_SCHEDE DI PRODUZIONE\\OLD) sono già state riportate qui, senza le cose dei singoli ordini.',
     ],
     passi: ['Apri il preventivo accettato.', 'Crea commessa, controlla quantità e dati, salva.', 'Stampa scheda di produzione.'],
     pagine: [['/preventivi', 'Preventivi'], ['/commesse', 'Commesse']],

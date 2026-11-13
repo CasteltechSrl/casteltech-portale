@@ -35,6 +35,7 @@
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
 import { caricaProgrammi } from '../programmi-prodotto-servizio.js';
+import { caricaNoteSchede } from '../note-prodotto-servizio.js';
 import { caricaArmadi, caricaDescrizioniCliente, cercaPrezziOnline, datiArmadi, dividiFile, salvaPrezziOnline, statoRicercaOnline } from '../armadi-servizio.js';
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
@@ -231,6 +232,12 @@ export function rotteApiClaude() {
     const elenco = Array.isArray(req.body?.elenco) ? req.body.elenco : null;
     if (!elenco) return res.status(400).json({ errore: 'Serve elenco: [{prodotto_id, programmi}].' });
     res.json(await caricaProgrammi(elenco.map((x: any) => ({ prodotto_id: Number(x?.prodotto_id), programmi: x?.programmi })), req.query.conferma === '1'));
+  });
+  // note di montaggio e segnalazioni delle vecchie schede di produzione (Adriano 13/11/2026): [{prodotto_id, note:[], segnalazioni:[]}]
+  r.post('/note-schede', async (req, res) => {
+    const elenco = Array.isArray(req.body?.elenco) ? req.body.elenco : null;
+    if (!elenco) return res.status(400).json({ errore: 'Serve elenco: [{prodotto_id, note, segnalazioni}].' });
+    res.json(await caricaNoteSchede(elenco.map((x: any) => ({ prodotto_id: Number(x?.prodotto_id), note: x?.note, segnalazioni: x?.segnalazioni })), req.query.conferma === '1'));
   });
   r.post('/documentazione', async (req, res) => {
     const b = req.body ?? {};
