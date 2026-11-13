@@ -407,3 +407,9 @@ export function percentualeValida(s: unknown): number | null {
   const n = Number(t);
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
 }
+
+/** % dei codici con un prezzo (Adriano 13/11/2026: "percentuale tra codici a magazzino e quelli con il prezzo"); null se non ci sono codici. */
+export function percentualeConPrezzo(codici: number, senzaPrezzo: number): number | null {
+  if (!codici) return null;
+  return Math.round(((codici - senzaPrezzo) / codici) * 1000) / 10;
+}

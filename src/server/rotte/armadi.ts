@@ -5,11 +5,10 @@
  */
 import express, { Router, type Request } from 'express';
 import { PAGINE_MACCHINE } from '../../engine/macchine.js';
-import { NOMI_FONTI, percentualeValida, riconoscimentoDi, type FontePrezzo, type Quota } from '../../engine/armadi.js';
+import { NOMI_FONTI, percentualeConPrezzo, percentualeValida, riconoscimentoDi, type FontePrezzo, type Quota } from '../../engine/armadi.js';
 import { corrispondeRicerca } from '../../engine/ricerca.js';
 import { layout } from '../views/layout.js';
 import { html, euro, euroUnitario, num, raw } from '../views/html.js';
-import { paginata } from '../views/paginazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
 import {
   articoloArmadio, bobineDelCodice, caricaArmadi, cercaPrezziOnline, datiArmadi, dividiFile, impostazioniArmadi, ricalcolaPrezzi, salvaImpostazioniArmadi,
@@ -27,16 +26,21 @@ const etichetta = (d: Dati, x: Quota) => x.proprietario.tipo === 'casteltech'
   ? 'Casteltech'
   : x.proprietario.tipo === 'cliente' ? `${nomeCliente(d, x.proprietario.clienteId)}${x.proprietario.perConto ? ` (${x.proprietario.perConto})` : ''}` : `da chiarire${x.proprietario.sigla ? ` (${x.proprietario.sigla})` : ''}`;
 
-/** Filtro dell'elenco: di=casteltech | c<id> | da_chiarire, q = testo, prezzo=senza. */
-function filtra(d: Dati, query: Record<string, unknown>) {
-  const di = String(query.di ?? ''), testo = String(query.q ?? '').trim(), senza = query.prezzo === 'senza';
+/** Filtro di un elenco: di = casteltech | c<id> | da_chiarire, testo, prezzo = senza | con (vuoto = tutti). */
+interface Filtro { di: string; testo: string; prezzo: '' | 'senza' | 'con' }
+const vale = (di: string) => (x: Quota) => !di || (di === 'casteltech' ? x.proprietario.tipo === 'casteltech' : di === 'da_chiarire' ? x.proprietario.tipo === 'da_chiarire' : `c${x.proprietario.clienteId}` === di);
+function filtra(d: Dati, f: Filtro) {
   const perCodice = new Map<string, Quota[]>();
   for (const x of d.quote) perCodice.set(x.codice, [...(perCodice.get(x.codice) ?? []), x]);
-  const vale = (x: Quota) => !di || (di === 'casteltech' ? x.proprietario.tipo === 'casteltech' : di === 'da_chiarire' ? x.proprietario.tipo === 'da_chiarire' : `c${x.proprietario.clienteId}` === di);
-  return d.articoli.map(a => ({ a, quote: (perCodice.get(a.codice) ?? []).filter(vale) }))
-    .filter(r => r.quote.length && (!senza || r.a.prezzo == null)
-      && (!testo || corrispondeRicerca([r.a.codice, r.a.descrizione, r.a.pn, r.a.produttore, r.a.proprietario_file].join(' '), testo)));
+  return d.articoli.map(a => ({ a, quote: (perCodice.get(a.codice) ?? []).filter(vale(f.di)) }))
+    .filter(r => r.quote.length && (!f.prezzo || (f.prezzo === 'senza') === (r.a.prezzo == null))
+      && (!f.testo || corrispondeRicerca([r.a.codice, r.a.descrizione, r.a.pn, r.a.produttore, r.a.proprietario_file].join(' '), f.testo)));
 }
+/** Le due sezioni dell'elenco (Adriano 13/11/2026): senza prezzo e con prezzo, ognuna col suo filtro per proprietario (di_senza / di_con, q_senza / q_con). */
+const SEZIONI = [{ chiave: 'senza', titolo: 'Componenti senza prezzo' }, { chiave: 'con', titolo: 'Componenti con il prezzo' }] as const;
+const filtroDi = (q: Record<string, unknown>, sez: 'senza' | 'con'): Filtro => ({ di: String(q[`di_${sez}`] ?? ''), testo: String(q[`q_${sez}`] ?? '').trim(), prezzo: sez });
+const RIGHE_VISTE = 100;
+const perc = (p: number | null) => (p == null ? '' : `${num(p, 1)} %`);
 
 export function rotteArmadi() {
   const r = Router();
@@ -46,15 +50,55 @@ export function rotteArmadi() {
     const ricerca = statoRicercaOnline();
     const vuoto = !d.articoli.length;
     const rp = d.riepilogo;
-    const filtrate = filtra(d, req.query as Record<string, unknown>);
-    const { righe, barra } = paginata(filtrate, req.query as Record<string, unknown>);
     const valoreRiga = (q: Quota[]) => q.reduce((s, x) => s + x.valore, 0);
     const qs = (cambi: Record<string, string>) => { const p = new URLSearchParams(req.query as Record<string, string>); p.delete('pagina'); p.delete('msg'); for (const [k, v] of Object.entries(cambi)) v ? p.set(k, v) : p.delete(k); return `${BASE}?${p}`; };
-    const di = String(req.query.di ?? '');
     const menuProprietari = (nome: string, valore: string) => html`<select name="${nome}">
       <option value="" ${valore ? '' : raw('selected')}>— da chiarire —</option>
       <option value="casteltech" ${valore === 'casteltech' ? raw('selected') : ''}>Casteltech</option>
       ${d.clienti.map(c => html`<option value="c${c.id}" ${valore === `c${c.id}` ? raw('selected') : ''}>${c.ragione_sociale}</option>`)}</select>`;
+    const totCodici = d.articoli.length, totSenza = d.articoli.filter(a => a.prezzo == null).length, totPezzi = d.articoli.reduce((s, a) => s + a.quantita, 0);
+    // Menu del filtro "Proprietario" delle due sezioni: solo i proprietari che hanno codici
+    const proprietariPresenti = [
+      ...(rp.casteltech.codici ? [{ valore: 'casteltech', nome: 'Casteltech' }] : []),
+      ...rp.clienti.map(c => ({ valore: `c${c.clienteId}`, nome: nomeCliente(d, c.clienteId) })),
+      ...(rp.daChiarire.length ? [{ valore: 'da_chiarire', nome: 'Da chiarire' }] : []),
+    ];
+    const sezioneElenco = (sez: 'senza' | 'con', titolo: string) => {
+      const f = filtroDi(req.query as Record<string, unknown>, sez);
+      const tutte = filtra(d, f);
+      const tutteVisibili = req.query[`tutte_${sez}`] === '1';
+      const righe = tutteVisibili ? tutte : tutte.slice(0, RIGHE_VISTE);
+      const altri = Object.entries(req.query as Record<string, string>).filter(([k]) => !k.endsWith(`_${sez}`) && k !== 'msg');
+      return html`
+      <section id="elenco-${sez}">
+        <h2>${titolo} (${tutte.length})</h2>
+        <form class="filtri-riga" method="get" action="${BASE}#elenco-${sez}">
+          ${altri.map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}">`)}
+          <label>Proprietario <select name="di_${sez}"><option value="">Tutti</option>
+            ${proprietariPresenti.map(p => html`<option value="${p.valore}" ${f.di === p.valore ? raw('selected') : ''}>${p.nome}</option>`)}</select></label>
+          <input type="search" name="q_${sez}" value="${f.testo}" placeholder="Cerca codice, descrizione, P/N, produttore…" autocomplete="off">
+          <button>Filtra</button>
+          ${f.di || f.testo ? html`<a href="${qs({ [`di_${sez}`]: '', [`q_${sez}`]: '', [`tutte_${sez}`]: '' })}#elenco-${sez}">togli il filtro</a>` : ''}
+        </form>
+        <p>${tutte.length} codici${sez === 'con' ? html` · valore ${euro(tutte.reduce((s, x) => s + valoreRiga(x.quote), 0))}` : ''}
+          · <a class="pulsante" href="${BASE}/elenco.xlsx?${new URLSearchParams({ prezzo: sez, di: f.di, q: f.testo })}">Excel</a></p>
+        <table>
+          <thead><tr><th>Codice</th><th>Descrizione</th><th>P/N</th><th>Proprietario</th><th class="num">Pezzi</th><th class="num">Bobine</th>
+            ${sez === 'con' ? html`<th class="num">€ a pezzo</th><th>Prezzo da</th><th class="num">Valore</th>` : ''}</tr></thead>
+          <tbody>${righe.map(({ a, quote }) => html`<tr>
+            <td><a href="${BASE}/codice/${encodeURIComponent(a.codice)}">${a.codice}</a></td>
+            <td>${a.descrizione ?? ''}${a.descrizione_fonte && a.descrizione_fonte !== 'armadi' ? html` <small class="nota">(${a.descrizione_fonte})</small>` : ''}</td>
+            <td>${a.pn ?? ''}</td>
+            <td>${quote.map((x, i) => html`${i ? html`<br>` : ''}${etichetta(d, x)}${quote.length > 1 ? html` <small>${num(x.quantita, 0)}</small>` : ''}`)}</td>
+            <td class="num" data-valore="${quote.reduce((s, x) => s + x.quantita, 0)}">${num(quote.reduce((s, x) => s + x.quantita, 0), 0)}</td>
+            <td class="num">${a.bobine || ''}</td>
+            ${sez === 'con' ? html`<td class="num" data-valore="${a.prezzo ?? ''}">${a.prezzo != null ? euroUnitario(a.prezzo) : ''}</td>
+            <td><small>${nomeFonte(a.prezzo_fonte)}${a.prezzo_data ? ` ${a.prezzo_data}` : ''}</small></td>
+            <td class="num" data-valore="${valoreRiga(quote)}">${euro(valoreRiga(quote))}</td>` : ''}</tr>`)}</tbody>
+        </table>
+        ${tutte.length > righe.length ? html`<p><a href="${qs({ [`tutte_${sez}`]: '1' })}#elenco-${sez}">Mostra tutti i ${tutte.length} codici</a></p>` : ''}
+      </section>`;
+    };
     const pezziSigla = new Map<string, number>();
     for (const x of d.quote) if (x.proprietario.sigla) pezziSigla.set(x.proprietario.sigla, (pezziSigla.get(x.proprietario.sigla) ?? 0) + x.quantita);
 
@@ -82,26 +126,43 @@ export function rotteArmadi() {
       ${vuoto ? carica : html`
       <div class="cifre">
         <div class="cifra"><span>Componenti di Casteltech</span><b>${euro(rp.casteltech.valore)}</b>
-          <small>${num(rp.casteltech.codici, 0)} codici, ${num(rp.casteltech.pezzi, 0)} pezzi${rp.casteltech.senzaPrezzo ? html` · <a href="${qs({ di: 'casteltech', prezzo: 'senza' })}">${rp.casteltech.senzaPrezzo} senza prezzo</a>` : ''}</small></div>
+          <small>${num(rp.casteltech.codici, 0)} codici, ${num(rp.casteltech.pezzi, 0)} pezzi${rp.casteltech.senzaPrezzo ? html` · <a href="${qs({ di_senza: 'casteltech' })}#elenco-senza">${rp.casteltech.senzaPrezzo} senza prezzo</a>` : ''}</small></div>
         <div class="cifra"><span>Componenti dei clienti (riconosciuto)</span><b>${euro(rp.totaleClienti.riconosciuto)}</b>
           <small>valore di mercato ${euro(rp.totaleClienti.valore)}, ${rp.clienti.length} clienti</small></div>
         <div class="cifra"><span>Di chi non si sa</span><b>${num(rp.daChiarire.reduce((s, x) => s + x.pezzi, 0), 0)} pezzi</b>
-          <small>${rp.daChiarire.length ? html`<a href="${qs({ di: 'da_chiarire' })}">valore ${euro(rp.daChiarire.reduce((s, x) => s + x.valore, 0))}</a> · sigle qui sotto` : 'tutto assegnato'}</small></div>
+          <small>${rp.daChiarire.length ? html`<a href="${qs({ di_senza: 'da_chiarire', di_con: 'da_chiarire' })}#elenco-senza">valore ${euro(rp.daChiarire.reduce((s, x) => s + x.valore, 0))}</a> · sigle qui sotto` : 'tutto assegnato'}</small></div>
+        <div class="cifra"><span>Codici con il prezzo</span><b>${perc(percentualeConPrezzo(totCodici, totSenza))}</b>
+          <small>${num(totCodici - totSenza, 0)} su ${num(totCodici, 0)} codici · <a href="#elenco-senza">${num(totSenza, 0)} senza prezzo</a></small></div>
       </div>
 
       <section class="riquadro">
-        <h2>Componenti dei clienti, per cliente</h2>
-        <p class="nota">Il valore di mercato è pezzi × prezzo come per i nostri. La <b>% di riconoscimento</b> è la parte di quel valore che si conta: si cambia cliente per cliente
-          (vuota = quella predefinita).</p>
+        <h2>Componenti per proprietario</h2>
+        <p class="nota">Il valore di mercato è pezzi × prezzo. "% con prezzo" = codici con un prezzo su tutti i codici del proprietario. La <b>% di riconoscimento</b> vale per i clienti:
+          è la parte del loro valore che si conta, si cambia cliente per cliente (vuota = quella predefinita). Un codice con bobine di più proprietari conta per ognuno.</p>
         <form method="post" action="${BASE}/riconoscimento">
           <table>
-            <thead><tr><th>Cliente</th><th class="num">Codici</th><th class="num">Pezzi</th><th class="num">Senza prezzo</th><th class="num">Valore di mercato</th><th class="num">% riconoscimento</th><th class="num">Riconosciuto</th></tr></thead>
-            <tbody>${rp.clienti.map(c => html`<tr>
-              <td><a href="${qs({ di: `c${c.clienteId}`, prezzo: '' })}">${nomeCliente(d, c.clienteId)}</a></td><td class="num">${c.codici}</td><td class="num">${num(c.pezzi, 0)}</td>
-              <td class="num">${c.senzaPrezzo || ''}</td><td class="num">${euro(c.valore)}</td>
+            <thead><tr><th>Proprietario</th><th class="num">Codici</th><th class="num">Con prezzo</th><th class="num">Senza prezzo</th><th class="num">% con prezzo</th>
+              <th class="num">Pezzi</th><th class="num">Valore di mercato</th><th class="num">% riconoscimento</th><th class="num">Valore contato</th></tr></thead>
+            <tbody>
+              <tr><td><a href="${qs({ di_senza: 'casteltech', di_con: 'casteltech' })}#elenco-senza"><b>Casteltech</b></a></td><td class="num">${rp.casteltech.codici}</td>
+                <td class="num">${rp.casteltech.codici - rp.casteltech.senzaPrezzo}</td>
+                <td class="num">${rp.casteltech.senzaPrezzo ? html`<a href="${qs({ di_senza: 'casteltech' })}#elenco-senza">${rp.casteltech.senzaPrezzo}</a>` : ''}</td>
+                <td class="num">${perc(percentualeConPrezzo(rp.casteltech.codici, rp.casteltech.senzaPrezzo))}</td><td class="num">${num(rp.casteltech.pezzi, 0)}</td>
+                <td class="num">${euro(rp.casteltech.valore)}</td><td class="num">—</td><td class="num">${euro(rp.casteltech.valore)}</td></tr>
+              ${rp.clienti.map(c => html`<tr>
+              <td><a href="${qs({ di_senza: `c${c.clienteId}`, di_con: `c${c.clienteId}` })}#elenco-senza">${nomeCliente(d, c.clienteId)}</a></td><td class="num">${c.codici}</td>
+              <td class="num">${c.codici - c.senzaPrezzo}</td>
+              <td class="num">${c.senzaPrezzo ? html`<a href="${qs({ di_senza: `c${c.clienteId}` })}#elenco-senza">${c.senzaPrezzo}</a>` : ''}</td>
+              <td class="num">${perc(percentualeConPrezzo(c.codici, c.senzaPrezzo))}</td><td class="num">${num(c.pezzi, 0)}</td><td class="num">${euro(c.valore)}</td>
               <td class="num"><input name="c${c.clienteId}" inputmode="decimal" class="corto" value="${d.imp.riconoscimento.clienti[`c${c.clienteId}`] ?? ''}" placeholder="${d.imp.riconoscimento.predefinita}"> %</td>
-              <td class="num">${euro(c.riconosciuto)}</td></tr>`)}</tbody>
-            <tfoot><tr><th>Totale</th><th></th><th></th><th></th><th class="num">${euro(rp.totaleClienti.valore)}</th><th></th><th class="num">${euro(rp.totaleClienti.riconosciuto)}</th></tr></tfoot>
+              <td class="num">${euro(c.riconosciuto)}</td></tr>`)}
+              ${rp.daChiarire.length ? html`<tr class="evidenza"><td><a href="${qs({ di_senza: 'da_chiarire', di_con: 'da_chiarire' })}#elenco-senza">Da chiarire</a></td>
+                <td class="num">${rp.daChiarire.reduce((s, x) => s + x.codici, 0)}</td><td></td><td></td><td></td><td class="num">${num(rp.daChiarire.reduce((s, x) => s + x.pezzi, 0), 0)}</td>
+                <td class="num">${euro(rp.daChiarire.reduce((s, x) => s + x.valore, 0))}</td><td></td><td></td></tr>` : ''}</tbody>
+            <tfoot><tr><th>Totale (codici diversi)</th><th class="num">${totCodici}</th><th class="num">${totCodici - totSenza}</th><th class="num">${totSenza}</th>
+              <th class="num">${perc(percentualeConPrezzo(totCodici, totSenza))}</th><th class="num">${num(totPezzi, 0)}</th>
+              <th class="num">${euro(rp.casteltech.valore + rp.totaleClienti.valore + rp.daChiarire.reduce((s, x) => s + x.valore, 0))}</th><th></th>
+              <th class="num">${euro(rp.casteltech.valore + rp.totaleClienti.riconosciuto)}</th></tr></tfoot>
           </table>
           <label>% predefinita per tutti i clienti <input name="predefinita" inputmode="decimal" class="corto" value="${d.imp.riconoscimento.predefinita}"> %</label>
           <button class="primario">Salva le %</button>
@@ -126,36 +187,7 @@ export function rotteArmadi() {
         </form>
       </details>
 
-      <section>
-        <h2>Codici negli armadi</h2>
-        <div class="filtri-riga">
-          <a href="${qs({ di: '' })}" class="${di ? '' : 'attivo'}">Tutti</a> ·
-          <a href="${qs({ di: 'casteltech' })}" class="${di === 'casteltech' ? 'attivo' : ''}">Casteltech</a> ·
-          <a href="${qs({ di: 'da_chiarire' })}" class="${di === 'da_chiarire' ? 'attivo' : ''}">Da chiarire</a> ·
-          ${req.query.prezzo === 'senza' ? html`<a href="${qs({ prezzo: '' })}">con e senza prezzo</a>` : html`<a href="${qs({ prezzo: 'senza' })}">solo senza prezzo</a>`}
-          ${di.startsWith('c') && di !== 'casteltech' ? html` · cliente: <b>${nomeCliente(d, Number(di.slice(1)))}</b>` : ''}
-        </div>
-        <form class="ricerca-veloce" method="get">
-          ${di ? html`<input type="hidden" name="di" value="${di}">` : ''}${req.query.prezzo ? html`<input type="hidden" name="prezzo" value="${String(req.query.prezzo)}">` : ''}
-          <input type="search" name="q" value="${String(req.query.q ?? '')}" placeholder="Cerca codice, descrizione, P/N, produttore… e premi Invio" autocomplete="off">
-        </form>
-        <p>${filtrate.length} codici · valore ${euro(filtrate.reduce((s, x) => s + valoreRiga(x.quote), 0))}
-          · <a class="pulsante" href="${BASE}/elenco.xlsx?${new URLSearchParams(req.query as Record<string, string>)}">Excel</a></p>
-        <table>
-          <thead><tr><th>Codice</th><th>Descrizione</th><th>P/N</th><th>Di chi</th><th class="num">Pezzi</th><th class="num">Bobine</th><th class="num">€ a pezzo</th><th>Prezzo da</th><th class="num">Valore</th></tr></thead>
-          <tbody>${righe.map(({ a, quote }) => html`<tr>
-            <td><a href="${BASE}/codice/${encodeURIComponent(a.codice)}">${a.codice}</a></td>
-            <td>${a.descrizione ?? ''}${a.descrizione_fonte && a.descrizione_fonte !== 'armadi' ? html` <small class="nota">(${a.descrizione_fonte})</small>` : ''}</td>
-            <td>${a.pn ?? ''}</td>
-            <td>${quote.map((x, i) => html`${i ? html`<br>` : ''}${etichetta(d, x)}${quote.length > 1 ? html` <small>${num(x.quantita, 0)}</small>` : ''}`)}</td>
-            <td class="num" data-valore="${quote.reduce((s, x) => s + x.quantita, 0)}">${num(quote.reduce((s, x) => s + x.quantita, 0), 0)}</td>
-            <td class="num">${a.bobine || ''}</td>
-            <td class="num" data-valore="${a.prezzo ?? ''}">${a.prezzo != null ? euroUnitario(a.prezzo) : html`<span class="avviso-testo">manca</span>`}</td>
-            <td><small>${nomeFonte(a.prezzo_fonte)}${a.prezzo_data ? ` ${a.prezzo_data}` : ''}</small></td>
-            <td class="num" data-valore="${valoreRiga(quote)}">${euro(valoreRiga(quote))}</td></tr>`)}</tbody>
-        </table>
-        ${barra}
-      </section>
+      ${SEZIONI.map(z => sezioneElenco(z.chiave, z.titolo))}
 
       <section class="riquadro">
         <h2>Prezzi</h2>
@@ -172,14 +204,16 @@ export function rotteArmadi() {
 
   r.get('/stoccaggio/elenco.xlsx', async (req, res) => {
     const d = await datiArmadi();
-    const righe = filtra(d, req.query as Record<string, unknown>).flatMap(({ a, quote }) => quote.map(x => {
+    const q = req.query as Record<string, unknown>;
+    const prezzo = q.prezzo === 'senza' || q.prezzo === 'con' ? q.prezzo : '';
+    const righe = filtra(d, { di: String(q.di ?? ''), testo: String(q.q ?? '').trim(), prezzo }).flatMap(({ a, quote }) => quote.map(x => {
       const perc = x.proprietario.tipo === 'cliente' ? riconoscimentoDi(d.imp.riconoscimento, x.proprietario.clienteId!) : null;
       return { codice: a.codice, descrizione: a.descrizione, pn: a.pn, produttore: a.produttore, di: etichetta(d, x), sigla: x.proprietario.sigla, pezzi: x.quantita,
         prezzo: a.prezzo, fonte: nomeFonte(a.prezzo_fonte), nota: a.prezzo_nota, valore: x.valore, perc, riconosciuto: perc != null ? x.valore * perc / 100 : x.proprietario.tipo === 'casteltech' ? x.valore : null };
     }));
     inviaExcel(res, nomeExcel('stoccaggio-componenti'), await excelSemplice('Armadi', [
       { header: 'Codice', key: 'codice', width: 30 }, { header: 'Descrizione', key: 'descrizione', width: 50 }, { header: 'P/N', key: 'pn', width: 24 },
-      { header: 'Produttore', key: 'produttore', width: 16 }, { header: 'Di chi', key: 'di', width: 30 }, { header: 'Sigla', key: 'sigla', width: 14 },
+      { header: 'Produttore', key: 'produttore', width: 16 }, { header: 'Proprietario', key: 'di', width: 30 }, { header: 'Sigla', key: 'sigla', width: 14 },
       { header: 'Pezzi', key: 'pezzi', formato: 'intero' }, { header: '€ a pezzo', key: 'prezzo', formato: 'numero' }, { header: 'Prezzo da', key: 'fonte', width: 18 },
       { header: 'Nota prezzo', key: 'nota', width: 40 }, { header: 'Valore', key: 'valore', formato: 'euro' }, { header: '% riconoscimento', key: 'perc', formato: 'numero' },
       { header: 'Valore contato', key: 'riconosciuto', formato: 'euro' },
