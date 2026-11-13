@@ -43,3 +43,10 @@ export function testoSegnalazioniVecchie(righe: unknown): string {
   const uniche = r.filter(x => !viste.has(chiave(x)) && viste.add(chiave(x)));
   return uniche.length ? `Dalle schede di produzione vecchie: ${uniche.join(' · ')}`.slice(0, MAX_NOTE) : '';
 }
+
+/** Prodotto da aggiungere in anagrafica dal caricamento delle schede vecchie: codice e descrizione in MAIUSCOLO, cliente obbligatorio. */
+export function prodottoNuovoPulito(x: { cliente_id: unknown; codice: unknown; descrizione: unknown }): { cliente_id: number; codice: string; descrizione: string } | null {
+  const cliente_id = Number(x.cliente_id);
+  const codice = String(x.codice ?? '').trim().toUpperCase(), descrizione = String(x.descrizione ?? '').trim().toUpperCase();
+  return Number.isInteger(cliente_id) && cliente_id > 0 && codice && descrizione ? { cliente_id, codice, descrizione } : null;
+}

@@ -425,7 +425,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    salvando la commessa il prodotto si aggiorna (`aggiornaDaCommessa`). Caricamento da Claude POST `/api/claude/programmi` {elenco} (solo con `?conferma=1`: riempie prodotto e commesse aperte, mai sovrascrive).
    Primo caricamento 13/11/2026 dai nomi delle macchine (AOI da immagini, FOX da essemtec.sql, iPulse.xlsx, HTGD.xlsx): Project Files → programmi-macchine.
    Note di montaggio sul prodotto (Adriano 13/11/2026, "riportare le note delle vecchie schede di produzione"; migrazione 102 `prodotti.note_montaggio`, regole in `engine/note-prodotto.ts`,
-   `note-prodotto-servizio.ts`, test in `tests/note-prodotto.test.ts`): riquadro "Note di montaggio" nella stessa pagina "Programmi" (tasto con "N"); la commessa nuova le prende se la scheda tecnica
+   `note-prodotto-servizio.ts`, test in `tests/note-prodotto.test.ts`; voce con `nuovo: {cliente_id, codice, descrizione}` = prodotto cercato per cliente + codice, se manca aggiunto in MAIUSCOLO, `prodottoNuovoPulito`): riquadro "Note di montaggio" nella stessa pagina "Programmi" (tasto con "N"); la commessa nuova le prende se la scheda tecnica
    non ne ha (`noteDaProporre` in `schedaTecnicaDaProporre`), salvando una commessa con note scritte tornano sul prodotto. Segnalazioni delle schede vecchie = UNA riga per prodotto in `segnalazioni`
    (categoria 'schede vecchie', senza commessa, `testoSegnalazioniVecchie`). Caricamento da Claude POST `/api/claude/note-schede` {elenco:[{prodotto_id, note, segnalazioni}]} (con `?conferma=1`:
    unisce le note senza doppioni, sostituisce la riga 'schede vecchie', riempie le note VUOTE delle commesse aperte). Primo caricamento dalle Word di 4_PRODUZIONE\01_SCHEDE DI PRODUZIONE\OLD:

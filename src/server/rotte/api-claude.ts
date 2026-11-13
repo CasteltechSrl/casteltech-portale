@@ -236,8 +236,12 @@ export function rotteApiClaude() {
   // note di montaggio e segnalazioni delle vecchie schede di produzione (Adriano 13/11/2026): [{prodotto_id, note:[], segnalazioni:[]}]
   r.post('/note-schede', async (req, res) => {
     const elenco = Array.isArray(req.body?.elenco) ? req.body.elenco : null;
-    if (!elenco) return res.status(400).json({ errore: 'Serve elenco: [{prodotto_id, note, segnalazioni}].' });
-    res.json(await caricaNoteSchede(elenco.map((x: any) => ({ prodotto_id: Number(x?.prodotto_id), note: x?.note, segnalazioni: x?.segnalazioni })), req.query.conferma === '1'));
+    if (!elenco) return res.status(400).json({ errore: 'Serve elenco: [{prodotto_id | nuovo: {cliente_id, codice, descrizione}, note, segnalazioni}].' });
+    res.json(await caricaNoteSchede(elenco.map((x: any) => ({
+      prodotto_id: Number(x?.prodotto_id),
+      nuovo: x?.nuovo ? { cliente_id: Number(x.nuovo.cliente_id), codice: String(x.nuovo.codice ?? ''), descrizione: String(x.nuovo.descrizione ?? '') } : undefined,
+      note: x?.note, segnalazioni: x?.segnalazioni,
+    })), req.query.conferma === '1'));
   });
   r.post('/documentazione', async (req, res) => {
     const b = req.body ?? {};
