@@ -17,8 +17,10 @@ export interface Utente { id: number; nome: string; ruolo: Ruolo }
  */
 export const MENU_GRUPPI: { chiave: string; nome: string; voci: [string, string][] }[] = [
   { chiave: 'anagrafiche', nome: 'Anagrafiche', voci: [['Clienti', '/anagrafiche/clienti'], ['Fornitori', '/anagrafiche/fornitori'], ['Prodotti', '/anagrafiche/prodotti'], ['Componenti', '/anagrafiche/componenti'], ['Componenti clienti', '/anagrafiche/componenti-clienti'], ['Materiali di consumo', '/anagrafiche/materiali']] },
+  // Adriano 13/11/2026: quattro voci in Arrivati = Prodotti (ex Documenti commesse), Cliente, Fornitore, Schede di produzione (sezioni di Da acquisire)
   // Documenti (Adriano 12/11/2026): i documenti che ARRIVANO (dai clienti, da e-mail e PDF), prima sotto Commerciale; indirizzi invariati
-  { chiave: 'documenti', nome: 'Documenti', voci: [['Arrivati', ''], ['Documenti commesse', '/preventivi/documenti'], ['Documenti da e-mail e PDF', '/ordini/acquisire'],
+  { chiave: 'documenti', nome: 'Documenti', voci: [['Arrivati', ''], ['Prodotti', '/preventivi/documenti'], ['Cliente', '/ordini/acquisire?sezione=clienti'],
+    ['Fornitore', '/ordini/acquisire?sezione=fornitori'], ['Schede di produzione', '/ordini/acquisire?sezione=produzione'],
     // Adriano 12/11/2026: nella stessa tendina anche i documenti che produciamo noi (restano anche nei loro gruppi)
     ['Emessi da noi', ''], ['Preventivi', '/preventivi'], ['Conferme d\'ordine', '/ordini/conferme'], ['DDT', '/amministrazione/documenti?tipo=ddt'],
     ['Fatture', '/amministrazione/documenti?tipo=fattura'], ['Note di credito', '/amministrazione/documenti?tipo=nota_credito'],

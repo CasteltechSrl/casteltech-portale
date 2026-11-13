@@ -415,12 +415,13 @@ export function codiceProposto(codiceLetto: string | null | undefined, descrizio
  * dai clienti e dai fornitori (autofatture e DDT)"). Calcolata in lettura dal tipo riconosciuto: niente colonne nuove.
  * DDT ricevuto: dal mittente letto/scelto (cliente = materiale per un suo ordine); senza mittente va tra i fornitori.
  * DDT di Casteltech: con i clienti (servono a evadere i loro ordini).
+ * Adriano 13/11/2026 (sera): ogni sezione è una voce del menu Documenti → Arrivati (`/ordini/acquisire?sezione=`), nell'ordine Cliente, Fornitore, Schede di produzione.
  */
 export type SezioneAcquisizione = 'produzione' | 'clienti' | 'fornitori' | 'altri';
 export const SEZIONI_ACQUISIZIONE: { chiave: SezioneAcquisizione; titolo: string; nota: string }[] = [
+  { chiave: 'clienti', titolo: 'Cliente', nota: 'Ordini (PDF, foto, email), DDT di materiale mandato dal cliente e DDT di Casteltech da abbinare agli ordini.' },
+  { chiave: 'fornitori', titolo: 'Fornitore', nota: 'Fatture dei fornitori esteri (diventano autofatture) e DDT della merce ordinata.' },
   { chiave: 'produzione', titolo: 'Schede di produzione', nota: 'Scansioni o foto delle schede compilate: i fogli tempi vanno nel rientro della commessa.' },
-  { chiave: 'clienti', titolo: 'Dai clienti', nota: 'Ordini (PDF, foto, email), DDT di materiale mandato dal cliente e DDT di Casteltech da abbinare agli ordini.' },
-  { chiave: 'fornitori', titolo: 'Dai fornitori', nota: 'Fatture dei fornitori esteri (diventano autofatture) e DDT della merce ordinata.' },
   { chiave: 'altri', titolo: 'Altri file', nota: 'Export di Fatture in Cloud e file non riconosciuti.' },
 ];
 export function sezioneAcquisizione(tipo: string, mittenteTipo?: string | null): SezioneAcquisizione {

@@ -219,6 +219,9 @@ export function rotteAcquisizioni() {
     const daFare = elenco.filter(a => a.stato === 'da_confermare').length;
     // sezioni per provenienza (Adriano 13/11/2026): schede di produzione, clienti, fornitori, altri
     const perSezione = Object.fromEntries(SEZIONI_ACQUISIZIONE.map(z => [z.chiave, elenco.filter(a => sezioneAcquisizione(a.tipo, a.mittente_tipo) === z.chiave)])) as Record<string, any[]>;
+    // una sezione sola dal menu Documenti → Arrivati (Adriano 13/11/2026): ?sezione=clienti|fornitori|produzione|altri
+    const scelta = SEZIONI_ACQUISIZIONE.find(z => z.chiave === req.query.sezione);
+    const visibili = SEZIONI_ACQUISIZIONE.filter(z => scelta ? z === scelta : perSezione[z.chiave].length);
     const daConfermare = (k: string) => perSezione[k].filter(a => a.stato === 'da_confermare').length;
     const clientiElenco = await q(`SELECT id, ragione_sociale FROM clienti ORDER BY ragione_sociale`);
     // si scartano solo i file non ancora diventati ordine, DDT, fattura o rientro (quelli confermati non hanno la spunta)
@@ -227,7 +230,8 @@ export function rotteAcquisizioni() {
       pulsanti: [{ azione: 'scarta', testo: 'Scarta', serve: '1+', pericolo: true,
         chiedi: 'Scartare {n} file? Non diventano ordini: il contenuto si cancella e resta solo la riga, così non si rilegge dal Drive.' }],
     });
-    res.send(pagina(req.session.utente, 'Ordini da e-mail e PDF', 'acquisire', html`
+    res.send(pagina(req.session.utente, scelta ? `Documenti arrivati: ${scelta.titolo}` : 'Ordini da e-mail e PDF', 'acquisire', html`
+      <nav class="tasti-anagrafiche"><a href="/ordini/acquisire" class="${scelta ? '' : 'attiva'}">Tutti <span class="conta">${elenco.length}</span></a>${SEZIONI_ACQUISIZIONE.map(z => html`<a href="/ordini/acquisire?sezione=${z.chiave}" class="${scelta === z ? 'attiva' : ''}">${z.titolo} <span class="conta">${perSezione[z.chiave].length}</span></a>`)}</nav>
       <section class="blocco">
         <h2>Cartella Google Drive</h2>
         ${driveConfigurato() ? html`<p class="nota">I file messi nella cartella condivisa con <code>${emailAccountDrive()}</code> si acquisiscono da soli
@@ -235,7 +239,7 @@ export function rotteAcquisizioni() {
           <form method="post" action="/ordini/acquisire/drive"><button>Controlla adesso la cartella</button></form>`
         : html`<p class="nota">Non collegata: manca la chiave dell'account di servizio (GOOGLE_SERVICE_ACCOUNT su Render). Intanto i file si caricano qui sotto.</p>`}
       </section>
-      <section class="blocco" id="ordine-a-voce">
+      ${scelta && scelta.chiave !== 'clienti' ? '' : html`<section class="blocco" id="ordine-a-voce">
         <h2>Ordine a voce o per telefono</h2>
         <p class="nota">Il cliente ha chiamato o ha detto l'ordine a voce, senza documento: scegli il cliente e premi «Scrivi l'ordine».
           Si apre la stessa pagina degli ordini letti dall'IA, con le righe vuote: scegli i prodotti dal menu (codice, descrizione e prezzo arrivano dall'anagrafica),
@@ -245,7 +249,7 @@ export function rotteAcquisizioni() {
             ${clientiElenco.map(c => html`<option value="${c.id}">${c.ragione_sociale}</option>`)}</select></label>
           <label>Ricevuto <select name="come"><option value="telefono">per telefono</option><option value="voce">a voce</option></select></label>
           <button class="primario">Scrivi l'ordine</button></form>
-      </section>
+      </section>`}
       <section class="blocco">
         <h2>Carica ordini</h2>
         <p class="nota">PDF o foto dell'ordine del cliente, email salvata (.eml, con il testo e gli allegati), testo (.txt),
@@ -259,12 +263,11 @@ export function rotteAcquisizioni() {
         <button id="avvia-acquisizioni" class="primario">Carica e leggi</button>
         <output id="esito-acquisizioni" class="nota"></output>
       </section>
-      ${daFare ? html`<p><b>${daFare} file da confermare.</b></p>` : ''}
-      ${elenco.length ? html`<nav class="tasti-anagrafiche">${SEZIONI_ACQUISIZIONE.filter(z => perSezione[z.chiave].length).map(z => html`<a href="#sez-${z.chiave}">${z.titolo} <span class="conta">${perSezione[z.chiave].length}</span></a>`)}</nav>
-        ${modulo.apri}${SEZIONI_ACQUISIZIONE.filter(z => perSezione[z.chiave].length).map(z => html`<section class="blocco" id="sez-${z.chiave}">
+      ${daFare && !scelta ? html`<p><b>${daFare} file da confermare.</b></p>` : ''}
+      ${visibili.length ? html`${modulo.apri}${visibili.map(z => html`<section class="blocco" id="sez-${z.chiave}">
         <h2>${z.titolo} <small class="nota">${perSezione[z.chiave].length} file${daConfermare(z.chiave) ? html` · <b>${daConfermare(z.chiave)} da confermare</b>` : ''}</small></h2>
         <p class="nota">${z.nota}</p>
-        <div class="tabella-scorre"><table class="elenco">
+        ${perSezione[z.chiave].length ? html`<div class="tabella-scorre"><table class="elenco">
         <thead><tr>${casellaTutti()}<th>Arrivato</th><th>File</th><th>Tipo</th><th>Da</th><th>${z.chiave === 'produzione' ? 'Commesse lette' : z.chiave === 'fornitori' ? 'Fornitore letto' : z.chiave === 'clienti' ? 'Cliente letto' : 'Cliente / fornitore letto'}</th><th class="n">Righe</th><th>Stato</th></tr></thead>
         <tbody>${perSezione[z.chiave].map(a => html`<tr class="cliccabile" data-href="/ordini/acquisire/${a.id}">
           ${a.stato === 'confermato' || a.stato === 'scartato' ? raw('<td class="selezione"></td>') : casella(a.id, a.nome_file)}
@@ -273,7 +276,7 @@ export function rotteAcquisizioni() {
           <td class="taglia">${a.cliente}${a.e_ordine === false ? html` <span class="esito verifica">non sembra un ordine</span>` : ''}</td>
           <td class="n">${a.righe || ''}</td>
           <td><span class="stato acq-${a.stato}">${(a.tipo === 'ddt' || a.tipo === 'ddt_ricevuto') && a.stato === 'confermato' ? 'DDT registrato' : a.tipo === 'fattura_estera' && a.stato === 'confermato' ? 'autofattura preparata' : a.tipo === 'scheda_produzione' && a.stato === 'confermato' ? 'tempi nel rientro' : STATI[a.stato]}</span>${a.numero ? html` <a href="/ordini/${a.ordine_id}">${a.numero}/${a.anno}</a>` : ''}
-            ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div></section>`)}${modulo.chiudi}`
+            ${a.errore ? html`<br><small class="nota">${a.errore}</small>` : ''}</td></tr>`)}</tbody></table></div>` : html`<p class="vuoto">Nessun file arrivato negli ultimi 60 giorni.</p>`}</section>`)}${modulo.chiudi}`
         : html`<p class="vuoto">Nessun file arrivato.</p>`}`, { script: ['acquisizioni.js', 'elenco.js'], avviso: req.query.drive ? String(req.query.drive) : req.query.errore ? String(req.query.errore) : req.query.msg ? String(req.query.msg) : undefined }));
   });
 
