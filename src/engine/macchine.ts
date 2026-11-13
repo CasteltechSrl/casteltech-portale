@@ -17,7 +17,7 @@ export interface PaginaMacchina {
 export const PAGINE_MACCHINE: PaginaMacchina[] = [
   {
     chiave: 'stoccaggio', titolo: 'Stoccaggio componenti',
-    cosa: 'Gli armadi dove si stoccano bobine, vassoi e materiale per la produzione.',
+    cosa: 'Gli armadi dove si stoccano bobine, vassoi e materiale per la produzione. Dal 13/11/2026 la pagina si riempie con i file degli armadi (rotte/armadi.ts).',
     mostrera: [
       'Dove si trova ogni componente: armadio e posizione, con il codice di produzione e il codice gestionale.',
       'Quante bobine e quanti pezzi ci sono di ogni codice, e il materiale dei clienti in conto lavoro tenuto a parte.',

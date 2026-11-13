@@ -724,9 +724,22 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     parole: 'armadi armadio stoccaggio materiale magazzino bobine vassoi pick and place p&p pnp montaggio smd essemtec fox ipulse aoi controllo ottico difetti macchine api collegamento',
     testo: [
       'Dal 12/11/2026 nel menu Produzione ci sono tre pagine nuove: Stoccaggio componenti (gli armadi del materiale), Pick & Place (le macchine di montaggio SMD) e AOI (il controllo ottico).',
-      'Per ora sono vuote: si riempiranno quando le macchine saranno collegate al portale con le loro API. Ogni pagina spiega cosa mostrerà (posizione e quantità dei componenti negli armadi; stato, tempi e scarti delle pick and place; schede controllate e difetti dell\'AOI).',
+      'Pick & Place e AOI per ora sono vuote: si riempiranno quando le macchine saranno collegate al portale con le loro API. Ogni pagina spiega cosa mostrerà (stato, tempi e scarti delle pick and place; schede controllate e difetti dell\'AOI). Stoccaggio componenti si riempie già con i file degli armadi (vedi l\'argomento Stoccaggio componenti).',
     ],
     pagine: [['/produzione/stoccaggio', 'Produzione → Stoccaggio componenti'], ['/produzione/pick-place', 'Produzione → Pick & Place'], ['/produzione/aoi', 'Produzione → AOI']],
+  },
+  {
+    id: 'stoccaggio-componenti', area: 'commesse', titolo: 'Stoccaggio componenti: cosa c\'è negli armadi e il suo valore (nostro e dei clienti)',
+    parole: 'stoccaggio componenti armadi armadio magazzino inventario giacenze bobine rolle reel valore valorizzazione valutazione materiale dei clienti conto lavoro riconoscimento percentuale sigle fornitore di chi è itemlist reel archive prezzi online distributori',
+    testo: [
+      'Dal 13/11/2026 Produzione → Stoccaggio componenti mostra cosa c\'è negli armadi, in attesa delle API: si caricano i due file esportati dal programma degli armadi, ItemList_armadi.txt (i codici con i pezzi) e reel_archive.csv (le bobine, ognuna con il suo codice univoco). Contano solo i codici con pezzi e le bobine non congelate. Ogni caricamento sostituisce quello prima; i prezzi scritti a mano e quelli trovati online restano.',
+      'Di chi è: ogni bobina ha la sua sigla (colonna Supplier), il codice ha la sua (colonna "fornitore"). Fa fede la bobina: se c\'è il nome del cliente è del cliente, anche "CAST/LPS" (comprato e già fatturato da noi a LPS); solo "CASTELTECH" è nostro. INFN, CERN, LOSI, SELTA sono avanzi di commesse vecchie e contano come Casteltech. Nel riquadro "Di chi sono" si sceglie a quale cliente (o Casteltech) corrisponde ogni sigla e quale vale se codice e bobina dicono cose diverse; le sigle senza cliente restano "da chiarire" in giallo.',
+      'Descrizioni: se negli armadi manca, il portale la completa dai componenti dei clienti (Selea, Idea), dall\'archivio componenti, dal codice Casteltech (RS-0402-…), dal codice Selea (RST…, CSC…, CSM…) o dal P/N scritto sulla bobina.',
+      'Valore = pezzi × prezzo. Il prezzo è quello scritto a mano nella pagina del codice; altrimenti l\'ultimo acquisto (fatture dei fornitori, autofatture, ordini a fornitore, archivio componenti); altrimenti il prezzo dei distributori online per i pezzi che abbiamo; altrimenti il prezzo scritto negli armadi; per resistenze e condensatori senza P/N una stima (mediana degli acquisti dello stesso tipo e case). "Cerca i prezzi online" chiede ai distributori 300 codici per volta (consuma il limite giornaliero).',
+      'Componenti dei clienti: il valore è a parte, cliente per cliente, con la % di riconoscimento (la parte del valore che si conta): una % predefinita per tutti e una per cliente se serve. Excel con lo stesso filtro.',
+    ],
+    passi: ['Esporta ItemList e reel_archive dal programma degli armadi.', 'Produzione → Stoccaggio componenti → "Carica i file degli armadi": scegli i due file, controlla il riepilogo, conferma.', 'Assegna le sigle da chiarire e scrivi le % di riconoscimento.', 'Apri i codici senza prezzo: scrivi il prezzo a mano o premi "Cerca i prezzi online".'],
+    pagine: [['/produzione/stoccaggio', 'Produzione → Stoccaggio componenti']],
   },
   {
     id: 'flusso-produzione', area: 'commesse', titolo: 'Il flusso di produzione nel cruscotto: da acquistare, da preparare, in produzione, da spedire, spedite nel mese',

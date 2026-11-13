@@ -16,6 +16,7 @@ test('Produzione: Stoccaggio componenti, Pick & Place, AOI nel menu (Adriano 12/
 });
 
 test('guida: armadi e AOI portano alle pagine delle macchine', () => {
-  assert.equal(cercaGuida('armadi stoccaggio')[0]?.argomento.id, 'macchine-produzione');
+  assert.equal(cercaGuida('armadi stoccaggio')[0]?.argomento.id, 'stoccaggio-componenti'); // dal 13/11/2026 la pagina ha i dati degli armadi
+  assert.equal(cercaGuida('pick and place macchine')[0]?.argomento.id, 'macchine-produzione');
   assert.equal(cercaGuida('aoi difetti')[0]?.argomento.id, 'macchine-produzione');
 });

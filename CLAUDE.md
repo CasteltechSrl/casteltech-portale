@@ -392,6 +392,13 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    `preventivoDellaCommessa(c)` (catalogo di oggi, nessun previsto). Elenco: colonna "Da completare" (`datiDaCompletare`: referente, ordine cliente, consegna, programmi, fasi);
    scheda tecnica con `noteCliente` stampate nel riquadro delle note di montaggio; previsto 0 = cella vuota nella stampa.
    Riquadro "Materiale di consumo" sotto "Programmi e lamine" (Adriano 13/11/2026, `righeConsumoCommessa` in `engine/consumi.ts`): previsto a scheda e sul lotto dal preventivo, usato dal rientro (`commesse.consumi`); senza preventivo previsto vuoto.
+3-quater. ✅ Stoccaggio componenti = contenuto degli armadi (Adriano 13/11/2026; migrazione 098 `armadi_articoli` + `armadi_bobine`, regole in `engine/armadi.ts`, letture in
+   `armadi-servizio.ts`, pagina `rotte/armadi.ts` = `/produzione/stoccaggio`, test in `tests/armadi.test.ts`): in attesa delle API si caricano ItemList (anagrafica, solo quantità > 0) e
+   reel_archive.csv (bobine attive, non congelate) dal pulsante della pagina o POST `/api/claude/armadi?conferma=1` (i due testi uniti da `SEPARATORE_FILE`); ogni caricamento sostituisce tutto,
+   restano prezzi a mano e online. Proprietario: fa fede la sigla della BOBINA; "CAST/LPS" = del cliente comprato e già fatturato da noi; solo CASTELTECH è nostro; INFN, CERN, LOSI, SELTA = Casteltech
+   (avanzi); SANDRA = Arilan, REBIX = NIT, SoloKeys = Inc.; sigle in `SIGLE_CLIENTI`, scelte dell'ufficio in impostazioni 'armadi'. Descrizioni completate (archivio, componenti clienti, codice
+   Casteltech o Selea, P/N). Prezzo: a mano > ultimo acquisto (fatture fornitori, autofatture, ordini a fornitore, archivio) > online (`cercaPn`, in background) > armadio > stima del gruppo.
+   Valore dei clienti per cliente con "% di riconoscimento" (predefinita 100 %).
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei
