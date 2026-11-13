@@ -1189,3 +1189,15 @@ table.elenco tr.spento td { opacity: .55; }
 .aci-risultati { list-style: none; margin: .4rem 0 0; padding: 0; max-height: 18rem; overflow-y: auto; }
 .aci-risultati li { padding: .15rem 0; border-bottom: 1px solid var(--bordo); }
 .aci-risultati button.link { text-align: left; }
+/* risposte alle osservazioni dei documenti del cliente (Adriano 13/11/2026) */
+ul.segnalazioni li.rimandata { border-color: #3a6ea5; background: #f1f5fb; }
+ul.segnalazioni li.rimandata .livello-segn { color: #3a6ea5; }
+ul.segnalazioni ul.risposte { list-style: none; margin: .35rem 0 .2rem; padding: 0 0 0 .6rem; border-left: 2px solid var(--bordo); }
+ul.segnalazioni ul.risposte li { border: 0; background: none; padding: .15rem 0; margin: 0; }
+ul.segnalazioni .etichetta.prezzo { background: #fff0c2; color: #7a5a00; border-radius: 4px; padding: 0 .3rem; font-size: .75rem; }
+ul.segnalazioni .azioni-osservazione { margin-top: .2rem; }
+ul.segnalazioni details.rispondi { display: inline-block; margin-left: .5rem; }
+ul.segnalazioni details.rispondi[open] { display: block; margin: .3rem 0 0; }
+ul.segnalazioni details.rispondi summary { cursor: pointer; color: var(--accento); font-size: .85rem; }
+ul.segnalazioni fieldset.esito-osservazione { border: 0; padding: 0; margin: .3rem 0; }
+.riquadro-osservazioni { margin: .8rem 0; }

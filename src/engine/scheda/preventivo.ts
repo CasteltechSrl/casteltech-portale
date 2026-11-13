@@ -7,6 +7,7 @@
  */
 import { CONSUMI, type AnalisiScheda } from './analisi.js';
 import { campiStagno } from './piedini.js';
+import { chiusaPerPreventivo } from './accettate.js';
 
 export interface VoceCompilata { codice: string; valore: number; perche: string }
 
@@ -62,7 +63,7 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
       const x = campiStagno(punti, 'onda');
       metti('stagno', x.stagno, `${punti} ${da}: i grammi a reoforo (Impostazioni) e le scorie li aggiunge il calcolo`);
       metti('stagnoPerSaldature', 0, 'stagno contato a reofori');
-      if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info' && !s.accettata)) daControllare.push('segnalazioni sulla saldatura a onda');
+      if (a.segnalazioni.some(s => /onda/i.test(s.testo) && s.livello !== 'info' && !chiusaPerPreventivo(s))) daControllare.push('segnalazioni sulla saldatura a onda');
     } else if (l.saldaturaTht === 'mano') {
       const x = campiStagno(punti, 'mano');
       metti('qntPuntiSaldaturaMano', punti, `${punti} ${da}`);
@@ -70,7 +71,7 @@ export function parametriDaAnalisi(a: AnalisiScheda): { parametri: Record<string
     }
   }
   metti('nItemMateriale', c.item, `${c.item - 1} codici montati + PCB`);
-  const errori = a.segnalazioni.filter(s => s.livello === 'errore' && !s.accettata).length;
+  const errori = a.segnalazioni.filter(s => s.livello === 'errore' && !chiusaPerPreventivo(s)).length;
   if (errori) daControllare.unshift(`${errori} segnalazioni da chiarire con il cliente (vedi i documenti)`);
   return { parametri: Object.fromEntries(voci.map(v => [v.codice, v.valore])), voci, daControllare };
 }

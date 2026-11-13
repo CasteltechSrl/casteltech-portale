@@ -47,7 +47,12 @@ export function stimaPastaDaGerber(pasta: Partial<Record<Lato, Piazzola[]>>, spe
 }
 
 export type Livello = 'errore' | 'avviso' | 'info';
-export interface Segnalazione { livello: Livello; testo: string; refs?: string[]; accettata?: { da: string; il: string } } // accettata: "Va bene" dell'ufficio (accettate.ts)
+export interface Segnalazione {
+  livello: Livello; testo: string; refs?: string[];
+  accettata?: { da: string; il: string }; // "Va bene" / risolta dall'ufficio (accettate.ts)
+  rimandata?: { da: string; il: string }; // non tocca il prezzo: da vedere prima della produzione (accettate.ts)
+  esito?: import('./accettate.js').EsitoOsservazione; risposte?: import('./accettate.js').RispostaOsservazione[];
+}
 
 export interface RigaBomScheda {
   riga: number;              // numero di riga nel file (da 1)
