@@ -310,7 +310,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    Preventivi → Da documenti del cliente: un caricamento per scheda (file, zip o cartella; cartelle OLD/VECCHI/ARCHIVIO/BACKUP ignorate).
    Legge BOM, pick and place (PADS, Allegro, KiCad, Altium, senza intestazione con lato dal nome), Gerber RS-274X (anche incrementali/G74,
    macro) in SVG, forature Excellon (anche Allegro con "Holesize"), GenCAD. Incrocio: SMD TOP/BOT, THT (CAD > pick and place > BOM > impronta),
-   feeder, item, refori (≥ 0,7 mm metallizzati, o piedini THT del CAD), fiducial, misure; saldatura THT: SMD su due lati → a mano, altrimenti
+   feeder, item, refori (≥ 0,7 mm metallizzati, o piedini THT del CAD), fiducial, misure; saldatura THT: SMD su due lati, THT su due lati o SMD sul lato dell'onda → a mano (niente onda selettiva, Adriano 13/11/2026), altrimenti
    onda (casi particolari li decide l'ufficio); consumi in `CONSUMI` (pasta 1,5 g / 450 componenti, onda 0,016 g/foro + 20%, filo 0,125 g/piedino).
    Segnalazioni: valori diversi BOM/pick and place, riferimenti mancanti, montaggio SMD/THT dichiarato sbagliato, lati, sovrapposizioni, DNP.
    Nel database solo i file utili compressi (PDF/3D/immagini restano sul Drive, solo nell'elenco). "Codifica la BOM" → sezione Componenti.
@@ -384,6 +384,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    "Assegna il cliente" nell'elenco.
    BOM JLCPCB/KiCad (DIGIFLY DGFAMv3, Adriano 13/11/2026; `sembraIntestazioneBom` in `engine/scheda/pick-place.ts`, test in `tests/schede-cliente.test.ts`): file con colonna
    Quantità e senza X/Y = BOM, mai pick and place "senza intestazione"; passo KiCad "_P1.27mm" = THT solo se l'impronta non è SMD (SOIC, QFN, LGA, SOT, "-1MP"…).
+   Pasta su un lato senza SMD = nota "non fare la lamina" (info, niente lamina né pasta stimata); fori metallizzati senza componente mai nello stagno.
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

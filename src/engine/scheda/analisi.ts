@@ -1,7 +1,7 @@
 /**
  * Incrocio dei documenti di una scheda (BOM, pick and place, CAD, forature, Gerber) e segnalazioni per il preventivo e la produzione.
  * Regole di Adriano (27/10/2026):
- *  - SMD su tutti e due i lati → THT saldati a mano; altrimenti a onda (i casi particolari per ora li decide l'ufficio).
+ *  - SMD su tutti e due i lati, THT su due lati o SMD sul lato dell'onda → THT saldati a mano (niente onda selettiva); altrimenti a onda.
  *  - Stagno: onda 0,02 g a foro (Impostazioni, Adriano 4/11/2026) + 20% di scorie; filo per saldatura a mano 0,125 g a piedino; pasta 1,5 g ogni 400–500 componenti.
  *  - Il codice del componente: quello del cliente se è nella BOM, altrimenti la codifica Casteltech (sezione Componenti).
  * Nessun accesso al database.
@@ -313,6 +313,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
 
   // ── elenco unico dei riferimenti ──
   const tutti = new Set<string>([...bomPerRef.keys(), ...pp.keys(), ...cad.keys()]);
+  const latoNoto = new Set<string>(); // lato letto da pick and place o CAD (non il TOP proposto per i THT)
   const componenti: Componente[] = [];
   for (const ref of [...tutti].sort(ordinaRef)) {
     const b = bomPerRef.get(ref), p = pp.get(ref), c = cad.get(ref);
@@ -337,6 +338,7 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     if (b && !montato && p) note.push('non montato (BOM) ma presente nel pick and place');
     if (soloPp) note.push('non è nella BOM: non contato tra i componenti da montare');
     if (c && p && (c.lato !== p.lato)) note.push(`lato diverso: CAD ${c.lato}, pick and place ${p.lato}`);
+    if (p?.lato || c?.lato) latoNoto.add(ref);
     componenti.push({
       ref, lato: p?.lato ?? c?.lato ?? (tipo === 'THT' ? 'TOP' : null), tipo, tipoDa, montato,
       piediniTht: tipo === 'THT' ? (c?.piediniTht ?? null) : null,
@@ -439,17 +441,19 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
   const latoSmdUnico: Lato | null = latiSmd === 1 ? (smdTop.length ? 'TOP' : 'BOT') : null;
   const latiTht = new Set(tht.map(c => c.lato ?? 'TOP'));
   const latoCorpiTht: Lato | null = latiTht.size === 1 ? [...latiTht][0] : latiTht.size ? 'TOP' : null;
-  if (latiTht.size > 1) S('avviso', 'Ci sono THT su tutti e due i lati: la saldatura va decisa a mano.', tht.filter(c => c.lato === 'BOT').map(c => c.ref));
+  // Casteltech non ha l'onda selettiva (Adriano 13/11/2026, DIGIFLY DGFAMv3): THT su due lati o SMD sul lato che passa sull'onda = THT a mano
+  if (latiTht.size > 1) S('avviso', 'Ci sono THT su tutti e due i lati: niente onda (non abbiamo l\'onda selettiva), THT saldati a mano.', tht.filter(c => c.lato === 'BOT').map(c => c.ref));
   let saldaturaTht: 'onda' | 'mano' | null = null, motivo = '';
   if (!tht.length) motivo = 'Nessun componente THT.';
   else if (latiSmd === 2) { saldaturaTht = 'mano'; motivo = 'SMD su tutti e due i lati: i THT si saldano a mano.'; }
-  else {
+  else if (new Set(tht.filter(c => latoNoto.has(c.ref)).map(c => c.lato)).size > 1) { saldaturaTht = 'mano'; motivo = 'THT su tutti e due i lati: saldati a mano (niente onda selettiva).'; }
+  else if (latoSmdUnico && tht.some(c => latoNoto.has(c.ref)) && tht.filter(c => latoNoto.has(c.ref)).every(c => c.lato !== latoSmdUnico)) {
+    saldaturaTht = 'mano';
+    motivo = 'Gli SMD sono sul lato di saldatura dei THT: niente onda (non abbiamo l\'onda selettiva), THT saldati a mano.';
+    S('info', 'Gli SMD sono sul lato che passerebbe sull\'onda: THT saldati a mano (non abbiamo l\'onda selettiva).', tht.map(c => c.ref));
+  } else {
     saldaturaTht = 'onda';
     motivo = latiSmd === 0 ? 'Solo THT: saldatura a onda.' : 'SMD su un lato solo: THT a onda.';
-    if (latoSmdUnico && latoCorpiTht && latoSmdUnico !== latoCorpiTht) {
-      motivo += ' Attenzione: gli SMD sono sul lato di saldatura dei THT (servono colla o telaio, altrimenti a mano): caso particolare da valutare.';
-      S('avviso', 'Gli SMD sono sul lato che passa sull\'onda: caso particolare da valutare (colla, telaio selettivo o saldatura a mano).');
-    }
   }
   if (latoSmdUnico === 'BOT') S('info', 'Gli SMD sono tutti sul lato che il cliente chiama BOTTOM: per noi è una scheda a lato unico ("solo TOP" nel preventivo).');
 
@@ -460,7 +464,8 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     for (const l of ['TOP', 'BOT'] as Lato[]) {
       const conSmd = l === 'TOP' ? smdTop.length > 0 : smdBot.length > 0;
       if (conSmd && !pasta.has(l)) S('avviso', `Ci sono SMD sul lato ${l} ma il Gerber della pasta (lamina) di quel lato manca.`);
-      if (!conSmd && pasta.has(l) && haPp) S('avviso', `C'è il Gerber della pasta sul lato ${l} ma nessun SMD in quel lato nel pick and place.`);
+      // pasta senza SMD (Adriano 13/11/2026): si ignora, niente lamina di quel lato (la lamina si conta solo sui lati con SMD)
+      if (!conSmd && pasta.has(l) && haPp) S('info', `Gerber della pasta sul lato ${l} senza SMD in quel lato: ignorato, non fare la lamina ${l}.`);
     }
   }
 
@@ -469,7 +474,8 @@ export function analizzaScheda(ing: IngressoAnalisi): AnalisiScheda {
     pastaGrammi: arrot(smd.length * CONSUMI.pastaGrammi / CONSUMI.pastaOgniComponenti, 3),
     stagnoOndaGrammi: saldaturaTht === 'onda' && refori != null ? arrot(refori * CONSUMI.ondaGrammiForo * (1 + CONSUMI.ondaScorie), 3) : 0,
     filoGrammi: saldaturaTht === 'mano' && refori != null ? arrot(refori * CONSUMI.filoGrammiPiedino, 3) : 0,
-    pastaDaGerber: ing.pasta ? stimaPastaDaGerber(ing.pasta) : null,
+    // solo i lati con SMD: la pasta di un lato senza SMD non si stende (niente lamina)
+    pastaDaGerber: ing.pasta ? stimaPastaDaGerber({ ...(smdTop.length && ing.pasta.TOP ? { TOP: ing.pasta.TOP } : {}), ...(smdBot.length && ing.pasta.BOT ? { BOT: ing.pasta.BOT } : {}) }) : null,
   };
 
   // ── note del cliente sulla BOM (es. "MONTARE FUSIBILE T10A 250V") ──

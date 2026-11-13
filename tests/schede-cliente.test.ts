@@ -625,3 +625,19 @@ test('impronte KiCad con il passo "_P1.27mm": SMD se il nome dice SOIC/QFN/LGA, 
   assert.equal(tipo('JST_SH_SM02B-SRSS-TB_1x02-1MP_P1.00mm_Horizontal'), 'SMD');
   assert.equal(tipo('PinSocket_1x10_P1.27mm_Vertical'), 'THT');
 });
+
+// Adriano 13/11/2026 (DIGIFLY DGFAMv3): niente onda selettiva → THT sul lato opposto agli SMD = a mano; pasta su un lato senza SMD ignorata (niente lamina)
+test('niente onda selettiva: SMD sul lato dell\'onda = THT a mano; pasta BOT senza SMD ignorata', () => {
+  const a = analizzaScheda({
+    pickPlace: [{ nome: 'pp.txt', lettura: lettura([pos('R1', 'TOP', '10k', 'R0603', 5), pos('R2', 'TOP', '10k', 'R0603', 9),
+      { ...pos('J8', 'BOT', 'HB-FH2', 'PinSocket_1x10_P1.27mm_Vertical', 20) }]) }],
+    strati: [{ nome: 'F_Paste.gtp', ruolo: 'pasta', lato: 'TOP' }, { nome: 'B_Paste.gbp', ruolo: 'pasta', lato: 'BOT' }],
+    pasta: { TOP: [{ x: 5, y: 5, w: 1, h: 1 } as any], BOT: [{ x: 20, y: 5, w: 1, h: 1 } as any] },
+  });
+  assert.equal(a.lavorazione.saldaturaTht, 'mano');
+  assert.ok(!a.segnalazioni.some(s => s.livello === 'avviso' && /pasta/.test(s.testo)));
+  assert.ok(a.segnalazioni.some(s => /non fare la lamina BOT/.test(s.testo)));
+  assert.deepEqual(a.consumi.pastaDaGerber?.lati, ['TOP']);
+  const { parametri } = parametriDaAnalisi(a);
+  assert.equal(parametri.usaOnda, 0); assert.equal(parametri.nLamine, 1);
+});
