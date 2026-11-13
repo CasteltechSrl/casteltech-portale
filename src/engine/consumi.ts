@@ -49,3 +49,26 @@ export function consumoReale(voce: VoceConsumo, totaleLotto: number | null | und
 }
 
 export const formatoQuantita = nf;
+
+/** Riga del riquadro "Materiale di consumo" nella pagina della commessa (Adriano 13/11/2026). */
+export interface RigaConsumoCommessa { codice: string; nome: string; previstoScheda: string; previstoLotto: string; usatoLotto: string; usatoScheda: string }
+
+/**
+ * Elenco del materiale di consumo della commessa: previsto dal preventivo (a scheda e sul lotto) e quello usato
+ * scritto al rientro (totale del lotto e a scheda). Senza preventivo il previsto resta vuoto.
+ */
+export function righeConsumoCommessa(prev: any, quantita: number, consumi: Record<string, number> | null | undefined): RigaConsumoCommessa[] {
+  return vociConsumo(prev, quantita).map(v => {
+    const tot = consumi?.[v.codice];
+    const usato = tot != null && Number.isFinite(Number(tot)) ? Number(tot) : null;
+    const lotto = v.perLotto ? v.previstoTesto
+      : v.previsto != null && quantita > 0 ? `${nf(v.previsto * quantita)} ${v.unita}` : '';
+    return {
+      codice: v.codice, nome: v.nome,
+      previstoScheda: v.perLotto ? '' : v.previstoTesto,
+      previstoLotto: lotto,
+      usatoLotto: usato == null ? '' : `${nf(usato)} ${v.unita}`,
+      usatoScheda: usato == null || v.perLotto || !(quantita > 0) ? '' : `${nf(usato / quantita)} ${v.unita}`,
+    };
+  });
+}

@@ -216,4 +216,5 @@ test('guida: scheda di produzione senza preventivo e dati da completare (Adriano
   assert.ok(primi('scheda di produzione senza preventivo', 3).includes('scheda-senza-preventivo'));
   assert.ok(primi('scheda a consuntivo tutte le fasi', 3).includes('scheda-senza-preventivo'));
   assert.ok(primi('note cliente referente da completare', 3).includes('scheda-da-completare'));
+  assert.ok(primi('materiale di consumo commessa', 3).includes('scheda-da-completare'));
 });

@@ -376,6 +376,7 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    dall'anagrafica (cliente dal prodotto), revisione vuota = l'ultima, TOP/BOT e schede per pannello nel modulo; fasi modificabili anche dopo. Dove serviva il preventivo si usa
    `preventivoDellaCommessa(c)` (catalogo di oggi, nessun previsto). Elenco: colonna "Da completare" (`datiDaCompletare`: referente, ordine cliente, consegna, programmi, fasi);
    scheda tecnica con `noteCliente` stampate nel riquadro delle note di montaggio; previsto 0 = cella vuota nella stampa.
+   Riquadro "Materiale di consumo" sotto "Programmi e lamine" (Adriano 13/11/2026, `righeConsumoCommessa` in `engine/consumi.ts`): previsto a scheda e sul lotto dal preventivo, usato dal rientro (`commesse.consumi`); senza preventivo previsto vuoto.
 3a. ✅ Scheda di pre-produzione della commessa (Adriano 5/11/2026; `/commesse/:id/pre-produzione`, regole in `engine/pre-produzione.ts`, letture in
    `pre-produzione-servizio.ts`, pagina in `views/pre-produzione.ts`, migrazione 077 `commesse.pre_produzione`, test in `tests/pre-produzione.test.ts`): pulsante
    "Pre-produzione" nella commessa = una pagina con 1) cliente, riga d'ordine collegata (`ordini_righe.commessa_id`), conferme, preventivo e scheda tecnica; 2) pacchetto dei

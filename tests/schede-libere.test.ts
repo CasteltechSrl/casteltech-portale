@@ -40,3 +40,22 @@ test('elenco: cosa manca ancora alla scheda di produzione', () => {
     scheda: { programmi: { progForno: { top: 'TOP STD', bot: '' } } } }), []);
   assert.deepEqual(datiDaCompletare({ referente: 'ROSSI', ordineCliente: '45', consegna: '2026-12-01', scheda: { pasta: 'SAC305' }, senzaFasi: true }), ['fasi']);
 });
+
+test('materiale di consumo nella pagina della commessa: previsto a scheda e sul lotto, usato dal rientro', async () => {
+  const { righeConsumoCommessa } = await import('../src/engine/consumi.js');
+  const prev = { n_schede: 100, parametri: { crema: 2, tropicalizzante: 4 }, catalogo: { parametri: [], materiali: [] } };
+  const righe = righeConsumoCommessa(prev, 50, { pastaSaldante: 120, conformal: 3 });
+  const pasta = righe.find(r => r.codice === 'pastaSaldante')!;
+  assert.equal(pasta.previstoScheda, '2 gr');
+  assert.equal(pasta.previstoLotto, '100 gr');
+  assert.equal(pasta.usatoLotto, '120 gr');
+  assert.equal(pasta.usatoScheda, '2,4 gr');
+  const conf = righe.find(r => r.codice === 'conformal')!;
+  assert.equal(conf.previstoScheda, '');
+  assert.equal(conf.previstoLotto, '2 bomb. sul lotto');
+  assert.equal(conf.usatoScheda, '');
+  // senza preventivo: elenco completo, previsto vuoto
+  const libere = righeConsumoCommessa(null, 10, null);
+  assert.equal(libere.length, 9);
+  assert.ok(libere.every(r => !r.previstoScheda && !r.previstoLotto && !r.usatoLotto));
+});

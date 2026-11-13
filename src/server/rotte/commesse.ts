@@ -22,7 +22,7 @@ import {
   type DatiCommessa, type FaseScheda, type RigaRientro, type SchedaTecnica, type Spedizione,
 } from '../commesse-servizio.js';
 import { secondiDaTempo, scriviTempo } from '../../engine/tempi-scritti.js';
-import { consumoReale, formatoQuantita, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
+import { consumoReale, formatoQuantita, righeConsumoCommessa, vociConsumo, type VoceConsumo } from '../../engine/consumi.js';
 import { tempiRealiPerFase, type Rilevazione } from '../../engine/consuntivo.js';
 import { controllaRientro, SOGLIA_SCOSTAMENTO, avvisoSenzaFase, totaleDaOre, ordineRighe } from '../../engine/rientro.js';
 import { ripartisciFasiInsieme, soloNuove, type RigaScansione } from '../../engine/fogli-tempi.js';
@@ -535,6 +535,15 @@ async function paginaCommessa(req: Request, prev: any, d: DatiCommessa, salvata?
           <label>Pasta <input name="scheda[pasta]" value="${st.pasta}" maxlength="80"></label>
           <input type="hidden" name="scheda[forno]" value="${st.forno}">
         </div>
+      </fieldset>
+
+      <fieldset class="blocco">
+        <legend>Materiale di consumo</legend>
+        <table class="fasi">
+          <thead><tr><th>Voce</th><th class="n">Previsto a scheda</th><th class="n">Previsto sul lotto</th><th class="n">Usato sul lotto</th><th class="n">Usato a scheda</th></tr></thead>
+          <tbody>${righeConsumoCommessa(libera ? null : prev, d.quantita || 0, salvata?.consumi).map(r => html`<tr><td>${r.nome}</td>
+            <td class="n">${r.previstoScheda}</td><td class="n">${r.previstoLotto}</td><td class="n">${r.usatoLotto}</td><td class="n">${r.usatoScheda}</td></tr>`)}</tbody></table>
+        <p class="nota">${libera ? 'Scheda senza preventivo: nessun consumo previsto. ' : 'Previsto dal preventivo, ricalcolato sulla quantità. '}L'usato si scrive al rientro${salvata ? html` (<a href="/commesse/${salvata.id}/rientro">Rientro scheda</a>)` : ''} dal totale del lotto annotato sul foglio tempi.</p>
       </fieldset>
 
       <fieldset class="blocco">
