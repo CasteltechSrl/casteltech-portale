@@ -3,10 +3,11 @@
  * - `noteDelProdotto` / `salvaNoteProdotto`: pagina Anagrafiche → Prodotti → "Programmi" (riquadro Note di montaggio).
  * - `caricaNoteSchede`: caricamento fatto da Claude (POST /api/claude/note-schede) con le note lette dalle vecchie schede di produzione Word:
  *   unisce le note al prodotto, sostituisce la segnalazione "schede vecchie" del prodotto e riempie le note VUOTE delle commesse aperte;
- *   senza `conferma` dice solo cosa farebbe.
+ *   senza `conferma` dice solo cosa farebbe. Con `nuovo: {cliente_id, codice, descrizione}` (codici confermati da Adriano ma non in anagrafica)
+ *   il prodotto si cerca per cliente + codice e, se manca, si aggiunge in MAIUSCOLO sotto quel cliente (regola codice-cliente).
  */
 import { q, q1, transazione } from './db.js';
-import { CATEGORIA_SCHEDE_VECCHIE, MAX_NOTE, testoSegnalazioniVecchie, unisciNote } from '../engine/note-prodotto.js';
+import { CATEGORIA_SCHEDE_VECCHIE, MAX_NOTE, prodottoNuovoPulito, testoSegnalazioniVecchie, unisciNote } from '../engine/note-prodotto.js';
 
 export async function noteDelProdotto(id: number): Promise<string> {
   return (await q1<{ note_montaggio: string }>(`SELECT note_montaggio FROM prodotti WHERE id = $1`, [id]))?.note_montaggio ?? '';
@@ -21,14 +22,28 @@ export const segnalazioniDelProdotto = (id: number) => q<{ testo: string; catego
   `SELECT s.testo, s.categoria, c.numero FROM segnalazioni s LEFT JOIN commesse c ON c.id = s.commessa_id
    WHERE s.prodotto_id = $1 AND s.rilevante_prossime ORDER BY s.creato_il DESC LIMIT 10`, [id]);
 
-export interface EsitoNoteSchede { prodotti: number; righeNote: number; segnalazioni: number; commesse: string[]; nonTrovati: number[] }
+export interface EsitoNoteSchede { prodotti: number; creati: string[]; righeNote: number; segnalazioni: number; commesse: string[]; nonTrovati: number[] }
 
-export async function caricaNoteSchede(elenco: { prodotto_id: number; note?: unknown; segnalazioni?: unknown }[], conferma: boolean): Promise<EsitoNoteSchede> {
-  const esito: EsitoNoteSchede = { prodotti: 0, righeNote: 0, segnalazioni: 0, commesse: [], nonTrovati: [] };
+export interface ProdottoNuovo { cliente_id: number; codice: string; descrizione: string }
+
+export async function caricaNoteSchede(elenco: { prodotto_id?: number; nuovo?: ProdottoNuovo; note?: unknown; segnalazioni?: unknown }[], conferma: boolean): Promise<EsitoNoteSchede> {
+  const esito: EsitoNoteSchede = { prodotti: 0, creati: [], righeNote: 0, segnalazioni: 0, commesse: [], nonTrovati: [] };
   await transazione(async c => {
     for (const x of elenco) {
-      const p = (await c.query(`SELECT id, note_montaggio FROM prodotti WHERE id = $1`, [x.prodotto_id])).rows[0];
-      if (!p) { esito.nonTrovati.push(x.prodotto_id); continue; }
+      let p: { id: number; note_montaggio: string } | undefined;
+      if (x.nuovo) {
+        const n = prodottoNuovoPulito(x.nuovo);
+        const cliente = n && (await c.query(`SELECT id FROM clienti WHERE id = $1`, [n.cliente_id])).rows[0];
+        if (!n || !cliente) { esito.nonTrovati.push(Number(x.nuovo.cliente_id)); continue; }
+        const { codice, descrizione } = n;
+        p = (await c.query(`SELECT id, note_montaggio FROM prodotti WHERE cliente_id = $1 AND upper(codice) = $2 ORDER BY id LIMIT 1`, [cliente.id, codice])).rows[0];
+        if (!p) {
+          esito.creati.push(codice);
+          if (!conferma) { p = { id: 0, note_montaggio: '' }; }
+          else p = (await c.query(`INSERT INTO prodotti (cliente_id, codice, descrizione) VALUES ($1,$2,$3) RETURNING id, note_montaggio`, [cliente.id, codice, descrizione])).rows[0];
+        }
+      } else p = (await c.query(`SELECT id, note_montaggio FROM prodotti WHERE id = $1`, [x.prodotto_id])).rows[0];
+      if (!p) { esito.nonTrovati.push(Number(x.prodotto_id)); continue; }
       const unite = unisciNote(p.note_montaggio, x.note);
       const segn = testoSegnalazioniVecchie(x.segnalazioni);
       if (unite.aggiunte || segn) esito.prodotti++;
