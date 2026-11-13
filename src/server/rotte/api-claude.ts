@@ -34,7 +34,7 @@
  *   GET  /api/claude/caricamenti             → controllo dei file caricati dall'ufficio (Adriano 7/11/2026): sedi operative, componenti clienti,
  *                                              ordini da e-mail con righe di schede ancora senza prodotto e le loro conferme (solo conteggi e numeri)
  */
-import { caricaArmadi, cercaPrezziOnline, datiArmadi, dividiFile, salvaPrezziOnline, statoRicercaOnline } from '../armadi-servizio.js';
+import { caricaArmadi, caricaDescrizioniCliente, cercaPrezziOnline, datiArmadi, dividiFile, salvaPrezziOnline, statoRicercaOnline } from '../armadi-servizio.js';
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
@@ -132,6 +132,12 @@ export function rotteApiClaude() {
   });
   r.post('/armadi/cerca-prezzi', async (req, res) => {
     res.json({ esito: await cercaPrezziOnline(Math.min(1000, Number(req.body?.max) || 300), !!req.body?.soloCasteltech) });
+  });
+  // Descrizioni dei codici di un cliente con i P/N (Adriano 13/11/2026, file di Selea e Idea): { cliente_id, componenti: [{ codice, descrizione }] }
+  r.post('/armadi/descrizioni-cliente', async (req, res) => {
+    const id = Number(req.body?.cliente_id);
+    if (!Number.isInteger(id) || !Array.isArray(req.body?.componenti)) return res.status(400).json({ errore: 'servono cliente_id e componenti' });
+    res.json(await caricaDescrizioniCliente(id, req.body.componenti));
   });
   r.get('/armadi', async (_req, res) => {
     const d = await datiArmadi();

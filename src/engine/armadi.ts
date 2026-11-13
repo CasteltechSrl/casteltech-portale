@@ -301,6 +301,40 @@ export function pnDaDescrizione(s: string | null | undefined): string | null {
   return fuori.length ? fuori[0].toUpperCase().replace(/[.,;:]+$/, '') : null;
 }
 
+/**
+ * P/N da chiedere ai distributori per un codice (Adriano 13/11/2026, codici Selea e Idea senza prezzo): il P/N salvato, ripulito dai prefissi
+ * delle etichette ("1P", "P", "3N1", "30P") e dei distributori ("771-", "863-", "576-"), poi ogni P/N scritto nelle descrizioni (prima tra parentesi).
+ * Al massimo `max`, senza doppioni.
+ */
+export function candidatiPn(pn: string | null | undefined, descrizioni: (string | null | undefined)[], max = 5): string[] {
+  const out: string[] = [];
+  const testi = descrizioni.map(d => pulito(d).toUpperCase()).join(' ');
+  const metti = (x: string | null | undefined) => {
+    const v = (x ?? '').toUpperCase().replace(/[.,;:?)]+$/, '').replace(/^\(+/, '');
+    if (v.length >= 5 && sembraPn(v) && !/[%,]|MM$|^H\.|^RS-?\d{3}$/.test(v) && !out.includes(v)) out.push(v);
+  };
+  if (pn) {
+    const p = pn.toUpperCase();
+    // prefissi delle etichette: tolti solo se il resto è scritto nella descrizione, oppure "1P" (identificativo del P/N fornitore)
+    for (const pre of ['1P', '3N1', '30P', 'P']) {
+      if (p.startsWith(pre) && p.length > pre.length + 4) { const r = p.slice(pre.length); if (pre === '1P' || testi.replace(/[^A-Z0-9]/g, '').includes(r.replace(/[^A-Z0-9]/g, ''))) metti(r); }
+    }
+    const dist = /^\d{2,3}-(.+)$/.exec(p); if (dist && /[A-Z]/.test(dist[1])) metti(dist[1]);
+    metti(p);
+    if (p.startsWith('P') && p.length > 8) metti(p.slice(1));   // "P" delle etichette Vishay/Panasonic, anche se la descrizione non lo ripete
+  }
+  for (const d of descrizioni) {
+    const t = pulito(d).toUpperCase();
+    const dentro = [...t.matchAll(/\(([^()]*)\)/g)].flatMap(m => m[1].split(/\s+/));
+    const fuori = t.replace(/\([^()]*\)/g, ' ').split(/\s+/);
+    for (const w of [...dentro, ...fuori]) {
+      const x = w.replace(/[.,;:?]+$/, '');
+      if (x.length >= 6) { metti(x); const dd = /^\d{2,3}-(.+)$/.exec(x); if (dd && /[A-Z]/.test(dd[1])) metti(dd[1]); }
+    }
+  }
+  return out.slice(0, max);
+}
+
 // ── Prezzi ───────────────────────────────────────────────────────────────────
 
 export type FontePrezzo = 'manuale' | 'acquisto' | 'online' | 'armadio' | 'stima';

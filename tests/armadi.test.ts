@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   descrizioneArticolo, gruppoDaDescrizione, gruppoStima, leggiAnagraficaArmadi, leggiArchivioBobine, leggiCodiceSelea, leggiSigla, percentualeConPrezzo, percentualeValida,
-  pnDaDescrizione, pnPulito, prezzoOnline, proprietario, quote, riepilogo, scegliPrezzo, stimePerGruppo, tabellaSigle, clientiDelleSigle, gruppiSigle,
+  pnDaDescrizione, pnPulito, prezzoOnline, proprietario, quote, riepilogo, scegliPrezzo, stimePerGruppo, tabellaSigle, clientiDelleSigle, gruppiSigle, candidatiPn,
 } from '../src/engine/armadi.js';
 import { cercaGuida } from '../src/engine/guida.js';
 
@@ -148,4 +148,14 @@ test('sigle raggruppate per cliente: "Di chi è" non cambia, una riga per client
   const rotta = readFileSync('src/server/rotte/armadi.ts', 'utf8');
   assert.match(rotta, /<th>Cliente<\/th><th>Di chi è<\/th>/);
   assert.match(rotta, /SEPARATORE_SIGLE/);
+});
+
+test('P/N da provare presso i distributori: prefissi delle etichette tolti, P/N dalle descrizioni (Selea, Idea 13/11/2026)', () => {
+  assert.deepEqual(candidatiPn('3N1EEEFK1C221P', ['C SMD ELETTROLITICO 220UF 20%,16V CASE F (PAN EEEFK1C221P)']), ['EEEFK1C221P', '3N1EEEFK1C221P']);
+  assert.deepEqual(candidatiPn('1PLTC4265CDE#PBF', []), ['LTC4265CDE#PBF', '1PLTC4265CDE#PBF']);
+  assert.deepEqual(candidatiPn('863-NUD3160LT1G', []), ['NUD3160LT1G', '863-NUD3160LT1G']);
+  assert.deepEqual(candidatiPn('RS-485', ['DRIVER RS-485, SN65HVD10, 8-SO O ST4485EBDR']), ['SN65HVD10', 'ST4485EBDR']);
+  assert.equal(candidatiPn(null, ['R SMD 0R 1% 0402    (YAG RC0402JR-070RL) (VIS CRCW04020000Z0EDC)'])[0], 'RC0402JR-070RL');
+  assert.deepEqual(candidatiPn('H.12.5MM', ['CONDENSATORE ELETTROLITICO 50V 220UF H.12.5MM']), []);
+  assert.ok(candidatiPn('PICEEEFT1E102UP', ['C SMD ELETTROLITICO 1000UF 20%,25V CASE G (PAN EEE-FT1E102UP 25V)']).includes('EEE-FT1E102UP'));
 });
