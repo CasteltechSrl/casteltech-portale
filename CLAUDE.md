@@ -382,6 +382,8 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (POST `/:id/aggiorna-preventivo`) = stesso preventivo e catalogo, cambiano solo i parametri letti (non prima produzione, lamine, controllo visivo) e la revisione se diversa,
    cambi nelle note; preventivo accettato o con ordine/commessa = nuovo da validare. Riquadro "Nome e cliente" (POST `/:id/dati`, cliente anche alle parti divise) e azione
    "Assegna il cliente" nell'elenco.
+   BOM JLCPCB/KiCad (DIGIFLY DGFAMv3, Adriano 13/11/2026; `sembraIntestazioneBom` in `engine/scheda/pick-place.ts`, test in `tests/schede-cliente.test.ts`): file con colonna
+   Quantità e senza X/Y = BOM, mai pick and place "senza intestazione"; passo KiCad "_P1.27mm" = THT solo se l'impronta non è SMD (SOIC, QFN, LGA, SOT, "-1MP"…).
    ⬜ Rotazioni per macchina (servono i file macchina e le regole), ODB++, BOM .xls, archivi .rar (LPS li manda: per ora si rifanno in zip).
 3. ✅ Commesse e stampa scheda di produzione (`rotte/commesse.ts`, `commesse-servizio.ts`, `public/stampa.css`):
    prima pagina come la MASTERspec, fasi del preventivo ricalcolate sulla quantità (tempo previsto e effettivo, ciclo e uomo),

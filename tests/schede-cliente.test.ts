@@ -600,3 +600,28 @@ test('pick and place con case e impronte nel testo (SOD323, DO-214AB, …SPAZIAT
   assert.ok(stessoComponente({ pn: 'MBRS4201T3G', valore: 'schottky rectifiers diode' }, ' DO-214AB'));
   assert.ok(!stessoComponente({ pn: 'LTST-C191KRKT', valore: 'LED' }, 'LTST-S270KRKT LED_0603'));
 });
+
+// DIGIFLY DGFAMv3 (Adriano 13/11/2026): la BOM JLCPCB (Designator, Footprint, Quantity, Value, LCSC) era letta come pick and place
+// senza intestazione ("R13,0402,1,100,C25076" = X 402, Y 1) → "Manca la BOM" e quattro resistenze nella stessa posizione fuori dal contorno.
+test('BOM con intestazione JLCPCB: è una BOM, non un pick and place', () => {
+  const bom = `﻿Designator,Footprint,Quantity,Value,LCSC Part #\nC1,0402,1,47nF,C272875\n"C43, C44",0402,2,12pF,C1547\nR13,0402,1,100,C25076\nR20,0402,1,10,C25077\nR21,0402,1,4.7,C25121\n`;
+  assert.equal(sembraPickPlace(bom), false);
+  assert.equal(tipoFile('DGFAMv3_bom.csv', bom), 'bom');
+  const pos = `﻿Designator,Mid X,Mid Y,Rotation,Layer\nC1,104.19,-139.43,0.0,top\nR13,96.22,-137.94,0.0,top\nJ8,100.2,-74.3,270.0,bottom\n`;
+  assert.equal(tipoFile('DGFAMv3_positions.csv', pos), 'pick-place');
+  assert.equal(leggiPickPlace('DGFAMv3_positions.csv', pos).posizioni.length, 3);
+  // il vecchio formato senza intestazione (Selea) resta un pick and place
+  assert.equal(sembraPickPlace('R1;10K 0603;12.5;30.1;90\nR2;10K 0603;14.5;30.1;90\n'), true);
+});
+
+test('impronte KiCad con il passo "_P1.27mm": SMD se il nome dice SOIC/QFN/LGA, THT per strip e connettori', () => {
+  const tipo = (fp: string) => analizzaScheda({
+    bom: null, pickPlace: [{ nome: 'p.csv', lettura: { formato: 'x', unita: 'mm', fiducial: [], avvisi: [], posizioni: [
+      { ref: 'U1', valore: '', footprint: fp, x: 10, y: 10, rot: 0, lato: 'TOP' }] } }],
+  }).componenti.find(c => c.ref === 'U1')!.tipo;
+  assert.equal(tipo('SOIC-8_5.3x5.3mm_P1.27mm'), 'SMD');
+  assert.equal(tipo('TQFN-16-1EP_3x3mm_P0.5mm_EP1.23x1.23mm'), 'SMD');
+  assert.equal(tipo('LGA-8_3x5mm_P1.25mm'), 'SMD');
+  assert.equal(tipo('JST_SH_SM02B-SRSS-TB_1x02-1MP_P1.00mm_Horizontal'), 'SMD');
+  assert.equal(tipo('PinSocket_1x10_P1.27mm_Vertical'), 'THT');
+});

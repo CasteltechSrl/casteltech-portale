@@ -185,7 +185,11 @@ export function leggiBomScheda(grezze: string[][]): { righe: RigaBomScheda[]; co
 
 // ───────────────────────────── confronti ─────────────────────────────
 
-const RE_IMPRONTA_THT = /(^|[_\-\s])(THT|PTH|TH|DIP\d*|SIP\d*|RADIAL|AXIAL|TO-?220|TO-?92|TO-?247|HC-?49|FASTON|PINHEADER|HEADER|JACK|RJ45|PHOENIX|MORSETT|TERMINAL|SUPERCAP)([_\-\s]|$)|_P\d+(\.\d+)?MM|SIP\d{3}|CONN_USB_DUAL/i;
+const RE_IMPRONTA_THT = /(^|[_\-\s])(THT|PTH|TH|DIP\d*|SIP\d*|RADIAL|AXIAL|TO-?220|TO-?92|TO-?247|HC-?49|FASTON|PINHEADER|HEADER|JACK|RJ45|PHOENIX|MORSETT|TERMINAL|SUPERCAP)([_\-\s]|$)|SIP\d{3}|CONN_USB_DUAL/i;
+// passo alla KiCad ("_P2.54mm"): THT solo se l'impronta non è di un SMD (SOIC-8_5.3x5.3mm_P1.27mm, TQFN-16_…_P0.5mm, LGA-8_3x5mm_P1.25mm,
+// JST SH …-1MP_P1.00mm sono SMD: DIGIFLY DGFAMv3, Adriano 13/11/2026)
+const RE_PASSO_KICAD = /_P\d+(\.\d+)?MM/i;
+const RE_IMPRONTA_SMD = /(^|[^A-Z])(SMD|SMT|SO|SOIC|SOP|SSOP|TSSOP|MSOP|HTSSOP|QFN|[VWTU]QFN|DFN|[VWTU]DFN|QFP|LQFP|TQFP|LGA|BGA|SON|[VWTU]SON|SOT|SOD|PLCC|LCC|MELF|\d+MP|SM\d+B)([^A-Z]|$)/i;
 const RE_CASE = /(?:^|[^0-9])(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512)(?:[^0-9]|$)/;
 const caseDi = (s: string) => RE_CASE.exec(s.toUpperCase().replace(/EIA/g, ' '))?.[1] ?? null;
 /** Riferimento di un componente: R1, LED5, C_IN_1, R_FBB1, J_ETH3V3 (lettera in testa, almeno una cifra). */
@@ -239,7 +243,7 @@ export function stessoComponente(bom: { pn: string; valore: string }, testoPp: s
   return tokPn.some(t => tokPp.includes(t));
 }
 
-const tipoDaImpronta = (s: string) => RE_IMPRONTA_THT.test(s) ? 'THT' as const : null;
+const tipoDaImpronta = (s: string) => RE_IMPRONTA_THT.test(s) || (RE_PASSO_KICAD.test(s) && !RE_IMPRONTA_SMD.test(s)) ? 'THT' as const : null;
 const arrot = (n: number, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 export interface IngressoAnalisi {

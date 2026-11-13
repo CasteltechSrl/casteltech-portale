@@ -111,6 +111,14 @@ function indiciColonne(intest: string[]) {
 }
 
 /** Il testo sembra un pick and place? (serve per riconoscere i .txt e i .csv). */
+/** Prima riga di una BOM: colonna quantità e nessuna colonna di coordinate (X, Y, Mid X, Pos X, Center-X…). */
+export function sembraIntestazioneBom(riga: string): boolean {
+  const celle = riga.replace(/^﻿/, '').split(/[;,\t]/).map(c => c.replace(/"/g, '').trim().toLowerCase());
+  const quantita = celle.some(c => /^(qty|q\.?ty|quantity|quantit[aà]|q\.?t[aà]|pz|pcs)\b/.test(c));
+  const coordinate = celle.some(c => /^(x|y)$|\b(mid|pos|center|centre|ref|loc|location)[\s_-]*(x|y)\b|\b(x|y)[\s_-]*\(?(mm|mil|in)/.test(c));
+  return quantita && !coordinate;
+}
+
 export function sembraPickPlace(testo: string): boolean {
   if (/\$PART_SECTION_BEGIN\$/.test(testo) || /Pick and Place|Footprint positions|refdes\s*!/i.test(testo)) return true;
   try { return leggiPickPlace('x.txt', testo).posizioni.length >= 2; } catch { return false; }
@@ -231,6 +239,9 @@ export function leggiPickPlace(nomeFile: string, testoGrezzo: string): LetturaPi
   }
 
   // ── senza intestazione: "REF; testo; X; Y; ROT; [codice]" (es. Selea) ──
+  // Una BOM con intestazione (Quantità ma niente X/Y) non è un pick and place: le righe "R13,0402,1,100,C25076"
+  // sembravano X=402, Y=1, rotazione 100 (DIGIFLY DGFAMv3, BOM JLCPCB, Adriano 13/11/2026).
+  if (sembraIntestazioneBom(righe.find(r => r.trim()) ?? '')) throw new Error('È una BOM, non un pick and place.');
   const posizioni: Posizione[] = [];
   for (const r of righe) {
     if (!r.trim()) continue;
