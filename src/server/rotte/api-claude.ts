@@ -139,8 +139,11 @@ export function rotteApiClaude() {
     if (!Number.isInteger(id) || !Array.isArray(req.body?.componenti)) return res.status(400).json({ errore: 'servono cliente_id e componenti' });
     res.json(await caricaDescrizioniCliente(id, req.body.componenti));
   });
-  r.get('/armadi', async (_req, res) => {
+  r.get('/armadi', async (req, res) => {
     const d = await datiArmadi();
+    // ?articoli=1: tutti i codici con prezzo, fonte e nota (controllo dei valori più alti)
+    if (req.query.articoli === '1') return res.json(d.articoli.map(a => ({ codice: a.codice, pn: a.pn, descrizione: a.descrizione, quantita: a.quantita, proprietario: a.proprietario_file,
+      prezzo: a.prezzo, fonte: a.prezzo_fonte, nota: a.prezzo_nota, valore: a.prezzo != null ? Math.round(a.prezzo * a.quantita * 100) / 100 : null })));
     res.json({ impostazioni: d.imp, ricerca: statoRicercaOnline(), riepilogo: d.riepilogo, sigle: d.tabella,
       senzaPrezzo: d.articoli.filter(a => a.prezzo == null).map(a => ({ codice: a.codice, pn: a.pn, descrizione: a.descrizione, quantita: a.quantita, proprietario: a.proprietario_file })) });
   });
