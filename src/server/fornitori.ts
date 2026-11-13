@@ -7,6 +7,7 @@
  *   TME_APP_TOKEN, TME_APP_SECRET              developers.tme.eu (API v2, OAuth client credentials)
  *   ARROW_LOGIN, ARROW_API_KEY                 developers.arrow.com → Request API Key (aggiunto 1/11/2026, da verificare con le prime chiavi)
  *   WURTH_CLIENT_ID, WURTH_CLIENT_SECRET       profile.we-online.com → API Keys (Customer API Würth Elektronik, 4/11/2026; solo codici WE)
+ *   LCSC: nessuna chiave (dati della pagina prodotto del sito, solo per i codici LCSC tipo C25744; Adriano 13/11/2026, vedi engine/lcsc.ts)
  * Ogni P/N si cerca presso TUTTI i distributori collegati, in parallelo; un errore su un P/N non ferma gli altri
  * (si riprova una volta; ci si ferma solo se le chiavi sono sbagliate, se il limite è finito o dopo 3 errori di fila).
  * Ogni risposta resta in fornitori_cache per 24 ore (stesso P/N = nessuna nuova chiamata).
@@ -20,13 +21,14 @@ import type { ProdottoDigiKey } from '../engine/codifica/digikey-dati.js';
 import { elementiTme, offerteTme } from '../engine/tme.js';
 import { offerteArrow, siCache } from '../engine/arrow.js';
 import { codiceWurth, corpoWurth, offerteWurth } from '../engine/wurth.js';
+import { codiceLcsc, offertaLcsc, prodottoLcsc, type ProdottoLcsc } from '../engine/lcsc.js';
 import { cambioBce } from './autofatture-servizio.js';
 import { conta, erroreServizio, riuscito } from './stato-servizi.js';
 
 const ORE_CACHE = 24;
 const TIMEOUT = 20_000;
 
-export interface RisultatoFornitore { offerte: Offerta[]; prodotto?: ProdottoDigiKey | null; errore?: string }
+export interface RisultatoFornitore { offerte: Offerta[]; prodotto?: ProdottoDigiKey | null; errore?: string; lcsc?: ProdottoLcsc | null }
 
 export class ErroreFornitore extends Error { constructor(msg: string, public tipo: string = 'altro') { super(msg); } }
 
@@ -36,6 +38,7 @@ export function fornitoriConfigurati(): Record<Fornitore, boolean> {
     digikey: !!(e.DIGIKEY_CLIENT_ID && e.DIGIKEY_CLIENT_SECRET), mouser: !!e.MOUSER_API_KEY,
     farnell: !!e.FARNELL_API_KEY, tme: !!(e.TME_APP_TOKEN && e.TME_APP_SECRET), arrow: !!(e.ARROW_LOGIN && e.ARROW_API_KEY),
     wurth: !!(e.WURTH_CLIENT_ID && e.WURTH_CLIENT_SECRET),
+    lcsc: true, // senza chiave: si interroga solo con i codici LCSC
   };
 }
 
@@ -277,6 +280,18 @@ async function arrowCerca(pn: string, varianti = false): Promise<Offerta[]> {
 }
 async function arrowPn(pn: string): Promise<RisultatoFornitore> { return { offerte: await arrowCerca(pn) }; }
 
+// ───────────────────────────── LCSC (sito, senza chiave) ─────────────────────────────
+/** Dati e prezzi di un codice LCSC (C25744): P/N del produttore, case, parametri, alternative di LCSC; prezzi in euro al cambio BCE. */
+async function lcscPn(pn: string): Promise<RisultatoFornitore> {
+  const codice = codiceLcsc(pn);
+  if (!codice) return { offerte: [], lcsc: null };
+  const r = await http(`https://wmsc.lcsc.com/ftps/wm/product/detail?productCode=${encodeURIComponent(codice)}`,
+    { nome: 'LCSC', headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (portale Casteltech)' } });
+  const p = prodottoLcsc(r);
+  const o = p ? offertaLcsc(p) : null;
+  return { offerte: o ? await inEuro([o]) : [], lcsc: p };
+}
+
 // ───────────────────────────── Würth Elektronik (Customer API) ─────────────────────────────
 let tokenWe: { valore: string; scade: number } | null = null;
 async function tokenWurth(): Promise<string> {
@@ -414,11 +429,13 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?:
   let fatti = 0;
   const segna = (k: string, f: Fornitore, r: RisultatoFornitore) => { perPn.get(k)![f] = r; };
   // prima la cache
-  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [], arrow: [], wurth: [] };
+  const daCercare: Record<Fornitore, [string, string][]> = { digikey: [], mouser: [], farnell: [], tme: [], arrow: [], wurth: [], lcsc: [] };
   for (const f of Object.keys(daCercare) as Fornitore[]) {
     if (!attivi[f]) continue;
     for (const [k, pn] of unici) {
       if (f === 'wurth' && !codiceWurth(pn)) continue; // a Würth si chiedono solo i suoi codici
+      // codici LCSC (C25744) solo a LCSC, e a LCSC solo quelli (la ricerca per P/N del sito è bloccata)
+      if ((f === 'lcsc') !== !!codiceLcsc(pn)) continue;
       // cacheLunga: va bene anche una risposta vecchia, si chiede solo il P/N mai cercato
       const c = opz.forza ? null : await daCache(f, k, opz.soloCache || opz.cacheLunga ? 24 * 365 : ORE_CACHE);
       // escludi (Adriano 13/11/2026, DigiKey e Farnell al limite del giorno): la cache si usa, ma a loro non si chiede
@@ -460,12 +477,13 @@ export async function cercaPn(pns: string[], opz: { forza?: boolean; soloCache?:
   aGruppi('tme', 50, tmePn);
   unoAllaVolta('arrow', 2, arrowPn);
   aGruppi('wurth', 50, wurthPn);
+  unoAllaVolta('lcsc', 2, lcscPn);
   await Promise.all(lavori);
   return { perPn, errori };
 }
 
 /** Prova di collegamento (Impostazioni → Componenti). */
-export async function provaFornitore(f: Fornitore, pn = f === 'wurth' ? '885012206071' : 'RC0603FR-072K2L'): Promise<string> {
+export async function provaFornitore(f: Fornitore, pn = f === 'wurth' ? '885012206071' : f === 'lcsc' ? 'C25744' : 'RC0603FR-072K2L'): Promise<string> {
   if (!fornitoriConfigurati()[f]) return 'chiavi non impostate su Render';
   try {
     let offerte: Offerta[] = [];
@@ -475,10 +493,24 @@ export async function provaFornitore(f: Fornitore, pn = f === 'wurth' ? '8850122
     if (f === 'tme') offerte = (await tmePn([pn])).get(pn)?.offerte ?? [];
     if (f === 'arrow') offerte = (await arrowPn(pn)).offerte;
     if (f === 'wurth') offerte = (await wurthPn([pn])).get(pn)?.offerte ?? [];
+    if (f === 'lcsc') offerte = (await lcscPn(pn)).offerte;
     if (!offerte.length) return `collegato, ma ${pn} non trovato`;
     const o = offerte[0];
     if (f === 'wurth') return `OK: ${o.mpn}, ${o.stock} pz a magazzino, prezzi ${o.scaglioni.map(s => `${s.qta} pz ${s.prezzo} ${o.valuta}`).join(' · ')}`
       + `${o.ciclo ? ` (${o.ciclo})` : ''}${o.consegnaSettimane ? `, consegna ${o.consegnaSettimane}` : ''}`;
     return `OK: ${o.mpn} ${o.codiceFornitore}, ${o.stock} pz, da ${o.scaglioni[0]?.prezzo} ${o.valuta}`;
   } catch (e: any) { return e.message; }
+}
+
+/**
+ * Prodotti LCSC dei codici C… (stessa cache e stesse regole di `cercaPn`: soloCache = nessuna chiamata, cacheLunga = solo i codici mai letti).
+ * Chiave = codice LCSC.
+ */
+export async function prodottiLcsc(codici: string[], opz: { forza?: boolean; soloCache?: boolean; cacheLunga?: boolean } = {}): Promise<Map<string, RisultatoFornitore>> {
+  const validi = [...new Set(codici.map(codiceLcsc).filter((c): c is string => !!c))];
+  const out = new Map<string, RisultatoFornitore>();
+  if (!validi.length) return out;
+  const es = await cercaPn(validi, opz);
+  for (const c of validi) { const r = es.perPn.get(pnKey(c)!)?.lcsc; if (r) out.set(c, r); }
+  return out;
 }

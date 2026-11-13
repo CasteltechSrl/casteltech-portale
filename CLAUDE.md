@@ -542,8 +542,14 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    (conservato finché il P/N è lo stesso, rifatto solo con "Aggiorna prezzi"), codice trovato chiesto ai distributori → alternativa `FONTI_ALTERNATIVA.INTERNET`
    (`identica` true se "stesso componente": regole di `decidiAlternativa`), nota "ricerca su internet (data): … CRITICITÀ: …" sempre; max 12 righe per elaborazione.
    Miglior prezzo di un P/N (Adriano 28/10/2026; `/quotazioni/prezzo`, `confrontaOfferte` in `engine/acquisti.ts`): P/N + pezzi → tutti gli shop collegati
-   affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC: serve la chiave
-   (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare); per ora solo il link "Cerca su LCSC".
+   affiancati, in cima la stessa scelta della BOM (`sceltaMigliore`), colonna "In più"; usa `cercaPn` e la cache di 24 h. ⬜ LCSC API ufficiale: serve la chiave
+   (richiesta a support@lcsc.com con i documenti dell'azienda, IP di Render da autorizzare). Intanto (Adriano 13/11/2026, DIGIFLY DGFAMv3 "tutta su LCSC";
+   `engine/lcsc.ts`, `lcscPn`/`prodottiLcsc` in `fornitori.ts`, test in `tests/lcsc.test.ts`): i codici LCSC (C25744, colonna P/N o colonna "LCSC"/"JLCPCB") si leggono
+   senza chiave dalla pagina prodotto del sito (`wmsc.lcsc.com/ftps/wm/product/detail?productCode=`; la loro ricerca per P/N è bloccata) con la cache di `cercaPn`
+   (fornitore 'lcsc', solo codici C…): in `elabora` (passo 1b) il P/N della riga diventa quello del produttore (`RigaBom.lcsc` = codice), con produttore, case,
+   descrizione (`descrizioneLcsc`) e nota `notaLcsc` (alternative di LCSC); senza dati DigiKey la codifica usa `prodottoDkDaLcsc` (categoria e parametri LCSC nella
+   forma DigiKey per `daDigikey`). Offerta LCSC in USD → EUR, in `sceltaMigliore` dopo tutti gli altri (Cina: spedizione e dogana); mai tra i "non controllati".
+   Miglior prezzo: codice C… = dati LCSC + P/N cercato dagli altri shop.
    Componenti in comune (suggerimento di Adriano Croci "Macchine per Selea", 2/11/2026; `/quotazioni/comuni`, `engine/componenti-comuni.ts`, test in
    `tests/componenti-comuni.test.ts`): cliente → sue BOM quotate (via `preventivi.bom_id` / `pacchetti_scheda.bom_id`, o spuntate a mano) → componenti presenti in più
    schede (stesso codice di produzione, altrimenti P/N senza trattini; non montati esclusi), in cima i più usati; "Feeder fissi" N = i primi N in verde. Solo lettura.

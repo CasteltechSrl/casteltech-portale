@@ -1225,10 +1225,23 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Per sapere dove conviene comprare un componente: scrivi il P/N del produttore e quanti pezzi servono. Il portale chiede prezzo e disponibilità a tutti gli shop collegati (DigiKey, Mouser, Farnell, TME) e li mette uno sotto l\'altro.',
       'In cima, in verde, c\'è il più conveniente sul totale da pagare: tiene conto del minimo d\'ordine, dei multipli e degli scaglioni (a volte comprare qualche pezzo in più costa meno). Per gli altri la colonna "In più" dice quanto si spenderebbe in più. Uno shop senza pezzi sufficienti va in fondo.',
-      'Le risposte restano in memoria 24 ore (quelle di Arrow no: per le sue condizioni d\'uso si chiedono ogni volta); "Aggiorna prezzi" le richiede di nuovo. LCSC non è ancora collegato: "Cerca su LCSC" apre il loro sito con lo stesso P/N.',
+      'Le risposte restano in memoria 24 ore (quelle di Arrow no: per le sue condizioni d\'uso si chiedono ogni volta); "Aggiorna prezzi" le richiede di nuovo.',
+      'Si può scrivere anche un codice LCSC (C25744): il portale mostra cosa è (produttore, P/N, case, caratteristiche, datasheet) e cerca quel P/N anche dagli altri shop, con LCSC in fondo all\'elenco. Per un P/N normale LCSC non risponde (la loro ricerca è chiusa): "Cerca su LCSC" apre il sito.',
     ],
     passi: ['Quotazioni → Miglior prezzo di un P/N.', 'Scrivi P/N e pezzi, premi "Cerca il prezzo".', 'Il codice dello shop apre la pagina del prodotto per ordinarlo.'],
     pagine: [['/quotazioni/prezzo', 'Quotazioni → Miglior prezzo di un P/N']],
+  },
+  {
+    id: 'codici-lcsc', area: 'componenti', titolo: 'BOM con i codici LCSC (C25744) al posto dei P/N',
+    parole: 'lcsc jlcpcb jlc easyeda codice c part caratteristiche alternative bom cinese cina p/n produttore',
+    testo: [
+      'Molte BOM fatte per JLCPCB/EasyEDA/KiCad hanno solo il codice LCSC (C25744) e non il P/N del produttore. Il portale legge ogni codice LCSC dal loro sito (senza chiave, una volta sola: poi resta in memoria) e scrive nella riga il P/N vero con produttore, case, descrizione e caratteristiche.',
+      'Con il P/N vero la riga si codifica come le altre (se DigiKey non ha il componente, famiglia e dati arrivano dalla categoria di LCSC) e gli altri distributori cercano quel P/N. Nella nota della riga: "LCSC C25744 = UNI-ROYAL 0402WGF1002TCE: …" e le alternative che propone LCSC (stesse caratteristiche secondo LCSC).',
+      'Il prezzo LCSC (in dollari, portato in euro) c\'è sempre come offerta, ma si sceglie SOLO se nessun altro distributore ha i pezzi: arriva dalla Cina, con spedizione e dogana. Le alternative dagli altri shop si trovano come sempre, partendo dal P/N vero.',
+      'Il codice LCSC si riconosce nella colonna P/N o in una colonna "LCSC" / "JLCPCB" della BOM. La chiave ufficiale delle API LCSC non è ancora arrivata; la ricerca per P/N sul loro sito è bloccata, quindi da LCSC si leggono solo i codici C….',
+    ],
+    passi: ['Quotazioni → Carica una BOM (o Codifica la BOM dai documenti del cliente).', 'Guarda le note delle righe: "LCSC C… = produttore P/N".', 'Le righe ancora "da completare" le legge l\'IA come sempre.'],
+    pagine: [['/quotazioni', 'Quotazioni → BOM caricate'], ['/quotazioni/prezzo', 'Quotazioni → Miglior prezzo di un P/N']],
   },
   {
     id: 'codifica-singola', area: 'componenti', titolo: 'Codificare un solo componente',

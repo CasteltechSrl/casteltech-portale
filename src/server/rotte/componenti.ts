@@ -20,6 +20,7 @@ import { caseDaAggiungere, codiceProposto, suggerimentiRiga, valoriTabella, type
 import { NOMI_FORNITORI, confrontaOfferte, leggiPrezzo, prezzoUnitario, sceltaMigliore, type Fornitore, type Offerta } from '../../engine/acquisti.js';
 import type { Ruolo } from '../../engine/codifica/bom.js';
 import { cercaPn, fornitoriConfigurati } from '../fornitori.js';
+import { codiceLcsc, notaLcsc } from '../../engine/lcsc.js';
 import { pnKey } from '../../engine/codifica/bom.js';
 import { iaConfigurata } from '../lettura-ia.js';
 import { testoScarto } from '../../engine/codifica/modifiche-mano.js';
@@ -289,25 +290,35 @@ export function rotteComponenti() {
     const qta = Math.min(Math.max(parseInt(String(req.query.qta ?? ''), 10) || 1, 1), 1e7);
     // profilo Esterno (sola lettura): solo i prezzi già letti, niente richieste ai distributori (controllo del 4/11/2026)
     const esterno = req.session.utente?.ruolo === 'esterno';
-    const esito = pn && pnKey(pn) ? await cercaPn([pn], esterno ? { soloCache: true } : { forza: req.query.aggiorna === '1' }) : null;
-    const perFornitore = esito?.perPn.get(pnKey(pn)!) ?? {};
-    const offerte = Object.values(perFornitore).flatMap(x => x?.offerte ?? []);
-    const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f]);
-    const mancanti = esito ? attivi.filter(f => !esito.errori[f] && !perFornitore[f]?.offerte.length).map(f => NOMI_FORNITORI[f]) : [];
+    const opzRicerca = esterno ? { soloCache: true } : { forza: req.query.aggiorna === '1' };
+    let esito = pn && pnKey(pn) ? await cercaPn([pn], opzRicerca) : null;
+    // codice LCSC (C25744, Adriano 13/11/2026): LCSC dà il P/N del produttore, che si chiede anche agli altri distributori
+    const rLcsc = codiceLcsc(pn) ? esito?.perPn.get(pnKey(pn)!)?.lcsc ?? null : null;
+    const prodLcsc = rLcsc?.lcsc ?? null;
+    const offerteLcsc = prodLcsc ? rLcsc!.offerte : [];
+    if (prodLcsc) esito = await cercaPn([prodLcsc.mpn], opzRicerca);
+    const perFornitore = esito?.perPn.get(pnKey(prodLcsc?.mpn ?? pn)!) ?? {};
+    const offerte = [...Object.values(perFornitore).flatMap(x => x?.offerte ?? []), ...offerteLcsc];
+    const attivi = (Object.keys(fornitoriConfigurati()) as Fornitore[]).filter(f => fornitoriConfigurati()[f] && (f !== 'lcsc' || !!codiceLcsc(pn)));
+    const mancanti = esito ? attivi.filter(f => !esito!.errori[f] && !perFornitore[f]?.offerte.length && !(f === 'lcsc' && offerteLcsc.length)).map(f => NOMI_FORNITORI[f]) : [];
     res.send(pag(req, 'Miglior prezzo', 'prezzo', html`
       ${statoCollegamenti()}
       <form method="get" class="blocco stretto-form">
-        <p class="nota">Scrivi il P/N del produttore e quanti pezzi servono: il portale chiede prezzo e disponibilità a tutti gli shop collegati
+        <p class="nota">Scrivi il P/N del produttore (o il codice LCSC, es. C25744) e quanti pezzi servono: il portale chiede prezzo e disponibilità a tutti gli shop collegati
           e mette in cima il più conveniente (minimi d'ordine, multipli e scaglioni compresi). Le risposte restano in memoria 24 ore.</p>
         <label>P/N <input name="pn" value="${pn}" autofocus autocomplete="off" required></label>
         <label>Pezzi da comprare <input name="qta" value="${String(qta)}" inputmode="numeric"></label>
         <button class="primario">Cerca il prezzo</button>
       </form>
       ${esito ? html`<section class="blocco"><h2>${pn} <small class="nota">${num(qta, 0)} pz</small></h2>
-        ${attivi.map(f => esito.errori[f] ? html`<p class="avviso">${esito.errori[f]}</p>` : '')}
+        ${prodLcsc ? html`<p class="nota"><b>${notaLcsc(prodLcsc)}</b>${prodLcsc.case ? ` · case ${prodLcsc.case}` : ''}
+          ${prodLcsc.parametri.length ? html`<br>${prodLcsc.parametri.map(([n, v]) => `${n}: ${v}`).join(' · ')}` : ''}
+          <br><a href="${prodLcsc.url}" target="_blank" rel="noopener">Pagina LCSC ↗</a>${prodLcsc.datasheet ? html` · <a href="${prodLcsc.datasheet}" target="_blank" rel="noopener">datasheet ↗</a>` : ''}</p>` : ''}
+        ${codiceLcsc(pn) && !prodLcsc && !esito.errori.lcsc ? html`<p class="avviso">Codice LCSC ${pn} non trovato sul sito LCSC.</p>` : ''}
+        ${attivi.map(f => esito!.errori[f] ? html`<p class="avviso">${esito!.errori[f]}</p>` : '')}
         ${tabellaConfronto(offerte, qta)}
         <p class="nota">${mancanti.length ? `Non lo hanno: ${mancanti.join(', ')}. ` : ''}
-          <a href="https://www.lcsc.com/search?q=${encodeURIComponent(pn)}" target="_blank" rel="noopener">Cerca su LCSC ↗</a> (non ancora collegato: si apre il sito) ·
+          ${codiceLcsc(pn) ? '' : html`<a href="https://www.lcsc.com/search?q=${encodeURIComponent(pn)}" target="_blank" rel="noopener">Cerca su LCSC ↗</a> (per P/N si apre il sito; i codici LCSC C… il portale li legge da solo) ·`}
           <a href="/quotazioni/prezzo?pn=${encodeURIComponent(pn)}&amp;qta=${String(qta)}&amp;aggiorna=1">Aggiorna prezzi</a></p>
       </section>` : ''}`));
   });

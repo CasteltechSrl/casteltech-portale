@@ -203,6 +203,9 @@ export function rotteImpostazioni() {
         hanno la stessa chiave). Prezzi in dollari convertiti in euro al cambio BCE. Aggiunto l'1/11/2026: lettura da confermare con la prima "Prova".`,
       wurth: html`<code>WURTH_CLIENT_ID</code> e <code>WURTH_CLIENT_SECRET</code>: profile.we-online.com → API Keys (account WEID di info@, approvato dal commerciale WE;
         scade il 5/6/2027: lì "Renew" e nuovo secret su Render). Prezzi nostri (listino per i codici mai comprati), si chiede solo per i codici Würth (numerici).`,
+      lcsc: html`Nessuna chiave (13/11/2026): si leggono i dati della pagina prodotto del sito LCSC, SOLO per i codici LCSC delle BOM (C25744). Il codice diventa il P/N
+        del produttore con case e caratteristiche; prezzi in dollari convertiti in euro, LCSC si sceglie solo se nessun altro distributore ha i pezzi (spedizione dalla Cina e dogana).
+        La chiave ufficiale delle API resta da chiedere (support@lcsc.com).`,
     };
     res.send(pag(req, 'Componenti', html`
       <section class="blocco stretto-form">

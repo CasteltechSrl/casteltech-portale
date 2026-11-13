@@ -12,8 +12,8 @@
  *  - Reperibilità: si cerca da tutti i distributori; critico solo se il componente non si trova da nessuna parte (Adriano, 28/10/2026).
  */
 
-export type Fornitore = 'digikey' | 'mouser' | 'farnell' | 'tme' | 'arrow' | 'wurth';
-export const NOMI_FORNITORI: Record<Fornitore, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME', arrow: 'Arrow', wurth: 'Würth Elektronik' };
+export type Fornitore = 'digikey' | 'mouser' | 'farnell' | 'tme' | 'arrow' | 'wurth' | 'lcsc';
+export const NOMI_FORNITORI: Record<Fornitore, string> = { digikey: 'DigiKey', mouser: 'Mouser', farnell: 'Farnell', tme: 'TME', arrow: 'Arrow', wurth: 'Würth Elektronik', lcsc: 'LCSC' };
 
 export interface Scaglione { qta: number; prezzo: number }
 export interface Offerta {
@@ -112,7 +112,9 @@ export function sceltaMigliore(offerte: Offerta[], qta: number): Scelta | null {
   if (!valide.length) return null;
   const disponibili = valide.filter(x => x.offerta.stock >= x.acquisto.qta);
   if (disponibili.length) {
-    disponibili.sort((a, b) => Number(!!a.offerta.obsoleto) - Number(!!b.offerta.obsoleto) || a.acquisto.totale - b.acquisto.totale);
+    // LCSC (Cina: spedizione e dogana) solo se nessun altro distributore ha i pezzi (Adriano 13/11/2026)
+    disponibili.sort((a, b) => Number(!!a.offerta.obsoleto) - Number(!!b.offerta.obsoleto)
+      || Number(a.offerta.fornitore === 'lcsc') - Number(b.offerta.fornitore === 'lcsc') || a.acquisto.totale - b.acquisto.totale);
     return { ...disponibili[0], disponibile: true };
   }
   valide.sort((a, b) => b.offerta.stock - a.offerta.stock || a.acquisto.totale - b.acquisto.totale);

@@ -219,3 +219,8 @@ test('guida: scheda di produzione senza preventivo e dati da completare (Adriano
   assert.ok(primi('note cliente referente da completare', 3).includes('scheda-da-completare'));
   assert.ok(primi('materiale di consumo commessa', 3).includes('scheda-da-completare'));
 });
+
+test('guida: BOM con i codici LCSC (Adriano 13/11/2026)', () => {
+  assert.ok(primi('codici lcsc nella bom', 3).includes('codici-lcsc'));
+  assert.ok(primi('bom jlcpcb senza p/n', 3).includes('codici-lcsc'));
+});

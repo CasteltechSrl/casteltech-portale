@@ -23,7 +23,8 @@ import { candidatiPn, differenzeBomCodice, notaDueCodici, quotaPn, scegliCandida
 import { daDigikey } from '../engine/codifica/digikey-dati.js';
 import { ETICHETTE_RUOLI, NOTA_DA_VALIDARE, completo, foglioBom, pulisciRigheBom, rigaPcb, regolaCondensatori, leggiBomColonneFisse, leggiCsv, nomiColonne, pnKey, quantitaRiga, regolaResistenze, rigaIntestazione, rilevaColonne, type Ruolo } from '../engine/codifica/bom.js';
 import { NOMI_FORNITORI, leggiPrezzo, leggiRegoleScarto, pezziScarto, prezzoUnitario, reperibilita, sceltaMigliore, type Fornitore, type Offerta, type Reperibilita, type RegoleScarto } from '../engine/acquisti.js';
-import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, parametriDaCache, parametriInCache, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
+import { cercaPn, cercaVarianti, digikeyParametri, digikeySostituti, fornitoriConfigurati, memorizza, mouserParametri, parametriDaCache, parametriInCache, prodottiLcsc, type EsitoRicerca, type RisultatoFornitore } from './fornitori.js';
+import { codiceLcsc, colonnaLcsc, descrizioneLcsc, notaLcsc, prodottoDkDaLcsc, type ProdottoLcsc } from '../engine/lcsc.js';
 import { cercaComponenteSulWeb, iaConfigurata, leggiConIa, proponiCompatibiliIa, type EsitoRicercaWeb } from './lettura-ia.js';
 import { righeNonQuotate } from '../engine/non-quotati.js';
 import { connettoreStandard, famigliaProposta } from '../engine/codifica/famiglia-proposta.js';
@@ -67,6 +68,8 @@ export interface RigaBom {
   prezzoManuale?: number | null;
   /** modifiche a mano (Federico, 2/11/2026): scarto al posto di quello standard, nota dell'ufficio, riga aggiunta e dove si compra */
   scartoManuale?: ScartoMano | null; notaOperatore?: string | null; aggiuntaAMano?: boolean; doveSiCompra?: string | null;
+  /** codice LCSC della BOM (C25744): il P/N della riga è quello del produttore letto da LCSC (Adriano 13/11/2026) */
+  lcsc?: string | null;
 }
 
 export const PREZZO_A_MANO = 'manuale' as const;
@@ -249,6 +252,7 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
   // senza P/N: il codice si cerca in Valore e Descrizione, prima nella colonna che ne contiene di più (Adriano 29/10/2026)
   const ordinePn = (['descrizione', 'valore'] as ColonnaPn[])
     .map(c => ({ c, q: quotaPn(righeFile.map(r => val(r.celle, c))) })).sort((x, y) => y.q - x.q).map(x => x.c);
+  const iLcsc = colonnaLcsc(colonne);
   let righe: RigaBom[] = righeFile.map(({ n, celle, mano }) => {
     const qt = quantitaRiga(val(celle, 'quantita'), val(celle, 'designatori'));
     const r: RigaBom = { n, pn: val(celle, 'pn'), produttore: val(celle, 'produttore'), designatori: val(celle, 'designatori'), valore: val(celle, 'valore'),
@@ -258,7 +262,8 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     // le alternative scritte a mano e quella scelta restano anche dopo "Rielabora" (se il P/N della riga è lo stesso)
     const candidati = r.pn ? [] : candidatiPn({ valore: r.valore, descrizione: r.descrizioneBom }, ordinePn);
     const prima = precedenti.get(n);
-    if (prima && (pnKey(prima.pn) === pnKey(r.pn) || (!r.pn && candidati.some(c => pnKey(c.pn) === pnKey(prima.pn))))) {
+    const stessoLcsc = !!prima?.lcsc && prima.lcsc === (codiceLcsc(r.pn) ?? (iLcsc >= 0 ? codiceLcsc(celle[iLcsc]) : null));
+    if (prima && (pnKey(prima.pn) === pnKey(r.pn) || stessoLcsc || (!r.pn && candidati.some(c => pnKey(c.pn) === pnKey(prima.pn))))) {
       // "Rielabora" senza distributori: restano tutte le alternative già trovate, il compatibile proposto e il P/N scelto per i passivi
       r.alternative = opz.soloCache ? (prima.alternative ?? []) : (prima.alternative ?? []).filter(x => x.fonte === FONTI_ALTERNATIVA.MANO || x.mpn === prima.alternativaScelta);
       // l'alternativa scelta da sola dal portale si rivaluta quando si rileggono i prezzi (il P/N della BOM potrebbe essere tornato disponibile)
@@ -278,6 +283,28 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     return r;
   });
   av.totale = righe.length;
+  // 1b. codici LCSC (Adriano 13/11/2026, BOM JLCPCB/EasyEDA): il codice C… diventa il P/N del produttore con case, descrizione e caratteristiche
+  // lette da LCSC, così la riga si codifica e gli altri distributori si interrogano con il P/N vero; LCSC resta come offerta (dopo gli altri)
+  const lcscRiga = new Map<RigaBom, string>();
+  righe.forEach((r, i) => {
+    const c = codiceLcsc(r.pn) ?? (iLcsc >= 0 ? codiceLcsc(righeFile[i].celle[iLcsc]) : null);
+    if (c) lcscRiga.set(r, c);
+  });
+  const daLcsc = lcscRiga.size ? await prodottiLcsc([...lcscRiga.values()], { forza: opz.forzaPrezzi, soloCache: !!opzioni.soloCache, cacheLunga: !!opzioni.mancanti }) : new Map<string, RisultatoFornitore>();
+  for (const [r, c] of lcscRiga) {
+    r.lcsc = c;
+    const x = daLcsc.get(c), p = x?.lcsc;
+    if (!p) {
+      r.note.push(x ? `codice LCSC ${c} non trovato sul sito LCSC` : `codice LCSC ${c} non ancora letto da LCSC (sito non raggiungibile o "Rielabora" senza ricerche: usa "Aggiorna prezzi")`);
+      continue;
+    }
+    if (!r.pn || codiceLcsc(r.pn)) { r.pn = p.mpn; r.fonti.push(`P/N da LCSC (${c})`); (r as any)._candidati = []; }
+    if (!r.produttore && p.produttore) r.produttore = p.produttore;
+    if (!r.footprint && p.case) r.footprint = p.case;
+    if (!r.descrizioneBom) r.descrizioneBom = descrizioneLcsc(p);
+    r.note.push(notaLcsc(p));
+    if (pnKey(r.pn) === pnKey(p.mpn)) { (r as any)._offerteLcsc = x!.offerte; (r as any)._prodLcsc = p; }
+  }
   // 2. archivio
   av.fase = 'archivio componenti';
   const inArchivio = new Map<string, Componente[]>();
@@ -289,6 +316,14 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     .flatMap(r => r.pn ? [r.pn] : ((r as any)._candidati as CandidatoPn[]).map(c => c.pn));
   const ricerca: EsitoRicerca = solo ? { perPn: new Map(), errori: {} }
     : await cercaPn(unico(daCercare), { forza: opz.forzaPrezzi, soloCache: !!opzioni.soloCache, cacheLunga: !!opzioni.mancanti, avanzamento: f => { av.fatti = Math.min(f, av.totale); } });
+  // offerta LCSC sotto il P/N del produttore (anche nelle righe unite con lo stesso P/N)
+  if (!solo) for (const r of righe) {
+    const o = (r as any)._offerteLcsc as Offerta[] | undefined;
+    if (!o?.length || !r.pn) continue;
+    const k = pnKey(r.pn)!;
+    if (!ricerca.perPn.has(k)) ricerca.perPn.set(k, {});
+    ricerca.perPn.get(k)!.lcsc = { offerte: o };
+  }
   const maiCercati = opzioni.soloCache ? unico(daCercare).filter(pn => !Object.keys(ricerca.perPn.get(pnKey(pn)!) ?? {}).length).length : 0;
   const dist = (pn: string | null) => (pn ? ricerca.perPn.get(pnKey(pn)!) : undefined) ?? {};
   // codici trovati in Valore / Descrizione: si compra quello che i distributori hanno (anche se costa di più)
@@ -360,11 +395,15 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     // componente nuovo: dati da P/N, DigiKey, colonne
     let famDk: string | null = null, aDk: Attributi = {};
     const dk = dist(r.pn).digikey;
-    if (dk?.prodotto && !(famDec && completo(famDec, aDec))) {
-      const d = daDigikey(dk.prodotto);
+    // DigiKey non ha il componente: categoria e dati da LCSC, letti allo stesso modo (Adriano 13/11/2026)
+    const pLcsc = (r as any)._prodLcsc as ProdottoLcsc | undefined;
+    const prodDk = dk?.prodotto ?? (pLcsc ? prodottoDkDaLcsc(pLcsc) : null);
+    const nomeDati = dk?.prodotto ? 'DigiKey' : 'LCSC';
+    if (prodDk && !(famDec && completo(famDec, aDec))) {
+      const d = daDigikey(prodDk);
       famDk = d.famiglia; aDk = d.attributi;
       if (!r.produttore && d.produttore) r.produttore = d.produttore;
-      if (!famDk) r.note.push(`DigiKey: categoria non riconosciuta (${d.descrizione})`);
+      if (!famDk) r.note.push(`${nomeDati}: categoria non riconosciuta (${d.descrizione})`);
     } else if (r.pn && fornitoriConfigurati().digikey && dk && !dk.prodotto && !Object.values(dist(r.pn)).some(x => x?.offerte.length)) r.note.push('non trovato su DigiKey');
     const fam = famDec ?? famDk ?? famBom;
     if (famDk && famDk !== fam) aDk = {};
@@ -372,7 +411,7 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
     r.attributi = { ...aBom, ...aDk, ...aDec };
     { const x = regolaResistenze(r.famiglia, r.attributi); r.attributi = x.attributi; r.note.push(...x.note); }
     if (famDec) r.fonti.push('decodifica P/N');
-    if (Object.keys(aDk).length) r.fonti.push('DigiKey');
+    if (Object.keys(aDk).length) r.fonti.push(nomeDati);
     if (Object.keys(aBom).length) r.fonti.push('colonne BOM');
     if (!fam || !completo(fam, r.attributi)) daLeggereIa.push(r);
   }
@@ -974,7 +1013,7 @@ export function calcolaAcquistiCon(righe: RigaBom[], quantita: number[], regole:
       // quindi assente con Rielabora) non conta se un altro distributore ha risposto. Prima ogni P/N introvabile restava "attenzione" e
       // non diventava mai "critico": niente alternative né righe "non quotato" nel preventivo.
       const altri = Object.keys(trovati).some(f => f !== 'arrow');
-      r.nonControllati = attivi.filter(f => !trovati[f] && !(f === 'wurth' && !codiceWurth(pn)) && !(f === 'arrow' && altri));
+      r.nonControllati = attivi.filter(f => !trovati[f] && f !== 'lcsc' && !(f === 'wurth' && !codiceWurth(pn)) && !(f === 'arrow' && altri));
     }
     r.acquisti = []; r.reperibilita = undefined;
     if (!quantita.length) continue; // BOM "solo codifica": nessuna quantità, niente acquisti né giudizio di reperibilità
