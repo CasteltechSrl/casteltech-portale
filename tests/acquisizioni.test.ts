@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dataDa, leggiEmail, normalizzaProposta, numeroDa, numeroOrdineEmail, oggettoJson, rigaConProdotto, tipoFile } from '../src/engine/acquisizioni.js';
+import { SEZIONI_ACQUISIZIONE, sezioneAcquisizione, dataDa, leggiEmail, normalizzaProposta, numeroDa, numeroOrdineEmail, oggettoJson, rigaConProdotto, tipoFile } from '../src/engine/acquisizioni.js';
 
 test('acquisizioni: tipo del file dal nome', () => {
   assert.equal(tipoFile('export_ordini_25-10-2026_22-51-19.xls'), 'export_ordini');
@@ -235,4 +235,18 @@ test('acquisizioni: ordine per telefono o a voce = proposta vuota con il cliente
   assert.match(p.note, /TELEFONO/);
   assert.match(propostaOrdineManuale({ id: 1, nome: 'a' }, '2026-11-11', 'voce').note, /A VOCE/);
   assert.equal(nomeOrdineManuale('Selea', '2026-11-11'), 'Ordine per telefono – SELEA – 11/11/2026');
+});
+
+test('acquisizioni: sezioni per provenienza (Adriano 13/11/2026)', () => {
+  assert.equal(sezioneAcquisizione('scheda_produzione'), 'produzione');
+  assert.equal(sezioneAcquisizione('ordine'), 'clienti');
+  assert.equal(sezioneAcquisizione('email'), 'clienti');
+  assert.equal(sezioneAcquisizione('ddt'), 'clienti');
+  assert.equal(sezioneAcquisizione('fattura_estera'), 'fornitori');
+  assert.equal(sezioneAcquisizione('ddt_ricevuto', 'fornitore'), 'fornitori');
+  assert.equal(sezioneAcquisizione('ddt_ricevuto', null), 'fornitori');
+  assert.equal(sezioneAcquisizione('ddt_ricevuto', 'cliente'), 'clienti');
+  assert.equal(sezioneAcquisizione('export_fatture'), 'altri');
+  assert.equal(sezioneAcquisizione('altro'), 'altri');
+  assert.deepEqual(SEZIONI_ACQUISIZIONE.map(z => z.chiave), ['produzione', 'clienti', 'fornitori', 'altri']);
 });

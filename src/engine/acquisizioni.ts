@@ -409,3 +409,24 @@ export function codiceProposto(codiceLetto: string | null | undefined, descrizio
   const versione = /(^|[^A-Z0-9])VERS(?:IONE)?\.?\s+([A-Z0-9][A-Z0-9-]*)/.exec(t)?.[2];
   return versione ? `${codice} ${versione}` : codice;
 }
+
+/**
+ * Sezioni della pagina "Documenti da e-mail e PDF" (Adriano 13/11/2026: "dividere i file che arrivano dalle schede di produzione,
+ * dai clienti e dai fornitori (autofatture e DDT)"). Calcolata in lettura dal tipo riconosciuto: niente colonne nuove.
+ * DDT ricevuto: dal mittente letto/scelto (cliente = materiale per un suo ordine); senza mittente va tra i fornitori.
+ * DDT di Casteltech: con i clienti (servono a evadere i loro ordini).
+ */
+export type SezioneAcquisizione = 'produzione' | 'clienti' | 'fornitori' | 'altri';
+export const SEZIONI_ACQUISIZIONE: { chiave: SezioneAcquisizione; titolo: string; nota: string }[] = [
+  { chiave: 'produzione', titolo: 'Schede di produzione', nota: 'Scansioni o foto delle schede compilate: i fogli tempi vanno nel rientro della commessa.' },
+  { chiave: 'clienti', titolo: 'Dai clienti', nota: 'Ordini (PDF, foto, email), DDT di materiale mandato dal cliente e DDT di Casteltech da abbinare agli ordini.' },
+  { chiave: 'fornitori', titolo: 'Dai fornitori', nota: 'Fatture dei fornitori esteri (diventano autofatture) e DDT della merce ordinata.' },
+  { chiave: 'altri', titolo: 'Altri file', nota: 'Export di Fatture in Cloud e file non riconosciuti.' },
+];
+export function sezioneAcquisizione(tipo: string, mittenteTipo?: string | null): SezioneAcquisizione {
+  if (tipo === 'scheda_produzione') return 'produzione';
+  if (tipo === 'fattura_estera') return 'fornitori';
+  if (tipo === 'ddt_ricevuto') return mittenteTipo === 'cliente' ? 'clienti' : 'fornitori';
+  if (tipo === 'ordine' || tipo === 'email' || tipo === 'ddt') return 'clienti';
+  return 'altri';
+}

@@ -7,7 +7,9 @@ document.querySelectorAll('tr[data-href]').forEach(tr => {
 document.querySelectorAll('form.azioni-elenco').forEach(modulo => {
   const caselle = () => [...modulo.querySelectorAll('input[name=ids]')];
   const spuntate = () => caselle().filter(c => c.checked);
-  const tutti = modulo.querySelector('.seleziona-tutti');
+  // più tabelle nello stesso modulo (es. sezioni di Da acquisire): ogni "seleziona tutti" vale per la sua tabella
+  const tuttiElenco = [...modulo.querySelectorAll('.seleziona-tutti')];
+  const caselleDi = t => { const tab = t.closest('table'); return tuttiElenco.length > 1 && tab ? [...tab.querySelectorAll('input[name=ids]')] : caselle(); };
   const conta = modulo.querySelector('.n-selezionati');
   const d = modulo.dataset;
   // gruppi = a cosa appartengono le righe spuntate (es. gli ordini delle righe); senza gruppi ogni riga conta da sola
@@ -18,10 +20,10 @@ document.querySelectorAll('form.azioni-elenco').forEach(modulo => {
     if (n && d.gruppoUno) testo += ` (${g === 1 ? `1 ${d.gruppoUno}` : `${g} ${d.gruppoTanti}`})`;
     if (conta) conta.textContent = testo;
     modulo.querySelectorAll('button[data-serve]').forEach(b => { b.disabled = b.dataset.serve === '1' ? g !== 1 : n === 0; });
-    if (tutti) { tutti.checked = n > 0 && n === caselle().length; tutti.indeterminate = n > 0 && n < caselle().length; }
+    tuttiElenco.forEach(t => { const cc = caselleDi(t), k = cc.filter(c => c.checked).length; t.checked = k > 0 && k === cc.length; t.indeterminate = k > 0 && k < cc.length; });
   };
   modulo.addEventListener('change', aggiorna);
-  if (tutti) tutti.addEventListener('change', () => { caselle().forEach(c => { c.checked = tutti.checked; }); aggiorna(); });
+  tuttiElenco.forEach(t => t.addEventListener('change', () => { caselleDi(t).forEach(c => { c.checked = t.checked; }); aggiorna(); }));
   modulo.addEventListener('submit', e => {
     const domanda = e.submitter?.dataset.chiedi;
     if (!domanda) return;
