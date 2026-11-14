@@ -72,6 +72,17 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/cerca', 'Ricerca']],
   },
   {
+    id: 'freccia-indietro', area: 'inizio', titolo: 'La freccia in alto a sinistra: tornare alla pagina di prima',
+    parole: 'freccia indietro tornare torna pagina prima precedente origine sezione ritorno back',
+    testo: [
+      'In tutte le pagine, in alto a sinistra accanto a "Portale Casteltech", c\'è la freccia ←: riporta alla pagina da cui sei arrivato. Esempio: da Banca e carte apri Previsione di cassa o Fatture anticipate; la freccia ti riporta a Banca e carte.',
+      'Se nella stessa pagina cambi un filtro (anno, ricerca, pagina dell\'elenco) o salvi, la freccia non torna al filtro di prima ma alla pagina da cui eri entrato. Passando il mouse sulla freccia vedi il nome della pagina dove porta.',
+      'Se hai aperto la pagina direttamente (link, preferiti, nuova scheda) la freccia porta alla pagina principale della sezione (es. il cruscotto dell\'Amministrazione). Ogni scheda del browser ricorda il suo percorso.',
+    ],
+    passi: ['Apri Amministrazione → Banca e carte.', 'Premi il tasto "Previsione di cassa".', 'Premi la freccia ← in alto a sinistra: sei di nuovo in Banca e carte.'],
+    pagine: [['/amministrazione/banca', 'Banca e carte']],
+  },
+  {
     id: 'tasti-rapidi', area: 'inizio', titolo: 'Tasti rapidi: fare prima con la tastiera',
     parole: 'tasti rapidi scorciatoie tastiera shortcut alt n nuovo esc escape punto interrogativo elenco tasti ctrl s salva barra slash ricerca veloce',
     testo: [

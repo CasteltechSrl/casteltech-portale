@@ -214,6 +214,11 @@ codice e commenti compresi, con nomi di variabili italiani come nel resto del pr
   Documenti emessi (Adriano 31/10/2026; regole in `engine/azioni-documenti.ts`, `azioni-documenti-servizio.ts`, test in `tests/azioni-documenti.test.ts`):
   pulsanti per tipo (fatture: Stampa, XML/zip, Excel, Segna incassate → pagina con data e modo, Duplica, Nota di credito, Elimina; NC; autofatture; DDT: Fattura i DDT
   dello stesso cliente, Annulla DDT); Elimina SOLO bozze senza numero, il resto si storna/annulla e il messaggio dice cosa non è stato toccato; niente spunte per Contabilità. Un elenco nuovo con azioni usa lo stesso schema.
+- Freccia "torna indietro" (Adriano 14/11/2026, "vale per tutte le pagine vecchie e nuove"; `public/indietro.js`, link `a.freccia-indietro` nel layout comune `views/layout.ts`,
+  test in `tests/indietro.test.ts`): in ogni pagina con utente, in alto a sinistra, ← riporta alla pagina da cui si è arrivati (es. Banca e carte → Previsione di cassa → ← = Banca e carte).
+  Il browser ricorda le pagine della scheda (sessionStorage); stessa pagina con altri filtri/salvataggi/messaggi = stessa pagina (`chiavePagina`: contano solo `PARAMETRI_PAGINA` come tipo, sezione, vista);
+  senza pagina prima = prima pagina del gruppo acceso (`data-ripiego`) o pagina iniziale del profilo. Una pagina nuova DEVE usare `layout()` (così ha la freccia); una pagina che non lo usa
+  (stampe a parte) deve avere un suo modo per tornare. Un parametro che cambia pagina (non un filtro) va aggiunto a `PARAMETRI_PAGINA`. Il controllo settimanale lo verifica.
 - Ordinare gli elenchi cliccando le colonne (Adriano 3/11/2026; `public/ordina-tabelle.js` in ogni pagina, stile `th.ordinabile` in `stile.css`, test in `tests/ordina-tabelle.test.ts`):
   ogni `<table>` in `<main>` con `<thead>` si ordina da sola: clic = crescente, secondo = decrescente, terzo = ordine di partenza; date gg/mm/aaaa, numeri 61/2026,
   importi all'italiana per valore, vuoti in fondo, scelta ricordata nel browser. Escluse da sole: intestazioni unite, righe di gruppo, caselle di un modulo che contiene

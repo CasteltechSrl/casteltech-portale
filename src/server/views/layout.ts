@@ -4,7 +4,7 @@ import { avvisoServizi } from '../stato-servizi.js';
 /** Versione del portale: cambia a ogni pubblicazione, così il browser non usa stili e script vecchi. */
 export const VERSIONE = (process.env.RENDER_GIT_COMMIT ?? String(Date.now())).slice(0, 10);
 
-import { eUfficio, type Ruolo } from '../../engine/ruoli.js';
+import { eUfficio, paginaIniziale, type Ruolo } from '../../engine/ruoli.js';
 import { linkPermesso } from '../../engine/link-profilo.js';
 
 export interface Utente { id: number; nome: string; ruolo: Ruolo }
@@ -78,6 +78,9 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
   // nel menu solo le pagine che il profilo può aprire (es. Analisi: solo amministratore ed esterno, Adriano 6/11/2026)
   // voce senza indirizzo = titoletto dentro la tendina (es. Documenti: Arrivati / Emessi da noi)
   const permesse = (voci: readonly [string, string][]) => voci.filter(([, h]) => !h || linkPermesso(opz.utente?.ruolo, h.split(/[?#]/)[0]));
+  // freccia "torna indietro" (Adriano 14/11/2026): senza pagina prima, la prima pagina della sezione accesa o la pagina iniziale del profilo
+  const gruppo = MENU_GRUPPI.find(g => g.chiave === gruppoAttivo(opz.attiva));
+  const ripiego = opz.utente ? ((gruppo && opz.utente.ruolo !== 'produzione' ? permesse(gruppo.voci).find(v => v[1])?.[1] : undefined) ?? paginaIniziale(opz.utente.ruolo)) : '';
   return html`<!doctype html>
 <html lang="it">
 <head>
@@ -90,6 +93,7 @@ export function layout(opz: { titolo: string; utente?: Utente; attiva?: string; 
 <body class="${opz.utente?.ruolo === 'contabilita' ? 'sola-lettura' : opz.utente?.ruolo === 'esterno' ? 'sola-lettura-tutto' : ''}">
 ${opz.utente ? html`
 <header class="testata">
+  <a class="freccia-indietro" href="${ripiego}" data-ripiego="${ripiego}" title="Torna alla pagina di prima" aria-label="Torna alla pagina di prima" hidden>←</a>
   <a class="marchio" href="/"><span class="logo">C</span> Portale Casteltech</a>
   ${opz.utente.ruolo === 'contabilita' ? html`<nav class="menu menu-piatto">${permesse(MENU_CONTABILITA).map(([t, h]) => html`<a href="${h}">${t}</a>`)}</nav>` : html`<nav class="menu"><!-- menu a gruppi deciso da Adriano (31/10/2026); "⌂ Cruscotto" prima voce, senza tendina (Adriano 9/11/2026) -->
     ${eUfficio(opz.utente.ruolo) || opz.utente.ruolo === 'esterno' ? html`<a href="/cruscotto" class="voce-cruscotto ${opz.attiva === 'cruscotto' ? 'attiva' : ''}">⌂ Cruscotto</a>` : ''}
@@ -127,7 +131,8 @@ ${opz.utente ? raw(`<script src="/static/conferma.js?v=${VERSIONE}" defer></scri
 <script src="/static/ordina-tabelle.js?v=${VERSIONE}" defer></script>
 <script src="/static/elenchi-scelta.js?v=${VERSIONE}" defer></script>
 <script src="/static/menu-cercabile.js?v=${VERSIONE}" defer></script>
-<script src="/static/resta-qui.js?v=${VERSIONE}" defer></script>`) : ''}
+<script src="/static/resta-qui.js?v=${VERSIONE}" defer></script>
+<script src="/static/indietro.js?v=${VERSIONE}" defer></script>`) : ''}
 ${[opz.script ?? []].flat().map(s => raw(`<script src="/static/${s}?v=${VERSIONE}" defer></script>`))}
 </body>
 </html>`;
