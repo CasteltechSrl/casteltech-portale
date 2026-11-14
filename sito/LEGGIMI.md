@@ -24,6 +24,10 @@ Pubblicato da Render come pagine statiche ("Static Site" `casteltech-sito` in `r
     caselle da 16 px e pulsanti da 44 px sul telefono.
   - Testi: "Servizi online" (`#portale`) dice solo quello che c'è: preventivo guidato, offerta in PDF, conferma d'ordine, DDT per email. NON esiste un accesso
     per i clienti e il portale non ha giacenze: non scriverlo. L'elenco "Cosa serve per un preventivo" è uno solo (`SERVE`) e compare in home, servizi e modulo.
+  - Unite dalla seconda versione fatta sul PC di Adriano (14/11/2026): domande frequenti in fondo alla home (`FAQ`, anche `/#faq` e dati strutturati FAQPage:
+    risposte SOLO con dati già nel sito, niente certificazioni, tempi di consegna o lotto minimo), pulsante unico "Chiedete un preventivo" e fascia finale
+    uguale in tutte le pagine di produzione (`ctaProd`, `CTAQ` = domanda per servizio), nota sulla riservatezza dei file, catalogo dei servizi nel JSON-LD,
+    "voi" dappertutto (al "tu" resta solo la candidatura). Non unite: "stato degli ordini" e area riservata come già disponibili, voci "in arrivo", tempi di risposta promessi.
 - Cookie: banner di Iubenda (stesso account del vecchio sito); Google Analytics e la mappa di Google partono solo dopo il consenso.
 - `pubblico/<vecchio-indirizzo>/index.html` = rimandi dai vecchi indirizzi del WordPress (italiano e inglese) alla sezione giusta,
   rifatti da `strumenti/rimandi.py`. I PDF delle informative restano agli stessi indirizzi in `pubblico/wp-content/uploads/`.
