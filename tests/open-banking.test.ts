@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { addebitiCarta, bancheBper, collegamentiDaStato, contoDaApi, leggiScelta, tipoCollegamento, tipoUtente, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
+import { addebitiCarta, bancheBper, soloCarte, collegamentiDaStato, contoDaApi, leggiScelta, tipoCollegamento, tipoUtente, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
 import { cosaDaFare } from '../src/engine/cruscotto-generale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
@@ -48,11 +48,11 @@ test('open banking: da quando scaricare, consenso e ora', () => {
 test('open banking: banche BPER (senza le carte) e gettone firmato', () => {
   const b = bancheBper([{ name: 'BPER Banca Carte' }, { name: 'BPER Banca', psu_types: ['personal', 'business'] }, { name: 'Intesa Sanpaolo' }, { name: 'BPER Banca Smart', psu_types: ['personal'] }]);
   assert.deepEqual(b.map(x => x.name), ['BPER Banca', 'BPER Banca Smart']);
-  // modi di accesso: solo quelli per le aziende (elenco vero di Enable Banking del 14/11/2026)
+  // modi di accesso: quelli per le aziende + Smart (carta, accesso personale) (elenco vero di Enable Banking del 14/11/2026)
   const conMetodi = bancheBper([{ name: 'BPER Banca', psu_types: ['personal', 'business'], auth_methods: [
     { name: 'SMART', title: 'Servizi digitali Smart', psu_type: 'personal' }, { name: 'CORPORATE', title: 'Corporate Banking', psu_type: 'business' },
     { name: 'DIGITAL_CORPORATE', title: 'Digital Corporate Banking', psu_type: 'business' }] }]);
-  assert.deepEqual(conMetodi[0].metodi.map(m => m.name), ['CORPORATE', 'DIGITAL_CORPORATE']);
+  assert.deepEqual(conMetodi[0].metodi.map(m => m.name), ['SMART', 'CORPORATE', 'DIGITAL_CORPORATE']);
   assert.deepEqual(leggiScelta('BPER Banca|CORPORATE'), { banca: 'BPER Banca', metodo: 'CORPORATE' });
   assert.deepEqual(leggiScelta(''), { banca: 'BPER Banca', metodo: null });
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -85,8 +85,14 @@ test('open banking: carta di credito BPER e PayPal (Adriano 14/11/2026)', () => 
     { name: 'BPER Banca', psu_types: ['personal', 'business'], auth_methods: [{ name: 'SMART', psu_type: 'personal' }, { name: 'BPERCARD', title: 'Area Riservata Carte', psu_type: 'personal' },
       { name: 'CORPORATE', title: 'Corporate Banking', psu_type: 'business' }] }]);
   assert.deepEqual(b.map(x => x.name), ['BPER Banca', 'PayPal']);
-  assert.deepEqual(b[0].metodi.map(m => m.name), ['BPERCARD', 'CORPORATE']);
-  assert.match(b[0].metodi[0].titolo, /carta di credito/);
+  assert.deepEqual(b[0].metodi.map(m => m.name), ['SMART', 'BPERCARD', 'CORPORATE']);
+  // Adriano 14/11/2026: le carte si vedono entrando con l'accesso personale (Smart)
+  assert.match(b[0].metodi[0].titolo, /carta di credito, accesso personale/);
+  assert.equal(tipoCollegamento('BPER Banca', 'SMART'), 'carta');
+  assert.equal(tipoUtente('SMART'), 'personal');
+  assert.deepEqual(soloCarte([{ uid: 'cc', account_id: { iban: 'IT37B0538765310000001234567' } }, { uid: 'k', cash_account_type: 'CARD' }]).map(a => a.uid), ['k']);
+  assert.deepEqual(soloCarte([{ uid: 'cc', account_id: { iban: 'IT37B0538765310000001234567' } }, { uid: 'k2' }]).map(a => a.uid), ['k2']);
+  assert.match(b[0].metodi[1].titolo, /carta di credito/);
   assert.equal(tipoCollegamento('BPER Banca', 'BPERCARD'), 'carta');
   assert.equal(tipoCollegamento('BPER Banca', 'CORPORATE'), 'conti');
   assert.equal(tipoCollegamento('PayPal', null), 'paypal');

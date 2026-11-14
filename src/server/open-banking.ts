@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { q, q1 } from './db.js';
 import { caricaMovimenti, contiBanca, salvaConti } from './banca-servizio.js';
 import type { TipoConto } from '../engine/banca.js';
-import { FILE_OPEN_BANKING, NOMI_COLLEGAMENTO, bancheBper, collegamentiDaStato, contoDaApi, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta,
+import { FILE_OPEN_BANKING, NOMI_COLLEGAMENTO, bancheBper, collegamentiDaStato, contoDaApi, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta, soloCarte,
   tipoCollegamento, tipoUtente, togliGiaPresenti, type BancaScelta, type Collegamento, type ContoApi, type ContoCollegato, type TipoCollegamento, type TransazioneApi } from '../engine/open-banking.js';
 import { partiRoma } from '../engine/promemoria.js';
 import { indirizzoPortale } from './promemoria.js';
@@ -108,7 +108,7 @@ const TIPO_CONTO: Record<TipoCollegamento, TipoConto | null> = { conti: null, ca
 export async function completaCollegamento(codice: string, banca: string, utente: string, metodo: string | null = null): Promise<Collegamento> {
   const r = await api<{ session_id: string; accounts: ContoApi[]; access?: { valid_until?: string } }>('POST', '/sessions', { code: codice });
   const id = tipoCollegamento(banca, metodo);
-  const conti = (r.accounts ?? []).map(a => contoDaApi(a, id));
+  const conti = (id === 'carta' ? soloCarte(r.accounts ?? []) : r.accounts ?? []).map(a => contoDaApi(a, id));
   let prima: string | undefined;
   const nuovo: Collegamento = { id, banca, metodo, sessione: r.session_id, scadenza: r.access?.valid_until ?? scadenzaRichiesta(new Date()), conti,
     collegatoIl: new Date().toISOString(), collegatoDa: utente, errore: null };

@@ -118,8 +118,9 @@ export interface BancaScelta { name: string; impresa: boolean; metodi: { name: s
 export function bancheBper(elenco: { name: string; country?: string; psu_types?: string[]; auth_methods?: MetodoAccesso[] }[]): BancaScelta[] {
   return elenco.filter(b => (/bper/i.test(b.name) && !/carte|card/i.test(b.name)) || /^paypal$/i.test(b.name.trim()))
     .map(b => ({ name: b.name, impresa: !b.psu_types || b.psu_types.includes('business'),
-      metodi: (b.auth_methods ?? []).filter(m => m.name && (!m.psu_type || m.psu_type === 'business' || m.name === 'BPERCARD'))
-        .map(m => ({ name: m.name, titolo: m.name === 'BPERCARD' ? `${m.title || 'Area Riservata Carte'} (carta di credito)` : m.title || m.name })) }))
+      metodi: (b.auth_methods ?? []).filter(m => m.name && (!m.psu_type || m.psu_type === 'business' || METODI_CARTA.includes(m.name)))
+        .map(m => ({ name: m.name, titolo: m.name === 'BPERCARD' ? `${m.title || 'Area Riservata Carte'} (carta di credito)`
+          : m.name === 'SMART' ? `${m.title || 'Servizi digitali Smart'} (carta di credito, accesso personale)` : m.title || m.name })) }))
     .sort((a, b) => Number(/paypal/i.test(a.name)) - Number(/paypal/i.test(b.name)) || Number(b.impresa) - Number(a.impresa) || a.name.localeCompare(b.name));
 }
 
@@ -128,13 +129,26 @@ export function leggiScelta(v: unknown): { banca: string; metodo: string | null 
   const [banca, metodo] = String(v ?? '').split('|').map(x => x.trim());
   return { banca: banca || 'BPER Banca', metodo: metodo || null };
 }
+/**
+ * Accessi BPER da privato che servono per la carta di credito: Area Riservata Carte, oppure (Adriano 14/11/2026: "dovevo entrare come account
+ * personale e poi vedevo le carte") i Servizi digitali Smart con le credenziali personali.
+ */
+export const METODI_CARTA = ['BPERCARD', 'SMART'];
 export function tipoCollegamento(banca: string, metodo: string | null): TipoCollegamento {
   if (/paypal/i.test(banca)) return 'paypal';
-  if (metodo === 'BPERCARD' || /carte|card/i.test(banca)) return 'carta';
+  if ((metodo && METODI_CARTA.includes(metodo)) || /carte|card/i.test(banca)) return 'carta';
   return 'conti';
 }
-/** L'Area Riservata Carte di BPER è un accesso da privato: la banca rifiuta "business". */
-export const tipoUtente = (metodo: string | null): 'business' | 'personal' => (metodo === 'BPERCARD' ? 'personal' : 'business');
+/** Gli accessi della carta sono da privato: la banca rifiuta "business". */
+export const tipoUtente = (metodo: string | null): 'business' | 'personal' => (metodo && METODI_CARTA.includes(metodo) ? 'personal' : 'business');
+
+/** Collegamento della carta fatto con l'accesso personale: tiene solo le carte (tipo CARD o senza IBAN), non gli eventuali conti personali. */
+export function soloCarte<T extends ContoApi>(conti: T[]): T[] {
+  const carte = conti.filter(a => /card/i.test(a.cash_account_type ?? ''));
+  if (carte.length) return carte;
+  const senzaIban = conti.filter(a => !a.account_id?.iban);
+  return senzaIban.length ? senzaIban : conti;
+}
 
 /** Conto come lo dà l'API: IBAN per i conti, numero mascherato per la carta, valuta per PayPal. */
 export interface ContoApi { uid: string; account_id?: { iban?: string | null; other?: { identification?: string | null } | null } | null; name?: string | null;
