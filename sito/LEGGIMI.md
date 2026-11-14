@@ -13,6 +13,21 @@ Pubblicato da Render come pagine statiche ("Static Site" `casteltech-sito` in `r
     domande guidate per ogni voce (arrivano già come "domanda: risposta" in `righe_json`), fino a 10 file / 40 MB → pacchetto "SITO – AZIENDA"
     (o "SITO – PRIVATO – NOME") nei Documenti dei clienti + email a info@.
   - Contatti (`/api/sito/contatto`) → email a info@. Candidatura (`/api/sito/candidatura`) → email a info@ con il curriculum allegato.
+- Migliorie del 14/11/2026 (ramo `sito-migliorie-fable`):
+  - Ricerca e condivisioni: titolo e descrizione nel `<head>` (e per ogni sezione nell'elenco `META` dello script), anteprima `img/anteprima.jpg` (1200×630),
+    dati dell'azienda in JSON-LD (solo quelli già scritti nel sito). Dentro `<main id="app">` c'è un riassunto fisso per chi non ha JavaScript e per i motori
+    di ricerca: lo script lo sostituisce con le sezioni. Se cambiano indirizzo, telefono o orari vanno corretti in tre punti: `CONFIG`, piede della pagina, JSON-LD.
+  - Immagini: si mettono con `pic("chiave")` o `ph("chiave","stile")`, mai come sfondo: così hanno testo alternativo (`ALT`), misure (`DIM`) e si caricano solo
+    quando servono (`pic("chiave",1)` = immagine in cima, caricata subito). Ogni `.jpg` grande ha accanto la copia `.webp` (metà del peso), rifatta con
+    `convert foto.jpg -quality 76 -define webp:method=6 foto.webp`; il `.jpg` resta come ripiego. Una foto nuova = voce in `IMG`, `DIM`, `ALT` + la copia `.webp`.
+  - Accessibilità: "Vai al contenuto" come primo tasto Tab, il fuoco passa al contenuto a ogni cambio di sezione, contorno del fuoco scuro sui fondi chiari,
+    caselle da 16 px e pulsanti da 44 px sul telefono.
+  - Testi: "Servizi online" (`#portale`) dice solo quello che c'è: preventivo guidato, offerta in PDF, conferma d'ordine, DDT per email. NON esiste un accesso
+    per i clienti e il portale non ha giacenze: non scriverlo. L'elenco "Cosa serve per un preventivo" è uno solo (`SERVE`) e compare in home, servizi e modulo.
+  - Unite dalla seconda versione fatta sul PC di Adriano (14/11/2026): domande frequenti in fondo alla home (`FAQ`, anche `/#faq` e dati strutturati FAQPage:
+    risposte SOLO con dati già nel sito, niente certificazioni, tempi di consegna o lotto minimo), pulsante unico "Chiedete un preventivo" e fascia finale
+    uguale in tutte le pagine di produzione (`ctaProd`, `CTAQ` = domanda per servizio), nota sulla riservatezza dei file, catalogo dei servizi nel JSON-LD,
+    "voi" dappertutto (al "tu" resta solo la candidatura). Non unite: "stato degli ordini" e area riservata come già disponibili, voci "in arrivo", tempi di risposta promessi.
 - Cookie: banner di Iubenda (stesso account del vecchio sito); Google Analytics e la mappa di Google partono solo dopo il consenso.
 - `pubblico/<vecchio-indirizzo>/index.html` = rimandi dai vecchi indirizzi del WordPress (italiano e inglese) alla sezione giusta,
   rifatti da `strumenti/rimandi.py`. I PDF delle informative restano agli stessi indirizzi in `pubblico/wp-content/uploads/`.
