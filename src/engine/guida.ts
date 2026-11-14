@@ -836,7 +836,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     id: 'banca-collegamento', area: 'amministrazione', titolo: 'Banca: collegamento automatico (open banking)',
     parole: 'banca bper collegamento automatico open banking psd2 enable banking consenso app sca scarica movimenti da soli rinnova scollega senza csv carta di credito paypal spese addebito 15',
     testo: [
-      'Amministrazione → Banca → riquadro "Collegamento automatico con la banca". Il portale scarica da solo i movimenti dei conti BPER, della carta di credito e di PayPal ogni giorno feriale alle 8:30 e li mette in "Da abbinare", come se avessi caricato il CSV. "Scarica adesso" li prende subito.',
+      'Amministrazione → Banca e carte (nel menu subito dopo Fatture differite: in una pagina conti, carta di credito, PayPal, riconciliazione con le fatture, RiBa e anticipi, fatture anticipate, previsione di cassa) → riquadro "Collegamento automatico con la banca". Il portale scarica da solo i movimenti dei conti BPER, della carta di credito e di PayPal ogni giorno feriale alle 8:30 e li mette in "Da abbinare", come se avessi caricato il CSV. "Scarica adesso" li prende subito.',
       'Il servizio che collega il portale alla banca è Enable Banking (autorizzato in Europa per leggere i conti, PSD2): il portale può solo LEGGERE saldi e movimenti, non può fare pagamenti.',
       'Per collegare scegli nel menu "Collega": conti correnti = BPER Banca · Corporate Banking (oppure · Digital Corporate Banking: quello con cui entri di solito); carta di credito = BPER Banca · Area Riservata Carte (carta di credito); PayPal = PayPal. Poi "Collega" → "Vai a …" → entri come sempre e confermi (per BPER con l\'app), scegliendo i conti o le carte. Torni nel portale e il primo scarico parte subito (fino a 89 giorni indietro).',
       'Ogni collegamento è una riga della tabella con il suo consenso, l\'ultimo scarico, "Rinnova" e "Scollega". Collegare di nuovo la stessa cosa sostituisce il consenso di prima.',
@@ -848,7 +848,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       '"Scollega" chiude il consenso; i movimenti già scaricati restano. Le chiavi del servizio (ENABLEBANKING_APP_ID, ENABLEBANKING_PRIVATE_KEY) stanno solo su Render.',
     ],
     passi: ['Amministrazione → Banca → menu "Collega": conti, carta o PayPal → "Collega".', '"Vai a …", entra e conferma scegliendo i conti o le carte.', 'Ogni mattina i movimenti arrivano da soli in "Da abbinare"; ogni 180 giorni "Rinnova".'],
-    pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti'], ['/amministrazione/analisi/cassa', 'Previsione di cassa']],
+    pagine: [['/amministrazione/banca', 'Banca e carte'], ['/amministrazione/analisi/cassa', 'Previsione di cassa']],
   },
   {
     id: 'banca-movimenti', area: 'amministrazione', titolo: 'Banca: estratto conto e abbinamento con le fatture',
@@ -865,7 +865,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Se la banca è collegata in automatico (argomento "Banca: collegamento automatico"), il CSV non serve più per i conti collegati: i movimenti arrivano da soli e l\'abbinamento è lo stesso.',
     ],
     passi: ['Scarica da BPER i movimenti (Tutti i movimenti → CSV), oppure CBI o Excel.', 'Amministrazione → Banca → "Carica l\'estratto conto", scegli il file e premi Carica.', 'Controlla le proposte, spunta e premi "Conferma le righe spuntate".'],
-    pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti']],
+    pagine: [['/amministrazione/banca', 'Banca e carte']],
   },
   {
     id: 'banca-riba', area: 'amministrazione', titolo: 'RiBa e anticipo fatture: il file per la banca',

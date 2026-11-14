@@ -161,7 +161,7 @@ test('banca: controlli prima di creare la RiBa', () => {
 test('banca: nel menu Amministrazione e nella guida', () => {
   const voci = MENU_GRUPPI.find(g => g.chiave === 'amministrazione')!.voci.map(v => v[1]);
   assert.ok(voci.includes('/amministrazione/banca'));
-  assert.ok(voci.includes('/amministrazione/banca/anticipi'));
+  assert.ok(!voci.includes('/amministrazione/banca/anticipi'));   // dal 14/11/2026 RiBa e anticipi sono un tasto dentro "Banca e carte"
   assert.ok(cercaGuida('estratto conto banca').length > 0);
   assert.ok(cercaGuida('riba file cbi').length > 0);
 });

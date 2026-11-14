@@ -25,7 +25,7 @@ export function menuAmministrazione(attiva: 'cruscotto' | 'ddt' | 'fattura' | 'a
   const voci = [['cruscotto', '/amministrazione', 'Cruscotto'],
     ...SCHEDE_DOCUMENTI.map(s => [s.tipo, `/amministrazione/documenti?tipo=${s.tipo}`, s.tanti] as const),
     ['registri', '/amministrazione/registri', 'Registri IVA'],   // Fatture fornitori negli Acquisti (Adriano 7/11/2026)
-    ['banca', '/amministrazione/banca', 'Banca'], ['vies', '/amministrazione/vies', 'Controllo VIES'], ['fiscale', '/amministrazione/spese', 'Spese, bollo, lettere d\'intento'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
+    ['banca', '/amministrazione/banca', 'Banca e carte'], ['vies', '/amministrazione/vies', 'Controllo VIES'], ['fiscale', '/amministrazione/spese', 'Spese, bollo, lettere d\'intento'], ['analisi', '/amministrazione/analisi', 'Analisi']] as const;
   return html`<nav class="tasti-sezione">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}
     <a href="/impostazioni/amministrazione">Impostazioni</a></nav>`;
 }

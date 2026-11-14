@@ -1051,3 +1051,5 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Carta di credito BPER e PayPal (Adriano 14/11/2026, "scaricare le spese mensili e mettere a budget l'uscita del 15"): un collegamento per tipo (`collegamenti` in 'open_banking', `collegamentiDaStato`: lo stato di prima = 'conti'),
    carta = BPER metodo BPERCARD "Area Riservata Carte" (psu personal, `tipoUtente`), PayPal = aspsp 'PayPal'; conti in Banca con tipo 'carta'/'paypal' (`TIPI_CONTO`, numero `CARTA1234`/`PAYPAL`, `contoDaApi`),
    fuori dal saldo di cassa; previsione di cassa: spese della carta di un mese = uscita il 15 del mese dopo (`addebitiCarta`).
+   Menu (Adriano 14/11/2026): Amministrazione → "Banca e carte" subito dopo Fatture differite (unica voce della banca); nella pagina i tasti Conti, carte e riconciliazione / RiBa e anticipo fatture /
+   Fatture anticipate (`?tipo=fattura&anticipo=tutte`) / Previsione di cassa (`tasti` in `rotte/banca.ts`).
