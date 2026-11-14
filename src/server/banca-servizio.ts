@@ -8,6 +8,8 @@ import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi, ty
 import { rataMancante, abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
   categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
+import { FILE_OPEN_BANKING, togliGiaPresenti } from '../engine/open-banking.js';
+
 const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.numero IS NOT NULL`;
 
 /** Movimenti letti dal file: CBI (testo a righe fisse) oppure Excel/CSV dell'home banking. */
@@ -68,7 +70,14 @@ export async function contiConSaldo() {
 export async function caricaMovimenti(movimenti: Movimento[], conto: string, file: string): Promise<{ nuovi: number; gia: number }> {
   const iban = await ibanAzienda();
   const scelto = !conto || conto.toUpperCase() === 'BPER' ? numeroConto(iban) || 'BPER' : numeroConto(conto);
-  const conMov = movimenti.map(m => ({ ...m, rapporto: m.rapporto ?? scelto }));
+  let conMov = movimenti.map(m => ({ ...m, rapporto: m.rapporto ?? scelto }));
+  // file della banca caricato a mano dopo lo scarico automatico: descrizioni diverse, quindi si confrontano conto, data e importo (Adriano 14/11/2026)
+  if (file !== FILE_OPEN_BANKING && conMov.length) {
+    const dal = conMov.reduce((d, m) => (m.data < d ? m.data : d), conMov[0].data);
+    const automatici = await q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo
+      FROM banca_movimenti WHERE file = $1 AND data >= $2`, [FILE_OPEN_BANKING, dal]);
+    if (automatici.length) conMov = togliGiaPresenti(conMov, automatici);
+  }
   const chiavi = chiaviMovimenti(conMov, scelto);
   const inseriti = await q<{ id: number }>(`INSERT INTO banca_movimenti (conto, data, valuta, importo, descrizione, causale, chiave, file)
     SELECT m.rapporto, m.data, m.valuta, m.importo, m.descrizione, m.causale, m.chiave, $1

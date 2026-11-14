@@ -833,6 +833,21 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     pagine: [['/amministrazione/solleciti', 'Solleciti incassi'], ['/amministrazione', 'Cruscotto amministrazione']],
   },
   {
+    id: 'banca-collegamento', area: 'amministrazione', titolo: 'Banca: collegamento automatico (open banking)',
+    parole: 'banca bper collegamento automatico open banking psd2 enable banking consenso app sca scarica movimenti da soli rinnova scollega senza csv',
+    testo: [
+      'Amministrazione → Banca → riquadro "Collegamento automatico con la banca". Il portale scarica da solo i movimenti dei conti BPER ogni giorno feriale alle 8:30 e li mette in "Da abbinare", come se avessi caricato il CSV. "Scarica adesso" li prende subito.',
+      'Il servizio che collega il portale alla banca è Enable Banking (autorizzato in Europa per leggere i conti, PSD2): il portale può solo LEGGERE saldi e movimenti, non può fare pagamenti.',
+      'Per collegare: "Collega la banca" → "Vai alla banca" → entri come sempre in BPER e confermi con l\'app, scegliendo i conti. Torni nel portale e il primo scarico parte subito (fino a 89 giorni indietro).',
+      'Il consenso dura al massimo 180 giorni. 14 giorni prima il riquadro e il cruscotto ("Da fare oggi") lo segnalano: si rinnova con "Rinnova il consenso", stessi passi. Anche un errore di scarico compare lì.',
+      'I movimenti già caricati con il CSV non si ripetono: il portale confronta conto, data e importo (le descrizioni dell\'open banking sono scritte in modo diverso). Vale anche al contrario, se carichi un CSV dopo.',
+      'I conti tecnici dell\'anticipo fatture potrebbero non essere visibili con l\'open banking (copre i conti correnti): per quelli si continua a caricare il CSV.',
+      '"Scollega" chiude il consenso; i movimenti già scaricati restano. Le chiavi del servizio (ENABLEBANKING_APP_ID, ENABLEBANKING_PRIVATE_KEY) stanno solo su Render.',
+    ],
+    passi: ['Amministrazione → Banca → "Collega la banca".', '"Vai alla banca", entra in BPER e conferma con l\'app scegliendo i conti.', 'Ogni mattina i movimenti arrivano da soli in "Da abbinare"; ogni 180 giorni "Rinnova il consenso".'],
+    pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti']],
+  },
+  {
     id: 'banca-movimenti', area: 'amministrazione', titolo: 'Banca: estratto conto e abbinamento con le fatture',
     parole: 'banca bper password riservata estratto conto movimenti cbi excel csv saldo fido sconfinamento conto tecnico anticipo rientro abbinamento abbina incassi pagamenti bonifico riconciliazione home banking commissioni f24 categoria',
     testo: [
@@ -844,7 +859,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
       'Nel riquadro Conti si scrivono una volta nome, tipo (ordinario o anticipo), saldo a una data (per esempio quello dell\'estratto conto del 31/12) e fido: il saldo di oggi = quel saldo + i movimenti caricati dopo. Il fido anticipi (per esempio 100.000 €) vale per tutti i conti di anticipo insieme: la riga in fondo dice quanto è usato e quanto resta.',
       'Anticipi e rientri ("ANTICIPO SU DOCUMENTI", "RIENTRO ANTICIPO", i movimenti dei conti tecnici) non si abbinano mai alle fatture: la fattura è incassata quando arriva il bonifico del cliente o l\'accredito della distinta RiBa. Prendono la categoria "Anticipo fatture / RiBa".',
       'Chi la vede (Adriano 8/11/2026): amministratore, contabilità ed esterno entrano direttamente; gli utenti dell\'ufficio scrivono la password delle buste paga (la sceglie l\'amministratore in Dipendenti → Buste paga). Si richiude da sola dopo 15 minuti senza aprire pagine.',
-      'Il collegamento diretto con la banca (open banking PSD2) verrà dopo: l\'abbinamento resterà lo stesso.',
+      'Se la banca è collegata in automatico (argomento "Banca: collegamento automatico"), il CSV non serve più per i conti collegati: i movimenti arrivano da soli e l\'abbinamento è lo stesso.',
     ],
     passi: ['Scarica da BPER i movimenti (Tutti i movimenti → CSV), oppure CBI o Excel.', 'Amministrazione → Banca → "Carica l\'estratto conto", scegli il file e premi Carica.', 'Controlla le proposte, spunta e premi "Conferma le righe spuntate".'],
     pagine: [['/amministrazione/banca', 'Banca: movimenti e abbinamenti']],

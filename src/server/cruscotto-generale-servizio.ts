@@ -3,6 +3,8 @@
  * Tutto si legge UNA volta all'apertura della pagina, con le richieste lanciate insieme: niente aggiornamenti automatici,
  * così il database su Neon (piano gratuito) può spegnersi quando nessuno lavora. I conti stanno in engine/cruscotto-generale.ts.
  */
+import { openBankingConfigurato, statoOpenBanking } from './open-banking.js';
+import { statoConsenso } from '../engine/open-banking.js';
 import { q } from './db.js';
 import { pianificaProduzione, righeOrdini } from './ordini-servizio.js';
 import { elencoOrdiniFornitore } from './ordini-fornitore-servizio.js';
@@ -131,12 +133,15 @@ export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(og
   const ofAperti = ordiniFornitore.filter(o => !['bozza', 'annullato'].includes(o.stato) && o.arrivo !== 'arrivato');
 
   const differite = contaDifferite(ddt, oggi);
+  // collegamento automatico con la banca (Adriano 14/11/2026): consenso scaduto o in scadenza, oppure ultimo scarico non riuscito
+  const ob = openBankingConfigurato() ? await statoOpenBanking() : null;
+  const bancaDaRicollegare = ob?.sessione && (statoConsenso(ob.scadenza, new Date()).stato !== 'attivo' || ob.errore) ? 1 : 0;
   const daFare = cosaDaFare({
     sdiScartate: sdiConto('scartato'), sdiNonConsegnate: sdiConto('non_consegnato'), consegneInRitardo: inRitardo.length,
     preventiviDaValidare: prev('da_validare')?.quanti ?? 0, ordiniDaAcquisire, acquisizioniInErrore: acq(a => a.stato === 'errore'),
     ddtDaFatturare: ddt.length, schedeScansionate, tempiAperti: tempiAperti[0]?.quanti ?? 0, crmScadute: crm[0]?.scadute ?? 0,
     incassiScaduti: inc.fasce.scaduta.quante, pagamentiScaduti: pag.fasce.scaduta.quante, bozzeDocumenti: bozze[0]?.quanti ?? 0,
-    differiteScadute: differite.scaduti, differiteInScadenza: differite.inScadenza,
+    differiteScadute: differite.scaduti, differiteInScadenza: differite.inScadenza, bancaDaRicollegare,
   }, {
     'sdi-scartate': sdiUltimo('scartato') ? `/amministrazione/documenti/${sdiUltimo('scartato')}` : undefined,
     'sdi-non-consegnate': sdiUltimo('non_consegnato') ? `/amministrazione/documenti/${sdiUltimo('non_consegnato')}` : undefined,
