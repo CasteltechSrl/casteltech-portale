@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { q, q1 } from './db.js';
 import { caricaMovimenti } from './banca-servizio.js';
 import { numeroConto } from '../engine/banca.js';
-import { FILE_OPEN_BANKING, bancheBper, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta, togliGiaPresenti, type TransazioneApi } from '../engine/open-banking.js';
+import { FILE_OPEN_BANKING, bancheBper, type BancaScelta, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta, togliGiaPresenti, type TransazioneApi } from '../engine/open-banking.js';
 import { partiRoma } from '../engine/promemoria.js';
 import { indirizzoPortale } from './promemoria.js';
 
@@ -23,7 +23,7 @@ export const percorsoRitorno = '/amministrazione/banca/collega/ritorno';
 
 export interface ContoCollegato { uid: string; iban: string | null; numero: string; nome: string | null }
 export interface StatoOpenBanking {
-  banca?: string; sessione?: string; scadenza?: string; collegatoIl?: string; collegatoDa?: string;
+  banca?: string; metodo?: string | null; sessione?: string; scadenza?: string; collegatoIl?: string; collegatoDa?: string;
   conti?: ContoCollegato[]; ultimoScarico?: string; ultimoGiorno?: string; esito?: string; errore?: string | null;
 }
 
@@ -67,28 +67,28 @@ async function api<T>(metodo: string, percorso: string, corpo?: unknown): Promis
 }
 
 /** Banche BPER disponibili (nome da usare per il collegamento). */
-export async function bancheDisponibili(): Promise<{ name: string; impresa: boolean }[]> {
-  const r = await api<{ aspsps: { name: string; country: string; psu_types?: string[] }[] }>('GET', '/aspsps?country=IT');
+export async function bancheDisponibili(): Promise<BancaScelta[]> {
+  const r = await api<{ aspsps: { name: string; country: string; psu_types?: string[]; auth_methods?: { name: string; title?: string; psu_type?: string }[] }[] }>('GET', '/aspsps?country=IT');
   return bancheBper(r.aspsps ?? []);
 }
 
 /** Primo passo: indirizzo della banca dove dare il consenso con l'app; `stato` torna indietro e si controlla al ritorno. */
-export async function avviaCollegamento(banca: string, stato: string): Promise<string> {
+export async function avviaCollegamento(banca: string, stato: string, metodo: string | null = null): Promise<string> {
   const r = await api<{ url: string }>('POST', '/auth', {
     access: { valid_until: scadenzaRichiesta(new Date()) }, aspsp: { name: banca, country: 'IT' }, state: stato,
-    redirect_url: `${indirizzoPortale()}${percorsoRitorno}`, psu_type: 'business', language: 'it',
+    redirect_url: `${indirizzoPortale()}${percorsoRitorno}`, psu_type: 'business', language: 'it', ...(metodo ? { auth_method: metodo } : {}),
   });
   return r.url;
 }
 
 /** Ritorno dalla banca: il codice diventa la sessione con l'elenco dei conti. La sessione di prima si chiude. */
-export async function completaCollegamento(codice: string, banca: string, utente: string): Promise<ContoCollegato[]> {
+export async function completaCollegamento(codice: string, banca: string, utente: string, metodo: string | null = null): Promise<ContoCollegato[]> {
   const r = await api<{ session_id: string; accounts: { uid: string; account_id?: { iban?: string }; name?: string; identification_hash?: string }[]; access?: { valid_until?: string } }>(
     'POST', '/sessions', { code: codice });
   const prima = await statoOpenBanking();
   if (prima.sessione && prima.sessione !== r.session_id) await api('DELETE', `/sessions/${prima.sessione}`).catch(() => undefined);
   const conti = (r.accounts ?? []).map(a => ({ uid: a.uid, iban: a.account_id?.iban ?? null, numero: numeroConto(a.account_id?.iban ?? a.uid), nome: a.name ?? null }));
-  await salvaStato({ banca, sessione: r.session_id, scadenza: r.access?.valid_until ?? scadenzaRichiesta(new Date()), conti,
+  await salvaStato({ banca, metodo, sessione: r.session_id, scadenza: r.access?.valid_until ?? scadenzaRichiesta(new Date()), conti,
     collegatoIl: new Date().toISOString(), collegatoDa: utente, errore: null });
   return conti;
 }

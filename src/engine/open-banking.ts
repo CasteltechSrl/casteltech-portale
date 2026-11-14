@@ -107,9 +107,20 @@ export function scadenzaRichiesta(adesso: Date, giorniConsenso = 180): string {
   return new Date(adesso.getTime() + giorniConsenso * 86_400_000).toISOString();
 }
 
-/** Banche BPER nell'elenco dell'API (BPER Banca, BPER Banca Corporate…; le carte no). */
-export function bancheBper(elenco: { name: string; country?: string; psu_types?: string[] }[]): { name: string; impresa: boolean }[] {
+/** Modo di accesso alla banca (BPER ha due siti per le aziende: Corporate Banking e Digital Corporate Banking). */
+export interface MetodoAccesso { name: string; title?: string; psu_type?: string }
+export interface BancaScelta { name: string; impresa: boolean; metodi: { name: string; titolo: string }[] }
+
+/** Banche BPER nell'elenco dell'API (le carte no), con i soli accessi per le aziende. */
+export function bancheBper(elenco: { name: string; country?: string; psu_types?: string[]; auth_methods?: MetodoAccesso[] }[]): BancaScelta[] {
   return elenco.filter(b => /bper/i.test(b.name) && !/carte|card/i.test(b.name))
-    .map(b => ({ name: b.name, impresa: !b.psu_types || b.psu_types.includes('business') }))
+    .map(b => ({ name: b.name, impresa: !b.psu_types || b.psu_types.includes('business'),
+      metodi: (b.auth_methods ?? []).filter(m => m.name && (!m.psu_type || m.psu_type === 'business')).map(m => ({ name: m.name, titolo: m.title || m.name })) }))
     .sort((a, b) => Number(b.impresa) - Number(a.impresa) || a.name.localeCompare(b.name));
+}
+
+/** Scelta del modulo "banca|metodo" (metodo facoltativo). */
+export function leggiScelta(v: unknown): { banca: string; metodo: string | null } {
+  const [banca, metodo] = String(v ?? '').split('|').map(x => x.trim());
+  return { banca: banca || 'BPER Banca', metodo: metodo || null };
 }

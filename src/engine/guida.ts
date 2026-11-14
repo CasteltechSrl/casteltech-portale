@@ -838,7 +838,7 @@ export const ARGOMENTI_GUIDA: ArgomentoGuida[] = [
     testo: [
       'Amministrazione → Banca → riquadro "Collegamento automatico con la banca". Il portale scarica da solo i movimenti dei conti BPER ogni giorno feriale alle 8:30 e li mette in "Da abbinare", come se avessi caricato il CSV. "Scarica adesso" li prende subito.',
       'Il servizio che collega il portale alla banca è Enable Banking (autorizzato in Europa per leggere i conti, PSD2): il portale può solo LEGGERE saldi e movimenti, non può fare pagamenti.',
-      'Per collegare: "Collega la banca" → "Vai alla banca" → entri come sempre in BPER e confermi con l\'app, scegliendo i conti. Torni nel portale e il primo scarico parte subito (fino a 89 giorni indietro).',
+      'Per collegare: scegli "Banca e accesso" (BPER Banca · Corporate Banking oppure · Digital Corporate Banking: quello con cui entri di solito), "Collega la banca" → "Vai alla banca" → entri come sempre in BPER e confermi con l\'app, scegliendo i conti. Torni nel portale e il primo scarico parte subito (fino a 89 giorni indietro).',
       'Il consenso dura al massimo 180 giorni. 14 giorni prima il riquadro e il cruscotto ("Da fare oggi") lo segnalano: si rinnova con "Rinnova il consenso", stessi passi. Anche un errore di scarico compare lì.',
       'I movimenti già caricati con il CSV non si ripetono: il portale confronta conto, data e importo (le descrizioni dell\'open banking sono scritte in modo diverso). Vale anche al contrario, se carichi un CSV dopo.',
       'I conti tecnici dell\'anticipo fatture potrebbero non essere visibili con l\'open banking (copre i conti correnti): per quelli si continua a caricare il CSV.',

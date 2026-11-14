@@ -20,9 +20,9 @@ import { abbinaMovimento, contiBanca, contiConSaldo, fidoAnticipi, salvaConti, a
 
 import crypto from 'node:crypto';
 import { avviaCollegamento, bancheDisponibili, completaCollegamento, openBankingConfigurato, scaricaMovimenti, scollega, statoOpenBanking, type StatoOpenBanking } from '../open-banking.js';
-import { statoConsenso } from '../../engine/open-banking.js';
+import { leggiScelta, statoConsenso, type BancaScelta } from '../../engine/open-banking.js';
 
-declare module 'express-session' { interface SessionData { bancaCollega?: { stato: string; banca: string } } }
+declare module 'express-session' { interface SessionData { bancaCollega?: { stato: string; banca: string; metodo: string | null } } }
 
 const oggiRoma = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 const pagina = (req: Request, titolo: string, contenuto: Raw, avviso?: string, script?: string[]) =>
@@ -41,14 +41,17 @@ function tasti(attiva: 'movimenti' | 'anticipi'): Raw {
 const quando = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }) : '');
 
 /** Riquadro "Collegamento automatico" (open banking, Adriano 14/11/2026). */
-function sezioneCollegamento(s: StatoOpenBanking, configurato: boolean, banche: { name: string; impresa: boolean }[] | null): Raw {
+function sezioneCollegamento(s: StatoOpenBanking, configurato: boolean, banche: BancaScelta[] | null): Raw {
   if (!configurato) return html`<details class="blocco"><summary><strong>Collegamento automatico con la banca</strong> · non ancora attivo</summary>
     <p class="nota">Con l'open banking il portale scarica da solo i movimenti dei conti BPER ogni mattina dei giorni feriali (8:30), senza caricare il CSV.
       Servizio: Enable Banking. Per attivarlo servono le chiavi ENABLEBANKING_APP_ID e ENABLEBANKING_PRIVATE_KEY su Render (vedi la Guida, "Banca: collegamento automatico").</p></details>`;
   const c = statoConsenso(s.scadenza, new Date());
   const collegato = Boolean(s.sessione && s.conti?.length);
-  const scelta = banche?.length ? html`<label>Banca <select name="banca">${banche.map(b => html`<option ${b.name === s.banca ? raw('selected') : ''}>${b.name}</option>`)}</select></label>`
-    : html`<input type="hidden" name="banca" value="${s.banca ?? 'BPER Banca'}">`;
+  // una voce per banca e modo di accesso (BPER: Corporate Banking o Digital Corporate Banking, Adriano 14/11/2026)
+  const voci = (banche ?? []).flatMap(b => (b.metodi.length ? b.metodi : [{ name: '', titolo: '' }]).map(m => ({ valore: `${b.name}|${m.name}`, testo: m.titolo ? `${b.name} · ${m.titolo}` : b.name })));
+  const attuale = `${s.banca ?? 'BPER Banca'}|${s.metodo ?? ''}`;
+  const scelta = voci.length ? html`<label>Banca e accesso <select name="banca">${voci.map(v => html`<option value="${v.valore}" ${v.valore === attuale ? raw('selected') : ''}>${v.testo}</option>`)}</select></label>`
+    : html`<input type="hidden" name="banca" value="${attuale}">`;
   return html`<details class="blocco" ${!collegato || c.stato !== 'attivo' || s.errore ? raw('open') : ''}><summary><strong>Collegamento automatico con la banca</strong>
     · ${collegato ? (c.stato === 'scaduto' ? html`<span class="negativo">consenso scaduto</span>` : c.stato === 'in_scadenza' ? html`<span class="negativo">consenso in scadenza tra ${c.giorni} giorni</span>`
       : html`attivo (${s.conti!.length} conti, consenso fino al ${data(String(s.scadenza).slice(0, 10))})`) : 'conti non collegati'}</summary>
@@ -125,7 +128,7 @@ export function rotteBanca() {
     if (req.query.error) return res.redirect(vaiA('', `La banca non ha dato il consenso: ${String(req.query.error_description ?? req.query.error)}`));
     if (!attesa || String(req.query.state ?? '') !== attesa.stato || !req.query.code) return res.redirect(vaiA('', 'Collegamento non riuscito: riparti da "Collega la banca".'));
     try {
-      const conti = await completaCollegamento(String(req.query.code), attesa.banca, utente(req));
+      const conti = await completaCollegamento(String(req.query.code), attesa.banca, utente(req), attesa.metodo ?? null);
       let testo = `Banca collegata: ${conti.length} conti.`;
       try { testo += ` ${(await scaricaMovimenti(utente(req))).testo}.`; } catch (e: any) { testo += ` Primo scarico non riuscito: ${e?.message ?? e}`; }
       res.redirect(vaiA('', testo));
@@ -155,8 +158,8 @@ export function rotteBanca() {
         FROM banca_movimenti GROUP BY conto ORDER BY conto`),
       contiConSaldo(),
       statoOpenBanking(),
-      // elenco delle banche solo finché non c'è un collegamento (una chiamata in più all'API)
-      configurato ? statoOpenBanking().then(st => (st.sessione ? null : bancheDisponibili().catch(() => null))) : Promise.resolve(null),
+      // elenco delle banche con i modi di accesso (una chiamata all'API, non al database)
+      configurato ? bancheDisponibili().catch(() => null) : Promise.resolve(null),
     ]);
     const nome = (n: string) => nomeConto(n, elencoConti);
     const sicuri = daAbbinare.filter(x => (x.proposta?.punteggio ?? 0) >= SOGLIA_SICURA).length;
@@ -211,11 +214,11 @@ export function rotteBanca() {
   // ───────────── collegamento automatico (open banking) ─────────────
   r.post('/collega', async (req, res) => {
     if (!openBankingConfigurato()) return res.redirect(vaiA('', 'Collegamento non configurato: mancano le chiavi di Enable Banking su Render.'));
-    const banca = String(req.body.banca ?? '').trim() || 'BPER Banca';
+    const { banca, metodo } = leggiScelta(req.body.banca);
     const stato = crypto.randomBytes(16).toString('hex');
     try {
-      const url = await avviaCollegamento(banca, stato);
-      req.session.bancaCollega = { stato, banca };
+      const url = await avviaCollegamento(banca, stato, metodo);
+      req.session.bancaCollega = { stato, banca, metodo };
       // pagina con il link (non un redirect: la Content-Security-Policy "form-action" blocca un modulo che finisce su un altro sito)
       res.send(pagina(req, 'Collega la banca', html`<div class="intestazione-pagina"><h1>Collega la banca</h1></div>
         <p>Si apre il sito di ${banca} (tramite Enable Banking). Entra come sempre e conferma con l'app BPER: autorizzi il portale a <strong>leggere</strong>
