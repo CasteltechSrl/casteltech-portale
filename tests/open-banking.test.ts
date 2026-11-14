@@ -5,7 +5,7 @@ import { bancheBper, leggiScelta, dataInizioScarico, movimentoDaTransazione, ora
 import { cosaDaFare } from '../src/engine/cruscotto-generale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
-const { gettone } = await import('../src/server/open-banking.js');
+const { gettone, normalizzaChiave } = await import('../src/server/open-banking.js');
 
 test('open banking: transazione dell\'API → movimento come il CSV', () => {
   const m = movimentoDaTransazione({ status: 'BOOK', booking_date: '2026-11-13', value_date: '2026-11-14', transaction_amount: { amount: '1220.00', currency: 'EUR' },
@@ -64,6 +64,19 @@ test('open banking: banche BPER (senza le carte) e gettone firmato', () => {
   assert.equal(corpo.aud, 'api.enablebanking.com');
   assert.equal(corpo.exp - corpo.iat, 3600);
   assert.ok(crypto.createVerify('RSA-SHA256').update(`${h}.${p}`).verify(publicKey, Buffer.from(f, 'base64url')));
+});
+
+test('open banking: chiave incollata su Render senza a capo, con spazi, "\\n" o virgolette', () => {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const corpo = pem.replace(/-----[A-Z ]+-----/g, '').replace(/\s/g, '');
+  for (const v of [pem, pem.replace(/\n/g, ' '), pem.replace(/\n/g, ''), pem.replace(/\n/g, '\\n'), `"${pem.trim()}"`, corpo, pem.replace(/\n/g, '\r\n')]) {
+    const k = normalizzaChiave(v)!;
+    assert.doesNotThrow(() => crypto.createPrivateKey(k));
+    assert.ok(gettone(0, 'app', k).split('.').length === 3);
+  }
+  assert.equal(normalizzaChiave('  '), null);
+  assert.equal(normalizzaChiave(undefined), null);
 });
 
 test('open banking: cruscotto e guida', () => {
