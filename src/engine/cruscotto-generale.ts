@@ -15,7 +15,7 @@ export interface ContiDaFare {
   acquisizioniInErrore: number; ddtDaFatturare: number; schedeScansionate: number; tempiAperti: number; crmScadute: number;
   incassiScaduti: number; pagamentiScaduti: number; bozzeDocumenti: number;
   /** fatture differite (1/11/2026): DDT dei mesi prima non fatturati, con il termine del 15 superato o nel mese in corso */
-  differiteScadute?: number; differiteInScadenza?: number;
+  differiteScadute?: number; differiteInScadenza?: number; bancaDaRicollegare?: number;
 }
 
 const plurale = (n: number, uno: string, tanti: string) => (n === 1 ? uno : tanti);
@@ -36,6 +36,8 @@ export function cosaDaFare(c: ContiDaFare, diretti: Partial<Record<string, strin
       testo: plurale(c.differiteScadute ?? 0, 'DDT da fatturare oltre il 15 (fattura differita in ritardo)', 'DDT da fatturare oltre il 15 (fatture differite in ritardo)') },
     { chiave: 'incassi-scaduti', quanti: c.incassiScaduti, livello: 'urgente', link: '/amministrazione/solleciti',
       testo: plurale(c.incassiScaduti, 'incasso scaduto', 'incassi scaduti') },
+    { chiave: 'banca-ricollegare', quanti: c.bancaDaRicollegare ?? 0, livello: 'controllare', link: '/amministrazione/banca',
+      testo: 'consenso della banca da rinnovare (movimenti non scaricati in automatico)' },
     { chiave: 'pagamenti-scaduti', quanti: c.pagamentiScaduti, livello: 'controllare', link: '/amministrazione/ricevuti?da_pagare=1',
       testo: plurale(c.pagamentiScaduti, 'pagamento scaduto', 'pagamenti scaduti') },
     { chiave: 'differite-in-scadenza', quanti: c.differiteInScadenza ?? 0, livello: 'controllare', link: '/amministrazione/differite',

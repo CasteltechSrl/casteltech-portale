@@ -1041,4 +1041,10 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    fattura incassata senza rientro riconosciuto = detto così). Calcolato in lettura dai movimenti dei conti di anticipo.
    Password (Adriano 8/11/2026; `chiedePasswordRiservata` in `engine/ruoli.ts`, test in `tests/ruoli.test.ts`): Banca (`r.use` in testa a `rotteBanca`, POST `/banca/sblocca`,
    sessione `bancaSbloccata`, 15 minuti) e buste paga chiedono la password delle buste paga SOLO a ufficio e produzione; amministratore, contabilità ed esterno entrano senza.
-   Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). ⬜ Poi open banking PSD2 (servizio da scegliere).
+   Novità CBI del 16/11/2026 (indirizzo strutturato nei bonifici/SDD SEPA): non tocca il portale (genera solo RiBa e legge movimenti). Collegamento automatico (open banking PSD2, Adriano 14/11/2026, "prima la prova gratuita"; regole in `engine/open-banking.ts`, chiamate e scarico in
+   `server/open-banking.ts`, riquadro in `rotte/banca.ts`, test in `tests/open-banking.test.ts`): Enable Banking (GoCardless chiuso ai nuovi, Tink/Salt Edge/Fabrick a contratto; modalità
+   sui propri conti gratuita ma "per prova/uso personale", contratto per l'azienda da chiedere). Chiavi su Render ENABLEBANKING_APP_ID + ENABLEBANKING_PRIVATE_KEY (JWT RS256);
+   stato in impostazioni 'open_banking' (sessione, scadenza del consenso max 180 gg, conti). "Collega la banca" → pagina con il link (la CSP form-action blocca il redirect di un modulo
+   verso altri siti) → consenso con l'app → GET `/amministrazione/banca/collega/ritorno` (prima della password, controlla `state`) → primo scarico. Scarico lun–ven 8:30 (`avviaScaricoBanca`,
+   orologio senza database) o "Scarica adesso": movimenti contabilizzati → `caricaMovimenti` (stessa logica del CSV), file `FILE_OPEN_BANKING`; doppioni col CSV per conto+data+importo
+   (`togliGiaPresenti`, in tutte e due le direzioni). Consenso scaduto/in scadenza (14 gg) o errore = voce `banca-ricollegare` in "Da fare oggi". I conti tecnici d'anticipo forse non ci sono in PSD2: CSV.
