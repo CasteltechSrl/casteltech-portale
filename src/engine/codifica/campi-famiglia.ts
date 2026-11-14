@@ -62,7 +62,8 @@ const ESEMPI: Record<string, Partial<Record<Attr, string>> & { caseTht?: string 
  * in tabella, che per un connettore THT non c'è; i connettori vanno in CN con Tipo, Passo e Poli.
  */
 export const CONSIGLI: Record<string, string> = {
-  MI: 'Se è un connettore (RJ45, USB, morsetto, strip, presa…) scegli la famiglia CN · Connettori: servono Tipo (es. RJ45), Passo in mm e Poli. In MI il codice gestionale vuole un case in tabella (es. SOT-23, 0805): con "THT" non si calcola.',
+  MI: 'Se è un connettore (RJ45, USB, morsetto, strip, presa, coassiale…) scegli la famiglia CN · Connettori: Tipo (es. RJ45, COASSIALE), Passo in mm e Poli se li ha.',
+  CN: 'Passo e Poli solo se il connettore li ha: un coassiale (U.FL, SMA), un portascheda o un jack si codificano con il solo Tipo e il P/N.',
   IC: 'Per un integrato THT scrivi la custodia nel Case/Formato (es. DIP-8), non solo "THT".',
 };
 

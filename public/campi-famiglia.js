@@ -25,7 +25,7 @@
       input.placeholder = es ? 'es. ' + es : '';
     });
     if (spiegazione) spiegazione.textContent = fam
-      ? 'Per questa famiglia servono: ' + fam.campi.map(k => blocco.querySelector('label[data-campo="' + k + '"]').dataset.nome).join(', ') + '.' + (fam.consiglio ? ' ' + fam.consiglio : '')
+      ? 'Campi di questa famiglia: ' + fam.campi.map(k => blocco.querySelector('label[data-campo="' + k + '"]').dataset.nome).join(', ') + '. Sono facoltativi: con il P/N il codice esce comunque, i dati che mancano li sostituisce il P/N.' + (fam.consiglio ? ' ' + fam.consiglio : '')
       : 'Scegli la famiglia: si vedranno solo i campi da compilare.';
     if (tutti) { tutti.hidden = !fam; tutti.textContent = mostraTutti ? 'Mostra solo i campi che servono' : 'Mostra tutti i campi'; }
   }

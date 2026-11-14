@@ -383,9 +383,10 @@ export function daColonneBom(fam: string | null, valore?: unknown, footprint?: u
   }
   if (fam === 'CN' || fam === 'TI') {
     const F = [footprint, descr, valore].filter(x => x).map(String).join(' ').toUpperCase();
-    for (const [pat, tipo] of [[/PIN\s?HEADER|PINHEADER|\bHEADER\b|\bSTRIP\b/, 'BASETTA'], [/SOCKET|RECEPTACLE|FEMALE|PINSOCKET/, 'PRESA'],
-      [/TERMINAL\s?BLOCK|MORSETT/, 'MORSETTO'], [/USB[\s_-]?C\b|TYPE[\s_-]?C/, 'USBC'], [/MICRO[\s_-]?USB|USB[\s_-]?MICRO/, 'MICROUSB'],
-      [/RJ45/, 'RJ45'], [/\bFFC\b|\bFPC\b/, 'FFC'], [/MICRO\s?SD|SD\s?CARD/, 'SDCARD'], [/\bHDMI\b/, 'HDMI'], [/COAX|U\.FL|\bSMA\b/, 'COASSIALE']] as [RegExp, string][]) {
+    // prima i tipi precisi (coassiale, USB, RJ45…), poi quelli generici: un U.FL "Receptacle" è un coassiale, non una presa (14/11/2026)
+    for (const [pat, tipo] of [[/COAX|U\.?FL\b|\bIPEX|\bMMCX\b|\bSMA\b|\bBNC\b/, 'COASSIALE'], [/USB[\s_-]?C\b|TYPE[\s_-]?C\b/, 'USBC'], [/MICRO[\s_-]?USB|USB[\s_-]?MICRO/, 'MICROUSB'],
+      [/RJ45/, 'RJ45'], [/\bFFC\b|\bFPC\b/, 'FFC'], [/MICRO\s?SD|SD\s?CARD/, 'SDCARD'], [/\bHDMI\b/, 'HDMI'], [/TERMINAL\s?BLOCK|MORSETT/, 'MORSETTO'],
+      [/PIN\s?HEADER|PINHEADER|\bHEADER\b|\bSTRIP\b/, 'BASETTA'], [/SOCKET|RECEPTACLE|FEMALE|PINSOCKET/, 'PRESA']] as [RegExp, string][]) {
       if (pat.test(F)) { a.tipo = tipo; break; }
     }
     const p = F.match(/P(\d+[.,]\d+)\s?MM/) ?? F.match(/(\d+[.,]\d+)\s?MM/);

@@ -516,6 +516,11 @@ Serve PostgreSQL. Variabili: `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (cr
    case IC nome+piedini (SOIC8), CN tipo MORSETTO → TI con poli prima del passo; solo codici nuovi: in `ricalcola` l'archivio si cerca anche con `prodPrima` (codice alla vecchia maniera).
    Righe da completare del 4/11/2026 (registro in `aggiunte.ts`): categorie DigiKey con switch/driver → IC, SOT-23-THIN, induttanze con decimali, quarzi Abracon ABM (`abraconAbm` in `decoder.ts`),
    USB-A/B standard (`connettoreStandard` in `famiglia-proposta.ts`), pulsanti senza case = misura LLWW.
+   Campi facoltativi, codice sempre dal P/N (Adriano 14/11/2026, coassiale U.FL BWU.FL-IPEX1 senza passo né poli: "logica sempre uguale, mai due codici per lo stesso prodotto,
+   niente righe da fare a mano"; `calcola(..., { ripiego })`, `codiceProduzioneDalPn`, `CASE_GENERICO`, `NOTA_DAL_PN` in `regole.ts`, test in `tests/codifica-aggiunte.test.ts`): con il P/N
+   `calcola` non resta mai MANUALE: gestionale = T+famiglia, case/tipo (XXXX se non si conosce), valore (primi 5 caratteri del P/N se non si calcola); produzione = famiglia, campi noti, P/N;
+   famiglia non riconosciuta = MI; stato OK con nota "codice ricavato dal P/N (…)". Senza P/N resta da completare. Chi CONFRONTA codici (famigliaProposta, stesseCaratteristiche,
+   VERIFICA dal P/N, stessaRadice) usa `{ ripiego: false }`. Connettori: tipi precisi prima di header/presa (U.FL/IPEX/MMCX/SMA = COASSIALE), da MI/senza famiglia a CN anche senza passo e poli (`sicura`).
    Formato THT a misura (Adriano 5/11/2026, clip portafusibile; `formatoThtMisura` in `regole.ts`, decoder FS, DigiKey "Fuse Holders" → FS, test in `tests/codifica-aggiunte.test.ts`):
    fusibili "5X20"/"6.3X32"/"10X38" → gestionale 5X20/6X32/1038, clip e portafusibili "CLIP5X20" → C520, letti dalla descrizione/impronta; con Tecnologia T vale per ogni famiglia
    senza case standard (tranne ID e CE che hanno la loro regola), stato OK.

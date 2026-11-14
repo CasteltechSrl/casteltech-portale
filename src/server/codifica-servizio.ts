@@ -373,7 +373,7 @@ async function elabora(id: number, opzioni: { forzaPrezzi?: boolean; soloCache?:
       if (gest.length > 1) r.note.push(`nell'archivio ci sono ${gest.length} codici per questo P/N: ${gest.join(', ')}`);
       if (completi.length) {
         r.esito = ESITI.DB; r.attributi = { ...(h.attributi ?? {}) };
-        if (famDec) { const c = calcola(famDec, aDec, r.pn); if (c.root && !h.codice_gestionale!.startsWith(c.root + '-')) r.note.push(`VERIFICA: dal P/N risulta ${c.root} (${c.descr})`); }
+        if (famDec) { const c = calcola(famDec, aDec, r.pn, { ripiego: false }); if (c.root && !h.codice_gestionale!.startsWith(c.root + '-')) r.note.push(`VERIFICA: dal P/N risulta ${c.root} (${c.descr})`); }
       } else {
         r.esito = ESITI.DB_INC; if (h.note) r.note.push(h.note);
         const aArch = Object.fromEntries(Object.entries(h.attributi ?? {}).filter(([, v]) => v != null && v !== '')) as Attributi;
@@ -519,7 +519,7 @@ export async function ricalcola(righe: RigaBom[]) {
     const p = famigliaProposta(r);
     if (!p) continue;
     r.famiglia = p.famiglia; r.attributi = { ...r.attributi, ...p.attributi };
-    r.note = [...r.note.filter(n => !/^componente THT: indicare|^proposto: /.test(n)), `${NOTA_DA_VALIDARE}: ${p.motivo}`];
+    r.note = [...r.note.filter(n => !/^componente THT: indicare|^proposto: /.test(n)), p.sicura ? p.motivo : `${NOTA_DA_VALIDARE}: ${p.motivo}`];
   }
   for (const r of righe) if ([ESITI.INC, ESITI.NUOVO, ESITI.NUOVO_VER, ESITI.DB_INC, ESITI.DB_FATTO, ESITI.DB_PROD].includes(r.esito as any)) calcoli.set(r.n, calcola(r.famiglia, r.attributi, r.pn));
   const perProd = new Map<string, Componente[]>();
@@ -530,7 +530,7 @@ export async function ricalcola(righe: RigaBom[]) {
     const c = calcoli.get(r.n);
     if (!c) continue;
     const k = pnKey(r.pn);
-    const noteBase = r.note.filter(n => !/^(produzione:|codice di produzione già|P\/N ripetuto|tolleranza non indicata: X|valore arrotondato|tensione mancante|case |dimensione |induttanza in mm)/.test(n) && !c.note.includes(n));
+    const noteBase = r.note.filter(n => !/^(produzione:|codice ricavato dal P\/N|famiglia non riconosciuta|famiglia (da \w+ a )?CN \(connettore|codice di produzione già|P\/N ripetuto|tolleranza non indicata: X|valore arrotondato|tensione mancante|case |dimensione |induttanza in mm)/.test(n) && !c.note.includes(n));
     if (k && visti.has(k)) {
       const p = visti.get(k)!;
       Object.assign(r, { codiceProduzione: p.codiceProduzione, codiceGestionale: p.codiceGestionale, esito: p.esito, descrizione: p.descrizione });
@@ -568,7 +568,9 @@ export async function ricalcola(righe: RigaBom[]) {
       : completoRiga && c.stato !== MAN ? (c.stato === OK ? ESITI.NUOVO : ESITI.NUOVO_VER) : ESITI.INC;
     if (r.esito === ESITI.NUOVO && note.some(n => n.startsWith(NOTA_DA_VALIDARE))) r.esito = ESITI.NUOVO_VER;
     if (c.attrs) r.attributi = { ...c.attrs, tecnologia: c.T ?? r.attributi.tecnologia };
-    r.codiceProduzione = prod; r.codiceGestionale = gest; r.descrizione = c.descr; r.note = unico(note);
+    r.codiceProduzione = prod; r.codiceGestionale = gest; r.descrizione = c.descr;
+    // nota dell'archivio "proposto: SCN-????-…" di quando il codice non si calcolava: non serve più
+    r.note = unico(gest ? note.filter(n => !n.startsWith('proposto: ')) : note);
   }
 }
 
@@ -617,7 +619,7 @@ export async function prezziGenerici(righe: RigaBom[], perPnDist: Map<string, Pa
       } else r.note.push('nessun P/N equivalente trovato dai distributori');
       continue;
     }
-    const stessaRadice = (fam: string | null, attr: Attributi, pn: string) => calcola(fam, regolaResistenze(fam, attr).attributi, pn).root === radice;
+    const stessaRadice = (fam: string | null, attr: Attributi, pn: string) => calcola(fam, regolaResistenze(fam, attr).attributi, pn, { ripiego: false }).root === radice;
     let cercato = false;
     try {
       if (attivi.digikey) {
@@ -664,7 +666,7 @@ const SENZA_PN = (fam: string | null) => !!fam && !!FAMIGLIE[fam] && !FAMIGLIE[f
 export function stesseCaratteristiche(r: Pick<RigaBom, 'famiglia' | 'codiceProduzione' | 'codiceGestionale'>, fam: string | null, attr: Attributi, mpn: string): boolean | null {
   if (!fam || !r.famiglia) return null;
   if (fam !== r.famiglia) return false;
-  const c = calcola(fam, regolaResistenze(fam, attr).attributi, mpn);
+  const c = calcola(fam, regolaResistenze(fam, attr).attributi, mpn, { ripiego: false });
   if (r.codiceProduzione && c.prod) return c.prod.toUpperCase() === r.codiceProduzione.toUpperCase();
   const radice = r.codiceGestionale?.slice(0, -4);
   if (radice && c.root) return c.root === radice;
