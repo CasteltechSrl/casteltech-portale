@@ -123,6 +123,7 @@ test('open banking: cruscotto e guida', () => {
 });
 
 test('open banking: spese della carta mese per mese', () => {
-  const m = speseCartaPerMese([{ data: '2026-10-03', importo: -120.5 }, { data: '2026-10-20', importo: -79.5 }, { data: '2026-11-02', importo: -10 }, { data: '2026-11-05', importo: 4 }], '2026-11-14');
+  const m = speseCartaPerMese([{ data: '2026-10-03', importo: -120.5 }, { data: '2026-10-20', importo: -79.5 }, { data: '2026-11-02', importo: -10 }, { data: '2026-11-05', importo: 4 },
+    { data: '2026-10-30', importo: 3220.55, descrizione: 'TOTALE ACCREDITI' }, { data: '2026-10-31', importo: -3220.55, descrizione: 'TOTALE SPESE' }], '2026-11-14');
   assert.deepEqual(m.map(x => [x.mese, x.importo, x.movimenti, x.data, x.finora]), [['2026-11', 6, 2, '2026-12-15', true], ['2026-10', 200, 2, '2026-11-15', false]]);
 });

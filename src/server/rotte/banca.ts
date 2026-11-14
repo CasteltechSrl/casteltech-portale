@@ -121,7 +121,7 @@ async function sezioneSpeseCarte(conti: Awaited<ReturnType<typeof contiConSaldo>
   const carte = conti.filter(c => c.tipo === 'carta' || c.tipo === 'paypal');
   if (!carte.length) return html``;
   const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
-  const movimenti = await q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo
+  const movimenti = await q<{ conto: string; data: string; importo: number; descrizione: string }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo, descrizione
     FROM banca_movimenti WHERE conto = ANY($1) AND data >= $2`, [carte.map(c => c.numero), `${Number(oggi.slice(0, 4)) - 1}${oggi.slice(4, 7)}-01`]);
   return html`<h2>Spese della carta e di PayPal</h2>
     ${carte.map(c => {
