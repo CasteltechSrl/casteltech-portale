@@ -619,29 +619,67 @@ export interface Calcolo {
   attrs?: Attributi; T?: string; C?: string | null; V?: string | null;
 }
 
-/** Calcola i due codici (radice per il gestionale: il progressivo lo dà il database). */
-export function calcola(famiglia: string | null | undefined, attributi: Attributi, pn: unknown): Calcolo {
+/** Posto del case/tipo nel codice gestionale quando non si conosce (come la X di tolleranza e tensione non indicate). */
+export const CASE_GENERICO = 'XXXX';
+/** Inizio della nota delle righe codificate dal P/N. */
+export const NOTA_DAL_PN = 'codice ricavato dal P/N';
+
+/**
+ * Codice di produzione "dal P/N" (Adriano 14/11/2026): famiglia, i campi che si conoscono nell'ordine di sempre, poi il P/N.
+ * I campi che mancano si saltano (un connettore coassiale non ha passo né poli: CN-COASSIALE-BWU.FLIPEX1).
+ */
+export function codiceProduzioneDalPn(fam: string, a: Attributi, pn: unknown, tht = false): string | null {
+  const spec = FAMIGLIE[fam], rid = codiceRidotto(pn);
+  if (!spec || !rid) return null;
+  const parti = conTht(fam, a, tht) ? [fam, 'THT'] : [fam];
+  for (const k of ORDINE_PROD[fam] ?? spec.prod) if (k !== 'RID' && k !== 'PN' && a[k]) parti.push(String(a[k]));
+  parti.push(rid);
+  const codice = parti.join('-');
+  return codice.length > PROD_MAX ? codice.slice(0, PROD_MAX - 1) + '.' : codice;
+}
+
+/**
+ * Calcola i due codici (radice per il gestionale: il progressivo lo dà il database).
+ * Regola unica per tutte le famiglie (Adriano 14/11/2026, "la codifica giusta o sbagliata è quella: conta che la logica sia sempre uguale e che
+ * lo stesso prodotto non abbia due codici"): i campi della famiglia sono FACOLTATIVI. Se c'è il P/N e un dato manca o non è in tabella,
+ * al suo posto va il P/N: gestionale = tecnologia+famiglia, case/tipo (XXXX se non si conosce), valore (i primi 5 caratteri del P/N se non si
+ * calcola); produzione = famiglia, campi noti, P/N. Famiglia non riconosciuta = MI. Senza P/N resta "da completare".
+ * `ripiego: false` = solo la codifica piena (serve a chi confronta i codici, non a chi li assegna).
+ */
+export function calcola(famiglia: string | null | undefined, attributi: Attributi, pn: unknown, opzioni: { ripiego?: boolean } = {}): Calcolo {
+  const conRipiego = opzioni.ripiego !== false && !!codiceRidotto(pn);
   let fam = String(famiglia ?? '').toUpperCase().trim();
-  if (!(fam in FAMIGLIE)) return { prod: null, root: null, stato: MAN, note: ['scegliere la famiglia'], descr: null };
+  const notePrima: string[] = [];
+  if (!(fam in FAMIGLIE)) {
+    if (!conRipiego) return { prod: null, root: null, stato: MAN, note: ['scegliere la famiglia'], descr: null };
+    fam = 'MI'; notePrima.push('famiglia non riconosciuta: messa in MI (Miscellaneus)');
+  }
   const a: Attributi = {};
   for (const k of ATTR) a[k] = normAttr(k, attributi[k], fam);
   a.tecnologia = String(attributi.tecnologia ?? '').trim().toUpperCase() || null;
-  const notePrima: string[] = [];
   // i morsetti sono terminali THT (Adriano Croci 4/11/2026: famiglia TI-THT-MORSETTO-…)
   if (fam === 'CN' && String(a.tipo ?? '').replace(/\s/g, '') === 'MORSETTO') { fam = 'TI'; notePrima.push('morsetto: famiglia TI (terminali THT)'); }
   let g: Radice;
   try { g = codiceGestionaleRadice(fam, a, pn); }
   catch (e) { if (!(e instanceof ErroreValore)) throw e; g = { T: a.tecnologia || 'S', C: null, V: null, stato: MAN, note: [`valore non leggibile: ${e.message}`] }; }
   const tht = (a.tecnologia || g.T) === 'T' || fam === 'TI';
-  const [prod, manc] = codiceProduzione(fam, a, pn, tht);
+  let [prod, manc] = codiceProduzione(fam, a, pn, tht);
   // forma di prima (senza THT, case 8SOIC): serve a ritrovare in archivio i componenti già codificati senza P/N
-  const prodPrima = prod && (tht || fam === 'TI') ? codiceProduzione(fam, a, pn, false, true)[0] : null;
-  g = { ...g, note: [...notePrima, ...g.note] };
-  const root = g.C && g.V ? `${g.T}${fam}-${g.C}-${g.V}` : null;
-  let stato = g.stato; const note = [...g.note];
+  let prodPrima = prod && (tht || fam === 'TI') ? codiceProduzione(fam, a, pn, false, true)[0] : null;
+  let root = g.C && g.V ? `${g.T}${fam}-${g.C}-${g.V}` : null;
+  let stato = g.stato; let note = [...notePrima, ...g.note];
   if (manc.length) { note.unshift('produzione: manca ' + manc.join(', ')); stato = MAN; }
   if (!root && stato !== MAN) stato = MAN;
-  return { prod: manc.length ? null : prod, prodBozza: prod, prodPrima: manc.length ? null : prodPrima, famiglia: fam, root, stato, note, descr: descrizione(fam, a, pn), attrs: a, T: g.T, C: g.C, V: g.V };
+  let C = g.C, V = g.V;
+  if (stato === MAN && conRipiego) {
+    const perche = [...(manc.length ? ['manca ' + manc.join(', ')] : []), ...g.note];
+    C = g.C ?? CASE_GENERICO; V = g.V ?? mpnRoot(pn)[0];
+    root = `${g.T}${fam}-${C}-${V}`;
+    if (manc.length) { prod = codiceProduzioneDalPn(fam, a, pn, tht); prodPrima = null; manc = []; }
+    stato = OK;
+    note = [...notePrima, `${NOTA_DAL_PN}${perche.length ? ` (${perche.join('; ')})` : ''}`];
+  }
+  return { prod: manc.length ? null : prod, prodBozza: prod, prodPrima: manc.length ? null : prodPrima, famiglia: fam, root, stato, note, descr: descrizione(fam, a, pn), attrs: a, T: g.T, C, V };
 }
 
 // ───────────────────────────── progressivo (3 caratteri, senza I e O) ─────────────────────────────

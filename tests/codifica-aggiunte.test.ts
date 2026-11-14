@@ -201,8 +201,54 @@ test('formato THT a misura (Adriano 5/11/2026): fusibili 5X20, clip CLIP5X20 dal
   assert.equal(calcola('FS', { case: '6.3X32', corrente: '10A', tensione: '250V' }, 'X').root, 'TFS-6X32-10A0X');
   assert.equal(calcola('FS', { case: '10X38', corrente: '10A', tensione: '500V' }, 'X').root, 'TFS-1038-10A0X');
   assert.equal(calcola('IT', { case: '12X12', tecnologia: 'T' }, 'X').root, 'TIT-1212-XXXXX', 'altro THT a misura con tecnologia T');
-  assert.equal(calcola('IT', { case: '12X12' }, 'X').stato, 'MANUALE', 'senza tecnologia T la misura non basta');
+  assert.equal(calcola('IT', { case: '12X12' }, 'X', { ripiego: false }).stato, 'MANUALE', 'senza tecnologia T la misura non basta');
   assert.equal(calcola('FS', { case: '1206', corrente: '500MA', tensione: '32V' }, 'X').root, 'SFS-1206-0A50X', 'i fusibili SMD non cambiano');
   assert.equal(famigliaDaDk(['Circuit Protection', 'Fuse Holders'], {}, 'FUSE CLIP CART 250V 6.3A PCB'), 'FS');
   assert.ok(REGISTRO_AGGIUNTE.some(v => /CLIP5X20/.test(v.cosa)));
+});
+
+test('campi facoltativi (Adriano 14/11/2026): con il P/N il codice esce sempre, i dati che mancano li sostituisce il P/N', () => {
+  // coassiale U.FL senza passo né poli (BWU.FL-IPEX1, LCSC C5137195)
+  const ufl = calcola('CN', { tipo: 'COASSIALE', tecnologia: 'S' }, 'BWU.FL-IPEX1');
+  assert.equal(ufl.prod, 'CN-COASSIALE-BWU.FLIPEX1');
+  assert.equal(ufl.root, 'SCN-COAX-BWUFL');
+  assert.equal(ufl.stato, 'OK');
+  assert.match(ufl.note.join(' '), /^codice ricavato dal P\/N \(manca Passo, Poli/);
+  // stessa logica sempre: stessi dati = stesso codice
+  assert.deepEqual(calcola('CN', { tipo: 'COASSIALE', tecnologia: 'S' }, 'BWU.FL-IPEX1'), ufl);
+  // tipo non in tabella: XXXX al posto del tipo; con passo e poli il valore resta quello di sempre
+  assert.equal(calcola('CN', { tipo: 'STRANO', passo: '2.54', poli: '4' }, 'ABC-123').root, 'SCN-XXXX-25404');
+  assert.equal(calcola('CN', {}, 'ABC-123').prod, 'CN-ABC123');
+  // un connettore completo non cambia
+  const rj = calcola('CN', { tipo: 'RJ45', passo: '1.02', poli: '8', tecnologia: 'T' }, 'HR911105A');
+  assert.equal(rj.root, 'TCN-RJ45-10208');
+  assert.ok(!rj.note.some(n => n.startsWith('codice ricavato')));
+  // altre famiglie: case non in tabella, valore mancante, famiglia non riconosciuta
+  assert.equal(calcola('IC', { case: 'MODULO-STRANO' }, 'ESP32-WROOM-32E').root, 'SIC-XXXX-ESP32');
+  const res = calcola('RS', { case: '0603' }, 'RC0603FR-07XXX');
+  assert.equal(res.root, 'SRS-0603-RC060');
+  assert.equal(res.prod, 'RS-0603-RC0603FR07XXX');
+  const ignoto = calcola(null, { tecnologia: 'T' }, 'XYZ 99');
+  assert.equal(ignoto.famiglia, 'MI');
+  assert.equal(ignoto.root, 'TMI-XXXX-XYZ99');
+  assert.equal(ignoto.prod, 'MI-THT-XYZ99');
+  // codice lungo: accorciato a 30 caratteri con il punto finale
+  const lungo = calcola('CN', { tipo: 'COASSIALE' }, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789').prod!;
+  assert.equal(lungo.length, 30); assert.ok(lungo.endsWith('.'));
+  // senza P/N non c'è niente con cui costruire il codice: resta da completare
+  assert.equal(calcola('CN', { tipo: 'COASSIALE' }, null).stato, 'MANUALE');
+  assert.equal(calcola(null, {}, '').stato, 'MANUALE');
+  // chi confronta i codici chiede solo la codifica piena
+  assert.equal(calcola('CN', { tipo: 'COASSIALE' }, 'BWU.FL-IPEX1', { ripiego: false }).root, null);
+});
+
+test('connettori (14/11/2026): U.FL "Receptacle" = COASSIALE, e da MI passa a CN anche senza passo e poli', async () => {
+  const { daColonneBom } = await import('../src/engine/codifica/decoder.js');
+  const { famigliaProposta } = await import('../src/engine/codifica/famiglia-proposta.js');
+  const [, a] = daColonneBom('CN', 'BWU.FL-IPEX1', 'U.FL_Hirose_U.FL-R-SMT-1_Vertical', 'Connector Receptacle IPEX Male Pin 50Ω Surface Mount');
+  assert.equal(a.tipo, 'COASSIALE');
+  const p = famigliaProposta({ famiglia: 'MI', pn: 'BWU.FL-IPEX1', attributi: {}, footprint: 'U.FL_Hirose_U.FL-R-SMT-1_Vertical', descrizioneBom: 'Connector Receptacle IPEX Male Pin 50Ω' });
+  assert.equal(p?.famiglia, 'CN'); assert.equal(p?.sicura, true); assert.equal(p?.attributi.tipo, 'COASSIALE');
+  // un integrato con la parola USB non diventa un connettore
+  assert.equal(famigliaProposta({ famiglia: 'IC', pn: 'FT232RL', attributi: {}, descrizioneBom: 'USB UART IC' }), null);
 });

@@ -123,8 +123,10 @@ function caseDk(par: Record<string, string>, fam: string): string | null {
 // i tipi USB prima di "Receptacle" (4/11/2026: la presa USB-B 5787834-1 diventava una PRESA generica senza passo)
 const CONN_TIPO: [string, string][] = [['USB - C', 'USBC'], ['USB-C', 'USBC'], ['USB - MICRO', 'MICROUSB'], ['MICRO USB', 'MICROUSB'], ['USB - MINI', 'USBMINI'],
   ['USB - B', 'USBB'], ['USB-B', 'USBB'], ['USB - A', 'USBA'], ['USB-A', 'USBA'],
-  ['HEADER', 'BASETTA'], ['RECEPTACLE', 'PRESA'], ['SOCKET', 'PRESA'], ['RJ45', 'RJ45'], ['8P8C', 'RJ45'], ['FFC', 'FFC'], ['FPC', 'FFC'],
-  ['TERMINAL BLOCK', 'MORSETTO'], ['MICROSD', 'SDCARD'], ['SD', 'SDCARD'], ['HDMI', 'HDMI'], ['COAXIAL', 'COASSIALE'], ['U.FL', 'COASSIALE'], ['JACK', 'PWJACK']];
+  // prima i tipi precisi, poi header/presa generici: un U.FL "Receptacle" è un coassiale (14/11/2026)
+  ['COAXIAL', 'COASSIALE'], ['U.FL', 'COASSIALE'], ['IPEX', 'COASSIALE'], ['MMCX', 'COASSIALE'], ['RJ45', 'RJ45'], ['8P8C', 'RJ45'], ['FFC', 'FFC'], ['FPC', 'FFC'],
+  ['TERMINAL BLOCK', 'MORSETTO'], ['MICROSD', 'SDCARD'], ['HDMI', 'HDMI'],
+  ['HEADER', 'BASETTA'], ['RECEPTACLE', 'PRESA'], ['SOCKET', 'PRESA'], ['SD', 'SDCARD'], ['JACK', 'PWJACK']];
 const COLORI_DK: Record<string, string> = { RED: 'ROSSO', GREEN: 'VERDE', BLUE: 'BLU', YELLOW: 'GIALLO', ORANGE: 'ARANCIONE', WHITE: 'BIANCO',
   AMBER: 'AMBRA', INFRARED: 'IR', RGB: 'RGB', 'RED, GREEN, BLUE (RGB)': 'RGB' };
 const CONTATTI: Record<string, string> = { 'SPST-NO': 'SPSTNA', 'SPST-NC': 'SPSTNC', SPDT: 'SPDT', DPDT: 'DPDT', 'DPST-NO': 'DPSTNA' };

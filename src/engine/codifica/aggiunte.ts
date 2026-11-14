@@ -73,6 +73,10 @@ export const TIPI_ANTENNE: Record<string, string> = { CHIP: 'ANTC', PCB: 'ANTP',
 
 /** Tutto quello che è stato aggiunto, con la data e il motivo (pagina Impostazioni → Componenti). */
 export const REGISTRO_AGGIUNTE: VoceRegistro[] = [
+  { data: '14/11/2026', tipo: 'famiglia', cosa: 'Regola unica per tutte le famiglie: i campi sono facoltativi. Con il P/N il codice esce sempre: gestionale = tecnologia+famiglia, case/tipo (XXXX se non si conosce), valore (primi 5 caratteri del P/N se non si calcola); produzione = famiglia, campi noti, P/N. Famiglia non riconosciuta = MI',
+    perche: 'Adriano: "non voglio avere ogni BOM 6/10 componenti non codificati… dietro alla codifica ci deve essere una logica sempre uguale" (coassiale U.FL BWU.FL-IPEX1 senza passo né poli). Lo stesso P/N ha sempre lo stesso codice perché l\'archivio si legge prima; senza P/N resta da completare' },
+  { data: '14/11/2026', tipo: 'parole BOM', cosa: 'Connettori: prima i tipi precisi (COASSIALE per U.FL, IPEX, MMCX, SMA, BNC; USB, RJ45, FFC, SD, HDMI, morsetto), poi header e presa generici; connettore in MI o senza famiglia va in CN anche senza passo e poli',
+    perche: 'un U.FL "Receptacle" diventava una presa generica e chiedeva passo e poli' },
   { data: '05/11/2026', tipo: 'case', cosa: 'Formato THT a misura: fusibili 5X20 / 6.3X32 / 10X38, clip e portafusibili CLIP5X20 (gestionale C520); con Tecnologia T vale per ogni famiglia senza case standard; DigiKey "Fuse Holders" → FS',
     perche: 'Adriano: "nel THT alle volte è complicato, cosa possiamo metterci?" (clip portafusibile 52000001009 restava senza case)' },
   { data: '04/11/2026', tipo: 'case', cosa: 'Formati aggiunti dall\'ufficio dalla pagina della riga BOM (tabella codifica_case)',

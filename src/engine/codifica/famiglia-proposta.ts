@@ -10,7 +10,7 @@ import { daColonneBom } from './decoder.js';
 
 /** Famiglie da cui si può passare a CN: quelle dove un connettore finisce per sbaglio. */
 const DA_CORREGGERE = new Set(['', 'MI', 'IC']);
-const PAROLE_CONNETTORE = /CONNECTOR|\bCONN\b|\bCONN[._\s]|RJ45|RJ11|ETHERNET|\bUSB|PIN\s?HEADER|\bHEADER\b|TERMINAL\s?BLOCK|MORSETT|\bSOCKET\b|RECEPTACLE|\bHDMI\b|MICRO\s?SD/;
+const PAROLE_CONNETTORE = /CONNECTOR|COAX|U\.FL\b|\bIPEX|\bCONN\b|\bCONN[._\s]|RJ45|RJ11|ETHERNET|\bUSB|PIN\s?HEADER|\bHEADER\b|TERMINAL\s?BLOCK|MORSETT|\bSOCKET\b|RECEPTACLE|\bHDMI\b|MICRO\s?SD/;
 /** Valori standard dei connettori modulari quando impronta e descrizione non li dicono (8P8C e 6P6C: passo 1,02 mm). */
 /** USB-A e USB-B (4/11/2026, presa 5787834-1): 4 contatti a passo 2,5 mm. */
 export const STANDARD: Record<string, { passo: string; poli: string }> = {
@@ -32,7 +32,8 @@ export interface DatiRiga {
   footprint?: string | null; descrizioneBom?: string | null; valore?: string | null; descrizione?: string | null;
 }
 
-export function famigliaProposta(r: DatiRiga): { famiglia: 'CN'; attributi: Attributi; motivo: string } | null {
+/** `sicura` = niente valori presunti: non serve la verifica (connettore senza passo/poli, codice dal P/N; Adriano 14/11/2026). */
+export function famigliaProposta(r: DatiRiga): { famiglia: 'CN'; attributi: Attributi; motivo: string; sicura?: boolean } | null {
   const fam = String(r.famiglia ?? '').toUpperCase();
   if (!DA_CORREGGERE.has(fam)) return null;
   const testo = [r.footprint, r.descrizioneBom, r.valore, r.descrizione, r.attributi.tipo].filter(Boolean).join(' ').toUpperCase();
@@ -46,9 +47,13 @@ export function famigliaProposta(r: DatiRiga): { famiglia: 'CN'; attributi: Attr
   if (std && !a.passo) { a.passo = std.passo; standard.push(`passo ${std.passo} mm`); }
   if (std && !a.poli) { a.poli = std.poli; standard.push(`${std.poli} poli`); }
   a.tecnologia = a.tecnologia ?? r.attributi.tecnologia ?? (/\bTHT\b/.test(testo) ? 'T' : null);
-  const c = calcola('CN', a, r.pn);
-  if (!c.root) return null;
+  const c = calcola('CN', a, r.pn, { ripiego: false });
   const da = fam ? `da ${fam} a CN` : 'CN';
+  if (!c.root) {
+    // senza passo o poli (coassiali, schede, jack…): CN lo stesso, il codice si ricava dal P/N. Un integrato (IC) non si tocca.
+    if (fam === 'IC' || !r.pn) return null;
+    return { famiglia: 'CN', attributi: { ...a, passo: a.passo ?? null, poli: a.poli ?? null }, sicura: true, motivo: `famiglia ${da} (connettore riconosciuto da "${parola[0].trim()}")` };
+  }
   return { famiglia: 'CN', attributi: a,
     motivo: `famiglia ${da} (connettore riconosciuto da "${parola[0].trim()}")${standard.length ? `, valori standard ${a.tipo}: ${standard.join(', ')}` : ''}: controlla tipo, passo e poli` };
 }

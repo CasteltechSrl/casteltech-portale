@@ -103,7 +103,7 @@ test('BOM: connettore in MI (RJ45 THT) → consiglio di usare CN, che dà il cod
   const { mappaCampiFamiglie } = await import('../src/engine/codifica/campi-famiglia.js');
   const { calcola } = await import('../src/engine/codifica/regole.js');
   assert.match(mappaCampiFamiglie().MI.consiglio!, /CN · Connettori/);
-  assert.equal(calcola('MI', { case: 'THT', tipo: 'RJ45', tecnologia: 'T' }, 'HR911105A').root, null);
+  assert.equal(calcola('MI', { case: 'THT', tipo: 'RJ45', tecnologia: 'T' }, 'HR911105A', { ripiego: false }).root, null);
   assert.equal(calcola('CN', { tipo: 'RJ45', passo: '1.02', poli: '8', tecnologia: 'T' }, 'HR911105A').root, 'TCN-RJ45-10208');
 });
 

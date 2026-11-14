@@ -78,6 +78,7 @@ export function suggerimentiRiga(r: { famiglia: string | null; attributi: Attrib
     out.push(parti.join(' '));
   };
   for (const n of r.note) {
+    if (n.startsWith('codice ricavato dal P/N')) continue;   // riga già codificata: i campi che mancano sono facoltativi
     const c = n.match(/case "([^"]*)" non in tabella/i) ?? n.match(/formato\/case "([^"]*)"/i);
     if (c) { consiglioCase(c[1]); continue; }
     if (/^case non indicato|formato\/case non indicato|case mancante/i.test(n)) { consiglioCase(null); continue; }
