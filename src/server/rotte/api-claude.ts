@@ -16,6 +16,7 @@
  *   POST /api/claude/banca/conti             → { conti: [{numero, nome, tipo, saldoData, saldo, fido}], fidoAnticipi? }
  *   POST /api/claude/banca/movimenti         → { nome, base64, conto? } = estratto conto (CSV/CBI/Excel) mandato da Adriano, senza doppioni
  *   GET  /api/claude/banca/dati?dal=         → movimenti, rate aperte, rate già pagate non ancora confermate da un movimento, IBAN dei clienti
+ *   POST /api/claude/banca/regole[?ia=1]     → registra i movimenti con categoria sicura; con ia=1 l'IA propone gli altri
  *   POST /api/claude/banca/decisioni         → { abbina: [{id, rate: [{tipo, id, gia?}]}], registra: [{id, categoria}] } = abbinamento fatto da Claude
  *                                              (Adriano 7/11/2026: "non riesci a capirlo tu incrociando fatture, acquisti, stipendi?"), confermato_da 'Claude'
  *   POST /api/claude/banca/rata-mancante     → { anno, numero } = una rata (totale alla data) per la fattura emessa che non ne ha
@@ -49,7 +50,8 @@ import { statoInvoicetronic, ultimeRicevute } from '../invoicetronic.js';
 import { aggiornamentoDaClaude, aggiungiNota, chiuso, ordinaSuggerimenti } from '../../engine/suggerimenti.js';
 import { eliminaRevisione, prodottiVendutiNellAnno, salvaRevisione, spazioTabelle, trovaProdotto } from '../documenti-prodotto-servizio.js';
 import { testoConfronto } from '../../engine/documenti-prodotto.js';
-import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, salvaConti, salvaIbanCliente, aggiungiRataMancante, codiceSia, salvaCodiceSia } from '../banca-servizio.js';
+import { abbinaMovimento, caricaMovimenti, clientiIban, contiConSaldo, fidoAnticipi, leggiEstrattoConto, rateAperte, ratePagateLibere, registraMovimento, registraSicuri, salvaConti, salvaIbanCliente, aggiungiRataMancante, codiceSia, salvaCodiceSia } from '../banca-servizio.js';
+import { proponiConIa } from '../banca-ia.js';
 import { datiXmlFattura } from '../../engine/xml-fic.js';
 import { elencoSchede, nuovaScheda, ripulisciScheda, salvaScheda, sostituisciFile, MAX_PDF, type DatiScheda } from '../sicurezza-servizio.js';
 import { importaVoci } from './registri.js';
@@ -343,6 +345,11 @@ export function rotteApiClaude() {
       registrati++;
     }
     res.json({ abbinati, registrati, errori });
+  });
+  // regole sicure (commissioni, emolumenti, F24, anticipi, rientri) e, con ?ia=1, le proposte dell'IA sugli altri (Adriano 14/11/2026)
+  r.post('/banca/regole', async (req, res) => {
+    const registrati = await registraSicuri();
+    res.json({ registrati, ia: req.query.ia === '1' ? (await proponiConIa(true)).testo : null });
   });
   r.post('/banca/rata-mancante', async (req, res) => {
     res.json(await aggiungiRataMancante(Number(req.body?.anno), Number(req.body?.numero)));

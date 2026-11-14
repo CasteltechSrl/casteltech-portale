@@ -110,7 +110,7 @@ test('banca: numero della fattura nella descrizione solo con una parola di fattu
 });
 
 test('banca: categoria proposta per i movimenti senza fattura', () => {
-  assert.equal(categoriaProposta({ descrizione: 'DELEGA F24 AGENZIA ENTRATE', importo: -500 }), 'Imposte e contributi (F24)');
+  assert.equal(categoriaProposta({ descrizione: 'DELEGA F24 AGENZIA ENTRATE', importo: -500 }), 'Imposte e rate Agenzia Entrate');
   assert.equal(categoriaProposta({ descrizione: 'COMMISSIONI SU BONIFICO', importo: -1 }), 'Commissioni e spese bancarie');
   assert.equal(categoriaProposta({ descrizione: 'EMOLUMENTI OTTOBRE', importo: -9000 }), 'Stipendi');
   assert.equal(categoriaProposta({ descrizione: 'VERSAMENTO', importo: 100 }), 'Altre entrate');
@@ -195,13 +195,13 @@ test('banca: anticipo e rientro della banca non sono mai l\'incasso della fattur
 test('banca: categorie sui movimenti tipici di BPER', () => {
   const c = (d: string, i = -10) => categoriaProposta({ descrizione: d, importo: i });
   assert.equal(c('GIROCONTO COMPETENZE COMPETENZE SPESE ED ONERI - AL C/C 0258/03092938', 100), 'Giroconto');
-  assert.equal(c('RIENTRO ANTICIPO/FINANZIAMENTO FT 98 + 108'), 'Anticipo fatture / RiBa');
+  assert.equal(c('RIENTRO ANTICIPO/FINANZIAMENTO FT 98 + 108'), 'Rientro anticipo');
   assert.equal(c('RATA PRESTITO Fin. 005/1 Scadenza del 28/03/2026 Quota capitale 1.414,27 Interessi 17,18'), 'Finanziamenti e mutui');
   assert.equal(c('COMPETENZE DARE AUTORIZZATE IN C/C INTERESSI A DEBITO AL 31/12/2025'), 'Interessi');
   assert.equal(c('COMPETENZE SPESE ED ONERI'), 'Commissioni e spese bancarie');
   assert.equal(c('IMPOSTA DI BOLLO BOLLI DA OTTOBRE A DICEMBRE'), 'Commissioni e spese bancarie');
   assert.equal(c('VIACARD ADD. VIACARD - Utente: 1'), 'Pedaggi e carburante');
-  assert.equal(c('PAGAM. DELEGA F24 AGENZIA ENTRATE'), 'Imposte e contributi (F24)');
+  assert.equal(c('PAGAM. DELEGA F24 AGENZIA ENTRATE'), 'Imposte e rate Agenzia Entrate');
   assert.equal(c('DISPOSIZIONE EMOLUMENTI EUR 1.500,00'), 'Stipendi');
 });
 

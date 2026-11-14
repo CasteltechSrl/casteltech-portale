@@ -20,6 +20,7 @@ import { abbinaMovimento, contiBanca, contiConSaldo, fidoAnticipi, salvaConti, a
 
 import crypto from 'node:crypto';
 import { avviaCollegamento, bancheDisponibili, completaCollegamento, openBankingConfigurato, scaricaMovimenti, scollega, statoOpenBanking, type StatoOpenBanking } from '../open-banking.js';
+import { proponiConIa } from '../banca-ia.js';
 import { NOMI_COLLEGAMENTO, leggiScelta, statoConsenso, tipoCollegamento, type BancaScelta, type Collegamento, type TipoCollegamento } from '../../engine/open-banking.js';
 
 declare module 'express-session' { interface SessionData { bancaCollega?: { stato: string; banca: string; metodo: string | null } } }
@@ -81,9 +82,11 @@ function sezioneCollegamento(s: StatoOpenBanking, configurato: boolean, banche: 
       Collegare di nuovo la stessa cosa sostituisce il consenso di prima.</p></details>`;
 }
 
-const scritturaRate = (rate: RataAperta[]) => rate.map(r => `${r.tipo}:${r.id}`).join(',');
+const scritturaRate = (rate: RataAperta[]) => rate.map(r => `${r.tipo}:${r.id}${r.gia ? ':gia' : ''}`).join(',');
+/** Categorie nel menu di un movimento: "Incasso/Pagamento fattura" solo nella direzione giusta (fattura non ancora arrivata). */
+const categorieMenu = (importo: number) => CATEGORIE_MOVIMENTO.filter(c => (c !== 'Incasso fattura' || importo > 0) && (c !== 'Pagamento fattura' || importo < 0));
 const testoRata = (r: RataAperta) => html`<a href="${r.tipo === 'emessa' ? `/amministrazione/documenti/${r.documentoId}` : `/amministrazione/ricevuti/${r.documentoId}`}">
-  ${r.tipo === 'emessa' ? 'Fatt.' : 'Fatt. forn.'} ${r.numero || 's.n.'}</a> del ${data(r.dataDoc)} · ${r.controparte} · scad. ${data(r.scadenza)} · ${euro(r.importo)}`;
+  ${r.tipo === 'emessa' ? 'Fatt.' : 'Fatt. forn.'} ${r.numero || 's.n.'}</a> del ${data(r.dataDoc)} · ${r.controparte} · scad. ${data(r.scadenza)} · ${euro(r.importo)}${r.gia ? html` · <span class="nota">già segnata pagata</span>` : ''}`;
 
 /** Conti della banca con il saldo di oggi (saldo dell'estratto conto + movimenti caricati dopo) e quanto resta dell'affidamento. */
 function sezioneConti(conti: Awaited<ReturnType<typeof contiConSaldo>>, fidoAnticipi: number | null): Raw {
@@ -175,7 +178,8 @@ export function rotteBanca() {
       configurato ? bancheDisponibili().catch(() => null) : Promise.resolve(null),
     ]);
     const nome = (n: string) => nomeConto(n, elencoConti);
-    const sicuri = daAbbinare.filter(x => (x.proposta?.punteggio ?? 0) >= SOGLIA_SICURA).length;
+    const sicuri = daAbbinare.filter(x => (x.proposta?.punteggio ?? 0) >= SOGLIA_SICURA || (!x.proposta && x.sicura)).length;
+    const spuntata = (x: (typeof daAbbinare)[number]) => x.proposta ? x.proposta.punteggio >= SOGLIA_SICURA : x.sicura;
     res.send(pagina(req, 'Banca e carte', html`
       <div class="intestazione-pagina"><h1>Banca e carte</h1></div>
       ${menuAmministrazione('banca')}${tasti('movimenti')}
@@ -196,21 +200,25 @@ export function rotteBanca() {
       <h2>Da abbinare (${daAbbinare.length})</h2>
       ${daAbbinare.length ? html`
         <p class="nota">Entrate → fatture emesse da incassare, uscite → fatture dei fornitori da pagare. Il portale cerca lo stesso importo, poi il numero della fattura
-          e il nome nella descrizione; più fatture dello stesso cliente o una distinta RiBa intera. Le proposte sicure (${sicuri}) sono già spuntate: controlla e premi
-          <strong>Conferma</strong>. Le fatture diventano incassate o pagate alla data del movimento. Senza fattura: scegli la categoria e spunta.</p>
+          e il nome nella descrizione; più fatture dello stesso cliente, una distinta RiBa intera, le fatture già segnate pagate e le distinte di bonifici ai fornitori.
+          Commissioni, emolumenti, F24, anticipi e rientri si registrano da soli. Quello che le regole non capiscono lo guarda l'IA (righe "IA:").
+          Le proposte sicure (${sicuri}) sono già spuntate: controlla e premi <strong>Conferma</strong>. Le fatture diventano incassate o pagate alla data del movimento.</p>
+        <form method="post" action="/amministrazione/banca/ia" class="inline" id="modulo-ia"></form>
         <form method="post" action="/amministrazione/banca/conferma">
-          <div class="barra-azioni"><button class="primario">Conferma le righe spuntate</button></div>
+          <div class="barra-azioni"><button class="primario">Conferma le righe spuntate</button>
+            <button form="modulo-ia" title="L'IA guarda di nuovo i movimenti che le regole non sanno abbinare">Chiedi all'IA</button></div>
           <div class="tabella-scorre limitata"><table class="elenco">
             <thead><tr><th data-non-ordinare></th><th>Data</th><th>Conto</th><th class="num">Importo</th><th>Descrizione</th><th>Proposta</th><th></th></tr></thead>
-            <tbody>${daAbbinare.map(({ m, proposta, categoria }) => html`<tr class="${proposta && proposta.punteggio >= SOGLIA_SICURA ? '' : 'da-controllare'}">
-              <td><input type="checkbox" name="ok" value="${m.id}" ${proposta && proposta.punteggio >= SOGLIA_SICURA ? raw('checked') : ''}></td>
+            <tbody>${daAbbinare.map(x => { const { m, proposta, categoria, ia } = x; return html`<tr class="${spuntata(x) ? '' : 'da-controllare'}">
+              <td><input type="checkbox" name="ok" value="${m.id}" ${spuntata(x) ? raw('checked') : ''}></td>
               <td>${data(m.data)}</td><td>${nome(m.conto)}</td><td class="${importoClasse(m.importo)}">${euro(m.importo)}</td>
               <td><span class="nota taglia" title="${m.descrizione}">${m.descrizione}</span></td>
               <td>${proposta ? html`<input type="hidden" name="rate_${m.id}" value="${scritturaRate(proposta.rate)}">
                   ${proposta.rate.map(x => html`<div>${testoRata(x)}</div>`)}<div class="nota">${proposta.motivo}</div>`
-                : html`<select name="cat_${m.id}">${CATEGORIE_MOVIMENTO.filter(c => c !== 'Incasso fattura' && c !== 'Pagamento fattura')
-                    .map(c => html`<option ${c === categoria ? raw('selected') : ''}>${c}</option>`)}</select>`}</td>
-              <td><a href="/amministrazione/banca/movimento/${m.id}">a mano</a></td></tr>`)}</tbody></table></div>
+                : html`<select name="cat_${m.id}">${categorieMenu(m.importo)
+                    .map(c => html`<option ${c === categoria ? raw('selected') : ''}>${c}</option>`)}</select>
+                  ${ia?.motivo && !ia.rate?.length ? html`<div class="nota">IA: ${ia.motivo}</div>` : ''}`}</td>
+              <td><a href="/amministrazione/banca/movimento/${m.id}">a mano</a></td></tr>`; })}</tbody></table></div>
         </form>` : html`<p class="vuoto">Nessun movimento da abbinare.</p>`}
 
       <h2>Già abbinati e registrati</h2>
@@ -281,7 +289,7 @@ export function rotteBanca() {
     for (const id of ids) {
       const rate = String(req.body?.[`rate_${id}`] ?? '');
       if (rate) {
-        const scelte = rate.split(',').map(x => { const [tipo, n] = x.split(':'); return { tipo: tipo as 'emessa' | 'ricevuta', id: Number(n) }; });
+        const scelte = rate.split(',').map(x => { const [tipo, n, gia] = x.split(':'); return { tipo: tipo as 'emessa' | 'ricevuta', id: Number(n), ...(gia === 'gia' ? { gia: true } : {}) }; });
         const e = await abbinaMovimento(id, scelte, utente(req));
         if (e) errori.push(`Movimento ${id}: ${e}`); else abbinati++;
       } else {
@@ -292,6 +300,11 @@ export function rotteBanca() {
       }
     }
     res.redirect(vaiA('', [`${abbinati} movimenti abbinati alle fatture, ${registrati} registrati in categoria.`, ...errori].join(' ')));
+  });
+
+  r.post('/ia', async (req, res) => {
+    try { res.redirect(vaiA('', `${(await proponiConIa(true)).testo}.`)); }
+    catch (e: any) { res.redirect(vaiA('', `IA non riuscita: ${e?.message ?? e}`)); }
   });
 
   r.get('/movimento/:id', async (req, res) => {
@@ -318,7 +331,7 @@ export function rotteBanca() {
         </form>
         <h2>Oppure senza fattura</h2>
         <form method="post" action="/amministrazione/banca/movimento/${m.id}/registra" class="riga-campi">
-          <label>Categoria <select name="categoria">${CATEGORIE_MOVIMENTO.filter(c => c !== 'Incasso fattura' && c !== 'Pagamento fattura').map(c => html`<option>${c}</option>`)}</select></label>
+          <label>Categoria <select name="categoria">${categorieMenu(m.importo).map(c => html`<option>${c}</option>`)}</select></label>
           <button>Registra</button></form>
         <form method="post" action="/amministrazione/banca/movimento/${m.id}/elimina" class="inline" data-conferma="Eliminare questo movimento (caricato per sbaglio)?">
           <button class="pericolo">Elimina il movimento</button></form>`
