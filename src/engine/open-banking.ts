@@ -182,10 +182,14 @@ export function collegamentiDaStato(s: any): Collegamento[] {
  * Addebito della carta di credito: le spese di un mese si pagano il 15 del mese dopo (Adriano 14/11/2026). Una voce per mese con addebito da oggi in poi;
  * il mese in corso conta le spese fatte finora. Rimborsi in meno.
  */
+/** Righe di riepilogo dell'estratto conto della carta BPER ("TOTALE ACCREDITI" / "TOTALE SPESE" a fine ciclo): non sono spese, si tolgono dai conti. */
+export const rigaRiepilogoCarta = (descrizione?: string | null) => /^\s*totale (accrediti|spese)\b/i.test(descrizione ?? '');
+
 /** Spese della carta (o di PayPal) mese per mese, dal più recente: ogni mese si paga il giorno indicato (15) del mese dopo. */
-export function speseCartaPerMese(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; movimenti: number; finora: boolean }[] {
+export function speseCartaPerMese(movimenti: { data: string; importo: number; descrizione?: string | null }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; movimenti: number; finora: boolean }[] {
   const perMese = new Map<string, { importo: number; movimenti: number }>();
   for (const m of movimenti) {
+    if (rigaRiepilogoCarta(m.descrizione)) continue;
     const x = perMese.get(m.data.slice(0, 7)) ?? { importo: 0, movimenti: 0 };
     perMese.set(m.data.slice(0, 7), { importo: x.importo - m.importo, movimenti: x.movimenti + 1 });
   }
@@ -196,7 +200,7 @@ export function speseCartaPerMese(movimenti: { data: string; importo: number }[]
   }).sort((x, y) => y.mese.localeCompare(x.mese));
 }
 
-export function addebitiCarta(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; finora: boolean }[] {
+export function addebitiCarta(movimenti: { data: string; importo: number; descrizione?: string | null }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; finora: boolean }[] {
   return speseCartaPerMese(movimenti, oggi, giorno).filter(x => x.data >= oggi && x.importo > 0)
     .map(({ mese, data, importo, finora }) => ({ mese, data, importo, finora })).sort((x, y) => x.data.localeCompare(y.data));
 }
