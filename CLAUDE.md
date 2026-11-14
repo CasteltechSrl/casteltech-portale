@@ -1056,5 +1056,13 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    Carta di credito BPER e PayPal (Adriano 14/11/2026, "scaricare le spese mensili e mettere a budget l'uscita del 15"): un collegamento per tipo (`collegamenti` in 'open_banking', `collegamentiDaStato`: lo stato di prima = 'conti'),
    carta = BPER metodo BPERCARD "Area Riservata Carte" (psu personal, `tipoUtente`), PayPal = aspsp 'PayPal'; conti in Banca con tipo 'carta'/'paypal' (`TIPI_CONTO`, numero `CARTA1234`/`PAYPAL`, `contoDaApi`),
    fuori dal saldo di cassa; previsione di cassa: spese della carta di un mese = uscita il 15 del mese dopo (`addebitiCarta`).
+   Abbinamento più intelligente (Adriano 14/11/2026; `categoriaMovimento`/`categoriaF24` in `engine/banca.ts`, IA in `engine/banca-ia.ts` + `server/banca-ia.ts`, migrazione 103
+   `banca_movimenti.proposta_ia`, test in `tests/banca-regole-ia.test.ts`): regole con `sicura` registrate da sole (`registraSicuri`, "Regola del portale") dopo ogni caricamento:
+   ^COMMISSIONI = commissioni, EMOLUMENTI = stipendi, F24 = "Imposte e rate Agenzia Entrate" salvo giorno 10–20 = "Contributi dipendenti (F24)", "ANTICIPO SU DOCUMENTI" = Anticipo fatture,
+   "RIENTRO ANTICIPO" = Rientro anticipo, addebito carta = Carta di credito; "DISPOSIZIONE a favore di NOME … FPR" = Pagamento fattura del professionista (Cetani), mai stipendio.
+   Candidate = rate aperte + `ratePagateLibere` come `gia` (`rateCandidate`; punteggio sul giorno in cui è stata segnata pagata); distinta di bonifici ai fornitori = somma esatta delle
+   fatture in scadenza ±20 gg (punteggio 70, da controllare). Dopo il caricamento l'IA (`proponiConIa`, max 40, un movimento già guardato non si richiede) propone fatture/categoria
+   per i movimenti che le regole non risolvono; `leggiRispostaIa` tiene solo fatture esistenti, direzione giusta e somma al centesimo; pulsante "Chiedi all'IA", POST `/api/claude/banca/regole[?ia=1]`.
+   Categorie vecchie "Imposte e contributi (F24)" e "Anticipo fatture / RiBa" restano sui movimenti già registrati (`CATEGORIE_VECCHIE`).
    Menu (Adriano 14/11/2026): Amministrazione → "Banca e carte" subito dopo Fatture differite (unica voce della banca); nella pagina i tasti Conti, carte e riconciliazione / RiBa e anticipo fatture /
    Fatture anticipate (`?tipo=fattura&anticipo=tutte`) / Previsione di cassa (`tasti` in `rotte/banca.ts`).

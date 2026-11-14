@@ -204,6 +204,8 @@ export interface RataAperta {
   partitaIva?: string | null;
   riba?: boolean;                  // rata da pagare con RiBa
   distintaId?: number | null;      // distinta RiBa in cui è stata presentata
+  gia?: boolean;                   // rata già segnata pagata (storico FIC o a mano) e non ancora collegata a un movimento
+  pagataIl?: string | null;        // data in cui è stata segnata pagata (solo con `gia`)
 }
 
 export interface Proposta { rate: RataAperta[]; punteggio: number; motivo: string }
@@ -245,13 +247,20 @@ function punteggioRata(m: Movimento, r: RataAperta): { punti: number; perche: st
   const s = somiglianzaNome(m.descrizione, r.controparte);
   if (s > 0) { punti += Math.round(25 * s); perche.push(`nome ${r.controparte}`); }
   if (r.partitaIva && norm(m.descrizione).includes(r.partitaIva.toLowerCase())) { punti += 15; perche.push('partita IVA'); }
+  if (r.gia && r.pagataIl) {
+    // rata già segnata pagata: conta il giorno in cui è stata segnata, non la scadenza (Adriano 14/11/2026, Selea FT 111, Cetani FPR 10/26)
+    const g = giorni(m.data, r.pagataIl);
+    if (g <= 3) { punti += 15; perche.push(`già segnata pagata il ${r.pagataIl.split('-').reverse().join('/')}`); }
+    else punti -= Math.min(30, Math.floor(g / 3));
+    return { punti, perche };
+  }
   punti += Math.max(0, 10 - Math.floor(giorni(m.data, r.scadenza) / 10));
   return { punti, perche };
 }
 
-/** Sottoinsieme di rate (al massimo 10, dalle più vecchie) che fa esattamente `totale`. */
-function sommaEsatta(rate: RataAperta[], totale: number): RataAperta[] | null {
-  const elenco = [...rate].sort((a, b) => a.scadenza.localeCompare(b.scadenza)).slice(0, 10);
+/** Sottoinsieme di rate (al massimo `max`, dalle più vecchie) che fa esattamente `totale`. */
+function sommaEsatta(rate: RataAperta[], totale: number, max = 10): RataAperta[] | null {
+  const elenco = [...rate].sort((a, b) => a.scadenza.localeCompare(b.scadenza)).slice(0, max);
   const obiettivo = Math.round(totale * 100);
   const valori = elenco.map(r => Math.round(r.importo * 100));
   let migliore: number[] | null = null;
@@ -271,7 +280,7 @@ function sommaEsatta(rate: RataAperta[], totale: number): RataAperta[] | null {
  * ("ANTICIPO SU DOCUMENTI FT 45" = proprio l'importo della fattura 45), il rientro dell'anticipo, competenze, bolli, commissioni.
  * L'incasso vero è il bonifico del cliente ("BONIFICO o/c: SELEA ... FT 53").
  */
-export const MAI_FATTURA = /anticipo su documenti|rientro anticipo|^competenze|giroconto competenze|imposta di bollo|^commissioni|interessi a debito/;
+export const MAI_FATTURA = /anticipo su documenti|rientro anticipo|^competenze|giroconto competenze|imposta di bollo|^commissioni|interessi a debito|emolument|pagamento carta di credito|delega unificata|\bf24\b/;
 
 /** Soglia da cui la proposta è "sicura" (spuntata già nella pagina). */
 export const SOGLIA_SICURA = 75;
@@ -331,37 +340,84 @@ export function proponiAbbinamento(m: Movimento, rate: RataAperta[], opz: { cont
     const punti = 60 + Math.round(20 * s) + (citate === scelte.length ? 15 : 0);
     if (!migliore || punti > migliore.punteggio) migliore = { rate: scelte, punteggio: punti, motivo: `${scelte.length} fatture di ${nome} che fanno l'importo` };
   }
-  return migliore;
+  if (migliore) return migliore;
+  // 4) distinta di bonifici ai fornitori senza i nomi ("DISPOSIZIONE ... Num. Distinta"): fatture dei fornitori in scadenza vicino
+  //    alla data che fanno esattamente il totale (Adriano 14/11/2026: "bonifici aggregati dove non si vede il dettaglio")
+  if (tipo === 'ricevuta' && /distinta/.test(norm(m.descrizione)) && !/emolument|stipend|retribuz/.test(norm(m.descrizione))) {
+    const vicine = candidate.filter(r => !r.gia && giorni(m.data, r.scadenza) <= 20)
+      .sort((a, b) => giorni(m.data, a.scadenza) - giorni(m.data, b.scadenza)).slice(0, 14);
+    const scelte = sommaEsatta(vicine, importo, 14);
+    if (scelte) return { rate: scelte, punteggio: 70, motivo: `distinta: ${scelte.length} fatture di fornitori in scadenza che fanno il totale (controlla)` };
+  }
+  return null;
 }
 
 // ───────────────────────────── categorie dei movimenti senza fattura ─────────────────────────────
 
-export const CATEGORIE_MOVIMENTO = ['Incasso fattura', 'Pagamento fattura', 'Commissioni e spese bancarie', 'Interessi', 'Imposte e contributi (F24)',
-  'Stipendi', 'Carta / POS', 'Pedaggi e carburante', 'Leasing e noleggi', 'Finanziamenti e mutui', 'Anticipo fatture / RiBa', 'Giroconto', 'Utenze', 'Assicurazioni',
-  'Altre entrate', 'Altre uscite'] as const;
+export const CATEGORIE_MOVIMENTO = ['Incasso fattura', 'Pagamento fattura', 'Commissioni e spese bancarie', 'Interessi', 'Imposte e rate Agenzia Entrate',
+  'Contributi dipendenti (F24)', 'Stipendi', 'Carta di credito', 'Carta / POS', 'Pedaggi e carburante', 'Leasing e noleggi', 'Finanziamenti e mutui',
+  'Anticipo fatture', 'Rientro anticipo', 'Giroconto', 'Utenze', 'Assicurazioni', 'Contributi pubblici', 'Rimborsi', 'Altre entrate', 'Altre uscite'] as const;
 
-// in ordine: vince la prima regola (provate sui movimenti BPER 2026: "GIROCONTO COMPETENZE SPESE ED ONERI" è un giroconto,
-// "RIENTRO ANTICIPO/FINANZIAMENTO" è anticipo, "COMPETENZE ... INTERESSI A DEBITO" sono interessi)
-const REGOLE_CATEGORIA: [RegExp, string][] = [
-  [/giroconto|giro conto|trasferimento tra/, 'Giroconto'],
-  [/anticipo su documenti|rientro anticipo|anticipo fatt|\bsbf\b|s\.b\.f|presentazione effett|ri\.?ba\b|effetti/, 'Anticipo fatture / RiBa'],
-  [/mutuo|finanziament|rata prest|prestito/, 'Finanziamenti e mutui'],
-  [/\bf24\b|delega|agenzia.?entrate|\binps\b|\binail\b|tribut/, 'Imposte e contributi (F24)'],
-  [/stipend|emolument|retribuz|\bpaghe\b|cedolin/, 'Stipendi'],
-  [/interess/, 'Interessi'],
-  [/commission|spese|canone|imposta di bollo|\bbollo\b|competenze|oneri/, 'Commissioni e spese bancarie'],
-  [/viacard|telepass|autostrad|carburant|benzina|gasolio/, 'Pedaggi e carburante'],
-  [/leasing|noleggio|locazione finanz/, 'Leasing e noleggi'],
-  [/\bpos\b|carta|bancomat|pagobancomat|visa|mastercard/, 'Carta / POS'],
-  [/enel|\bhera\b|\biren\b|\ba2a\b|\bgas\b|energia|telecom|\btim\b|vodafone|fastweb|wind|acqua/, 'Utenze'],
-  [/assicuraz|polizza|unipol|generali|allianz|\baxa\b/, 'Assicurazioni'],
+/** Categorie usate prima del 14/11/2026: restano sui movimenti già registrati, non si propongono più. */
+export const CATEGORIE_VECCHIE = ['Imposte e contributi (F24)', 'Anticipo fatture / RiBa'];
+
+/**
+ * F24 (Adriano 14/11/2026): di solito sono le rate dell'Agenzia delle Entrate, tranne quello pagato intorno al 16 del mese
+ * (dal 10 al 20) che sono i contributi dei dipendenti (si paga dopo gli stipendi del 10).
+ */
+export function categoriaF24(data: string): string {
+  const g = Number(data.slice(8, 10));
+  return g >= 10 && g <= 20 ? 'Contributi dipendenti (F24)' : 'Imposte e rate Agenzia Entrate';
+}
+
+// in ordine: vince la prima regola. `sicura` = registrata da sola senza chiedere (Adriano 14/11/2026: "dove c'è scritto commissioni sono
+// automaticamente commissioni bancarie; emolumenti sono stipendi; F24…; anticipi e rientri"). Provate sui movimenti BPER 2026.
+// "DISPOSIZIONE EMOLUMENTI ... Spese: 0,07" è lo stipendio (le spese del bonifico sono un movimento a parte "COMMISSIONI BONIFICI").
+const REGOLE_CATEGORIA: [RegExp, string, boolean][] = [
+  [/^commission/, 'Commissioni e spese bancarie', true],
+  [/emolument|stipend|retribuz|\bpaghe\b|cedolin|busta paga/, 'Stipendi', true],
+  [/anticipo su documenti|anticipo fatt|anticipo s\.?b\.?f/, 'Anticipo fatture', true],
+  [/rientro anticipo/, 'Rientro anticipo', true],
+  [/pagamento carta di credito|addebito e\/c.*carta|carta di credito addebito/, 'Carta di credito', true],
+  [/interessi a debito|interessi creditori|interessi passivi/, 'Interessi', true],
+  [/giroconto|giro conto|trasferimento tra/, 'Giroconto', false],
+  [/\bsbf\b|s\.b\.f|presentazione effett|ri\.?ba\b|effetti/, 'Anticipo fatture', false],
+  [/sabatini|\bmimit\b|\bmise\b|contributo in conto|credito d.imposta|\bgse\b/, 'Contributi pubblici', false],
+  [/mutuo|finanziament|rata prest|prestito/, 'Finanziamenti e mutui', false],
+  [/\bf24\b|delega unificata|pagam\. delega/, 'F24', true],
+  [/agenzia.?entrate|agenzia delle entrate|riscossione|\binps\b|\binail\b|tribut/, 'Imposte e rate Agenzia Entrate', false],
+  [/rimborso|storno|restituz/, 'Rimborsi', false],
+  [/interess/, 'Interessi', false],
+  [/imposta di bollo|\bbollo\b|canone|spese tenuta|oneri|competenze/, 'Commissioni e spese bancarie', true],
+  [/viacard|telepass|autostrad|carburant|benzina|gasolio/, 'Pedaggi e carburante', false],
+  [/leasing|noleggio|locazione finanz/, 'Leasing e noleggi', false],
+  [/assicuraz|polizza|unipol|generali|allianz|\baxa\b|reale mutua|zurich/, 'Assicurazioni', false],
+  [/\bpos\b|carta|bancomat|pagobancomat|visa|mastercard/, 'Carta / POS', false],
+  [/enel|\bhera\b|\biren\b|\ba2a\b|\bgas\b|energia|telecom|\btim\b|vodafone|fastweb|wind|acqua/, 'Utenze', false],
+  [/commission|spese/, 'Commissioni e spese bancarie', false],
 ];
 
-/** Categoria proposta per un movimento senza fattura, dalle parole della descrizione. */
-export function categoriaProposta(m: Pick<Movimento, 'descrizione' | 'importo'>): string {
+/**
+ * Bonifico a un professionista per la sua fattura (Adriano 14/11/2026: "Federico Cetani sembra uno stipendio ma è il pagamento della fattura,
+ * è un libero professionista"): "DISPOSIZIONE a favore di NOME ... nr. FPR 10/26" = pagamento di una fattura del fornitore.
+ */
+const DISPOSIZIONE_FATTURA = /disposizione a favore di .*\b(fpr|fatt|fattura|ft|parcella|nr\.?)\s*\.?\s*\d/;
+
+/** Categoria proposta per un movimento senza fattura, dalle parole della descrizione (e dalla data per gli F24). */
+export function categoriaProposta(m: Pick<Movimento, 'descrizione' | 'importo'> & { data?: string }): string {
+  return categoriaMovimento(m).categoria;
+}
+
+/** Categoria e se è sicura (si registra da sola). */
+export function categoriaMovimento(m: Pick<Movimento, 'descrizione' | 'importo'> & { data?: string }): { categoria: string; sicura: boolean } {
   const d = norm(m.descrizione);
-  for (const [re, cat] of REGOLE_CATEGORIA) if (re.test(d)) return cat;
-  return m.importo > 0 ? 'Altre entrate' : 'Altre uscite';
+  if (m.importo < 0 && DISPOSIZIONE_FATTURA.test(d)) return { categoria: 'Pagamento fattura', sicura: false };
+  for (const [re, cat, sicura] of REGOLE_CATEGORIA) if (re.test(d)) {
+    if (cat === 'F24') return { categoria: categoriaF24(m.data ?? ''), sicura };
+    if (cat === 'Rimborsi' && m.importo < 0) continue;
+    return { categoria: cat, sicura };
+  }
+  return { categoria: m.importo > 0 ? 'Altre entrate' : 'Altre uscite', sicura: false };
 }
 
 // ───────────────────────────── RiBa CBI ─────────────────────────────

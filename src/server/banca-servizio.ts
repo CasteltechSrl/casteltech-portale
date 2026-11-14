@@ -6,9 +6,10 @@ import { leggiFileBom } from './codifica-servizio.js';
 import { testoDaFile } from '../engine/componenti-clienti.js';
 import { anticipiDelleFatture, type AnticipoFattura, type FatturaPerAnticipi, type RataIncasso } from '../engine/anticipi.js';
 import { rataMancante, abiCabDaIban, chiaviMovimenti, contoNuovo, nomeConto, numeroConto, saldoConto, type ContoBanca, controlliCreditore, controlliEffetto, generaRiba, leggiCbi, movimentiDaTabella, proponiAbbinamento,
-  categoriaProposta, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
+  categoriaMovimento, SOGLIA_SICURA, type CreditoreRiba, type EffettoRiba, type Movimento, type Proposta, type RataAperta } from '../engine/banca.js';
 
 import { FILE_OPEN_BANKING, togliGiaPresenti } from '../engine/open-banking.js';
+import type { PropostaIa } from '../engine/banca-ia.js';
 
 const STATI_OK = `d.stato NOT IN ('bozza', 'annullato', 'scartato') AND d.numero IS NOT NULL`;
 
@@ -86,6 +87,11 @@ export async function caricaMovimenti(movimenti: Movimento[], conto: string, fil
   const conti = await contiBanca();
   const nuovi = [...new Set(conMov.map(m => m.rapporto!))].filter(n => !conti.some(c => c.numero === n));
   if (nuovi.length) await salvaConti([...conti, ...nuovi.map(n => contoNuovo(n, iban))]);
+  if (inseriti.length) {
+    // movimenti nuovi: prima le regole sicure, poi (dopo la risposta) l'IA sugli altri
+    await registraSicuri().catch(e => console.error('Banca, regole:', e));
+    setImmediate(() => { import('./banca-ia.js').then(x => x.proponiConIa()).catch(e => console.error('Banca, IA:', e?.message ?? e)); });
+  }
   return { nuovi: inseriti.length, gia: movimenti.length - inseriti.length };
 }
 
@@ -156,20 +162,50 @@ export async function salvaIbanCliente(id: number, iban: string): Promise<'scrit
   return 'scritto';
 }
 
-export interface MovimentoDb extends Movimento { id: number; conto: string; stato: string; categoria: string | null; rate: { tipo: string; id: number; gia?: boolean }[]; file: string | null }
+export interface MovimentoDb extends Movimento { id: number; conto: string; stato: string; categoria: string | null; rate: { tipo: string; id: number; gia?: boolean }[]; file: string | null;
+  proposta_ia?: PropostaIa | null }
 
 const SELECT_MOV = `SELECT id, conto, to_char(data, 'YYYY-MM-DD') AS data, to_char(valuta, 'YYYY-MM-DD') AS valuta, importo::float AS importo,
-  descrizione, causale, stato, categoria, rate, file FROM banca_movimenti`;
+  descrizione, causale, stato, categoria, rate, file, proposta_ia FROM banca_movimenti`;
 
 export async function movimento(id: number): Promise<MovimentoDb | null> {
   return (await q1<MovimentoDb>(`${SELECT_MOV} WHERE id = $1`, [id])) ?? null;
 }
 
-/** Movimenti da abbinare con la proposta (rate) o la categoria proposta. Ogni rata è proposta a un solo movimento (il più sicuro). */
-export async function movimentiDaAbbinare(): Promise<{ m: MovimentoDb; proposta: Proposta | null; categoria: string }[]> {
-  const [movimenti, rate, conti] = await Promise.all([q<MovimentoDb>(`${SELECT_MOV} WHERE stato = 'da_abbinare' ORDER BY data, id`), rateAperte(), contiBanca()]);
+/**
+ * Rate tra cui cercare: quelle aperte + quelle già segnate pagate ma non collegate a un movimento (`gia`), dal giorno `dal`
+ * (Adriano 14/11/2026: Selea FT 111 e Silibit FT 109 erano già segnate incassate e il bonifico non trovava nulla).
+ */
+export async function rateCandidate(dal: string): Promise<RataAperta[]> {
+  const [aperte, pagate] = await Promise.all([rateAperte(), ratePagateLibere(undefined, dal)]);
+  return [...aperte, ...pagate.map(r => ({ ...r, gia: true }))];
+}
+
+const giorniPrima = (d: string, n: number) => new Date(Date.parse(d) - n * 86400000).toISOString().slice(0, 10);
+
+export interface RigaDaAbbinare { m: MovimentoDb; proposta: Proposta | null; categoria: string; sicura: boolean; ia: PropostaIa | null }
+
+/**
+ * Movimenti da abbinare con la proposta (rate) o la categoria proposta. Ogni rata è proposta a un solo movimento (il più sicuro).
+ * Prima le regole; dove le regole non trovano fatture, la proposta dell'IA salvata (`proposta_ia`) se torna ancora.
+ */
+export async function movimentiDaAbbinare(): Promise<RigaDaAbbinare[]> {
+  const [movimenti, conti] = await Promise.all([q<MovimentoDb>(`${SELECT_MOV} WHERE stato = 'da_abbinare' ORDER BY data, id`), contiBanca()]);
+  if (!movimenti.length) return [];
+  const rate = await rateCandidate(giorniPrima(movimenti[0].data, 60));
   const tecnici = new Set(conti.filter(c => c.tipo === 'anticipo').map(c => c.numero));
-  const proposte = movimenti.map(m => ({ m, proposta: proponiAbbinamento(m, rate, { contoTecnico: tecnici.has(m.conto) }) }));
+  const chiave = (r: { tipo: string; id: number; gia?: boolean }) => `${r.tipo}:${r.id}${r.gia ? ':gia' : ''}`;
+  const perChiave = new Map(rate.map(r => [chiave(r), r]));
+  const proposte = movimenti.map(m => {
+    let proposta = proponiAbbinamento(m, rate, { contoTecnico: tecnici.has(m.conto) });
+    const ia = m.proposta_ia ?? null;
+    if (!proposta && ia?.rate?.length) {
+      const scelte = ia.rate.map(r => perChiave.get(chiave(r)));
+      if (scelte.every(Boolean) && Math.abs(scelte.reduce((s, r) => s + r!.importo, 0) - Math.abs(m.importo)) < 0.005)
+        proposta = { rate: scelte as RataAperta[], punteggio: ia.sicura ? SOGLIA_SICURA : SOGLIA_SICURA - 10, motivo: `IA: ${ia.motivo}` };
+    }
+    return { m, proposta, ia };
+  });
   // la stessa rata non va a due movimenti: tiene il punteggio più alto
   const usate = new Map<string, number>();
   for (const [i, p] of proposte.entries()) for (const r of p.proposta?.rate ?? []) {
@@ -179,8 +215,26 @@ export async function movimentiDaAbbinare(): Promise<{ m: MovimentoDb; proposta:
   }
   return proposte.map((p, i) => {
     const libera = p.proposta?.rate.every(r => usate.get(`${r.tipo}:${r.id}`) === i);
-    return { m: p.m, proposta: libera ? p.proposta : null, categoria: categoriaProposta(p.m) };
+    const regola = categoriaMovimento(p.m);
+    // categoria: la regola sicura vince; altrimenti quella dell'IA, se c'è
+    const daIa = !regola.sicura && p.ia?.categoria && !p.ia.rate?.length;
+    return { m: p.m, proposta: libera ? p.proposta : null, categoria: daIa ? p.ia!.categoria! : regola.categoria,
+      sicura: regola.sicura || !!(daIa && p.ia!.sicura), ia: p.ia };
   });
+}
+
+/**
+ * Registra da soli i movimenti con una categoria sicura e senza fattura proposta (Adriano 14/11/2026: commissioni, emolumenti, F24,
+ * anticipi e rientri, addebito della carta). Si possono annullare come gli altri. Restituisce quanti.
+ */
+export async function registraSicuri(): Promise<number> {
+  let n = 0;
+  for (const x of await movimentiDaAbbinare()) {
+    if (x.proposta || !x.sicura || x.categoria === 'Pagamento fattura') continue;
+    await registraMovimento(x.m.id, x.categoria, 'Regola del portale');
+    n++;
+  }
+  return n;
 }
 
 /** Modo di pagamento per le rate segnate dal movimento. */
