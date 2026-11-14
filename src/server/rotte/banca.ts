@@ -33,8 +33,10 @@ const elenco = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v =
 const utente = (req: Request) => req.session.utente?.nome ?? 'ufficio';
 const importoClasse = (n: number) => (n < 0 ? 'num negativo' : 'num');
 
-function tasti(attiva: 'movimenti' | 'anticipi'): Raw {
-  const voci = [['movimenti', '/amministrazione/banca', 'Movimenti e abbinamenti'], ['anticipi', '/amministrazione/banca/anticipi', 'RiBa e anticipo fatture']] as const;
+function tasti(attiva: 'movimenti' | 'anticipi' | 'anticipate' | 'cassa'): Raw {
+  // Banca e carte (Adriano 14/11/2026): tutto in un posto, conti, carta di credito, PayPal, riconciliazione, RiBa e anticipi, fatture anticipate, previsione di cassa
+  const voci = [['movimenti', '/amministrazione/banca', 'Conti, carte e riconciliazione'], ['anticipi', '/amministrazione/banca/anticipi', 'RiBa e anticipo fatture'],
+    ['anticipate', '/amministrazione/documenti?tipo=fattura&anticipo=tutte', 'Fatture anticipate'], ['cassa', '/amministrazione/analisi/cassa', 'Previsione di cassa']] as const;
   return html`<nav class="tasti-sezione secondari">${voci.map(([k, href, nome]) => html`<a href="${href}" class="${k === attiva ? 'attivo' : ''}">${nome}</a>`)}</nav>`;
 }
 
@@ -150,7 +152,7 @@ export function rotteBanca() {
     if (sbloccoValido(req.session.bancaSbloccata, Date.now())) { req.session.bancaSbloccata = Date.now(); return next(); }
     if (req.method !== 'GET') return res.status(403).send('Banca chiusa: scrivi di nuovo la password.');
     const impostata = await q1(`SELECT 1 FROM impostazioni WHERE chiave = 'paghe_password'`);
-    res.status(403).send(pagina(req, 'Banca', html`<div class="intestazione-pagina"><h1>🔒 Banca</h1></div>
+    res.status(403).send(pagina(req, 'Banca', html`<div class="intestazione-pagina"><h1>🔒 Banca e carte</h1></div>
       ${impostata ? html`<form method="post" action="/amministrazione/banca/sblocca" class="scheda-login sempre-attivo">
         <p>La Banca è riservata: scrivi la password (la stessa delle buste paga). Si richiude da sola dopo ${MINUTI_SBLOCCO} minuti senza aprire pagine.</p>
         <label>Password <input type="password" name="password" required autofocus autocomplete="off"></label>
@@ -174,8 +176,8 @@ export function rotteBanca() {
     ]);
     const nome = (n: string) => nomeConto(n, elencoConti);
     const sicuri = daAbbinare.filter(x => (x.proposta?.punteggio ?? 0) >= SOGLIA_SICURA).length;
-    res.send(pagina(req, 'Banca', html`
-      <div class="intestazione-pagina"><h1>Banca</h1></div>
+    res.send(pagina(req, 'Banca e carte', html`
+      <div class="intestazione-pagina"><h1>Banca e carte</h1></div>
       ${menuAmministrazione('banca')}${tasti('movimenti')}
       ${sezioneCollegamento(statoOb, configurato, banche)}
       <details class="blocco" ${conti.length ? '' : raw('open')}><summary><strong>Carica l'estratto conto</strong>

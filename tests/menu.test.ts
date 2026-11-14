@@ -117,3 +117,9 @@ test('menu: "⌂ Cruscotto" prima voce del menu, senza tendina (Adriano 9/11/202
   assert.ok(voce > 0 && voce < src.indexOf('MENU_GRUPPI : []).map'));
   assert.match(src, /<a href="\/cruscotto" class="voce-cruscotto \$\{opz\.attiva === 'cruscotto' \? 'attiva' : ''\}">⌂ Cruscotto<\/a>/);
 });
+
+test('Amministrazione: "Banca e carte" subito dopo Fatture differite, una sola voce per la banca (Adriano 14/11/2026)', () => {
+  const voci = MENU_GRUPPI.find(g => g.chiave === 'amministrazione')!.voci.map(v => v[0]);
+  assert.equal(voci[voci.indexOf('Fatture differite (DDT da fatturare)') + 1], 'Banca e carte');
+  assert.equal(voci.filter(v => /banca|riba/i.test(v)).length, 1);
+});
