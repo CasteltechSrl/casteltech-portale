@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { bancheBper, leggiScelta, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
+import { addebitiCarta, bancheBper, collegamentiDaStato, contoDaApi, leggiScelta, tipoCollegamento, tipoUtente, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
 import { cosaDaFare } from '../src/engine/cruscotto-generale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
@@ -77,6 +77,35 @@ test('open banking: chiave incollata su Render senza a capo, con spazi, "\\n" o 
   }
   assert.equal(normalizzaChiave('  '), null);
   assert.equal(normalizzaChiave(undefined), null);
+});
+
+test('open banking: carta di credito BPER e PayPal (Adriano 14/11/2026)', () => {
+  // elenco vero di Enable Banking del 14/11/2026: Area Riservata Carte è un accesso da privato, PayPal senza nome del metodo
+  const b = bancheBper([{ name: 'PayPal', psu_types: ['business', 'personal'], auth_methods: [{ name: '', psu_type: 'business' } as any] },
+    { name: 'BPER Banca', psu_types: ['personal', 'business'], auth_methods: [{ name: 'SMART', psu_type: 'personal' }, { name: 'BPERCARD', title: 'Area Riservata Carte', psu_type: 'personal' },
+      { name: 'CORPORATE', title: 'Corporate Banking', psu_type: 'business' }] }]);
+  assert.deepEqual(b.map(x => x.name), ['BPER Banca', 'PayPal']);
+  assert.deepEqual(b[0].metodi.map(m => m.name), ['BPERCARD', 'CORPORATE']);
+  assert.match(b[0].metodi[0].titolo, /carta di credito/);
+  assert.equal(tipoCollegamento('BPER Banca', 'BPERCARD'), 'carta');
+  assert.equal(tipoCollegamento('BPER Banca', 'CORPORATE'), 'conti');
+  assert.equal(tipoCollegamento('PayPal', null), 'paypal');
+  assert.equal(tipoUtente('BPERCARD'), 'personal');
+  assert.equal(tipoUtente('CORPORATE'), 'business');
+  assert.equal(contoDaApi({ uid: 'u1', account_id: { iban: 'IT37B0538765310000003092938' } }, 'conti').numero, '3092938');
+  assert.equal(contoDaApi({ uid: 'u2', account_id: { other: { identification: '5520 43** **** 1234' } }, name: 'CARTA BUSINESS' }, 'carta').numero, 'CARTA1234');
+  assert.equal(contoDaApi({ uid: 'u3', currency: 'EUR' }, 'paypal').numero, 'PAYPAL');
+  assert.equal(contoDaApi({ uid: 'u4', currency: 'USD' }, 'paypal').numero, 'PAYPALUSD');
+  // stato di prima (un collegamento solo) = conti
+  const vecchio = collegamentiDaStato({ sessione: 's1', banca: 'BPER Banca', metodo: 'CORPORATE', scadenza: '2027-05-01', conti: [{ uid: 'u', numero: '3092938' }] });
+  assert.equal(vecchio[0].id, 'conti');
+  assert.equal(collegamentiDaStato({ collegamenti: [{ id: 'carta', sessione: 's2', conti: [] }, { id: 'paypal', sessione: null }] }).length, 1);
+  assert.deepEqual(collegamentiDaStato({}), []);
+  // spese di ottobre pagate il 15/11, di novembre (finora) il 15/12; rimborso in meno; addebito già passato fuori
+  const a = addebitiCarta([{ data: '2026-09-10', importo: -50 }, { data: '2026-10-03', importo: -120.5 }, { data: '2026-10-20', importo: -79.5 }, { data: '2026-10-21', importo: 20 },
+    { data: '2026-11-02', importo: -33 }], '2026-11-14');
+  assert.deepEqual(a, [{ mese: '2026-10', data: '2026-11-15', importo: 180, finora: false }, { mese: '2026-11', data: '2026-12-15', importo: 33, finora: true }]);
+  assert.equal(addebitiCarta([{ data: '2026-12-05', importo: -10 }], '2026-12-20')[0].data, '2027-01-15');
 });
 
 test('open banking: cruscotto e guida', () => {

@@ -6,9 +6,10 @@
  */
 import crypto from 'node:crypto';
 import { q, q1 } from './db.js';
-import { caricaMovimenti } from './banca-servizio.js';
-import { numeroConto } from '../engine/banca.js';
-import { FILE_OPEN_BANKING, bancheBper, type BancaScelta, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta, togliGiaPresenti, type TransazioneApi } from '../engine/open-banking.js';
+import { caricaMovimenti, contiBanca, salvaConti } from './banca-servizio.js';
+import type { TipoConto } from '../engine/banca.js';
+import { FILE_OPEN_BANKING, NOMI_COLLEGAMENTO, bancheBper, collegamentiDaStato, contoDaApi, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, scadenzaRichiesta,
+  tipoCollegamento, tipoUtente, togliGiaPresenti, type BancaScelta, type Collegamento, type ContoApi, type ContoCollegato, type TipoCollegamento, type TransazioneApi } from '../engine/open-banking.js';
 import { partiRoma } from '../engine/promemoria.js';
 import { indirizzoPortale } from './promemoria.js';
 
@@ -32,19 +33,25 @@ export function normalizzaChiave(v: string | null | undefined): string | null {
 export const openBankingConfigurato = () => Boolean(appId() && chiavePrivata());
 export const percorsoRitorno = '/amministrazione/banca/collega/ritorno';
 
-export interface ContoCollegato { uid: string; iban: string | null; numero: string; nome: string | null }
-export interface StatoOpenBanking {
-  banca?: string; metodo?: string | null; sessione?: string; scadenza?: string; collegatoIl?: string; collegatoDa?: string;
-  conti?: ContoCollegato[]; ultimoScarico?: string; ultimoGiorno?: string; esito?: string; errore?: string | null;
-}
+export type { ContoCollegato, Collegamento };
+export interface StatoOpenBanking { collegamenti: Collegamento[]; ultimoGiorno?: string }
 
 export async function statoOpenBanking(): Promise<StatoOpenBanking> {
-  return (await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'open_banking'`))?.valore ?? {};
+  const v = (await q1<{ valore: any }>(`SELECT valore FROM impostazioni WHERE chiave = 'open_banking'`))?.valore ?? {};
+  return { collegamenti: collegamentiDaStato(v), ultimoGiorno: v.ultimoGiorno };
 }
-async function salvaStato(parte: Partial<StatoOpenBanking> | Record<string, unknown>): Promise<void> {
+/** Scrive tutti i collegamenti (e toglie i campi dello stato di prima, quando c'era un collegamento solo). */
+async function salvaStato(parte: { collegamenti?: Collegamento[]; ultimoGiorno?: string }): Promise<void> {
+  const valore = { ...parte, ...(parte.collegamenti ? { sessione: null, conti: null, scadenza: null, banca: null, metodo: null, esito: null, errore: null } : {}) };
   await q(`INSERT INTO impostazioni (chiave, valore) VALUES ('open_banking', $1::jsonb)
-    ON CONFLICT (chiave) DO UPDATE SET valore = impostazioni.valore || $1::jsonb, aggiornato_il = now()`, [JSON.stringify(parte)]);
+    ON CONFLICT (chiave) DO UPDATE SET valore = impostazioni.valore || $1::jsonb, aggiornato_il = now()`, [JSON.stringify(valore)]);
 }
+async function aggiornaCollegamento(id: TipoCollegamento, cambia: (c: Collegamento | undefined) => Collegamento | null): Promise<void> {
+  const tutti = (await statoOpenBanking()).collegamenti;
+  const nuovo = cambia(tutti.find(c => c.id === id));
+  await salvaStato({ collegamenti: [...tutti.filter(c => c.id !== id), ...(nuovo ? [nuovo] : [])].sort((a, b) => ORDINE.indexOf(a.id) - ORDINE.indexOf(b.id)) });
+}
+const ORDINE: TipoCollegamento[] = ['conti', 'carta', 'paypal'];
 
 // ───────────────────────────── chiamate all'API ─────────────────────────────
 
@@ -79,38 +86,50 @@ async function api<T>(metodo: string, percorso: string, corpo?: unknown): Promis
   return dati as T;
 }
 
-/** Banche BPER disponibili (nome da usare per il collegamento). */
+/** Banche disponibili: BPER (conti e carte) e PayPal. */
 export async function bancheDisponibili(): Promise<BancaScelta[]> {
   const r = await api<{ aspsps: { name: string; country: string; psu_types?: string[]; auth_methods?: { name: string; title?: string; psu_type?: string }[] }[] }>('GET', '/aspsps?country=IT');
   return bancheBper(r.aspsps ?? []);
 }
 
-/** Primo passo: indirizzo della banca dove dare il consenso con l'app; `stato` torna indietro e si controlla al ritorno. */
+/** Primo passo: indirizzo della banca (o di PayPal) dove dare il consenso; `stato` torna indietro e si controlla al ritorno. */
 export async function avviaCollegamento(banca: string, stato: string, metodo: string | null = null): Promise<string> {
   const r = await api<{ url: string }>('POST', '/auth', {
     access: { valid_until: scadenzaRichiesta(new Date()) }, aspsp: { name: banca, country: 'IT' }, state: stato,
-    redirect_url: `${indirizzoPortale()}${percorsoRitorno}`, psu_type: 'business', language: 'it', ...(metodo ? { auth_method: metodo } : {}),
+    redirect_url: `${indirizzoPortale()}${percorsoRitorno}`, psu_type: tipoUtente(metodo), language: 'it', ...(metodo ? { auth_method: metodo } : {}),
   });
   return r.url;
 }
 
-/** Ritorno dalla banca: il codice diventa la sessione con l'elenco dei conti. La sessione di prima si chiude. */
-export async function completaCollegamento(codice: string, banca: string, utente: string, metodo: string | null = null): Promise<ContoCollegato[]> {
-  const r = await api<{ session_id: string; accounts: { uid: string; account_id?: { iban?: string }; name?: string; identification_hash?: string }[]; access?: { valid_until?: string } }>(
-    'POST', '/sessions', { code: codice });
-  const prima = await statoOpenBanking();
-  if (prima.sessione && prima.sessione !== r.session_id) await api('DELETE', `/sessions/${prima.sessione}`).catch(() => undefined);
-  const conti = (r.accounts ?? []).map(a => ({ uid: a.uid, iban: a.account_id?.iban ?? null, numero: numeroConto(a.account_id?.iban ?? a.uid), nome: a.name ?? null }));
-  await salvaStato({ banca, metodo, sessione: r.session_id, scadenza: r.access?.valid_until ?? scadenzaRichiesta(new Date()), conti,
-    collegatoIl: new Date().toISOString(), collegatoDa: utente, errore: null });
-  return conti;
+/** Tipo del conto in Banca per i conti di un collegamento (carta e PayPal non sono conti correnti: niente saldo di cassa). */
+const TIPO_CONTO: Record<TipoCollegamento, TipoConto | null> = { conti: null, carta: 'carta', paypal: 'paypal' };
+
+/** Ritorno dalla banca: il codice diventa la sessione con l'elenco dei conti. La sessione di prima dello stesso tipo si chiude. */
+export async function completaCollegamento(codice: string, banca: string, utente: string, metodo: string | null = null): Promise<Collegamento> {
+  const r = await api<{ session_id: string; accounts: ContoApi[]; access?: { valid_until?: string } }>('POST', '/sessions', { code: codice });
+  const id = tipoCollegamento(banca, metodo);
+  const conti = (r.accounts ?? []).map(a => contoDaApi(a, id));
+  let prima: string | undefined;
+  const nuovo: Collegamento = { id, banca, metodo, sessione: r.session_id, scadenza: r.access?.valid_until ?? scadenzaRichiesta(new Date()), conti,
+    collegatoIl: new Date().toISOString(), collegatoDa: utente, errore: null };
+  await aggiornaCollegamento(id, c => { prima = c?.sessione; return nuovo; });
+  if (prima && prima !== r.session_id) await api('DELETE', `/sessions/${prima}`).catch(() => undefined);
+  // carta e PayPal: conti segnati subito col loro tipo (altrimenti al primo scarico diventerebbero conti d'anticipo)
+  const tipo = TIPO_CONTO[id];
+  if (tipo) {
+    const esistenti = await contiBanca();
+    const daAggiungere = conti.filter(c => !esistenti.some(e => e.numero === c.numero));
+    if (daAggiungere.length) await salvaConti([...esistenti, ...daAggiungere.map(c => ({ numero: c.numero, nome: (c.nome ?? NOMI_COLLEGAMENTO[id]).toUpperCase(), tipo,
+      saldoData: null, saldo: null, fido: null }))]);
+  }
+  return nuovo;
 }
 
-/** Scollega: chiude la sessione (e il consenso in banca) e toglie i conti. I movimenti già scaricati restano. */
-export async function scollega(): Promise<void> {
-  const s = await statoOpenBanking();
-  if (s.sessione && openBankingConfigurato()) await api('DELETE', `/sessions/${s.sessione}`).catch(() => undefined);
-  await salvaStato({ sessione: null, scadenza: null, conti: [], errore: null });
+/** Scollega un collegamento: chiude la sessione (e il consenso) e toglie i conti. I movimenti già scaricati restano. */
+export async function scollega(id: TipoCollegamento): Promise<void> {
+  const c = (await statoOpenBanking()).collegamenti.find(x => x.id === id);
+  if (c?.sessione && openBankingConfigurato()) await api('DELETE', `/sessions/${c.sessione}`).catch(() => undefined);
+  await aggiornaCollegamento(id, () => null);
 }
 
 /** Movimenti di un conto dal giorno indicato (tutte le pagine). */
@@ -127,35 +146,51 @@ async function transazioni(uid: string, dal: string): Promise<TransazioneApi[]> 
   return tutte;
 }
 
-/**
- * Scarica i movimenti di tutti i conti collegati e li passa alla stessa scrittura del CSV (`caricaMovimenti`): conti, saldi e abbinamenti
- * restano quelli di sempre. I movimenti già caricati dal CSV (stesso conto, data e importo) non si ripetono.
- */
-export async function scaricaMovimenti(chi = 'automatico'): Promise<{ nuovi: number; gia: number; conti: number; testo: string }> {
-  const s = await statoOpenBanking();
-  if (!s.sessione || !s.conti?.length) throw new Error('Nessun conto collegato: premi "Collega la banca".');
-  const oggi = partiRoma(new Date()).data;
+/** Scarico di un collegamento: per ogni conto i movimenti dall'ultimo giorno caricato, senza quelli già presenti (anche dal CSV). */
+async function scaricaCollegamento(c: Collegamento, oggi: string): Promise<{ nuovi: number; gia: number; righe: string[] }> {
   let nuovi = 0, gia = 0;
   const righe: string[] = [];
-  try {
-    for (const c of s.conti) {
-      const ultimo = (await q1<{ al: string | null }>(`SELECT to_char(max(data), 'YYYY-MM-DD') AS al FROM banca_movimenti WHERE conto = $1`, [c.numero]))?.al ?? null;
-      const dal = dataInizioScarico(ultimo, oggi);
-      const letti = (await transazioni(c.uid, dal)).map(t => movimentoDaTransazione(t, c.numero)).filter((m): m is NonNullable<typeof m> => m != null);
-      const esistenti = await q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo
-        FROM banca_movimenti WHERE conto = $1 AND data >= $2`, [c.numero, dal]);
-      const daScrivere = togliGiaPresenti(letti, esistenti);
-      const esito = daScrivere.length ? await caricaMovimenti(daScrivere, c.numero, FILE_OPEN_BANKING) : { nuovi: 0, gia: 0 };
-      nuovi += esito.nuovi; gia += letti.length - esito.nuovi;
-      righe.push(`${c.nome ?? c.numero}: ${esito.nuovi} nuovi`);
-    }
-  } catch (e: any) {
-    await salvaStato({ ultimoScarico: new Date().toISOString(), ultimoGiorno: oggi, errore: String(e?.message ?? e), ...(e?.scaduto ? { scadenza: new Date().toISOString() } : {}) });
-    throw e;
+  for (const conto of c.conti) {
+    const ultimo = (await q1<{ al: string | null }>(`SELECT to_char(max(data), 'YYYY-MM-DD') AS al FROM banca_movimenti WHERE conto = $1`, [conto.numero]))?.al ?? null;
+    const dal = dataInizioScarico(ultimo, oggi);
+    const letti = (await transazioni(conto.uid, dal)).map(t => movimentoDaTransazione(t, conto.numero)).filter((m): m is NonNullable<typeof m> => m != null);
+    const esistenti = await q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo
+      FROM banca_movimenti WHERE conto = $1 AND data >= $2`, [conto.numero, dal]);
+    const daScrivere = togliGiaPresenti(letti, esistenti);
+    const esito = daScrivere.length ? await caricaMovimenti(daScrivere, conto.numero, FILE_OPEN_BANKING) : { nuovi: 0, gia: 0 };
+    nuovi += esito.nuovi; gia += letti.length - esito.nuovi;
+    righe.push(`${conto.nome ?? conto.numero}: ${esito.nuovi} nuovi`);
   }
-  const testo = `${nuovi} movimenti nuovi${gia ? `, ${gia} già presenti` : ''} (${righe.join('; ')})`;
-  await salvaStato({ ultimoScarico: new Date().toISOString(), ultimoGiorno: oggi, esito: `${testo} · ${chi}`, errore: null });
-  return { nuovi, gia, conti: s.conti.length, testo };
+  return { nuovi, gia, righe };
+}
+
+/**
+ * Scarica i movimenti di tutti i collegamenti attivi e li passa alla stessa scrittura del CSV (`caricaMovimenti`): conti, saldi e abbinamenti
+ * restano quelli di sempre. Un collegamento che non risponde non ferma gli altri; l'errore resta sul suo riquadro.
+ */
+export async function scaricaMovimenti(chi = 'automatico', solo?: TipoCollegamento): Promise<{ nuovi: number; gia: number; conti: number; testo: string }> {
+  const tutti = (await statoOpenBanking()).collegamenti.filter(c => c.conti.length && (!solo || c.id === solo));
+  if (!tutti.length) throw new Error('Nessun conto collegato: premi "Collega".');
+  const oggi = partiRoma(new Date()).data;
+  let nuovi = 0, gia = 0, conti = 0;
+  const parti: string[] = [], errori: string[] = [];
+  for (const c of tutti) {
+    if (c.scadenza && new Date(c.scadenza).getTime() < Date.now()) { errori.push(`${NOMI_COLLEGAMENTO[c.id]}: consenso scaduto`); continue; }
+    try {
+      const e = await scaricaCollegamento(c, oggi);
+      nuovi += e.nuovi; gia += e.gia; conti += c.conti.length;
+      const testo = `${e.nuovi} movimenti nuovi${e.gia ? `, ${e.gia} già presenti` : ''} (${e.righe.join('; ')})`;
+      parti.push(`${NOMI_COLLEGAMENTO[c.id]}: ${testo}`);
+      await aggiornaCollegamento(c.id, x => x ? { ...x, ultimoScarico: new Date().toISOString(), esito: `${testo} · ${chi}`, errore: null } : null);
+    } catch (err: any) {
+      const msg = String(err?.message ?? err);
+      errori.push(`${NOMI_COLLEGAMENTO[c.id]}: ${msg}`);
+      await aggiornaCollegamento(c.id, x => x ? { ...x, ultimoScarico: new Date().toISOString(), errore: msg, ...(err?.scaduto ? { scadenza: new Date().toISOString() } : {}) } : null);
+    }
+  }
+  await salvaStato({ ultimoGiorno: oggi });
+  if (!parti.length) throw new Error(errori.join(' · '));
+  return { nuovi, gia, conti, testo: [...parti, ...errori.map(e => `non riuscito ${e}`)].join(' · ') };
 }
 
 /**
@@ -170,8 +205,7 @@ export function avviaScaricoBanca(): void {
     if (!oraDiScaricare(roma, giornoFatto)) return;
     giornoFatto = roma.data;
     statoOpenBanking().then(s => {
-      if (!s.sessione || !s.conti?.length || s.ultimoGiorno === roma.data) return;
-      if (s.scadenza && new Date(s.scadenza).getTime() < Date.now()) return;
+      if (!s.collegamenti.length || s.ultimoGiorno === roma.data) return;
       return scaricaMovimenti('automatico').then(e => console.log('Banca:', e.testo));
     }).catch(e => console.error('Banca non scaricata:', e?.message ?? e));
   }, 10 * 60_000);

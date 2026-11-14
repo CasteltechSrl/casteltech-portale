@@ -8,6 +8,7 @@ import { numeroRegistro, periodoDa } from '../engine/registri-iva.js';
 import { caricaLiquidazioniMensili } from './registri-iva-servizio.js';
 import { contiConSaldo, fidoAnticipi } from './banca-servizio.js';
 import { fattureAnticipate } from '../engine/anticipi.js';
+import { addebitiCarta } from '../engine/open-banking.js';
 import {
   leggiImpostazioniCassa, mediaUltimi, meseAnno, piuGiorni, previsioneCassa, usciteFisse,
   type AnticipiCassa, type ImpostazioniCassa, type IncassoStorico, type PagamentoAperto, type RataAperta, type UscitaPuntuale, type ValoriAutomatici,
@@ -90,6 +91,11 @@ export async function caricaPrevisione(oggi: string) {
     rate.filter(r => r.tipo_doc === 'fattura' && r.importo > 0).map(r => ({ id: r.id, numero: String(r.numero_doc), dataDoc: r.data_doc, scadenza: r.scadenza.slice(0, 10),
       importo: r.importo, riba: r.modalita === 'MP12' })), oggi);
   const anticipi: AnticipiCassa = { perRata: new Map(anticipate.flatMap(a => a.rate.map(r => [r.id, { tipo: a.tipo, anticipato: r.anticipato }] as const))), daRientrare };
+  // carta di credito (Adriano 14/11/2026): le spese di un mese si pagano il 15 del mese dopo, dai movimenti scaricati della carta
+  const carte = new Set(conti.filter(c => c.tipo === 'carta').map(c => c.numero));
+  for (const a of addebitiCarta(movTecnici.filter(m => carte.has(m.conto)), oggi))
+    puntuali.push({ chiave: 'carta', voce: `Carta di credito: spese di ${meseAnno(Number(a.mese.slice(0, 4)), Number(a.mese.slice(5, 7)))}${a.finora ? ' (finora)' : ''}`,
+      data: a.data, importo: a.importo });
   const ordinario = conti.find(c => c.tipo === 'ordinario' && c.saldoOggi != null);
   const dataBanca = ordinario?.ultimo || ordinario?.saldoData || null;
   const saldo = ordinario && dataBanca && (imp.saldo == null || !imp.dataSaldo || dataBanca >= imp.dataSaldo)
