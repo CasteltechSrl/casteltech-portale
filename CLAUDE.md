@@ -1055,7 +1055,8 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    (`togliGiaPresenti`, in tutte e due le direzioni). Consenso scaduto/in scadenza (14 gg) o errore = voce `banca-ricollegare` in "Da fare oggi". Collegati il 14/11/2026 con Corporate Banking: tutti e 4 i conti (anche quelli d'anticipo).
    Carta di credito BPER e PayPal (Adriano 14/11/2026, "scaricare le spese mensili e mettere a budget l'uscita del 15"): un collegamento per tipo (`collegamenti` in 'open_banking', `collegamentiDaStato`: lo stato di prima = 'conti'),
    carta = BPER metodo SMART (accesso personale: Adriano 14/11/2026 vede le carte così, solo le carte tenute con `soloCarte`) o BPERCARD "Area Riservata Carte" (`METODI_CARTA`, psu personal, `tipoUtente`), PayPal = aspsp 'PayPal'; conti in Banca con tipo 'carta'/'paypal' (`TIPI_CONTO`, numero `CARTA1234`/`PAYPAL`, `contoDaApi`),
-   fuori dal saldo di cassa; previsione di cassa: spese della carta di un mese = uscita il 15 del mese dopo (`addebitiCarta`).
+   fuori dal saldo di cassa; previsione di cassa: spese della carta di un mese = uscita il 15 del mese dopo (`addebitiCarta`). Movimenti di carta e PayPal mai in "Da abbinare": registrati da soli
+   come "Spese carta / PayPal" (`movimentiDaAbbinare` → `registraSicuri`), riquadro "Spese della carta e di PayPal" in Banca (`speseCartaPerMese`, ultimi 6 mesi).
    Abbinamento più intelligente (Adriano 14/11/2026; `categoriaMovimento`/`categoriaF24` in `engine/banca.ts`, IA in `engine/banca-ia.ts` + `server/banca-ia.ts`, migrazione 103
    `banca_movimenti.proposta_ia`, test in `tests/banca-regole-ia.test.ts`): regole con `sicura` registrate da sole (`registraSicuri`, "Regola del portale") dopo ogni caricamento:
    ^COMMISSIONI = commissioni, EMOLUMENTI = stipendi, F24 = "Imposte e rate Agenzia Entrate" salvo giorno 10–20 = "Contributi dipendenti (F24)", "ANTICIPO SU DOCUMENTI" = Anticipo fatture,

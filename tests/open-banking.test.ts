@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { addebitiCarta, bancheBper, soloCarte, collegamentiDaStato, contoDaApi, leggiScelta, tipoCollegamento, tipoUtente, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
+import { addebitiCarta, speseCartaPerMese, bancheBper, soloCarte, collegamentiDaStato, contoDaApi, leggiScelta, tipoCollegamento, tipoUtente, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
 import { cosaDaFare } from '../src/engine/cruscotto-generale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
@@ -120,4 +120,9 @@ test('open banking: cruscotto e guida', () => {
   assert.equal(cosaDaFare(zero).length, 0);
   assert.equal(cosaDaFare({ ...zero, bancaDaRicollegare: 1 })[0].link, '/amministrazione/banca');
   assert.ok(cercaGuida('collegamento automatico banca').some((x: any) => (x.id ?? x.argomento?.id) === 'banca-collegamento'));
+});
+
+test('open banking: spese della carta mese per mese', () => {
+  const m = speseCartaPerMese([{ data: '2026-10-03', importo: -120.5 }, { data: '2026-10-20', importo: -79.5 }, { data: '2026-11-02', importo: -10 }, { data: '2026-11-05', importo: 4 }], '2026-11-14');
+  assert.deepEqual(m.map(x => [x.mese, x.importo, x.movimenti, x.data, x.finora]), [['2026-11', 6, 2, '2026-12-15', true], ['2026-10', 200, 2, '2026-11-15', false]]);
 });
