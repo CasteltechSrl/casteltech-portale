@@ -1201,3 +1201,9 @@ ul.segnalazioni details.rispondi[open] { display: block; margin: .3rem 0 0; }
 ul.segnalazioni details.rispondi summary { cursor: pointer; color: var(--accento); font-size: .85rem; }
 ul.segnalazioni fieldset.esito-osservazione { border: 0; padding: 0; margin: .3rem 0; }
 .riquadro-osservazioni { margin: .8rem 0; }
+
+/* Freccia "torna indietro" in alto a sinistra in ogni pagina (Adriano 14/11/2026; public/indietro.js) */
+.testata .freccia-indietro { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem; margin-right: -.9rem; border: 1px solid var(--bordo); border-radius: 50%; color: var(--accento); background: var(--carta); text-decoration: none; font-size: 1.25rem; font-weight: 700; line-height: 1; }
+.testata .freccia-indietro:hover { background: var(--accento-chiaro); border-color: var(--accento); }
+.testata .freccia-indietro[hidden] { display: none; }
+@media print { .testata .freccia-indietro { display: none; } }
