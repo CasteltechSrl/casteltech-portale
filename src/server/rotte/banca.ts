@@ -14,13 +14,13 @@ import { layout } from '../views/layout.js';
 import { html, data, euro, raw, type Raw } from '../views/html.js';
 import { menuAmministrazione } from './cruscotto-amministrazione.js';
 import { excelSemplice, inviaExcel, nomeExcel } from '../excel.js';
-import { CATEGORIE_MOVIMENTO, SOGLIA_SICURA, abiCabDaIban, controlliEffetto, importoDa, dataDa, nomeConto, type ContoBanca, type RataAperta } from '../../engine/banca.js';
+import { CATEGORIE_MOVIMENTO, SOGLIA_SICURA, TIPI_CONTO, tipoConto, abiCabDaIban, controlliEffetto, importoDa, dataDa, nomeConto, type ContoBanca, type RataAperta } from '../../engine/banca.js';
 import { abbinaMovimento, contiBanca, contiConSaldo, fidoAnticipi, salvaConti, annullaDistinta, annullaMovimento, caricaMovimenti, codiceSia, creaDistinta, distinte, effettoDa, eliminaMovimento,
   leggiEstrattoConto, movimentiDaAbbinare, movimento, rateAperte, rateDaAnticipare, registraMovimento, salvaCodiceSia } from '../banca-servizio.js';
 
 import crypto from 'node:crypto';
 import { avviaCollegamento, bancheDisponibili, completaCollegamento, openBankingConfigurato, scaricaMovimenti, scollega, statoOpenBanking, type StatoOpenBanking } from '../open-banking.js';
-import { leggiScelta, statoConsenso, type BancaScelta } from '../../engine/open-banking.js';
+import { NOMI_COLLEGAMENTO, leggiScelta, statoConsenso, tipoCollegamento, type BancaScelta, type Collegamento, type TipoCollegamento } from '../../engine/open-banking.js';
 
 declare module 'express-session' { interface SessionData { bancaCollega?: { stato: string; banca: string; metodo: string | null } } }
 
@@ -40,32 +40,43 @@ function tasti(attiva: 'movimenti' | 'anticipi'): Raw {
 
 const quando = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }) : '');
 
-/** Riquadro "Collegamento automatico" (open banking, Adriano 14/11/2026). */
+/** Riquadro "Collegamento automatico" (open banking, Adriano 14/11/2026): conti BPER, carta di credito e PayPal, ognuno col suo consenso. */
 function sezioneCollegamento(s: StatoOpenBanking, configurato: boolean, banche: BancaScelta[] | null): Raw {
   if (!configurato) return html`<details class="blocco"><summary><strong>Collegamento automatico con la banca</strong> · non ancora attivo</summary>
-    <p class="nota">Con l'open banking il portale scarica da solo i movimenti dei conti BPER ogni mattina dei giorni feriali (8:30), senza caricare il CSV.
-      Servizio: Enable Banking. Per attivarlo servono le chiavi ENABLEBANKING_APP_ID e ENABLEBANKING_PRIVATE_KEY su Render (vedi la Guida, "Banca: collegamento automatico").</p></details>`;
-  const c = statoConsenso(s.scadenza, new Date());
-  const collegato = Boolean(s.sessione && s.conti?.length);
-  // una voce per banca e modo di accesso (BPER: Corporate Banking o Digital Corporate Banking, Adriano 14/11/2026)
-  const voci = (banche ?? []).flatMap(b => (b.metodi.length ? b.metodi : [{ name: '', titolo: '' }]).map(m => ({ valore: `${b.name}|${m.name}`, testo: m.titolo ? `${b.name} · ${m.titolo}` : b.name })));
-  const attuale = `${s.banca ?? 'BPER Banca'}|${s.metodo ?? ''}`;
-  const scelta = voci.length ? html`<label>Banca e accesso <select name="banca">${voci.map(v => html`<option value="${v.valore}" ${v.valore === attuale ? raw('selected') : ''}>${v.testo}</option>`)}</select></label>`
-    : html`<input type="hidden" name="banca" value="${attuale}">`;
-  return html`<details class="blocco" ${!collegato || c.stato !== 'attivo' || s.errore ? raw('open') : ''}><summary><strong>Collegamento automatico con la banca</strong>
-    · ${collegato ? (c.stato === 'scaduto' ? html`<span class="negativo">consenso scaduto</span>` : c.stato === 'in_scadenza' ? html`<span class="negativo">consenso in scadenza tra ${c.giorni} giorni</span>`
-      : html`attivo (${s.conti!.length} conti, consenso fino al ${data(String(s.scadenza).slice(0, 10))})`) : 'conti non collegati'}</summary>
-    ${s.errore ? html`<p class="avviso">Ultimo scarico (${quando(s.ultimoScarico)}) non riuscito: ${s.errore}</p>` : ''}
-    <p class="nota">Ogni giorno feriale alle 8:30 il portale scarica da solo i movimenti dei conti collegati e li mette qui sotto "Da abbinare", come il CSV.
-      I movimenti già caricati (anche dal CSV: stesso conto, data e importo) non si ripetono. Il consenso dato con l'app BPER dura al massimo 180 giorni:
-      prima della scadenza il portale lo segnala e si rinnova con "Collega la banca".</p>
-    ${collegato ? html`<ul>${s.conti!.map(x => html`<li>${x.nome ?? 'Conto'} · ${x.iban ?? x.numero}</li>`)}</ul>
-      <p class="nota">Collegato il ${quando(s.collegatoIl)}${s.collegatoDa ? ` da ${s.collegatoDa}` : ''}. ${s.esito ? html`Ultimo scarico ${quando(s.ultimoScarico)}: ${s.esito}.` : ''}</p>` : ''}
+    <p class="nota">Con l'open banking il portale scarica da solo i movimenti dei conti BPER, della carta di credito e di PayPal ogni mattina dei giorni feriali (8:30),
+      senza caricare il CSV. Servizio: Enable Banking. Per attivarlo servono le chiavi ENABLEBANKING_APP_ID e ENABLEBANKING_PRIVATE_KEY su Render (vedi la Guida, "Banca: collegamento automatico").</p></details>`;
+  const stati = s.collegamenti.map(c => ({ c, consenso: statoConsenso(c.scadenza, new Date()) }));
+  const daGuardare = !stati.length || stati.some(x => x.consenso.stato !== 'attivo' || x.c.errore);
+  // una voce per banca e modo di accesso (BPER: Corporate Banking, Digital Corporate Banking, Area Riservata Carte; PayPal)
+  const voci = (banche?.length ? banche : [{ name: 'BPER Banca', impresa: true, metodi: [] }, { name: 'PayPal', impresa: true, metodi: [] }] as BancaScelta[])
+    .flatMap(b => (b.metodi.length ? b.metodi : [{ name: '', titolo: '' }]).map(m => ({ valore: `${b.name}|${m.name}`, testo: m.titolo ? `${b.name} · ${m.titolo}` : b.name })));
+  const usato = s.collegamenti.find(c => c.id === 'conti');
+  const proposta = usato ? `${usato.banca}|${usato.metodo ?? ''}` : '';
+  const stato = (c: Collegamento, k: ReturnType<typeof statoConsenso>) => k.stato === 'scaduto' ? html`<span class="negativo">consenso scaduto</span>`
+    : k.stato === 'in_scadenza' ? html`<span class="negativo">consenso in scadenza tra ${k.giorni} giorni</span>` : html`attivo, consenso fino al ${data(String(c.scadenza).slice(0, 10))}`;
+  return html`<details class="blocco" ${daGuardare ? raw('open') : ''}><summary><strong>Collegamento automatico con la banca</strong>
+    · ${stati.length ? stati.map(({ c, consenso }, i) => html`${i ? ' · ' : ''}${NOMI_COLLEGAMENTO[c.id]}: ${consenso.stato === 'attivo' && !c.errore ? 'attivo'
+      : html`<span class="negativo">${consenso.stato === 'attivo' ? 'errore' : consenso.stato === 'scaduto' ? 'scaduto' : 'in scadenza'}</span>`}`) : 'niente collegato'}</summary>
+    <p class="nota">Ogni giorno feriale alle 8:30 il portale scarica da solo i movimenti di quello che è collegato e li mette qui sotto "Da abbinare", come il CSV.
+      I movimenti già caricati (anche dal CSV: stesso conto, data e importo) non si ripetono. Ogni consenso dura al massimo 180 giorni: prima della scadenza il portale
+      lo segnala e si rinnova con "Rinnova". Carta di credito: le spese di un mese entrano nella previsione di cassa come uscita del 15 del mese dopo.</p>
+    ${stati.length ? html`<table class="elenco"><thead><tr><th>Collegamento</th><th>Conti</th><th>Stato</th><th>Ultimo scarico</th><th></th></tr></thead>
+      <tbody>${stati.map(({ c, consenso }) => html`<tr><td><strong>${NOMI_COLLEGAMENTO[c.id]}</strong><div class="nota">${c.banca}${c.metodo ? ` · ${c.metodo}` : ''}
+          · collegato il ${quando(c.collegatoIl)}${c.collegatoDa ? ` da ${c.collegatoDa}` : ''}</div></td>
+        <td>${c.conti.map(x => html`<div>${x.nome ?? 'Conto'} · ${x.iban ?? x.numero}</div>`)}</td>
+        <td>${stato(c, consenso)}${c.errore ? html`<div class="negativo">Ultimo scarico non riuscito: ${c.errore}</div>` : ''}</td>
+        <td>${c.esito && !c.errore ? html`${quando(c.ultimoScarico)}<div class="nota">${c.esito}</div>` : quando(c.ultimoScarico)}</td>
+        <td><form method="post" action="/amministrazione/banca/collega" class="inline"><input type="hidden" name="banca" value="${c.banca}|${c.metodo ?? ''}">
+            <button class="${consenso.stato === 'attivo' ? '' : 'primario'}">Rinnova</button></form>
+          <form method="post" action="/amministrazione/banca/scollega" class="inline" data-conferma="Scollegare ${NOMI_COLLEGAMENTO[c.id]}? Il portale smette di scaricarne i movimenti (quelli già scaricati restano).">
+            <input type="hidden" name="id" value="${c.id}"><button>Scollega</button></form></td></tr>`)}</tbody></table>` : ''}
     <div class="barra-azioni">
-      <form method="post" action="/amministrazione/banca/collega" class="inline">${scelta} <button class="${collegato && c.stato === 'attivo' ? '' : 'primario'}">${collegato ? 'Rinnova il consenso' : 'Collega la banca'}</button></form>
-      ${collegato ? html`<form method="post" action="/amministrazione/banca/scarica" class="inline"><button class="primario">Scarica adesso</button></form>
-        <form method="post" action="/amministrazione/banca/scollega" class="inline" data-conferma="Scollegare i conti? Il portale smette di scaricare i movimenti (quelli già scaricati restano)."><button>Scollega</button></form>` : ''}
-    </div></details>`;
+      <form method="post" action="/amministrazione/banca/collega" class="inline"><label>Collega <select name="banca">${voci.map(v => html`<option value="${v.valore}" ${v.valore === proposta ? raw('selected') : ''}>${v.testo}</option>`)}</select></label>
+        <button class="${stati.length ? '' : 'primario'}">Collega</button></form>
+      ${stati.length ? html`<form method="post" action="/amministrazione/banca/scarica" class="inline"><button class="primario">Scarica adesso</button></form>` : ''}
+    </div>
+    <p class="nota">Conti correnti: BPER Banca · Corporate Banking (o Digital Corporate Banking). Carta di credito: BPER Banca · Area Riservata Carte. PayPal: PayPal.
+      Collegare di nuovo la stessa cosa sostituisce il consenso di prima.</p></details>`;
 }
 
 const scritturaRate = (rate: RataAperta[]) => rate.map(r => `${r.tipo}:${r.id}`).join(',');
@@ -84,7 +95,7 @@ function sezioneConti(conti: Awaited<ReturnType<typeof contiConSaldo>>, fidoAnti
         <th>Movimenti fino al</th><th class="num">Saldo di oggi</th><th class="num">Disponibile</th></tr></thead>
       <tbody>${conti.map(c => html`<tr><td>${c.numero}</td>
         <td><input name="nome_${c.numero}" value="${c.nome}" class="maiuscolo" size="22"></td>
-        <td><select name="tipo_${c.numero}"><option value="ordinario">conto corrente</option><option value="anticipo" ${c.tipo === 'anticipo' ? raw('selected') : ''}>anticipo (tecnico)</option></select></td>
+        <td><select name="tipo_${c.numero}">${TIPI_CONTO.map(([k, t]) => html`<option value="${k}" ${c.tipo === k ? raw('selected') : ''}>${t}</option>`)}</select></td>
         <td><input type="date" name="saldo_data_${c.numero}" value="${c.saldoData ?? ''}"></td>
         <td class="num"><input name="saldo_${c.numero}" value="${c.saldo != null ? String(c.saldo).replace('.', ',') : ''}" inputmode="decimal" size="10"></td>
         <td class="num"><input name="fido_${c.numero}" value="${c.fido != null ? String(c.fido).replace('.', ',') : ''}" inputmode="decimal" size="10"></td>
@@ -128,9 +139,9 @@ export function rotteBanca() {
     if (req.query.error) return res.redirect(vaiA('', `La banca non ha dato il consenso: ${String(req.query.error_description ?? req.query.error)}`));
     if (!attesa || String(req.query.state ?? '') !== attesa.stato || !req.query.code) return res.redirect(vaiA('', 'Collegamento non riuscito: riparti da "Collega la banca".'));
     try {
-      const conti = await completaCollegamento(String(req.query.code), attesa.banca, utente(req), attesa.metodo ?? null);
-      let testo = `Banca collegata: ${conti.length} conti.`;
-      try { testo += ` ${(await scaricaMovimenti(utente(req))).testo}.`; } catch (e: any) { testo += ` Primo scarico non riuscito: ${e?.message ?? e}`; }
+      const c = await completaCollegamento(String(req.query.code), attesa.banca, utente(req), attesa.metodo ?? null);
+      let testo = `${NOMI_COLLEGAMENTO[c.id]} collegato: ${c.conti.length} ${c.conti.length === 1 ? 'conto' : 'conti'}.`;
+      try { testo += ` ${(await scaricaMovimenti(utente(req), c.id)).testo}.`; } catch (e: any) { testo += ` Primo scarico non riuscito: ${e?.message ?? e}`; }
       res.redirect(vaiA('', testo));
     } catch (e: any) { res.redirect(vaiA('', `Collegamento non riuscito: ${e?.message ?? e}`)); }
   });
@@ -220,20 +231,21 @@ export function rotteBanca() {
       const url = await avviaCollegamento(banca, stato, metodo);
       req.session.bancaCollega = { stato, banca, metodo };
       // pagina con il link (non un redirect: la Content-Security-Policy "form-action" blocca un modulo che finisce su un altro sito)
-      res.send(pagina(req, 'Collega la banca', html`<div class="intestazione-pagina"><h1>Collega la banca</h1></div>
-        <p>Si apre il sito di ${banca} (tramite Enable Banking). Entra come sempre e conferma con l'app BPER: autorizzi il portale a <strong>leggere</strong>
-          saldi e movimenti dei conti (nessun pagamento). Alla fine torni qui da solo.</p>
-        <p class="nota">Scegli tutti i conti che vuoi far scaricare al portale. Il consenso dura al massimo 180 giorni, poi si rinnova da questa pagina.</p>
-        <div class="barra-azioni"><a class="pulsante primario" href="${url}">Vai alla banca</a> <a class="pulsante" href="/amministrazione/banca">Annulla</a></div>`));
+      res.send(pagina(req, 'Collega', html`<div class="intestazione-pagina"><h1>Collega: ${NOMI_COLLEGAMENTO[tipoCollegamento(banca, metodo)]}</h1></div>
+        <p>Si apre il sito di ${banca} (tramite Enable Banking). Entra come sempre e conferma${tipoCollegamento(banca, metodo) === 'paypal' ? '' : " con l'app BPER"}:
+          autorizzi il portale a <strong>leggere</strong> saldi e movimenti (nessun pagamento). Alla fine torni qui da solo.</p>
+        <p class="nota">Scegli tutti i conti${tipoCollegamento(banca, metodo) === 'carta' ? ' e le carte' : ''} che vuoi far scaricare al portale. Il consenso dura al massimo 180 giorni, poi si rinnova da questa pagina.</p>
+        <div class="barra-azioni"><a class="pulsante primario" href="${url}">Vai a ${banca}</a> <a class="pulsante" href="/amministrazione/banca">Annulla</a></div>`));
     } catch (e: any) { res.redirect(vaiA('', `La banca non risponde: ${e?.message ?? e}`)); }
   });
   r.post('/scarica', async (req, res) => {
     try { res.redirect(vaiA('', `Scaricati: ${(await scaricaMovimenti(utente(req))).testo}.`)); }
     catch (e: any) { res.redirect(vaiA('', `Scarico non riuscito: ${e?.message ?? e}`)); }
   });
-  r.post('/scollega', async (_req, res) => {
-    await scollega();
-    res.redirect(vaiA('', 'Conti scollegati: il portale non scarica più i movimenti (quelli già scaricati restano).'));
+  r.post('/scollega', async (req, res) => {
+    const id = (['conti', 'carta', 'paypal'] as TipoCollegamento[]).find(x => x === req.body?.id) ?? 'conti';
+    await scollega(id);
+    res.redirect(vaiA('', `${NOMI_COLLEGAMENTO[id]} scollegato: il portale non ne scarica più i movimenti (quelli già scaricati restano).`));
   });
 
   r.post('/carica', express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
@@ -253,7 +265,7 @@ export function rotteBanca() {
     const b = req.body ?? {};
     const conti: ContoBanca[] = vecchi.map(c => {
       const v = (k: string) => String(b[`${k}_${c.numero}`] ?? '').trim();
-      return { numero: c.numero, nome: v('nome').toUpperCase() || c.nome, tipo: v('tipo') === 'anticipo' ? 'anticipo' : 'ordinario',
+      return { numero: c.numero, nome: v('nome').toUpperCase() || c.nome, tipo: tipoConto(v('tipo')),
         saldoData: dataDa(v('saldo_data')), saldo: importoDa(v('saldo')), fido: importoDa(v('fido')) };
     });
     await salvaConti(conti, importoDa(String(b.fido_anticipi ?? '')));

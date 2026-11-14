@@ -135,7 +135,7 @@ export async function datiCruscottoGenerale(oggi: string, annoScelto = Number(og
   const differite = contaDifferite(ddt, oggi);
   // collegamento automatico con la banca (Adriano 14/11/2026): consenso scaduto o in scadenza, oppure ultimo scarico non riuscito
   const ob = openBankingConfigurato() ? await statoOpenBanking() : null;
-  const bancaDaRicollegare = ob?.sessione && (statoConsenso(ob.scadenza, new Date()).stato !== 'attivo' || ob.errore) ? 1 : 0;
+  const bancaDaRicollegare = (ob?.collegamenti ?? []).filter(c => statoConsenso(c.scadenza, new Date()).stato !== 'attivo' || c.errore).length;
   const daFare = cosaDaFare({
     sdiScartate: sdiConto('scartato'), sdiNonConsegnate: sdiConto('non_consegnato'), consegneInRitardo: inRitardo.length,
     preventiviDaValidare: prev('da_validare')?.quanti ?? 0, ordiniDaAcquisire, acquisizioniInErrore: acq(a => a.stato === 'errore'),

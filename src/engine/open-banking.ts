@@ -107,20 +107,73 @@ export function scadenzaRichiesta(adesso: Date, giorniConsenso = 180): string {
   return new Date(adesso.getTime() + giorniConsenso * 86_400_000).toISOString();
 }
 
-/** Modo di accesso alla banca (BPER ha due siti per le aziende: Corporate Banking e Digital Corporate Banking). */
+/** Modo di accesso alla banca (BPER ha due siti per le aziende: Corporate Banking e Digital Corporate Banking; le carte dall'"Area Riservata Carte"). */
 export interface MetodoAccesso { name: string; title?: string; psu_type?: string }
+/** Cosa si collega: conti correnti, carta di credito, PayPal (Adriano 14/11/2026: carta BPER e PayPal per le spese del mese e l'addebito del 15). */
+export type TipoCollegamento = 'conti' | 'carta' | 'paypal';
+export const NOMI_COLLEGAMENTO: Record<TipoCollegamento, string> = { conti: 'Conti BPER', carta: 'Carta di credito', paypal: 'PayPal' };
 export interface BancaScelta { name: string; impresa: boolean; metodi: { name: string; titolo: string }[] }
 
-/** Banche BPER nell'elenco dell'API (le carte no), con i soli accessi per le aziende. */
+/** Banche dell'elenco dell'API che servono: BPER (accessi per le aziende + Area Riservata Carte) e PayPal. */
 export function bancheBper(elenco: { name: string; country?: string; psu_types?: string[]; auth_methods?: MetodoAccesso[] }[]): BancaScelta[] {
-  return elenco.filter(b => /bper/i.test(b.name) && !/carte|card/i.test(b.name))
+  return elenco.filter(b => (/bper/i.test(b.name) && !/carte|card/i.test(b.name)) || /^paypal$/i.test(b.name.trim()))
     .map(b => ({ name: b.name, impresa: !b.psu_types || b.psu_types.includes('business'),
-      metodi: (b.auth_methods ?? []).filter(m => m.name && (!m.psu_type || m.psu_type === 'business')).map(m => ({ name: m.name, titolo: m.title || m.name })) }))
-    .sort((a, b) => Number(b.impresa) - Number(a.impresa) || a.name.localeCompare(b.name));
+      metodi: (b.auth_methods ?? []).filter(m => m.name && (!m.psu_type || m.psu_type === 'business' || m.name === 'BPERCARD'))
+        .map(m => ({ name: m.name, titolo: m.name === 'BPERCARD' ? `${m.title || 'Area Riservata Carte'} (carta di credito)` : m.title || m.name })) }))
+    .sort((a, b) => Number(/paypal/i.test(a.name)) - Number(/paypal/i.test(b.name)) || Number(b.impresa) - Number(a.impresa) || a.name.localeCompare(b.name));
 }
 
-/** Scelta del modulo "banca|metodo" (metodo facoltativo). */
+/** Scelta del modulo "banca|metodo" (metodo facoltativo), con il tipo di collegamento e il tipo di utente da chiedere alla banca. */
 export function leggiScelta(v: unknown): { banca: string; metodo: string | null } {
   const [banca, metodo] = String(v ?? '').split('|').map(x => x.trim());
   return { banca: banca || 'BPER Banca', metodo: metodo || null };
+}
+export function tipoCollegamento(banca: string, metodo: string | null): TipoCollegamento {
+  if (/paypal/i.test(banca)) return 'paypal';
+  if (metodo === 'BPERCARD' || /carte|card/i.test(banca)) return 'carta';
+  return 'conti';
+}
+/** L'Area Riservata Carte di BPER è un accesso da privato: la banca rifiuta "business". */
+export const tipoUtente = (metodo: string | null): 'business' | 'personal' => (metodo === 'BPERCARD' ? 'personal' : 'business');
+
+/** Conto come lo dà l'API: IBAN per i conti, numero mascherato per la carta, valuta per PayPal. */
+export interface ContoApi { uid: string; account_id?: { iban?: string | null; other?: { identification?: string | null } | null } | null; name?: string | null;
+  details?: string | null; currency?: string | null; cash_account_type?: string | null }
+export interface ContoCollegato { uid: string; iban: string | null; numero: string; nome: string | null }
+export function contoDaApi(a: ContoApi, tipo: TipoCollegamento): ContoCollegato {
+  const iban = a.account_id?.iban ?? null;
+  const altro = String(a.account_id?.other?.identification ?? '');
+  let numero: string;
+  if (tipo === 'paypal') numero = `PAYPAL${a.currency && a.currency !== 'EUR' ? a.currency : ''}`;
+  else if (tipo === 'carta' && !iban) numero = `CARTA${(altro.replace(/\D/g, '') || a.uid.replace(/\W/g, '')).slice(-4)}`;
+  else numero = iban ?? (altro || a.uid);
+  const nome = a.name || a.details || (tipo === 'carta' ? `Carta ${numero.slice(-4)}` : tipo === 'paypal' ? 'PayPal' : null);
+  return { uid: a.uid, iban, numero: numeroConto(numero), nome };
+}
+
+/** Un collegamento (un consenso dato in banca o a PayPal), uno per tipo. */
+export interface Collegamento {
+  id: TipoCollegamento; banca: string; metodo: string | null; sessione: string; scadenza: string | null; collegatoIl?: string; collegatoDa?: string;
+  conti: ContoCollegato[]; ultimoScarico?: string; esito?: string; errore?: string | null;
+}
+/** Collegamenti salvati; lo stato di prima (un solo collegamento con i campi in cima) vale come "conti". */
+export function collegamentiDaStato(s: any): Collegamento[] {
+  if (Array.isArray(s?.collegamenti)) return s.collegamenti.filter((c: any) => c?.sessione);
+  if (!s?.sessione) return [];
+  return [{ id: 'conti', banca: s.banca ?? 'BPER Banca', metodo: s.metodo ?? null, sessione: s.sessione, scadenza: s.scadenza ?? null, collegatoIl: s.collegatoIl,
+    collegatoDa: s.collegatoDa, conti: s.conti ?? [], ultimoScarico: s.ultimoScarico, esito: s.esito, errore: s.errore ?? null }];
+}
+
+/**
+ * Addebito della carta di credito: le spese di un mese si pagano il 15 del mese dopo (Adriano 14/11/2026). Una voce per mese con addebito da oggi in poi;
+ * il mese in corso conta le spese fatte finora. Rimborsi in meno.
+ */
+export function addebitiCarta(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; finora: boolean }[] {
+  const perMese = new Map<string, number>();
+  for (const m of movimenti) perMese.set(m.data.slice(0, 7), (perMese.get(m.data.slice(0, 7)) ?? 0) - m.importo);
+  return [...perMese].map(([mese, importo]) => {
+    const [a, mm] = mese.split('-').map(Number);
+    const dopo = mm === 12 ? `${a + 1}-01` : `${a}-${String(mm + 1).padStart(2, '0')}`;
+    return { mese, data: `${dopo}-${String(giorno).padStart(2, '0')}`, importo: Math.round(importo * 100) / 100, finora: mese === oggi.slice(0, 7) };
+  }).filter(x => x.data >= oggi && x.importo > 0).sort((x, y) => x.data.localeCompare(y.data));
 }

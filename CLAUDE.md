@@ -1047,4 +1047,7 @@ ELECTRONICS"); senza P.IVA europea sulla fattura (Mouser dalla sede di Assago: s
    stato in impostazioni 'open_banking' (sessione, scadenza del consenso max 180 gg, conti). "Collega la banca" → pagina con il link (la CSP form-action blocca il redirect di un modulo
    verso altri siti) → consenso con l'app → GET `/amministrazione/banca/collega/ritorno` (prima della password, controlla `state`) → primo scarico. Scarico lun–ven 8:30 (`avviaScaricoBanca`,
    orologio senza database) o "Scarica adesso": movimenti contabilizzati → `caricaMovimenti` (stessa logica del CSV), file `FILE_OPEN_BANKING`; doppioni col CSV per conto+data+importo
-   (`togliGiaPresenti`, in tutte e due le direzioni). Consenso scaduto/in scadenza (14 gg) o errore = voce `banca-ricollegare` in "Da fare oggi". I conti tecnici d'anticipo forse non ci sono in PSD2: CSV.
+   (`togliGiaPresenti`, in tutte e due le direzioni). Consenso scaduto/in scadenza (14 gg) o errore = voce `banca-ricollegare` in "Da fare oggi". Collegati il 14/11/2026 con Corporate Banking: tutti e 4 i conti (anche quelli d'anticipo).
+   Carta di credito BPER e PayPal (Adriano 14/11/2026, "scaricare le spese mensili e mettere a budget l'uscita del 15"): un collegamento per tipo (`collegamenti` in 'open_banking', `collegamentiDaStato`: lo stato di prima = 'conti'),
+   carta = BPER metodo BPERCARD "Area Riservata Carte" (psu personal, `tipoUtente`), PayPal = aspsp 'PayPal'; conti in Banca con tipo 'carta'/'paypal' (`TIPI_CONTO`, numero `CARTA1234`/`PAYPAL`, `contoDaApi`),
+   fuori dal saldo di cassa; previsione di cassa: spese della carta di un mese = uscita il 15 del mese dopo (`addebitiCarta`).

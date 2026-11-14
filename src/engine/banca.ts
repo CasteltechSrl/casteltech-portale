@@ -168,7 +168,11 @@ export function numeroConto(v: unknown): string {
  * Conti della banca (impostazioni 'banca'.conti): nome, tipo (ordinario = c/c dove passano incassi e pagamenti; anticipo = conto tecnico
  * dell'anticipo fatture/RiBa), saldo di riferimento a una data (dall'estratto conto) e affidamento. Saldo di oggi = riferimento + movimenti dopo quella data.
  */
-export interface ContoBanca { numero: string; nome: string; tipo: 'ordinario' | 'anticipo'; saldoData: string | null; saldo: number | null; fido: number | null }
+/** Tipo del conto: corrente, tecnico d'anticipo, carta di credito o PayPal (Adriano 14/11/2026: carta e PayPal dal collegamento automatico). */
+export type TipoConto = 'ordinario' | 'anticipo' | 'carta' | 'paypal';
+export const TIPI_CONTO: [TipoConto, string][] = [['ordinario', 'conto corrente'], ['anticipo', 'anticipo (tecnico)'], ['carta', 'carta di credito'], ['paypal', 'PayPal']];
+export const tipoConto = (v: unknown): TipoConto => (TIPI_CONTO.find(([k]) => k === v)?.[0] ?? 'ordinario');
+export interface ContoBanca { numero: string; nome: string; tipo: TipoConto; saldoData: string | null; saldo: number | null; fido: number | null }
 
 export function nomeConto(numero: string, conti: ContoBanca[]): string {
   return conti.find(c => c.numero === numero)?.nome ?? numero;

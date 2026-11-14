@@ -56,7 +56,7 @@ import { importaVoci } from './registri.js';
 import { caricaTabelleAci } from '../tariffe-aci-servizio.js';
 import { controllaFileQualita } from '../../engine/qualita.js';
 import { SEZIONI_SICUREZZA } from '../../engine/sicurezza.js';
-import { CATEGORIE_MOVIMENTO, codiceSiaValido, dataDa, numeroConto, type ContoBanca } from '../../engine/banca.js';
+import { CATEGORIE_MOVIMENTO, codiceSiaValido, dataDa, numeroConto, tipoConto, type ContoBanca } from '../../engine/banca.js';
 
 // la chiave si tiene in memoria dopo la prima lettura (Neon: niente query a ogni chiamata)
 let chiaveInMemoria: string | null | undefined;
@@ -300,7 +300,7 @@ export function rotteApiClaude() {
     const b = req.body ?? {};
     if (!Array.isArray(b.conti)) return res.status(400).json({ errore: 'Serve conti: [{numero, nome, tipo, saldoData, saldo, fido}].' });
     const conti: ContoBanca[] = b.conti.map((c: any) => ({ numero: numeroConto(c.numero), nome: String(c.nome ?? '').toUpperCase().slice(0, 60) || numeroConto(c.numero),
-      tipo: c.tipo === 'anticipo' ? 'anticipo' : 'ordinario', saldoData: dataDa(c.saldoData), saldo: typeof c.saldo === 'number' ? c.saldo : null,
+      tipo: tipoConto(c.tipo), saldoData: dataDa(c.saldoData), saldo: typeof c.saldo === 'number' ? c.saldo : null,
       fido: typeof c.fido === 'number' ? c.fido : null }));
     await salvaConti(conti, typeof b.fidoAnticipi === 'number' ? b.fidoAnticipi : undefined);
     res.json({ ok: true, conti: await contiConSaldo() });
