@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { bancheBper, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
+import { bancheBper, leggiScelta, dataInizioScarico, movimentoDaTransazione, oraDiScaricare, statoConsenso, togliGiaPresenti } from '../src/engine/open-banking.js';
 import { cosaDaFare } from '../src/engine/cruscotto-generale.js';
 import { cercaGuida } from '../src/engine/guida.js';
 process.env.DATABASE_URL ??= 'postgres://solo-per-i-test@localhost/nessuno'; // il modulo db non si collega finché non si fanno query
@@ -48,6 +48,13 @@ test('open banking: da quando scaricare, consenso e ora', () => {
 test('open banking: banche BPER (senza le carte) e gettone firmato', () => {
   const b = bancheBper([{ name: 'BPER Banca Carte' }, { name: 'BPER Banca', psu_types: ['personal', 'business'] }, { name: 'Intesa Sanpaolo' }, { name: 'BPER Banca Smart', psu_types: ['personal'] }]);
   assert.deepEqual(b.map(x => x.name), ['BPER Banca', 'BPER Banca Smart']);
+  // modi di accesso: solo quelli per le aziende (elenco vero di Enable Banking del 14/11/2026)
+  const conMetodi = bancheBper([{ name: 'BPER Banca', psu_types: ['personal', 'business'], auth_methods: [
+    { name: 'SMART', title: 'Servizi digitali Smart', psu_type: 'personal' }, { name: 'CORPORATE', title: 'Corporate Banking', psu_type: 'business' },
+    { name: 'DIGITAL_CORPORATE', title: 'Digital Corporate Banking', psu_type: 'business' }] }]);
+  assert.deepEqual(conMetodi[0].metodi.map(m => m.name), ['CORPORATE', 'DIGITAL_CORPORATE']);
+  assert.deepEqual(leggiScelta('BPER Banca|CORPORATE'), { banca: 'BPER Banca', metodo: 'CORPORATE' });
+  assert.deepEqual(leggiScelta(''), { banca: 'BPER Banca', metodo: null });
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
   const t = gettone(Date.UTC(2026, 10, 14), 'app-123', pem);
