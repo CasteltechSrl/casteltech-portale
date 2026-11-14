@@ -21,7 +21,7 @@ import { abbinaMovimento, contiBanca, contiConSaldo, fidoAnticipi, salvaConti, a
 import crypto from 'node:crypto';
 import { avviaCollegamento, bancheDisponibili, completaCollegamento, openBankingConfigurato, scaricaMovimenti, scollega, statoOpenBanking, type StatoOpenBanking } from '../open-banking.js';
 import { proponiConIa } from '../banca-ia.js';
-import { NOMI_COLLEGAMENTO, leggiScelta, statoConsenso, tipoCollegamento, type BancaScelta, type Collegamento, type TipoCollegamento } from '../../engine/open-banking.js';
+import { NOMI_COLLEGAMENTO, leggiScelta, speseCartaPerMese, statoConsenso, tipoCollegamento, type BancaScelta, type Collegamento, type TipoCollegamento } from '../../engine/open-banking.js';
 
 declare module 'express-session' { interface SessionData { bancaCollega?: { stato: string; banca: string; metodo: string | null } } }
 
@@ -116,6 +116,26 @@ function sezioneConti(conti: Awaited<ReturnType<typeof contiConSaldo>>, fidoAnti
       <div class="barra-azioni"><button>Salva i conti</button></div></form>`;
 }
 
+/** Spese della carta di credito e di PayPal mese per mese (Adriano 14/11/2026: "sapere e mettere a budget l'uscita del 15"). */
+async function sezioneSpeseCarte(conti: Awaited<ReturnType<typeof contiConSaldo>>): Promise<Raw> {
+  const carte = conti.filter(c => c.tipo === 'carta' || c.tipo === 'paypal');
+  if (!carte.length) return html``;
+  const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+  const movimenti = await q<{ conto: string; data: string; importo: number }>(`SELECT conto, to_char(data, 'YYYY-MM-DD') AS data, importo::float AS importo
+    FROM banca_movimenti WHERE conto = ANY($1) AND data >= $2`, [carte.map(c => c.numero), `${Number(oggi.slice(0, 4)) - 1}${oggi.slice(4, 7)}-01`]);
+  return html`<h2>Spese della carta e di PayPal</h2>
+    ${carte.map(c => {
+      const mesi = speseCartaPerMese(movimenti.filter(m => m.conto === c.numero), oggi).slice(0, 6);
+      return html`<h3>${c.nome} <span class="nota">(${c.tipo === 'carta' ? 'carta di credito' : 'PayPal'})</span></h3>
+        ${mesi.length ? html`<table class="elenco"><thead><tr><th>Mese</th><th class="num">Movimenti</th><th class="num">Spese</th><th>${c.tipo === 'carta' ? 'Addebito sul conto' : ''}</th></tr></thead>
+          <tbody>${mesi.map(x => html`<tr><td>${x.mese.slice(5, 7)}/${x.mese.slice(0, 4)}${x.finora ? ' (finora)' : ''}</td><td class="num">${x.movimenti}</td>
+            <td class="num">${euro(x.importo)}</td><td>${c.tipo === 'carta' ? data(x.data) : ''}</td></tr>`)}</tbody></table>`
+          : html`<p class="vuoto">Nessun movimento scaricato.</p>`}`;
+    })}
+    <p class="nota">I movimenti della carta e di PayPal si registrano da soli come "Spese carta / PayPal" (li trovi in "Già abbinati e registrati"): non sono incassi o
+      pagamenti di fatture sul conto. Le spese di un mese della carta si pagano il 15 del mese dopo e sono già nella Previsione di cassa.</p>`;
+}
+
 export function rotteBanca() {
   const r = Router();
 
@@ -197,6 +217,7 @@ export function rotteBanca() {
       </details>
 
       ${sezioneConti(elencoConti, await fidoAnticipi())}
+      ${await sezioneSpeseCarte(elencoConti)}
       <h2>Da abbinare (${daAbbinare.length})</h2>
       ${daAbbinare.length ? html`
         <p class="nota">Entrate → fatture emesse da incassare, uscite → fatture dei fornitori da pagare. Il portale cerca lo stesso importo, poi il numero della fattura

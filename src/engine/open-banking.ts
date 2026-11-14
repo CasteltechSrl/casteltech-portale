@@ -182,12 +182,21 @@ export function collegamentiDaStato(s: any): Collegamento[] {
  * Addebito della carta di credito: le spese di un mese si pagano il 15 del mese dopo (Adriano 14/11/2026). Una voce per mese con addebito da oggi in poi;
  * il mese in corso conta le spese fatte finora. Rimborsi in meno.
  */
-export function addebitiCarta(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; finora: boolean }[] {
-  const perMese = new Map<string, number>();
-  for (const m of movimenti) perMese.set(m.data.slice(0, 7), (perMese.get(m.data.slice(0, 7)) ?? 0) - m.importo);
-  return [...perMese].map(([mese, importo]) => {
+/** Spese della carta (o di PayPal) mese per mese, dal più recente: ogni mese si paga il giorno indicato (15) del mese dopo. */
+export function speseCartaPerMese(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; movimenti: number; finora: boolean }[] {
+  const perMese = new Map<string, { importo: number; movimenti: number }>();
+  for (const m of movimenti) {
+    const x = perMese.get(m.data.slice(0, 7)) ?? { importo: 0, movimenti: 0 };
+    perMese.set(m.data.slice(0, 7), { importo: x.importo - m.importo, movimenti: x.movimenti + 1 });
+  }
+  return [...perMese].map(([mese, x]) => {
     const [a, mm] = mese.split('-').map(Number);
     const dopo = mm === 12 ? `${a + 1}-01` : `${a}-${String(mm + 1).padStart(2, '0')}`;
-    return { mese, data: `${dopo}-${String(giorno).padStart(2, '0')}`, importo: Math.round(importo * 100) / 100, finora: mese === oggi.slice(0, 7) };
-  }).filter(x => x.data >= oggi && x.importo > 0).sort((x, y) => x.data.localeCompare(y.data));
+    return { mese, data: `${dopo}-${String(giorno).padStart(2, '0')}`, importo: Math.round(x.importo * 100) / 100, movimenti: x.movimenti, finora: mese === oggi.slice(0, 7) };
+  }).sort((x, y) => y.mese.localeCompare(x.mese));
+}
+
+export function addebitiCarta(movimenti: { data: string; importo: number }[], oggi: string, giorno = 15): { mese: string; data: string; importo: number; finora: boolean }[] {
+  return speseCartaPerMese(movimenti, oggi, giorno).filter(x => x.data >= oggi && x.importo > 0)
+    .map(({ mese, data, importo, finora }) => ({ mese, data, importo, finora })).sort((x, y) => x.data.localeCompare(y.data));
 }

@@ -355,7 +355,7 @@ export function proponiAbbinamento(m: Movimento, rate: RataAperta[], opz: { cont
 // ───────────────────────────── categorie dei movimenti senza fattura ─────────────────────────────
 
 export const CATEGORIE_MOVIMENTO = ['Incasso fattura', 'Pagamento fattura', 'Commissioni e spese bancarie', 'Interessi', 'Imposte e rate Agenzia Entrate',
-  'Contributi dipendenti (F24)', 'Stipendi', 'Carta di credito', 'Carta / POS', 'Pedaggi e carburante', 'Leasing e noleggi', 'Finanziamenti e mutui',
+  'Contributi dipendenti (F24)', 'Stipendi', 'Carta di credito', 'Spese carta / PayPal', 'Carta / POS', 'Pedaggi e carburante', 'Leasing e noleggi', 'Finanziamenti e mutui',
   'Anticipo fatture', 'Rientro anticipo', 'Giroconto', 'Utenze', 'Assicurazioni', 'Contributi pubblici', 'Rimborsi', 'Altre entrate', 'Altre uscite'] as const;
 
 /** Categorie usate prima del 14/11/2026: restano sui movimenti già registrati, non si propongono più. */

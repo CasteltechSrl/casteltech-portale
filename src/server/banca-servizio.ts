@@ -194,9 +194,12 @@ export async function movimentiDaAbbinare(): Promise<RigaDaAbbinare[]> {
   if (!movimenti.length) return [];
   const rate = await rateCandidate(giorniPrima(movimenti[0].data, 60));
   const tecnici = new Set(conti.filter(c => c.tipo === 'anticipo').map(c => c.numero));
+  // carta di credito e PayPal (Adriano 14/11/2026): sono spese da mettere a budget, non incassi o pagamenti di fatture sul conto: si registrano da sole
+  const carte = new Set(conti.filter(c => c.tipo === 'carta' || c.tipo === 'paypal').map(c => c.numero));
   const chiave = (r: { tipo: string; id: number; gia?: boolean }) => `${r.tipo}:${r.id}${r.gia ? ':gia' : ''}`;
   const perChiave = new Map(rate.map(r => [chiave(r), r]));
   const proposte = movimenti.map(m => {
+    if (carte.has(m.conto)) return { m, proposta: null as Proposta | null, ia: null as PropostaIa | null };
     let proposta = proponiAbbinamento(m, rate, { contoTecnico: tecnici.has(m.conto) });
     const ia = m.proposta_ia ?? null;
     if (!proposta && ia?.rate?.length) {
@@ -214,6 +217,7 @@ export async function movimentiDaAbbinare(): Promise<RigaDaAbbinare[]> {
     if (prima == null || (proposte[prima].proposta?.punteggio ?? 0) < p.proposta!.punteggio) usate.set(k, i);
   }
   return proposte.map((p, i) => {
+    if (carte.has(p.m.conto)) return { m: p.m, proposta: null, categoria: 'Spese carta / PayPal', sicura: true, ia: null };
     const libera = p.proposta?.rate.every(r => usate.get(`${r.tipo}:${r.id}`) === i);
     const regola = categoriaMovimento(p.m);
     // categoria: la regola sicura vince; altrimenti quella dell'IA, se c'è
