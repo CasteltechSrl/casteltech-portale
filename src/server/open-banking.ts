@@ -14,10 +14,21 @@ import { indirizzoPortale } from './promemoria.js';
 
 const URL_API = () => (process.env.ENABLEBANKING_URL ?? 'https://api.enablebanking.com').replace(/\/$/, '');
 const appId = () => process.env.ENABLEBANKING_APP_ID?.trim() || null;
-const chiavePrivata = () => {
-  const k = process.env.ENABLEBANKING_PRIVATE_KEY?.trim();
-  return k ? k.replace(/\\n/g, '\n') : null;
-};
+const chiavePrivata = () => normalizzaChiave(process.env.ENABLEBANKING_PRIVATE_KEY);
+
+/**
+ * Chiave .pem come la si incolla su Render: a capo tolti o diventati spazi, "\n" scritti, virgolette intorno, solo il blocco senza
+ * intestazione. Si rifà il PEM: intestazione, corpo base64 a righe da 64, chiusura (Adriano 14/11/2026: "DECODER routines::unsupported").
+ */
+export function normalizzaChiave(v: string | null | undefined): string | null {
+  let k = String(v ?? '').trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n').trim();
+  if (!k) return null;
+  const m = k.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  const tipo = m ? m[1] : 'PRIVATE KEY';
+  const corpo = (m ? m[2] : k).replace(/[^A-Za-z0-9+/=]/g, '');
+  if (!corpo) return null;
+  return `-----BEGIN ${tipo}-----\n${corpo.match(/.{1,64}/g)!.join('\n')}\n-----END ${tipo}-----\n`;
+}
 export const openBankingConfigurato = () => Boolean(appId() && chiavePrivata());
 export const percorsoRitorno = '/amministrazione/banca/collega/ritorno';
 
@@ -43,7 +54,9 @@ export function gettone(adesso = Date.now(), id = appId(), chiave = chiavePrivat
   if (!id || !chiave) throw new Error('Collegamento con la banca non configurato: mancano ENABLEBANKING_APP_ID e ENABLEBANKING_PRIVATE_KEY su Render.');
   const iat = Math.floor(adesso / 1000);
   const corpo = `${b64({ typ: 'JWT', alg: 'RS256', kid: id })}.${b64({ iss: 'enablebanking.com', aud: 'api.enablebanking.com', iat, exp: iat + 3600 })}`;
-  const firma = crypto.createSign('RSA-SHA256').update(corpo).sign(chiave).toString('base64url');
+  let firma: string;
+  try { firma = crypto.createSign('RSA-SHA256').update(corpo).sign(chiave).toString('base64url'); }
+  catch { throw new Error('La chiave ENABLEBANKING_PRIVATE_KEY su Render non si legge: incolla di nuovo tutto il file .pem (da -----BEGIN a -----END).'); }
   return `${corpo}.${firma}`;
 }
 
